@@ -702,13 +702,16 @@ function showScheduleModal(is_group, mentee_id = null) {
       });
     }
     
-    const scheduledAtObj = new Date(`${date}T${time}`);
+    // Build a local Date (year, month-1, day, hour, minute) to avoid UTC conversion issues
+    const [year, month, day] = date.split('-').map(Number);
+    const [hour, minute] = time.split(':').map(Number);
+    const scheduledAtObj = new Date(year, month - 1, day, hour, minute);
     if (isNaN(scheduledAtObj.getTime())) {
       haptic('error');
       showToast('Invalid date or time selected', 'error');
       return;
     }
-    
+
     const scheduledAt = scheduledAtObj.toISOString();
     closeScheduleModal();
     createSession(is_group, mentee_id, scheduledAt, title, participant_ids);
