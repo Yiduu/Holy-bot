@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Recovery – Admin Panel</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        /* Admin-specific overrides */
+        .admin-layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .admin-sidebar {
+            width: 220px;
+            flex-shrink: 0;
+            background: var(--bg2);
+            border-right: 1px solid var(--border-dim);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            z-index: 100;
+            transition: transform 0.3s ease;
+        }
+
+        .admin-sidebar.collapsed {
+            transform: translateX(-220px);
+        }
+
+        .sidebar-logo {
+            padding: 24px 20px 20px;
+            font-family: var(--font-display);
+            font-size: 1rem;
+            color: var(--gold);
+            border-bottom: 1px solid var(--border-dim);
+            letter-spacing: 0.06em;
+        }
+
+        .sidebar-logo span {
+            font-size: 0.65rem;
+            color: var(--text3);
+            display: block;
+            margin-top: 3px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 12px 0;
+            overflow-y: auto;
+        }
+
+        .sidebar-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 11px 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            color: var(--text2);
+            transition: all var(--transition);
+            border-left: 3px solid transparent;
+        }
+
+        .sidebar-item svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            flex-shrink: 0;
+        }
+
+        .sidebar-item:hover {
+            color: var(--text);
+            background: var(--surface);
+        }
+
+        .sidebar-item.active {
+            color: var(--gold);
+            border-left-color: var(--gold);
+            background: var(--gold-dim);
+        }
+
+        .sidebar-bottom {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border-dim);
+        }
+
+        .admin-main {
+            flex: 1;
+            margin-left: 220px;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .admin-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: var(--bg);
+            border-bottom: 1px solid var(--border-dim);
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .topbar-title {
+            font-family: var(--font-display);
+            font-size: 1.1rem;
+        }
+
+        .topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .admin-content {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        /* Tabs */
+        .tab-pane {
+            display: none;
+        }
+
+        .tab-pane.active {
+            display: block;
+            animation: fadeIn 0.25s ease;
+        }
+
+        /* Stats row */
+        .admin-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 700px) {
+            .admin-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .admin-stat {
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius);
+            padding: 18px 16px;
+        }
+
+        .admin-stat-num {
+            font-family: var(--font-display);
+            font-size: 2rem;
+            color: var(--gold);
+        }
+
+        .admin-stat-label {
+            font-size: 0.7rem;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            margin-top: 4px;
+        }
+
+        .admin-stat-sub {
+            font-size: 0.75rem;
+            color: var(--text2);
+            margin-top: 2px;
+        }
+
+        /* Table */
+        .admin-table-wrap {
+            overflow-x: auto;
+            border-radius: var(--radius);
+            border: 1px solid var(--border-dim);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+        }
+
+        thead th {
+            background: var(--bg3);
+            padding: 11px 14px;
+            text-align: left;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text3);
+            border-bottom: 1px solid var(--border-dim);
+            white-space: nowrap;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid var(--border-dim);
+            transition: background var(--transition);
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        tbody tr:hover {
+            background: var(--surface);
+        }
+
+        tbody td {
+            padding: 11px 14px;
+            color: var(--text2);
+            vertical-align: middle;
+        }
+
+        tbody td:first-child {
+            color: var(--text);
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            margin-top: 16px;
+            justify-content: center;
+        }
+
+        .page-btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            color: var(--text2);
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+
+        .page-btn:hover {
+            border-color: var(--border);
+            color: var(--text);
+        }
+
+        .page-btn.active {
+            background: var(--gold-dim);
+            border-color: var(--border);
+            color: var(--gold);
+        }
+
+        .page-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        /* Search bar */
+        .search-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 180px;
+            padding: 9px 14px;
+            background: var(--bg3);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            font-size: 0.875rem;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--gold);
+        }
+
+        /* Filter select */
+        .filter-select {
+            padding: 9px 14px;
+            background: var(--bg3);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--gold);
+        }
+
+        /* Section header row */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        /* Application card */
+        .app-card {
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius);
+            padding: 18px;
+            margin-bottom: 12px;
+        }
+
+        .app-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .app-card-id {
+            font-family: var(--font-display);
+            font-size: 0.9rem;
+            color: var(--gold);
+        }
+
+        .app-card-meta {
+            font-size: 0.72rem;
+            color: var(--text3);
+        }
+
+        .app-card-q {
+            margin-bottom: 10px;
+        }
+
+        .app-card-q-label {
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--text3);
+            margin-bottom: 4px;
+        }
+
+        .app-card-q-answer {
+            font-size: 0.83rem;
+            color: var(--text2);
+            line-height: 1.6;
+        }
+
+        .app-card-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 14px;
+        }
+
+        /* Ticket card */
+        .ticket-card {
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 10px;
+        }
+
+        .ticket-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .ticket-subject {
+            font-weight: 700;
+            font-size: 0.875rem;
+        }
+
+        .ticket-desc {
+            font-size: 0.82rem;
+            color: var(--text2);
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+
+        .ticket-reply-area {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* Broadcast */
+        .broadcast-box {
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius);
+            padding: 20px;
+            max-width: 600px;
+        }
+
+        /* Audit log row */
+        .audit-action {
+            font-family: monospace;
+            font-size: 0.78rem;
+            background: var(--bg3);
+            padding: 2px 7px;
+            border-radius: 4px;
+            color: var(--accent);
+        }
+
+        /* Mobile sidebar toggle */
+        .sidebar-toggle {
+            display: none;
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-sm);
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .sidebar-toggle svg {
+            width: 18px;
+            height: 18px;
+            stroke: var(--text2);
+            fill: none;
+            stroke-width: 2;
+        }
+
+        @media (max-width: 768px) {
+            .admin-sidebar {
+                transform: translateX(-220px);
+            }
+
+            .admin-sidebar.open {
+                transform: none;
+                box-shadow: 4px 0 20px rgba(0, 0, 0, 0.4);
+            }
+
+            .admin-main {
+                margin-left: 0;
+            }
+
+            .sidebar-toggle {
+                display: flex;
+            }
+
+            .admin-content {
+                padding: 16px;
+            }
+
+            .admin-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .sidebar-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 99;
+                display: none;
+            }
+
+            .sidebar-overlay.show {
+                display: block;
+            }
+        }
+
+        /* Loading in table */
+        .table-loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text3);
+        }
+
+        /* Inline form */
+        .inline-note {
+            padding: 9px 12px;
+            background: var(--bg3);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.82rem;
+            width: 100%;
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .inline-note:focus {
+            outline: none;
+            border-color: var(--gold);
+        }
+
+        /* Status badge */
+        .status-open {
+            color: var(--warn);
+        }
+
+        .status-resolved {
+            color: var(--success);
+        }
+
+        .status-pending {
+            color: var(--warn);
+        }
+
+        .status-approved {
+            color: var(--success);
+        }
+
+        .status-rejected {
+            color: var(--danger);
+        }
+
+        .status-banned {
+            color: var(--danger);
+        }
+
+        .status-active {
+            color: var(--success);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+    <div class="admin-layout">
+
+        <!-- ── Sidebar ─────────────────────────────────────────────── -->
+        <aside class="admin-sidebar" id="adminSidebar">
+            <div class="sidebar-logo">
+                ✦ Recovery
+                <span>Admin Panel</span>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="sidebar-item active" onclick="showTab('overview')" id="tab-overview">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="3" y="3" width="7" height="7" />
+                        <rect x="14" y="3" width="7" height="7" />
+                        <rect x="14" y="14" width="7" height="7" />
+                        <rect x="3" y="14" width="7" height="7" />
+                    </svg>
+                    Overview
+                </div>
+                <div class="sidebar-item" onclick="showTab('users')" id="tab-users">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    Users
+                </div>
+                <div class="sidebar-item" onclick="showTab('applications')" id="tab-applications">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                    Applications
+                    <span id="pendingBadge" class="chip chip-gold" style="margin-left:auto;display:none">0</span>
+                </div>
+                <div class="sidebar-item" onclick="showTab('messages')" id="tab-messages">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                    Messages
+                </div>
+                <div class="sidebar-item" onclick="showTab('tickets')" id="tab-tickets">
+                    <svg viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    Support Tickets
+                    <span id="openTicketsBadge" class="chip chip-red" style="margin-left:auto;display:none">0</span>
+                </div>
+                <div class="sidebar-item" onclick="showTab('topics')" id="tab-topics">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                    </svg>
+                    Topics
+                </div>
+                <div class="sidebar-item" onclick="showTab('broadcast')" id="tab-broadcast">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M22 2L11 13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    </svg>
+                    Broadcast
+                </div>
+                <div class="sidebar-item" onclick="showTab('audit')" id="tab-audit">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="9" y1="15" x2="15" y2="15" />
+                    </svg>
+                    Audit Log
+                </div>
+            </nav>
+            <div class="sidebar-bottom">
+                <a href="index.html" class="btn btn-ghost btn-sm btn-full">← Back to App</a>
+            </div>
+        </aside>
+
+        <!-- ── Main ─────────────────────────────────────────────────── -->
+        <main class="admin-main">
+            <div class="admin-topbar">
+                <div style="display:flex;align-items:center;gap:12px">
+                    <div class="sidebar-toggle" onclick="toggleSidebar()">
+                        <svg viewBox="0 0 24 24">
+                            <line x1="3" y1="12" x2="21" y2="12" />
+                            <line x1="3" y1="6" x2="21" y2="6" />
+                            <line x1="3" y1="18" x2="21" y2="18" />
+                        </svg>
+                    </div>
+                    <span class="topbar-title" id="topbarTitle">Overview</span>
+                </div>
+                <div class="topbar-actions">
+                    <button class="btn btn-sm btn-outline" onclick="refreshCurrent()">↻ Refresh</button>
+                    <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon">☀️</span></button>
+                </div>
+            </div>
+
+            <div class="admin-content">
+
+                <!-- ── Overview Tab ─────────────────────────────────────── -->
+                <div class="tab-pane active" id="pane-overview">
+                    <div class="admin-stats" id="overviewStats">
+                        <div class="admin-stat">
+                            <div class="admin-stat-num" id="st-users">–</div>
+                            <div class="admin-stat-label">Total Members</div>
+                            <div class="admin-stat-sub" id="st-new">0 new today</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-num" id="st-mentors">–</div>
+                            <div class="admin-stat-label">Active Mentors</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-num" id="st-pending">–</div>
+                            <div class="admin-stat-label">Pending Applications</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-num" id="st-flagged">–</div>
+                            <div class="admin-stat-label">Flagged Messages</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-num" id="st-tickets">–</div>
+                            <div class="admin-stat-label">Open Tickets</div>
+                        </div>
+                    </div>
+
+                    <div class="section-header">
+                        <div class="section-title">Quick Actions</div>
+                    </div>
+                    <div class="grid-2" style="max-width:500px;gap:10px">
+                        <button class="btn btn-outline" onclick="showTab('applications')">Review Applications</button>
+                        <button class="btn btn-outline" onclick="showTab('messages')">Flagged Messages</button>
+                        <button class="btn btn-outline" onclick="showTab('tickets')">Open Tickets</button>
+                        <button class="btn btn-outline" onclick="showTab('broadcast')">Send Broadcast</button>
+                    </div>
+
+                    <div style="margin-top:24px">
+                        <div class="section-title">Data Export</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+                            <button class="btn btn-sm btn-ghost" onclick="exportTable('users')">Export Users
+                                CSV</button>
+                            <button class="btn btn-sm btn-ghost" onclick="exportTable('messages')">Export Messages
+                                CSV</button>
+                            <button class="btn btn-sm btn-ghost" onclick="exportTable('video_sessions')">Export Sessions
+                                CSV</button>
+                            <button class="btn btn-sm btn-ghost" onclick="exportTable('mentor_applications')">Export
+                                Applications CSV</button>
+                            <button class="btn btn-sm btn-ghost" onclick="exportTable('support_tickets')">Export Tickets
+                                CSV</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Users Tab ────────────────────────────────────────── -->
+                <div class="tab-pane" id="pane-users">
+                    <div class="search-row">
+                        <input class="search-input" id="userSearch" placeholder="Search by anonymous ID…"
+                            oninput="debounceLoadUsers()" />
+                        <select class="filter-select" id="userRoleFilter" onchange="loadUsers(1)">
+                            <option value="">All Roles</option>
+                            <option value="user">Users</option>
+                            <option value="mentor">Mentors</option>
+                        </select>
+                    </div>
+
+                    <div class="admin-table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Anonymous ID</th>
+                                    <th>Role</th>
+                                    <th>Sex</th>
+                                    <th>Age</th>
+                                    <th>Joined</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <tr>
+                                    <td colspan="7" class="table-loading">Loading…</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pagination" id="usersPagination"></div>
+                </div>
+
+                <!-- ── Applications Tab ─────────────────────────────────── -->
+                <div class="tab-pane" id="pane-applications">
+                    <div class="search-row">
+                        <select class="filter-select" id="appStatusFilter" onchange="loadApplications(1)">
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+                    <div id="applicationsContainer">
+                        <div class="table-loading">Loading…</div>
+                    </div>
+                    <div class="pagination" id="appsPagination"></div>
+                </div>
+
+                <!-- ── Messages Tab ─────────────────────────────────────── -->
+                <div class="tab-pane" id="pane-messages">
+                    <div class="search-row">
+                        <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text2)">
+                            <input type="checkbox" id="flaggedOnly" onchange="loadMessages(1)" checked />
+                            Flagged messages only
+                        </label>
+                    </div>
+                    <div class="admin-table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>From</th>
+                                    <th>To</th>
+                                    <th>Content</th>
+                                    <th>Flagged</th>
+                                    <th>Sent</th>
+                                </tr>
+                            </thead>
+                            <tbody id="messagesTableBody">
+                                <tr>
+                                    <td colspan="5" class="table-loading">Loading…</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pagination" id="msgPagination"></div>
+                </div>
+
+                <!-- ── Tickets Tab ──────────────────────────────────────── -->
+                <div class="tab-pane" id="pane-tickets">
+                    <div id="ticketsContainer">
+                        <div class="table-loading">Loading…</div>
+                    </div>
+                </div>
+
+                <!-- ── Topics Tab ───────────────────────────────────────── -->
+                <div class="tab-pane" id="pane-topics">
+                    <div class="section-header">
+                        <div class="section-title">Manage Counseling Topics</div>
+                        <button class="btn btn-primary btn-sm" onclick="openTopicModal()">+ Add Topic</button>
+                    </div>
+                    <div class="admin-table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Slug</th>
+                                    <th>Description</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="topicsTableBody">
+                                <tr>
+                                    <td colspan="5" class="table-loading">Loading…</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="topicModal" class="modal-overlay">
+                        <div class="modal-sheet" style="max-width:450px;margin:auto;margin-top:100px;border-radius:14px">
+                            <div class="modal-title" id="topicModalTitle">Add Topic</div>
+                            <input type="hidden" id="topicId">
+                            <div class="form-group">
+                                <label class="form-label">Name</label>
+                                <input type="text" id="topicName" class="form-control" placeholder="e.g. Pornography Addiction">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Slug</label>
+                                <input type="text" id="topicSlug" class="form-control" placeholder="e.g. porn_addiction">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Description</label>
+                                <textarea id="topicDesc" class="form-control" rows="3"></textarea>
+                            </div>
+                            <div class="toggle-wrap">
+                                <span>Active</span>
+                                <div id="topicActive" class="toggle on" onclick="this.classList.toggle('on')"></div>
+                            </div>
+                            <div style="display:flex;gap:10px;margin-top:20px">
+                                <button class="btn btn-primary btn-full" onclick="saveTopic()">Save</button>
+                                <button class="btn btn-ghost btn-full" onclick="closeTopicModal()">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Broadcast Tab ────────────────────────────────────── -->
+                <div class="tab-pane" id="pane-broadcast">
+                    <div class="broadcast-box">
+                        <div class="section-title" style="margin-bottom:16px">Send Announcement</div>
+                        <div class="form-group">
+                            <label class="form-label">Target Audience</label>
+                            <select id="broadcastRole" class="form-control">
+                                <option value="">All Members</option>
+                                <option value="user">Users Only</option>
+                                <option value="mentor">Mentors Only</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Message</label>
+                            <textarea id="broadcastMsg" class="form-control" rows="5"
+                                placeholder="Write your announcement…" maxlength="1000"></textarea>
+                            <div style="text-align:right;font-size:.72rem;color:var(--text3);margin-top:4px"><span
+                                    id="broadcastLen">0</span>/1000</div>
+                        </div>
+                        <button class="btn btn-primary" onclick="sendBroadcast()">📢 Send Broadcast</button>
+                        <div id="broadcastResult" style="margin-top:12px;font-size:.85rem;color:var(--success)"></div>
+                    </div>
+                </div>
+
+                <!-- ── Audit Tab ────────────────────────────────────────── -->
+                <div class="tab-pane" id="pane-audit">
+                    <div class="admin-table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Admin ID</th>
+                                    <th>Action</th>
+                                    <th>Target</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auditTableBody">
+                                <tr>
+                                    <td colspan="5" class="table-loading">Loading…</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pagination" id="auditPagination"></div>
+                </div>
+
+            </div><!-- /admin-content -->
+        </main>
+    </div>
+
+    <script>
+        /* ─── Config ──────────────────────────────────────────────────── */
+        const API = window.location.origin;
+        let activeTab = 'overview';
+        let usersPage = 1, appsPage = 1, msgPage = 1, auditPage = 1;
+        let userSearchTimer = null;
+
+        /* ─── Auth ────────────────────────────────────────────────────── */
+        function getHeaders() {
+            const initData = window.Telegram?.WebApp?.initData || '';
+            const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || '';
+            return {
+                'Content-Type': 'application/json',
+                'x-telegram-init-data': initData,
+                'x-telegram-id': String(userId),
+            };
+        }
+
+        async function apiFetch(path, opts = {}) {
+            const res = await fetch(`${API}${path}`, {
+                ...opts,
+                headers: { ...getHeaders(), ...(opts.headers || {}) },
+                body: opts.body ? JSON.stringify(opts.body) : undefined,
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || `HTTP ${res.status}`);
+            }
+            const ct = res.headers.get('content-type') || '';
+            if (ct.includes('text/csv')) return res.blob();
+            return res.json();
+        }
+
+        /* ─── Toast ───────────────────────────────────────────────────── */
+        function showToast(msg, type = 'info') {
+            const t = document.createElement('div');
+            t.style.cssText = `position:fixed;top:16px;left:50%;transform:translateX(-50%);
+    background:${type === 'error' ? 'var(--danger)' : type === 'success' ? 'var(--success)' : 'var(--bg3)'};
+    color:#fff;padding:10px 20px;border-radius:8px;z-index:9999;
+    font-size:.85rem;font-weight:700;max-width:90vw;text-align:center;animation:fadeIn .2s ease;`;
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        /* ─── Theme ───────────────────────────────────────────────────── */
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            document.getElementById('themeIcon').textContent = theme === 'light' ? '🌙' : '☀️';
+        }
+        function toggleTheme() {
+            const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+            setTheme(cur === 'dark' ? 'light' : 'dark');
+        }
+        setTheme(localStorage.getItem('theme') || 'dark');
+
+        /* ─── Sidebar ─────────────────────────────────────────────────── */
+        function toggleSidebar() {
+            document.getElementById('adminSidebar').classList.toggle('open');
+            document.getElementById('sidebarOverlay').classList.toggle('show');
+        }
+        function closeSidebar() {
+            document.getElementById('adminSidebar').classList.remove('open');
+            document.getElementById('sidebarOverlay').classList.remove('show');
+        }
+
+        /* ─── Tab Navigation ──────────────────────────────────────────── */
+        const tabTitles = { overview: 'Overview', users: 'Users', applications: 'Mentor Applications', messages: 'Messages', tickets: 'Support Tickets', topics: 'Counseling Topics', broadcast: 'Broadcast', audit: 'Audit Log' };
+
+        function showTab(tab) {
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+            document.getElementById(`pane-${tab}`).classList.add('active');
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            document.getElementById('topbarTitle').textContent = tabTitles[tab] || tab;
+            activeTab = tab;
+            closeSidebar();
+
+            switch (tab) {
+                case 'overview': loadStats(); break;
+                case 'users': loadUsers(1); break;
+                case 'applications': loadApplications(1); break;
+                case 'messages': loadMessages(1); break;
+                case 'tickets': loadTickets(); break;
+                case 'topics': loadTopics(); break;
+                case 'audit': loadAudit(1); break;
+            }
+        }
+
+        function refreshCurrent() { loadStats(); showTab(activeTab); }
+
+        /* ─── Helpers ─────────────────────────────────────────────────── */
+        function escHtml(str) {
+            const d = document.createElement('div');
+            d.textContent = str ?? '';
+            return d.innerHTML;
+        }
+        function timeAgo(dateStr) {
+            const diff = Date.now() - new Date(dateStr).getTime();
+            if (diff < 60000) return 'just now';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+            if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+            return `${Math.floor(diff / 86400000)}d ago`;
+        }
+        function renderPagination(containerId, page, pages, loadFn) {
+            const container = document.getElementById(containerId);
+            if (pages <= 1) { container.innerHTML = ''; return; }
+            let html = `<button class="page-btn" onclick="${loadFn}(${page - 1})" ${page <= 1 ? 'disabled' : ''}>‹</button>`;
+            for (let i = Math.max(1, page - 2); i <= Math.min(pages, page + 2); i++) {
+                html += `<button class="page-btn ${i === page ? 'active' : ''}" onclick="${loadFn}(${i})">${i}</button>`;
+            }
+            html += `<button class="page-btn" onclick="${loadFn}(${page + 1})" ${page >= pages ? 'disabled' : ''}>›</button>`;
+            container.innerHTML = html;
+        }
+
+        /* ─── Stats ───────────────────────────────────────────────────── */
+        async function loadStats() {
+            try {
+                const s = await apiFetch('/api/admin/stats');
+                document.getElementById('st-users').textContent = s.total_users;
+                document.getElementById('st-new').textContent = `${s.new_today} new today`;
+                document.getElementById('st-mentors').textContent = s.active_mentors;
+                document.getElementById('st-pending').textContent = s.pending_applications;
+                document.getElementById('st-flagged').textContent = s.flagged_messages;
+                document.getElementById('st-tickets').textContent = s.open_tickets;
+
+                const pb = document.getElementById('pendingBadge');
+                pb.textContent = s.pending_applications;
+                pb.style.display = s.pending_applications > 0 ? 'inline' : 'none';
+
+                const tb = document.getElementById('openTicketsBadge');
+                tb.textContent = s.open_tickets;
+                tb.style.display = s.open_tickets > 0 ? 'inline' : 'none';
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        /* ─── Users ───────────────────────────────────────────────────── */
+        function debounceLoadUsers() {
+            clearTimeout(userSearchTimer);
+            userSearchTimer = setTimeout(() => loadUsers(1), 400);
+        }
+
+        async function loadUsers(page = 1) {
+            usersPage = page;
+            const search = document.getElementById('userSearch').value;
+            const role = document.getElementById('userRoleFilter').value;
+            const body = document.getElementById('usersTableBody');
+            body.innerHTML = '<tr><td colspan="7" class="table-loading">Loading…</td></tr>';
+
+            try {
+                let url = `/api/admin/users?page=${page}`;
+                if (search) url += `&search=${encodeURIComponent(search)}`;
+                if (role) url += `&role=${role}`;
+                const data = await apiFetch(url);
+
+                if (!data.users.length) {
+                    body.innerHTML = '<tr><td colspan="7" class="table-loading">No users found</td></tr>';
+                    return;
+                }
+
+                body.innerHTML = data.users.map(u => {
+                    const name = u.user_settings?.display_name || u.anonymous_id;
+                    return `<tr>
+        <td><span style="font-family:var(--font-display);color:var(--gold);font-size:.8rem">${escHtml(u.anonymous_id)}</span></td>
+        <td><span class="chip ${u.role === 'mentor' ? 'chip-gold' : 'chip-blue'}">${u.role}</span></td>
+        <td>${u.sex || '–'}</td>
+        <td>${u.age_range || '–'}</td>
+        <td>${timeAgo(u.created_at)}</td>
+        <td><span class="${u.is_banned ? 'status-banned' : 'status-active'}">${u.is_banned ? 'Banned' : 'Active'}</span></td>
+        <td>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${u.role === 'user' ? `<button class="btn btn-sm btn-outline" onclick="changeRole(${u.telegram_id},'mentor')">→ Mentor</button>` : ''}
+            ${u.role === 'mentor' ? `<button class="btn btn-sm btn-ghost" onclick="disqualifyMentor(${u.telegram_id})">Disqualify</button>` : ''}
+            <button class="btn btn-sm btn-danger" onclick="toggleBan(${u.telegram_id},${!u.is_banned})">${u.is_banned ? 'Unban' : 'Ban'}</button>
+            <button class="btn btn-sm btn-outline" style="color:var(--danger);border-color:var(--danger)" onclick="deleteUser(${u.telegram_id},'${escHtml(u.anonymous_id)}')">Delete</button>
+          </div>
+        </td>
+      </tr>`;
+                }).join('');
+
+                renderPagination('usersPagination', page, data.pages, 'loadUsers');
+            } catch (e) {
+                body.innerHTML = `<tr><td colspan="7" class="table-loading">${e.message}</td></tr>`;
+            }
+        }
+
+        async function changeRole(telegram_id, role) {
+            if (!confirm(`Change this user's role to ${role}?`)) return;
+            try {
+                await apiFetch(`/api/admin/users/${telegram_id}/role`, { method: 'PATCH', body: { role } });
+                showToast(`Role changed to ${role}`, 'success');
+                loadUsers(usersPage);
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        async function toggleBan(telegram_id, banned) {
+            if (!confirm(`${banned ? 'Ban' : 'Unban'} this user?`)) return;
+            try {
+                await apiFetch(`/api/admin/users/${telegram_id}/ban`, { method: 'PATCH', body: { banned } });
+                showToast(banned ? 'User banned' : 'User unbanned', 'success');
+                loadUsers(usersPage);
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        async function disqualifyMentor(telegram_id) {
+            if (!confirm('Disqualify this mentor? They will be returned to user role and their mentees unassigned.')) return;
+            try {
+                await apiFetch(`/api/admin/mentors/${telegram_id}/disqualify`, { method: 'PATCH' });
+                showToast('Mentor disqualified', 'success');
+                loadUsers(usersPage);
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        async function deleteUser(telegram_id, anonymous_id) {
+            if (!confirm(`⚠️ PERMANENT ACTION\n\nDelete user ${anonymous_id}? All messages, sessions, and data will be permanently removed. This cannot be undone.`)) return;
+            try {
+                await apiFetch(`/api/admin/users/${telegram_id}/delete`, { method: 'DELETE' });
+                showToast(`User ${anonymous_id} deleted permanently`, 'success');
+                loadUsers(usersPage);
+                loadStats();
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        /* ─── Applications ────────────────────────────────────────────── */
+        async function loadApplications(page = 1) {
+            appsPage = page;
+            const status = document.getElementById('appStatusFilter').value;
+            const container = document.getElementById('applicationsContainer');
+            container.innerHTML = '<div class="table-loading">Loading…</div>';
+
+            try {
+                const data = await apiFetch(`/api/admin/applications?status=${status}&page=${page}`);
+
+                if (!data.applications.length) {
+                    container.innerHTML = '<div class="table-loading">No applications found</div>';
+                    document.getElementById('appsPagination').innerHTML = '';
+                    return;
+                }
+
+                container.innerHTML = data.applications.map(app => `
+      <div class="app-card" id="app-${app.id}">
+        <div class="app-card-header">
+          <div>
+            <div class="app-card-id">${escHtml(app.user?.anonymous_id || 'Unknown')}</div>
+            <div class="app-card-meta">
+              ${app.user?.sex || '?'} · ${app.user?.age_range || '?'} · Joined ${timeAgo(app.user?.created_at || app.submitted_at)}
+              · Submitted ${timeAgo(app.submitted_at)}
+            </div>
+          </div>
+          <span class="chip ${app.status === 'pending' ? 'chip-gold' : app.status === 'approved' ? 'chip-green' : 'chip-red'}">${app.status}</span>
+        </div>
+        <div class="app-card-q">
+          <div class="app-card-q-label">How long have you been free?</div>
+          <div class="app-card-q-answer">${escHtml(app.answer_q1)}</div>
+        </div>
+        <div class="app-card-q">
+          <div class="app-card-q-label">Key recovery steps</div>
+          <div class="app-card-q-answer">${escHtml(app.answer_q2)}</div>
+        </div>
+        ${app.answer_q3 ? `<div class="app-card-q"><div class="app-card-q-label">Additional</div><div class="app-card-q-answer">${escHtml(app.answer_q3)}</div></div>` : ''}
+        ${app.admin_note ? `<div class="app-card-q"><div class="app-card-q-label">Admin Note</div><div class="app-card-q-answer">${escHtml(app.admin_note)}</div></div>` : ''}
+        ${app.status === 'pending' ? `
+          <div class="app-card-actions">
+            <textarea class="inline-note" id="note-${app.id}" placeholder="Optional admin note…"></textarea>
+          </div>
+          <div class="app-card-actions">
+            <button class="btn btn-primary btn-sm" onclick="reviewApp('${app.id}','approved')">✓ Approve</button>
+            <button class="btn btn-danger btn-sm" onclick="reviewApp('${app.id}','rejected')">✗ Reject</button>
+          </div>` : ''}
+      </div>`).join('');
+
+                renderPagination('appsPagination', page, data.pages, 'loadApplications');
+            } catch (e) {
+                container.innerHTML = `<div class="table-loading">${e.message}</div>`;
+            }
+        }
+
+        async function reviewApp(id, action) {
+            const note = document.getElementById(`note-${id}`)?.value || '';
+            try {
+                await apiFetch(`/api/admin/applications/${id}`, { method: 'PATCH', body: { action, admin_note: note } });
+                showToast(`Application ${action}`, 'success');
+                loadApplications(appsPage);
+                loadStats();
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        /* ─── Messages ────────────────────────────────────────────────── */
+        async function loadMessages(page = 1) {
+            msgPage = page;
+            const flagged = document.getElementById('flaggedOnly').checked;
+            const body = document.getElementById('messagesTableBody');
+            body.innerHTML = '<tr><td colspan="5" class="table-loading">Loading…</td></tr>';
+
+            try {
+                const data = await apiFetch(`/api/admin/messages?flagged=${flagged}&page=${page}`);
+
+                if (!data.messages.length) {
+                    body.innerHTML = '<tr><td colspan="5" class="table-loading">No messages found</td></tr>';
+                    document.getElementById('msgPagination').innerHTML = '';
+                    return;
+                }
+
+                body.innerHTML = data.messages.map(m => `<tr>
+      <td><span style="font-size:.75rem;color:var(--text3)">${m.from_id}</span></td>
+      <td><span style="font-size:.75rem;color:var(--text3)">${m.to_id}</span></td>
+      <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(m.content)}</td>
+      <td>${m.is_flagged ? '<span class="chip chip-red">⚑ Flagged</span>' : '<span class="chip chip-green">OK</span>'}</td>
+      <td>${timeAgo(m.created_at)}</td>
+    </tr>`).join('');
+
+                renderPagination('msgPagination', page, data.pages, 'loadMessages');
+            } catch (e) {
+                body.innerHTML = `<tr><td colspan="5" class="table-loading">${e.message}</td></tr>`;
+            }
+        }
+
+        /* ─── Tickets ─────────────────────────────────────────────────── */
+        async function loadTickets() {
+            const container = document.getElementById('ticketsContainer');
+            container.innerHTML = '<div class="table-loading">Loading…</div>';
+
+            try {
+                const tickets = await apiFetch('/api/admin/tickets');
+
+                if (!tickets.length) {
+                    container.innerHTML = '<div class="table-loading">No open tickets 🎉</div>';
+                    return;
+                }
+
+                container.innerHTML = tickets.map(t => `
+      <div class="ticket-card" id="ticket-${t.id}">
+        <div class="ticket-header">
+          <div>
+            <div class="ticket-subject">${escHtml(t.subject)}</div>
+            <div style="font-size:.72rem;color:var(--text3);margin-top:2px">
+              From: ${escHtml(t.user?.anonymous_id || String(t.telegram_id))} · ${timeAgo(t.created_at)}
+            </div>
+          </div>
+          <span class="chip ${t.status === 'open' ? 'chip-gold' : 'chip-blue'}">${t.status}</span>
+        </div>
+        <div class="ticket-desc">${escHtml(t.description)}</div>
+        ${t.admin_reply ? `<div style="background:var(--bg3);padding:10px;border-radius:6px;font-size:.82rem;color:var(--text2);margin-bottom:10px"><strong style="color:var(--gold)">Admin replied:</strong> ${escHtml(t.admin_reply)}</div>` : ''}
+        <div class="ticket-reply-area">
+          <textarea class="inline-note" id="reply-${t.id}" placeholder="Reply to this ticket…">${t.admin_reply || ''}</textarea>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm btn-primary" onclick="replyTicket('${t.id}','in_progress')">Reply & Keep Open</button>
+            <button class="btn btn-sm btn-outline" onclick="replyTicket('${t.id}','resolved')">✓ Resolve</button>
+          </div>
+        </div>
+      </div>`).join('');
+            } catch (e) {
+                container.innerHTML = `<div class="table-loading">${e.message}</div>`;
+            }
+        }
+
+        async function replyTicket(id, status) {
+            const reply = document.getElementById(`reply-${id}`).value.trim();
+            if (!reply) { showToast('Please write a reply', 'error'); return; }
+            try {
+                await apiFetch(`/api/admin/tickets/${id}`, { method: 'PATCH', body: { admin_reply: reply, status } });
+                showToast('Ticket updated', 'success');
+                loadTickets();
+                loadStats();
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        /* ─── Topics ──────────────────────────────────────────────────── */
+        async function loadTopics() {
+            const body = document.getElementById('topicsTableBody');
+            body.innerHTML = '<tr><td colspan="5" class="table-loading">Loading…</td></tr>';
+            try {
+                const topics = await apiFetch('/api/topics/admin');
+                body.innerHTML = topics.map(t => `<tr>
+                    <td><strong>${escHtml(t.name)}</strong></td>
+                    <td><code style="font-size:.7rem">${escHtml(t.slug)}</code></td>
+                    <td style="font-size:.75rem">${escHtml(t.description)}</td>
+                    <td><span class="${t.is_active ? 'status-active' : 'status-rejected'}">${t.is_active ? 'Active' : 'Disabled'}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-ghost" onclick="editTopic(${JSON.stringify(t).replace(/"/g, '&quot;')})">Edit</button>
+                    </td>
+                </tr>`).join('');
+            } catch (e) { body.innerHTML = `<tr><td colspan="5" class="table-loading">${e.message}</td></tr>`; }
+        }
+
+        function openTopicModal() {
+            document.getElementById('topicModalTitle').textContent = 'Add Topic';
+            document.getElementById('topicId').value = '';
+            document.getElementById('topicName').value = '';
+            document.getElementById('topicSlug').value = '';
+            document.getElementById('topicDesc').value = '';
+            document.getElementById('topicActive').classList.add('on');
+            document.getElementById('topicModal').classList.add('open');
+        }
+
+        function closeTopicModal() { document.getElementById('topicModal').classList.remove('open'); }
+
+        function editTopic(t) {
+            document.getElementById('topicModalTitle').textContent = 'Edit Topic';
+            document.getElementById('topicId').value = t.id;
+            document.getElementById('topicName').value = t.name;
+            document.getElementById('topicSlug').value = t.slug;
+            document.getElementById('topicDesc').value = t.description;
+            if (t.is_active) document.getElementById('topicActive').classList.add('on');
+            else document.getElementById('topicActive').classList.remove('on');
+            document.getElementById('topicModal').classList.add('open');
+        }
+
+        async function saveTopic() {
+            const id = document.getElementById('topicId').value;
+            const body = {
+                name: document.getElementById('topicName').value,
+                slug: document.getElementById('topicSlug').value,
+                description: document.getElementById('topicDesc').value,
+                is_active: document.getElementById('topicActive').classList.contains('on')
+            };
+            try {
+                const url = id ? `/api/topics/${id}` : '/api/topics';
+                await apiFetch(url, { method: id ? 'PUT' : 'POST', body });
+                showToast('Topic saved', 'success');
+                closeTopicModal();
+                loadTopics();
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        /* ─── Broadcast ───────────────────────────────────────────────── */
+        document.getElementById('broadcastMsg').addEventListener('input', function () {
+            document.getElementById('broadcastLen').textContent = this.value.length;
+        });
+
+        async function sendBroadcast() {
+            const message = document.getElementById('broadcastMsg').value.trim();
+            const role_filter = document.getElementById('broadcastRole').value || undefined;
+            if (!message) { showToast('Write a message first', 'error'); return; }
+            if (!confirm(`Send this broadcast${role_filter ? ' to ' + role_filter + 's' : ' to all members'}?`)) return;
+
+            try {
+                const data = await apiFetch('/api/admin/broadcast', { method: 'POST', body: { message, role_filter } });
+                document.getElementById('broadcastResult').textContent = `✓ Sent to ${data.sent_to} members`;
+                document.getElementById('broadcastMsg').value = '';
+                document.getElementById('broadcastLen').textContent = '0';
+                showToast('Broadcast sent!', 'success');
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        /* ─── Audit ───────────────────────────────────────────────────── */
+        async function loadAudit(page = 1) {
+            auditPage = page;
+            const body = document.getElementById('auditTableBody');
+            body.innerHTML = '<tr><td colspan="5" class="table-loading">Loading…</td></tr>';
+
+            try {
+                const data = await apiFetch(`/api/admin/audit-logs?page=${page}`);
+
+                if (!data.logs.length) {
+                    body.innerHTML = '<tr><td colspan="5" class="table-loading">No logs found</td></tr>';
+                    document.getElementById('auditPagination').innerHTML = '';
+                    return;
+                }
+
+                body.innerHTML = data.logs.map(log => `<tr>
+      <td style="white-space:nowrap;font-size:.75rem">${timeAgo(log.created_at)}</td>
+      <td style="font-size:.75rem">${log.admin_id}</td>
+      <td><span class="audit-action">${escHtml(log.action)}</span></td>
+      <td style="font-size:.75rem">${log.target_id || '–'} <span style="color:var(--text3)">${log.target_type ? `(${log.target_type})` : ''}</span></td>
+      <td style="font-size:.72rem;color:var(--text3);max-width:200px;overflow:hidden;text-overflow:ellipsis">${JSON.stringify(log.details || {})}</td>
+    </tr>`).join('');
+
+                renderPagination('auditPagination', page, Math.ceil(data.total / 50), 'loadAudit');
+            } catch (e) {
+                body.innerHTML = `<tr><td colspan="5" class="table-loading">${e.message}</td></tr>`;
+            }
+        }
+
+        /* ─── Export ──────────────────────────────────────────────────── */
+        async function exportTable(table) {
+            try {
+                const blob = await apiFetch(`/api/admin/export/${table}`);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = `${table}-export.csv`;
+                document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(url);
+            } catch (e) { showToast(e.message, 'error'); }
+        }
+
+        /* ─── Init ────────────────────────────────────────────────────── */
+        window.Telegram?.WebApp?.ready();
+        loadStats();
+    </script>
+</body>
+
+</html>
