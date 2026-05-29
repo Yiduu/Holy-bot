@@ -1089,6 +1089,9 @@ bot.on('message', async (msg) => {
         sex: state.tempData.sex,
         educational_background: state.tempData.educational_background,
         about_me: about,
+        answer_q1: state.tempData.sex,
+        answer_q2: state.tempData.educational_background,
+        answer_q3: about,
         status: 'pending',
         submitted_at: new Date().toISOString()
       });
