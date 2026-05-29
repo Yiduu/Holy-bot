@@ -537,7 +537,22 @@ async function forwardMessage(fromId, toId, text) {
   const lang = await getUserLang(toId);
   if (recipient?.chat_id) {
     const roleLabel = sender?.role === 'mentor' ? tSync(lang, 'role_mentor') : tSync(lang, 'role_mentee');
-    await safeSend(recipient.chat_id, tSync(lang, 'msg_from_partner', { role: roleLabel, nick: mdEscape(sender?.anonymous_id), text: mdEscape(text) }));
+    const msgText = tSync(lang, 'msg_from_partner', { role: roleLabel, nick: mdEscape(sender?.anonymous_id), text: mdEscape(text) });
+
+    const partnersInfo = await getActiveChatPartners(toId);
+    const hasMultiple = partnersInfo && partnersInfo.partners.length > 1;
+
+    const extra = {};
+    if (hasMultiple) {
+      extra.reply_markup = {
+        inline_keyboard: [[{
+          text: lang === 'am' ? `💬 ከ @${sender?.anonymous_id} ጋር አውራ` : `💬 Chat with @${sender?.anonymous_id}`,
+          callback_data: `focus_chat_${fromId}`
+        }]]
+      };
+    }
+
+    await safeSend(recipient.chat_id, msgText, extra);
     setState(toId, 'chat_active', fromId);
   }
 }
@@ -1026,7 +1041,26 @@ bot.on('message', async (msg) => {
     const buttons = ut.map(t => [{ text: t.topics.name, callback_data: `search_topic_${t.topic_id}` }]);
     return safeSend(chatId, tSync(lang, 'choose_topic_search'), { reply_markup: { inline_keyboard: buttons } });
   }
-  if (textMatches('btn_my_chat')) return safeSend(chatId, tSync(lang, 'chat_instructions'));
+  if (textMatches('btn_my_chat')) {
+    const partnersInfo = await getActiveChatPartners(chatId);
+    if (!partnersInfo) {
+      return safeSend(chatId, tSync(lang, 'no_active_mentor'), {
+        reply_markup: { inline_keyboard: [[{ text: tSync(lang, 'btn_find_mentor'), callback_data: 'menu_mentors' }]] }
+      });
+    }
+    if (partnersInfo.partners.length === 1) {
+      return safeSend(chatId, tSync(lang, 'chat_instructions'));
+    } else {
+      const { data: mentees } = await supabase.from('users').select('telegram_id, anonymous_id').in('telegram_id', partnersInfo.partners);
+      const buttons = (mentees || []).map(m => [{
+        text: lang === 'am' ? `💬 ከ @${m.anonymous_id} ጋር አውራ` : `💬 Chat with @${m.anonymous_id}`,
+        callback_data: `focus_chat_${m.telegram_id}`
+      }]);
+      return safeSend(chatId, lang === 'am' ? 'ለመወያየት አንድ ተመካሪ ይምረጡ፡' : 'Select a mentee to chat with:', {
+        reply_markup: { inline_keyboard: buttons }
+      });
+    }
+  }
   if (textMatches('btn_streak')) return handleStreakFlow(chatId);
   if (textMatches('btn_journal')) {
     return safeSend(chatId, `✏️ *${tSync(lang, 'journal_title')}*`, {
@@ -1061,7 +1095,10 @@ bot.on('message', async (msg) => {
     for (const m of mentees) {
       const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', m.user_id).single();
       textStr += `👤 @${mdEscape(u?.anonymous_id || String(m.user_id))} (${mdEscape(m.topics?.name || '?')})\n`;
-      buttons.push([{ text: `❌ ${tSync(lang, 'btn_end')} @${u?.anonymous_id || m.user_id}`, callback_data: `end_mentorship_${m.user_id}` }]);
+      buttons.push([
+        { text: lang === 'am' ? '💬 አውራ' : '💬 Chat', callback_data: `focus_chat_${m.user_id}` },
+        { text: `❌ ${tSync(lang, 'btn_end')} @${u?.anonymous_id || m.user_id}`, callback_data: `end_mentorship_${m.user_id}` }
+      ]);
     }
     return safeSend(chatId, textStr, { reply_markup: { inline_keyboard: buttons } });
   }
@@ -1657,7 +1694,10 @@ bot.on('callback_query', async (query) => {
     for (const m of mentees) {
       const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', m.user_id).single();
       textStr += `👤 @${mdEscape(u?.anonymous_id || String(m.user_id))} (${mdEscape(m.topics?.name || '?')})\n`;
-      buttons.push([{ text: `❌ ${tSync(lang, 'btn_end')} @${u?.anonymous_id || m.user_id}`, callback_data: `end_mentorship_${m.user_id}` }]);
+      buttons.push([
+        { text: lang === 'am' ? '💬 አውራ' : '💬 Chat', callback_data: `focus_chat_${m.user_id}` },
+        { text: `❌ ${tSync(lang, 'btn_end')} @${u?.anonymous_id || m.user_id}`, callback_data: `end_mentorship_${m.user_id}` }
+      ]);
     }
     await safeSend(chatId, textStr, { reply_markup: { inline_keyboard: buttons } });
     return bot.answerCallbackQuery(query.id);
@@ -1665,6 +1705,12 @@ bot.on('callback_query', async (query) => {
   else if (data.startsWith('end_mentorship_')) {
     const userId = data.replace('end_mentorship_', '');
     await endMentorship(chatId, userId, 'mentor');
+  }
+  else if (data.startsWith('focus_chat_')) {
+    const userId = data.replace('focus_chat_', '');
+    setState(chatId, 'chat_active', userId);
+    const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', userId).single();
+    await safeSend(chatId, tSync(lang, 'focus_set', { nick: mdEscape(u?.anonymous_id || userId) }));
   }
 
   else if (data === 'menu_apply') {

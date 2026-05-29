@@ -123,7 +123,13 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     }
 
     const jitsiToken = generateJitsiJWT(roomName, { displayName: hostUser.anonymous_id, moderator: true });
-    res.status(201).json({ session, room_name: roomName, room_password: roomPassword, jitsi_token: jitsiToken });
+    res.status(201).json({
+      session,
+      room_name: roomName,
+      room_password: roomPassword,
+      jitsi_token: jitsiToken,
+      jitsi_domain: process.env.JITSI_DOMAIN || 'meet.jit.si'
+    });
   });
 
   // GET /api/sessions/my – sessions I'm part of
@@ -190,6 +196,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       room_name: session.room_name,
       room_password: session.room_password,
       jitsi_token: jitsiToken,
+      jitsi_domain: process.env.JITSI_DOMAIN || 'meet.jit.si',
       display_name: user?.anonymous_id || 'Anonymous',
       is_moderator: isModerator,
     });
