@@ -12,26 +12,19 @@ CREATE TABLE IF NOT EXISTS topics (
 
 -- Seed topics
 INSERT INTO topics (name, slug, description) VALUES
-('Pornography Addiction', 'porn_addiction', 'Recovery from compulsive pornography use.'),
-('Drug Addiction', 'drug_addiction', 'Recovery from substance abuse and chemical dependency.'),
-('Alcohol Addiction', 'alcohol_addiction', 'Recovery from alcohol dependency.'),
-('Identity Crisis', 'identity_crisis', 'Seeking clarity on purpose and identity in Christ.'),
-('Anxiety & Panic', 'anxiety_panic', 'Support for managing anxiety disorders and panic attacks.'),
-('Depression', 'depression', 'Support for clinical and situational depression.'),
-('Loneliness & Isolation', 'loneliness', 'Overcoming isolation and building community.'),
-('Grief & Loss', 'grief_loss', 'Navigating the journey of loss and mourning.'),
-('Anger Management', 'anger_management', 'Biblical principles for managing anger.'),
-('Self-Harm', 'self_harm', 'Support for overcoming self-harm behaviors.'),
-('Suicidal Thoughts', 'suicide_prevention', 'Critical support and hope for those in despair.'),
-('Eating Disorders', 'eating_disorders', 'Recovery from body image and eating-related struggles.'),
-('Gaming Addiction', 'gaming_addiction', 'Balancing technology and real-life responsibilities.'),
-('Social Media Addiction', 'social_media_addiction', 'Breaking free from compulsive digital validation.'),
-('Workaholism', 'workaholism', 'Finding rest and balance in a high-pressure world.'),
-('Purity & Sexual Integrity', 'sexual_integrity', 'Maintaining holiness in relationships and thought life.'),
-('Relationship & Marriage', 'relationship_marriage', 'Building healthy, God-centered relationships.'),
-('Parenting Struggles', 'parenting', 'Support for the challenges of raising children.'),
-('Financial Stress', 'finances', 'Stewardship and peace in financial difficulty.'),
-('Trauma & PTSD', 'trauma_ptsd', 'Healing from past wounds and traumatic experiences.')
+('Identity Crisis / የማንነት ቀውስ', 'identity_crisis', ''),
+('Depression/anxiety / ድብርት/ጭንቀት', 'depression_anxiety', ''),
+('Alcohol/drug addiction / አልኮል/አደንዛዥ ዕፅ ሱሰኝነት', 'alcohol_drug_addiction', ''),
+('Pre-marital sex/ sexual issues / ጋብቻ በፊት ወሲብ/የወሲብ ችግሮች', 'pre_marital_sexual_issues', ''),
+('Porn/masterbation / ፖርን/ማስተርቤሽን', 'porn_masterbation', ''),
+('Social media addiction / ማህበራዊ ሚዲያ ሱሰኝነት', 'social_media_addiction', ''),
+('Losing faith/ spiritual life / እምነት ማጣት/መንፈሳዊ ሕይወት', 'losing_faith_spiritual_life', ''),
+('Time management / ጊዜ አጠቃቀም', 'time_management', ''),
+('Loneliness / ብቸኝነት', 'loneliness', ''),
+('Family issues / የቤተሰብ ጉዳዮች', 'family_issues', ''),
+('Relationship issues / የፍቅር ግንኙነት ጉዳዮች', 'relationship_issues', ''),
+('Academic counseling / የትምህርት ጉዳይ ምክር', 'academic_counseling', ''),
+('Other / ሌላ', 'other', '')
 ON CONFLICT (slug) DO NOTHING;
 
 -- 2. User Topics (Struggles)
