@@ -301,13 +301,18 @@
       <button class="btn btn-ghost btn-sm" onclick="clearChatHistory()" style="color:var(--danger)" data-i18n="btn_clear">Clear</button>
     </div>
     <div id="chatMessages" class="chat-messages"></div>
-    <div id="typingIndicator" class="typing-indicator"></div>
-    <div id="chatInputRow" class="chat-input-row" style="display:none">
+<div id="typingIndicator" class="typing-indicator"></div>
+    <div id="chatInputRow" class="chat-input-row hidden">
       <input id="chatInput" class="chat-input" placeholder="Type a message…" oninput="handleChatTyping()" onkeydown="if(event.key==='Enter')sendMessage()" />
       <button class="chat-send-btn" onclick="sendMessage()">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <line x1="22" y1="2" x2="11" y2="13"/> 
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
       </button>
     </div>
+
+    
   </div>
   
   <!-- ── Page: Mentorship Requests ──────────────────────────────── -->
@@ -449,6 +454,7 @@
   </div>
 
   <!-- ─── Bottom Navigation ─────────────────────────────────────── -->
+    
   <nav class="bottom-nav">
     <div id="nav-dashboard" class="nav-item active" onclick="navigate('dashboard')">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
