@@ -6,7 +6,7 @@ const jwt = require('jsonwebtoken');
 // FIX: Moved require() calls to the top of the file (out of route handlers)
 // and corrected the relative path from routes/sessions.js → bot.js at project root.
 const { notifySessionInvite } = require('../bot');
-const { supabase, generateJitsiJWT } = require('../utils');
+const { generateJitsiJWT } = require('../utils');
 // Default to the public Jitsi server if no domain is set
 const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.jit.si';
 
