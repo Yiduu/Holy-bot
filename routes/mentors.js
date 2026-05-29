@@ -7,7 +7,8 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
   // GET /api/mentors – list available mentors
   router.get('/', requireAuth, async (req, res) => {
-    let { topic_id } = req.query;
+    let { topic_id, topic } = req.query;
+  if (topic && !topic_id) topic_id = topic;
     
     let query = supabase
       .from('users')

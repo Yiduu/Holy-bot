@@ -31,11 +31,11 @@ module.exports = function topicRoutes(supabase, requireAuth, requireAdmin) {
   // POST /api/topics - create a new topic
   router.post('/', requireAuth, requireAdmin, async (req, res) => {
     const { name, slug, description } = req.body;
-    const { data, error } = await supabase
-      .from('topics')
-      .insert({ name, slug, description })
-      .select()
-      .single();
+      const { data, error } = await supabase
+        .from('topics')
+        .upsert({ name, slug, description }, { onConflict: 'slug' })
+        .select()
+        .single();
 
     if (error) return res.status(500).json({ error: error.message });
     res.status(201).json(data);
