@@ -294,7 +294,7 @@
   </div>
 
   <!-- ── Page: Chat ─────────────────────────────────────────────── -->
-  <div id="page-chat" class="page" style="padding-bottom:0">
+  <div id="page-chat" class="page">
     <div class="app-header">
       <h2 id="chatWith" data-i18n="Chat">Messages</h2>
       <select id="chatPartnerSelect" class="form-control btn-sm" style="width:auto;display:none;background:var(--bg3)" onchange="switchChatPartner(this.value)"></select>
@@ -302,7 +302,7 @@
     </div>
     <div id="chatMessages" class="chat-messages"></div>
 <div id="typingIndicator" class="typing-indicator"></div>
-    <div id="chatInputRow" class="chat-input-row hidden">
+    <div id="chatInputRow" class="chat-input-row">
       <input id="chatInput" class="chat-input" placeholder="Type a message…" oninput="handleChatTyping()" onkeydown="if(event.key==='Enter')sendMessage()" />
       <button class="chat-send-btn" onclick="sendMessage()">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">

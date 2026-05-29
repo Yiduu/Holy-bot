@@ -320,12 +320,20 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .message-bubble.sent .message-time { color: rgba(26,18,0,0.6); text-align: right; }
 
 .chat-input-row {
-  display: flex; gap: 8px; padding: 10px 16px;
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
   border-top: 1px solid var(--border-dim);
   background: var(--bg2);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease;
   transform: translateY(0);
 }
+
 .chat-input-row.hidden {
   display: none !important;
   transform: translateY(20px);
