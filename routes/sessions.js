@@ -6,6 +6,9 @@ const jwt = require('jsonwebtoken');
 // FIX: Moved require() calls to the top of the file (out of route handlers)
 // and corrected the relative path from routes/sessions.js → bot.js at project root.
 const { notifySessionInvite } = require('../bot');
+const { supabase, generateJitsiJWT } = require('../utils');
+// Default to the public Jitsi server if no domain is set
+const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.jit.si';
 
 module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) {
   const router = express.Router();
@@ -13,17 +16,6 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
   function generateRoomPassword(length = 12) {
     const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
     return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  }
-
-  function generateJitsiJWT(roomName, userInfo) {
-    if (!process.env.JITSI_JWT_SECRET) return null;
-    return jwt.sign({
-      context: { user: userInfo },
-      aud: 'jitsi',
-      iss: process.env.JITSI_APP_ID || 'holy-app',
-      sub: 'meet.jit.si',
-      room: roomName,
-    }, process.env.JITSI_JWT_SECRET, { expiresIn: '4h' });
   }
 
   // POST /api/sessions/create – mentor creates a session
@@ -122,13 +114,17 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       }
     }
 
-    const jitsiToken = generateJitsiJWT(roomName, { displayName: hostUser.anonymous_id, moderator: true });
+    let jitsiToken = null;
+    if (JITSI_DOMAIN !== 'meet.jit.si') {
+      jitsiToken = generateJitsiJWT(roomName, { displayName: hostUser.anonymous_id, moderator: true });
+    }
     res.status(201).json({
       session,
       room_name: roomName,
       room_password: roomPassword,
-      jitsi_token: jitsiToken,
-      jitsi_domain: process.env.JITSI_DOMAIN || 'meet.jit.si'
+      // Only include the token for custom Jitsi installations
+      ...(jitsiToken && { jitsi_token: jitsiToken }),
+      jitsi_domain: JITSI_DOMAIN
     });
   });
 
@@ -190,13 +186,16 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
 
     const { data: user } = await supabase.from('users').select('anonymous_id').eq('telegram_id', telegram_id).single();
     const isModerator = session.host_id === telegram_id;
-    const jitsiToken = generateJitsiJWT(session.room_name, { displayName: user?.anonymous_id || 'Anonymous', moderator: isModerator });
-
+    let jitsiToken = null;
+    if (JITSI_DOMAIN !== 'meet.jit.si') {
+      jitsiToken = generateJitsiJWT(session.room_name, { displayName: user?.anonymous_id || 'Anonymous', moderator: isModerator });
+    }
     res.json({
       room_name: session.room_name,
       room_password: session.room_password,
-      jitsi_token: jitsiToken,
-      jitsi_domain: process.env.JITSI_DOMAIN || 'meet.jit.si',
+      // Include token only for custom Jitsi domains
+      ...(jitsiToken && { jitsi_token: jitsiToken }),
+      jitsi_domain: JITSI_DOMAIN,
       display_name: user?.anonymous_id || 'Anonymous',
       is_moderator: isModerator,
     });

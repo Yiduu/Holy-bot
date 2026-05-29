@@ -676,10 +676,15 @@ function showScheduleModal(is_group, mentee_id = null) {
     });
   }
 
-  const now = new Date();
-  now.setHours(now.getHours() + 1);
-  document.getElementById('scheduleDate').value = now.toISOString().split('T')[0];
-  document.getElementById('scheduleTime').value = now.toTimeString().slice(0,5);
+    const now = new Date();
+    // Use the current local date and time as the default values.
+    const localYear = now.getFullYear();
+    const localMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const localDay = String(now.getDate()).padStart(2, '0');
+    document.getElementById('scheduleDate').value = `${localYear}-${localMonth}-${localDay}`;
+    // Use local time without timezone offset (HH:MM)
+    const localTime = now.toTimeString().slice(0,5);
+    document.getElementById('scheduleTime').value = localTime;
   
   modal.classList.add('open');
   
@@ -702,14 +707,9 @@ function showScheduleModal(is_group, mentee_id = null) {
       });
     }
     
-    const scheduledAtObj = new Date(`${date}T${time}`);
-    if (isNaN(scheduledAtObj.getTime())) {
-      haptic('error');
-      showToast('Invalid date or time selected', 'error');
-      return;
-    }
-    
-    const scheduledAt = scheduledAtObj.toISOString();
+    // Build ISO string in UTC from the local date & time
+    const scheduledAt = new Date(`${date}T${time}:00`).toISOString();
+
     closeScheduleModal();
     createSession(is_group, mentee_id, scheduledAt, title, participant_ids);
   };
