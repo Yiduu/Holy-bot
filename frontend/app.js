@@ -994,6 +994,9 @@ function toggleNotif(id) {
 // ─── Mentor Application ───────────────────────────────────────
 function openApplyModal() {
   haptic('light');
+  $('applySex').value = '';
+  $('applyEdu').value = '';
+  $('applyAbout').value = '';
   $('applyModal').classList.add('open');
 }
 function closeApplyModal() {
@@ -1002,12 +1005,28 @@ function closeApplyModal() {
 }
 async function submitApplication() {
   haptic('medium');
-  const q1 = $('applyQ1').value.trim();
-  const q2 = $('applyQ2').value.trim();
-  if (!q1 || !q2) { haptic('error'); showToast('Please answer all questions', 'error'); return; }
+  const sex = $('applySex').value;
+  const edu = $('applyEdu').value.trim();
+  const about = $('applyAbout').value.trim();
+  
+  if (!sex || !edu || !about) { 
+    haptic('error'); 
+    showToast('Please answer all questions', 'error'); 
+    return; 
+  }
 
   try {
-    await apiFetch('/api/users/apply-mentor', { method: 'POST', body: { answer_q1: q1, answer_q2: q2 } });
+    await apiFetch('/api/users/apply-mentor', { 
+      method: 'POST', 
+      body: { 
+        sex, 
+        educational_background: edu, 
+        about_me: about,
+        answer_q1: sex,
+        answer_q2: edu,
+        answer_q3: about
+      } 
+    });
     haptic('success');
     showToast('Application submitted! 🙏', 'success');
     closeApplyModal();

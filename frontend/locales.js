@@ -81,7 +81,13 @@ const I18N = {
     "Daily Bible Verse": "Daily Bible Verse",
     "Specialization": "Specialization",
     "Max Mentees": "Max Mentees",
-    "Bio": "Bio"
+    "Bio": "Bio",
+    "apply_q1": "Please select your sex:",
+    "apply_q2": "What is your educational background? (e.g., Bachelor's in Psychology)",
+    "apply_q3": "Tell us about yourself (experience, qualifications, and why you want to be a mentor):",
+    "sex_male": "Male",
+    "sex_female": "Female",
+    "sex_prefer_not": "Prefer not to say"
   },
   am: {
     "btn_find_mentor": "🔍 አማካሪ ፈልግ",
@@ -165,6 +171,12 @@ const I18N = {
     "Daily Bible Verse": "የዕለቱ ጥቅስ",
     "Specialization": "ልዩ ሙያ",
     "Max Mentees": "ከፍተኛ ተመካሪ",
-    "Bio": "ስለ ራስ"
+    "Bio": "ስለ ራስ",
+    "apply_q1": "እባክዎን ጾታዎን ይምረጡ:",
+    "apply_q2": "የትምህርት ደረጃዎ ምንድነው? (ለምሳሌ፦ በስነ-ልቦና የመጀመሪያ ዲግሪ)",
+    "apply_q3": "ስለራስዎ ይንገሩን (ልምድ፣ ብቃት እና ለምን አማካሪ መሆን እንደሚፈልጉ)፦",
+    "sex_male": "ወንድ",
+    "sex_female": "ሴት",
+    "sex_prefer_not": "መናገር አልፈልግም"
   }
 };

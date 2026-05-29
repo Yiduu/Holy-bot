@@ -495,12 +495,21 @@
     <p class="text-sm text-dim mb-16">Answer honestly. Admin will review your application.</p>
 
     <div class="form-group">
-      <label class="form-label">How long have you been free from pornography?</label>
-      <textarea id="applyQ1" class="form-control" rows="3" placeholder="Share your journey..."></textarea>
+      <label class="form-label" data-i18n="apply_q1">Please select your sex:</label>
+      <select id="applySex" class="form-control">
+        <option value="" data-i18n="Select…">Select…</option>
+        <option value="M" data-i18n="sex_male">Male</option>
+        <option value="F" data-i18n="sex_female">Female</option>
+        <option value="prefer_not" data-i18n="sex_prefer_not">Prefer not to say</option>
+      </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Describe the key steps that helped your recovery</label>
-      <textarea id="applyQ2" class="form-control" rows="4" placeholder="What worked for you?"></textarea>
+      <label class="form-label" data-i18n="apply_q2">What is your educational background? (e.g., Bachelor's in Psychology)</label>
+      <input id="applyEdu" class="form-control" placeholder="Your education background..." />
+    </div>
+    <div class="form-group">
+      <label class="form-label" data-i18n="apply_q3">Tell us about yourself (experience, qualifications, and why you want to be a mentor):</label>
+      <textarea id="applyAbout" class="form-control" rows="4" placeholder="Tell us about yourself..."></textarea>
     </div>
 
     <div class="flex gap-8">

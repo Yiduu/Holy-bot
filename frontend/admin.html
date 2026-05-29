@@ -1138,14 +1138,17 @@
           <span class="chip ${app.status === 'pending' ? 'chip-gold' : app.status === 'approved' ? 'chip-green' : 'chip-red'}">${app.status}</span>
         </div>
         <div class="app-card-q">
-          <div class="app-card-q-label">How long have you been free?</div>
-          <div class="app-card-q-answer">${escHtml(app.answer_q1)}</div>
+          <div class="app-card-q-label">Sex</div>
+          <div class="app-card-q-answer">${escHtml(app.sex || app.answer_q1)}</div>
         </div>
         <div class="app-card-q">
-          <div class="app-card-q-label">Key recovery steps</div>
-          <div class="app-card-q-answer">${escHtml(app.answer_q2)}</div>
+          <div class="app-card-q-label">Educational Background</div>
+          <div class="app-card-q-answer">${escHtml(app.educational_background || app.answer_q2)}</div>
         </div>
-        ${app.answer_q3 ? `<div class="app-card-q"><div class="app-card-q-label">Additional</div><div class="app-card-q-answer">${escHtml(app.answer_q3)}</div></div>` : ''}
+        <div class="app-card-q">
+          <div class="app-card-q-label">About Me</div>
+          <div class="app-card-q-answer">${escHtml(app.about_me || app.answer_q3)}</div>
+        </div>
         ${app.admin_note ? `<div class="app-card-q"><div class="app-card-q-label">Admin Note</div><div class="app-card-q-answer">${escHtml(app.admin_note)}</div></div>` : ''}
         ${app.status === 'pending' ? `
           <div class="app-card-actions">

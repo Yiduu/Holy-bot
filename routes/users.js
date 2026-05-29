@@ -49,8 +49,14 @@ module.exports = function userRoutes(supabase, requireAuth) {
   // POST /api/users/apply-mentor
   router.post('/apply-mentor', requireAuth, async (req, res) => {
     const { id: telegram_id } = req.telegramUser;
-    const { answer_q1, answer_q2, answer_q3 } = req.body;
-    if (!answer_q1 || !answer_q2) return res.status(400).json({ error: 'Answers required' });
+    const { sex, educational_background, about_me, answer_q1, answer_q2, answer_q3 } = req.body;
+    
+    // Support both formats seamlessly
+    const finalSex = sex || answer_q1;
+    const finalEdu = educational_background || answer_q2;
+    const finalAbout = about_me || answer_q3;
+
+    if (!finalSex || !finalEdu) return res.status(400).json({ error: 'Answers required' });
 
     // Check not already a mentor
     const { data: user } = await supabase.from('users').select('role').eq('telegram_id', telegram_id).single();
@@ -60,7 +66,16 @@ module.exports = function userRoutes(supabase, requireAuth) {
     const { data: existing } = await supabase.from('mentor_applications').select('id').eq('telegram_id', telegram_id).eq('status', 'pending').single();
     if (existing) return res.status(409).json({ error: 'Application pending' });
 
-    const { data, error } = await supabase.from('mentor_applications').insert({ telegram_id, answer_q1, answer_q2, answer_q3 }).select().single();
+    const { data, error } = await supabase.from('mentor_applications').insert({ 
+      telegram_id, 
+      sex: finalSex,
+      educational_background: finalEdu,
+      about_me: finalAbout,
+      answer_q1: finalSex, 
+      answer_q2: finalEdu, 
+      answer_q3: finalAbout 
+    }).select().single();
+    
     if (error) return res.status(500).json({ error: error.message });
     res.status(201).json(data);
   });
