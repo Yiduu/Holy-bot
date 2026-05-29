@@ -111,9 +111,32 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     if (reqErr) return res.status(500).json({ error: reqErr.message });
 
-    // If accepted → create assignment
+    // If accepted → create assignment with resolved topic_id
     if (action === 'accepted') {
-      await supabase.from('mentorship_assignments').insert({ user_id: reqData.user_id, mentor_id });
+      let topic_id = reqData.topic_id;
+      if (!topic_id) {
+        const [userTopicsRes, mentorTopicsRes] = await Promise.all([
+          supabase.from('user_topics').select('topic_id').eq('telegram_id', reqData.user_id),
+          supabase.from('mentor_topics').select('topic_id').eq('telegram_id', mentor_id)
+        ]);
+        const uTids = (userTopicsRes.data || []).map(t => t.topic_id);
+        const mTids = (mentorTopicsRes.data || []).map(t => t.topic_id);
+        const common = uTids.filter(id => mTids.includes(id));
+        if (common.length > 0) {
+          topic_id = common[0];
+        } else if (uTids.length > 0) {
+          topic_id = uTids[0];
+        } else if (mTids.length > 0) {
+          topic_id = mTids[0];
+        }
+      }
+      await supabase.from('mentorship_assignments').insert({
+        user_id: reqData.user_id,
+        mentor_id,
+        topic_id: topic_id || null,
+        is_active: true,
+        assigned_at: new Date().toISOString()
+      });
     }
 
     // Notify user

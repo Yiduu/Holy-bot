@@ -135,7 +135,7 @@ async function deleteMessage(chatId, messageId) {
 // ─── Update Last Activity ─────────────────────────────────────────────────────
 
 async function touchActivity(chatId) {
-  await supabase.from('users').update({ last_activity: new Date().toISOString() }).eq('telegram_id', chatId);
+  await supabase.from('users').update({ last_active: new Date().toISOString() }).eq('telegram_id', chatId);
 }
 
 // ─── Main Menu ────────────────────────────────────────────────────────────────
@@ -404,7 +404,7 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
     .eq('user_id', chatId).eq('topic_id', topicId).eq('notified', false).single();
 
   let query = supabase.from('users')
-    .select('telegram_id, anonymous_id, public_alias, rating, rating_count, last_activity, max_mentees, user_settings(bio, display_name)')
+    .select('telegram_id, anonymous_id, public_alias, rating, rating_count, last_active, max_mentees, user_settings(bio, display_name)')
     .in('telegram_id', ids)
     .eq('is_banned', false);
 
@@ -457,11 +457,11 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
   const buttons = [];
 
   for (const m of paginated) {
-    const badge = onlineBadge(m.last_activity);
+    const badge = onlineBadge(m.last_active);
     const displayName = mdEscape(m.public_alias || m.user_settings?.display_name || m.anonymous_id);
     const bio = mdEscape(m.user_settings?.bio || tSync(lang, 'no_bio'));
     const stars = renderStars(m.rating, m.rating_count);
-    const status = isOnline(m.last_activity) ? tSync(lang, 'status_online') : tSync(lang, 'status_away');
+    const status = isOnline(m.last_active) ? tSync(lang, 'status_online') : tSync(lang, 'status_away');
     const slots = (m.max_mentees || DEFAULT_MAX_MENTEES) - (menteeCount[m.telegram_id] || 0);
 
     text += `${badge} *${displayName}*\n`;
@@ -859,6 +859,48 @@ async function notifySessionInvite(chatId, sessionInfo) {
     }
   });
 }
+
+async function notifyMentorshipRequest(mentorId, requesterName) {
+  const lang = await getUserLang(mentorId);
+  const text = lang === 'am'
+    ? `🙏 አዲስ የምክር ጥያቄ!\n\nከ: *${mdEscape(requesterName)}*\n\nጥያቄውን ለመቀበል/ለመገምገም እባክዎን አፑን ይክፈቱ።`
+    : `🙏 *New Mentorship Request!*\n\nFrom: *${mdEscape(requesterName)}*\n\nPlease open the app to view and respond to this request.`;
+
+  await safeSend(mentorId, text, {
+    reply_markup: {
+      inline_keyboard: [[{
+        text: lang === 'am' ? '📂 ማመልከቻዎችን ይመልከቱ' : '📂 View Requests',
+        web_app: { url: APP_URL }
+      }]]
+    }
+  });
+}
+
+async function notifyMentorshipAccepted(userId, mentorName) {
+  const lang = await getUserLang(userId);
+  const text = lang === 'am'
+    ? `🎉 እንኳን ደስ አለዎት! ከአማካሪዎ *${mdEscape(mentorName)}* ጋር የነበረዎት የምክር ጥያቄ ተቀባይነት አግኝቷል!`
+    : `🎉 *Congratulations!* Your mentorship request to *${mdEscape(mentorName)}* was accepted!`;
+
+  await safeSend(userId, text, {
+    reply_markup: {
+      inline_keyboard: [[{
+        text: lang === 'am' ? '💬 አሁን ያውሩ' : '💬 Chat Now',
+        web_app: { url: APP_URL }
+      }]]
+    }
+  });
+}
+
+async function notifyMentorshipRejected(userId, mentorName) {
+  const lang = await getUserLang(userId);
+  const text = lang === 'am'
+    ? `📋 *የጥያቄ ምላሽ*\n\nከአማካሪ *${mdEscape(mentorName)}* ጋር የነበረዎት ጥያቄ ተቀባይነት አላገኘም። እባክዎን ሌላ አማካሪ ይሞክሩ።`
+    : `📋 *Request Status Update*\n\nYour mentorship request to *${mdEscape(mentorName)}* was not accepted at this time. Please try another mentor.`;
+
+  await safeSend(userId, text);
+}
+
 
 // ─── Message Handler ──────────────────────────────────────────────────────────
 
@@ -1322,7 +1364,7 @@ bot.on('callback_query', async (query) => {
       sex: state.tempData.sex, age_range: state.tempData.age_range,
       education_level: state.tempData.education_level, role: 'user', max_mentees: DEFAULT_MAX_MENTEES
     });
-    await supabase.from('user_settings').insert({ telegram_id: chatId, language: selectedLang });
+    await supabase.from('user_settings').insert({ telegram_id: chatId, language: selectedLang, display_name: state.tempData.nickname });
     setLangCache(chatId, selectedLang);
     const topics = state.tempData.selectedTopics || [];
     for (const tid of topics) await supabase.from('user_topics').insert({ telegram_id: chatId, topic_id: tid });
@@ -1714,4 +1756,13 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000);
 
-module.exports = { bot, notifyMentorApproved, notifyMentorRejected, broadcastToAll, notifySessionInvite };
+module.exports = {
+  bot,
+  notifyMentorApproved,
+  notifyMentorRejected,
+  broadcastToAll,
+  notifySessionInvite,
+  notifyMentorshipRequest,
+  notifyMentorshipAccepted,
+  notifyMentorshipRejected
+};
