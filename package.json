@@ -1,7 +1,7 @@
 {
-    "name": "recovery-app",
+    "name": "holy-app",
     "version": "1.0.0",
-    "description": "Anonymous Christian recovery platform with Jitsi Meet video, Telegram Mini App, and Supabase",
+    "description": "Anonymous Christian counseling platform with Jitsi Meet video, Telegram Mini App, and Supabase",
     "main": "server.js",
     "scripts": {
         "start": "node server.js",

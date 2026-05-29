@@ -1,6 +1,6 @@
-# Recovery Platform - Expanded Counseling Support
+# Holy Platform - Expanded Counseling Support
 
-A comprehensive Christian recovery platform with support for multiple counseling topics, unified through a powerful Telegram Bot.
+A comprehensive Christian counseling platform with support for multiple counseling topics, unified through a powerful Telegram Bot.
 
 ## 🚀 Key Features
 

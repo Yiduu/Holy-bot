@@ -20,7 +20,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     return jwt.sign({
       context: { user: userInfo },
       aud: 'jitsi',
-      iss: process.env.JITSI_APP_ID || 'recovery-app',
+      iss: process.env.JITSI_APP_ID || 'holy-app',
       sub: 'meet.jit.si',
       room: roomName,
     }, process.env.JITSI_JWT_SECRET, { expiresIn: '4h' });
@@ -48,7 +48,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       if (!assignment) return res.status(403).json({ error: 'User is not your active mentee' });
     }
 
-    const roomName = `recovery-${uuidv4()}`;
+    const roomName = `holy-${uuidv4()}`;
     const roomPassword = generateRoomPassword();
 
     const { data: session, error } = await supabase.from('video_sessions').insert({
@@ -57,7 +57,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       host_id,
       is_group: !!is_group,
       max_participants: is_group ? 10 : 2,
-      title: title || (is_group ? 'Group Recovery Session' : '1-on-1 Session'),
+      title: title || (is_group ? 'Group Session' : '1-on-1 Session'),
       scheduled_at: scheduled_at || new Date().toISOString(),
       status: 'scheduled',
     }).select().single();

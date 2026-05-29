@@ -1,5 +1,5 @@
 {
-    "menu_welcome": "🌟 *Recovery Helper*\n\nWelcome back, *{nick}*! Choose an option:",
+    "menu_welcome": "🌟 *Holy Helper*\n\nWelcome back, *{nick}*! Choose an option:",
     "welcome_back": "👋 Welcome back, *{nick}*!",
     "registration_complete": "🎉 *Registration Complete!*\n\nLanguage set to {lang}. You're all set!",
     "btn_find_mentor": "🔍 Find a Mentor",
@@ -150,5 +150,5 @@
     "operation_cancelled": "❌ Operation cancelled.",
     "application_cancelled": "❌ Application cancelled.",
     "please_use_buttons": "❌ Please select an option using the buttons provided above.",
-    "help_text": "📖 *Recovery Helper — Commands*\n\n`/start` — Main menu\n`/menu` — Main menu\n`/apply` — Apply to become a mentor\n`/settopics` — Update your topics\n`/reply @nick msg` — Reply to a specific partner\n`/end` — End current mentorship\n\nJust type normally to chat with your partner."
+    "help_text": "📖 *Holy Helper — Commands*\n\n`/start` — Main menu\n`/menu` — Main menu\n`/apply` — Apply to become a mentor\n`/settopics` — Update your topics\n`/reply @nick msg` — Reply to a specific partner\n`/end` — End current mentorship\n\nJust type normally to chat with your partner."
 }

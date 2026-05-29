@@ -1,7 +1,7 @@
 'use strict';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// RECOVERY HELPER BOT — Complete Rewrite
+// HOLY HELPER BOT — Complete Rewrite
 // Modules: State, Localization, Formatting, Mentor Search, Chat, Streaks,
 //          Journal, Verse, Settings, Scheduler, Rating, Waiting List
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -319,7 +319,7 @@ async function createVideoSession(chatId, date, time12h) {
 
   try {
     console.log(`[Scheduler] Creating session for ${chatId} at ${scheduledAt.toISOString()}`);
-    const roomName = `recovery_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const roomName = `holy_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const roomPassword = Math.random().toString(36).substring(2, 10);
     const isGroup = state.tempData.type === 'group';
     const menteeId = state.tempData.mentee_id ? parseInt(state.tempData.mentee_id) : null;
