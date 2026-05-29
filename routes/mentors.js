@@ -7,21 +7,35 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
   // GET /api/mentors – list available mentors
   router.get('/', requireAuth, async (req, res) => {
-    const { topic_id } = req.query;
+    let { topic_id } = req.query;
     
     let query = supabase
       .from('users')
       .select('telegram_id, anonymous_id, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
       .eq('is_banned', false);
-
+    
+    // Resolve topic identifier (can be ID, slug, or name)
     if (topic_id) {
-      // Filter by topic_id in mentor_topics
-      const { data: mentorIds } = await supabase
+      // If not a pure number, look up the numeric ID from topics table
+      if (isNaN(Number(topic_id))) {
+        const { data: topicData, error: topicErr } = await supabase
+          .from('topics')
+          .select('id')
+          .or(`slug.eq.${topic_id},name.eq.${topic_id}`)
+          .single();
+        if (topicErr) {
+          // If lookup fails, return empty list (invalid topic)
+          return res.json([]);
+        }
+        topic_id = topicData.id;
+      }
+      // Filter mentors linked to this topic via mentor_topics
+      const { data: mentorIds, error: mentorErr } = await supabase
         .from('mentor_topics')
         .select('telegram_id')
         .eq('topic_id', topic_id);
-      
+      if (mentorErr) return res.status(500).json({ error: mentorErr.message });
       const ids = (mentorIds || []).map(m => m.telegram_id);
       if (ids.length === 0) return res.json([]);
       query = query.in('telegram_id', ids);
