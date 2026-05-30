@@ -952,7 +952,7 @@ bot.on('message', async (msg) => {
           if (!user) {
             // New user trying to join a session - prompt registration via Mini App
             const lang = await getUserLang(chatId);
-            return safeSend(chatId, 'Please register via the web app to continue.', {
+            return safeSend(chatId, 'Welcome to Holy Counseling Bot – a dedicated space for mentorship and guidance. Please register using the Holy app.', {
               reply_markup: {
                 inline_keyboard: [[{
                   text: 'Register',
