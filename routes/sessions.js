@@ -235,28 +235,35 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
 
     const participatedIds = participations.map(p => p.session_id);
 
-    // Step 2: Of those, find which sessions have an ended status
-    const { data: endedSessions, error: sessErr } = await supabase
+    // Step 2: Identify upcoming scheduled or active sessions in the future
+    const nowIso = new Date().toISOString();
+    const { data: activeFutureSessions, error: sessErr } = await supabase
       .from('video_sessions')
       .select('id')
       .in('id', participatedIds)
-      .in('status', ['ended', 'completed', 'cancelled', 'expired']);
+      .in('status', ['scheduled', 'active'])
+      .gt('scheduled_at', nowIso);
 
     if (sessErr) return res.status(500).json({ error: sessErr.message });
-    if (!endedSessions?.length) {
-      console.log('[Sessions] No ended sessions found for user:', telegram_id);
+
+    // Everything that is NOT an upcoming scheduled/active session in the future
+    // (i.e. past sessions, ended sessions, or deleted/orphaned sessions) is cleared.
+    const futureSessionIds = new Set((activeFutureSessions || []).map(s => s.id));
+    const idsToClear = participatedIds.filter(id => !futureSessionIds.has(id));
+
+    if (!idsToClear.length) {
+      console.log('[Sessions] No session history to clear.');
       return res.json({ success: true, count: 0 });
     }
 
-    const endedIds = endedSessions.map(s => s.id);
-    console.log(`[Sessions] Removing user from ${endedIds.length} ended session(s).`);
+    console.log(`[Sessions] Removing user from ${idsToClear.length} session(s) history.`);
 
-    // Step 3: Delete participant rows for those ended sessions using count: 'exact'
+    // Step 3: Delete participant rows for those sessions using count: 'exact'
     const { count, error: delErr } = await supabase
       .from('session_participants')
       .delete({ count: 'exact' })
       .eq('telegram_id', telegram_id)
-      .in('session_id', endedIds);
+      .in('session_id', idsToClear);
 
     if (delErr) return res.status(500).json({ error: delErr.message });
     res.json({ success: true, count: count || 0 });

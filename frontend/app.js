@@ -78,7 +78,8 @@ function formatTime(dateStr) {
 }
 
 function formatDateTime(dateStr) {
-  const tz = currentUser?.user_settings?.timezone || 'UTC';
+  let tz = currentUser?.user_settings?.timezone || 'Africa/Addis_Ababa';
+  if (!tz || tz === 'UTC') tz = 'Africa/Addis_Ababa';
   try {
     return new Date(dateStr).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', timeZone: tz });
   } catch (e) {
@@ -562,6 +563,7 @@ async function loadSessions() {
     } else {
       privateContainer.innerHTML = mySessions.map(s => {
         const session = s.session;
+        if (!session) return '';
         const isGroup = session.is_group;
         const title = session.title || (isGroup ? 'Group Session' : 'Private Session');
         const scheduled = formatDateTime(session.scheduled_at);
@@ -574,7 +576,7 @@ async function loadSessions() {
             </div>
             ${session.status === 'scheduled' ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>` : `<span class="chip chip-green">${t('btn_done')}</span>`}
           </div>`;
-      }).join('');
+      }).filter(Boolean).join('');
     }
   } catch (e) { console.error('Error loading private sessions', e); }
 

@@ -68,8 +68,8 @@ module.exports = function authRoutes(supabase, requireAuth) {
 
     if (error) return res.status(500).json({ error: error.message });
 
-    // Create default settings with nickname as display_name
-    await supabase.from('user_settings').insert({ telegram_id, display_name: anonymous_id });
+    // Create default settings with nickname as display_name and default timezone
+    await supabase.from('user_settings').insert({ telegram_id, display_name: anonymous_id, timezone: 'Africa/Addis_Ababa' });
 
     // Save topics if provided
     const { topic_ids } = req.body;

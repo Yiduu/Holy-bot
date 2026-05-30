@@ -95,10 +95,18 @@ function getState(chatId) {
 
 // ─── Formatting Helpers ───────────────────────────────────────────────────────
 
-function formatUserDateTime(dateStr, timezone = 'UTC') {
+function formatUserDateTime(dateStr, timezone = 'Africa/Addis_Ababa') {
+  let tz = timezone;
+  if (!tz || tz === 'UTC') tz = 'Africa/Addis_Ababa';
   try {
-    return new Date(dateStr).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: timezone });
-  } catch { return new Date(dateStr).toLocaleString(); }
+    return new Date(dateStr).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: tz, timeZoneName: 'short' });
+  } catch {
+    try {
+      return new Date(dateStr).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: tz });
+    } catch {
+      return new Date(dateStr).toLocaleString();
+    }
+  }
 }
 
 function isOnline(lastActivity) {
@@ -342,8 +350,12 @@ async function createVideoSession(chatId, date, time12h) {
     const link = `${APP_URL}?start=session_${sess.id}`;
 
     // Format confirmation details for the mentor
-    const dateStr = scheduledAt.toLocaleDateString('en-US', { timeZone: 'Africa/Addis_Ababa', dateStyle: 'medium' });
-    const timeStr = scheduledAt.toLocaleTimeString('en-US', { timeZone: 'Africa/Addis_Ababa', timeStyle: 'short' });
+    const { data: mentorSettings } = await supabase.from('user_settings').select('timezone').eq('telegram_id', chatId).single();
+    let hostTimezone = mentorSettings?.timezone || 'Africa/Addis_Ababa';
+    if (!hostTimezone || hostTimezone === 'UTC') hostTimezone = 'Africa/Addis_Ababa';
+
+    const dateStr = scheduledAt.toLocaleDateString('en-US', { timeZone: hostTimezone, dateStyle: 'medium' });
+    const timeStr = scheduledAt.toLocaleTimeString('en-US', { timeZone: hostTimezone, timeStyle: 'short', timeZoneName: 'short' });
     const typeLabel = state.tempData.type === 'private' ? 'Private' : 'Group';
 
     const mentorMsg = `✅ Session scheduled!\n\nDate: ${dateStr}\nTime: ${timeStr}\nType: ${typeLabel}\n\nJoin link: ${link}`;
@@ -866,7 +878,8 @@ async function broadcastToAll(message, roleFilter) {
 async function notifySessionInvite(chatId, sessionInfo) {
   const lang = await getUserLang(chatId);
   const { data: settings } = await supabase.from('user_settings').select('timezone').eq('telegram_id', chatId).single();
-  const recipientTimezone = settings?.timezone || 'Africa/Addis_Ababa';
+  let recipientTimezone = settings?.timezone || 'Africa/Addis_Ababa';
+  if (!recipientTimezone || recipientTimezone === 'UTC') recipientTimezone = 'Africa/Addis_Ababa';
   
   const link = `${APP_URL}?start=session_${sessionInfo.session_id}`;
   const timeStr = formatUserDateTime(sessionInfo.scheduled_at, recipientTimezone);
@@ -960,6 +973,18 @@ bot.on('message', async (msg) => {
                 }]]
               }
             });
+          } else {
+            // Registered user joining a session - send join button
+            const lang = await getUserLang(chatId);
+            return safeSend(chatId, tSync(lang, 'session_invite'), {
+              reply_markup: {
+                inline_keyboard: [[{
+                  text: tSync(lang, 'btn_join_session'),
+                  web_app: { url: `${APP_URL}?start=session_${sessionId}` }
+                }]]
+              }
+            });
+          }
         }
 
         if (!user) {
@@ -1001,9 +1026,6 @@ bot.on('message', async (msg) => {
           setState(chatId, 'awaiting_mentor_q1');
           return safeSend(chatId, await t(chatId, 'apply_q1'));
         }
-        
-
-      }
       if (command === '/settopics') {
         const lang = await getUserLang(chatId);
         const kb = await getTopicPickerKeyboard([], 'set_topics_', lang);
