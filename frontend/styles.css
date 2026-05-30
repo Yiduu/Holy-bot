@@ -374,6 +374,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 }
 .loading-screen.hidden { opacity: 0; pointer-events: none; }
 .loading-logo { font-family: var(--font-display); font-size: 2rem; color: var(--gold); letter-spacing: 0.1em; }
+.loading-logo-img { width: 80px; height: auto; }
 .loading-spinner {
   width: 36px; height: 36px; border-radius: 50%;
   border: 3px solid var(--border-dim); border-top-color: var(--gold);
