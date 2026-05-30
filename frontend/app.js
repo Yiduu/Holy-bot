@@ -247,11 +247,41 @@ function toggleChatInput(visible) {
 
 // ─── Onboarding ───────────────────────────────────────────────
 let onboardingStep = 0;
+let onboardingSelectedTopics = [];
 
-function showOnboarding() {
+async function showOnboarding() {
   $('loadingScreen')?.classList.add('hidden');
   $('onboarding').style.display = 'flex';
+  
+  // Load topics for onboarding
+  try {
+    const topics = await apiFetch('/api/topics');
+    const container = $('regTopicsList');
+    if (container) {
+      container.innerHTML = topics.map(t => `
+        <div id="onb-topic-${t.id}" class="chip chip-outline" onclick="toggleOnboardingTopic(${t.id})">
+          ${escapeHtml(t.name)}
+        </div>
+      `).join('');
+    }
+  } catch (e) {
+    console.error('Failed to load topics for onboarding:', e);
+  }
+  
   showStep(0);
+}
+
+function toggleOnboardingTopic(id) {
+  haptic('light');
+  const idx = onboardingSelectedTopics.indexOf(id);
+  const el = $(`onb-topic-${id}`);
+  if (idx > -1) {
+    onboardingSelectedTopics.splice(idx, 1);
+    if (el) el.className = 'chip chip-outline';
+  } else {
+    onboardingSelectedTopics.push(id);
+    if (el) el.className = 'chip chip-gold';
+  }
 }
 
 function showStep(step) {
@@ -287,7 +317,7 @@ async function completeRegistration() {
   try {
     const data = await apiFetch('/api/auth/register', {
       method: 'POST',
-      body: { sex, age_range, education_level, nickname, chat_id: getTelegramData().user?.id },
+      body: { sex, age_range, education_level, nickname, chat_id: getTelegramData().user?.id, topic_ids: onboardingSelectedTopics },
     });
     haptic('success');
     currentUser = data.user;
@@ -1153,17 +1183,26 @@ async function endMentorship(assignId) {
 
 // ─── Topics ───────────────────────────────────────────────────
 window.selectedTopics = [];
+window.isTopicModalExpertise = false;
 
-async function openTopicModal() {
+async function openTopicModal(isExpertise = false) {
   haptic('light');
+  window.isTopicModalExpertise = isExpertise;
   const container = $('topicsList');
   container.innerHTML = '<div class="loading-spinner" style="margin:20px auto"></div>';
+  
+  const modalTitle = document.querySelector('#topicModal .modal-title');
+  if (modalTitle) {
+    modalTitle.textContent = isExpertise ? 'Select Expertise Topics' : 'Select Struggle Topics';
+  }
+  
   $('topicModal').classList.add('open');
   
   try {
+    const myTopicsPath = isExpertise ? '/api/topics/my-expertise' : '/api/topics/my';
     const [all, mine] = await Promise.all([
       apiFetch('/api/topics'),
-      apiFetch('/api/topics/my')
+      apiFetch(myTopicsPath)
     ]);
     window.selectedTopics = mine.map(t => t.topic_id);
     
@@ -1195,9 +1234,10 @@ function closeTopicModal() {
 async function saveTopics() {
   haptic('medium');
   try {
-    await apiFetch('/api/topics/my', { method: 'POST', body: { topic_ids: window.selectedTopics } });
+    const savePath = window.isTopicModalExpertise ? '/api/topics/my-expertise' : '/api/topics/my';
+    await apiFetch(savePath, { method: 'POST', body: { topic_ids: window.selectedTopics } });
     haptic('success');
-    showToast(t('topics_updated'), 'success');
+    showToast(t('topics_updated') || 'Topics updated successfully', 'success');
     closeTopicModal();
   } catch (e) { showToast(e.message, 'error'); }
 }
@@ -1221,21 +1261,29 @@ async function loadJournalEntries() {
   } catch (e) { container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`; }
 }
 
+window.currentJournalEntryId = null;
+
 function showNewJournalEntry() {
   haptic('light');
-  $('journalModalTitle').textContent = t('btn_new_entry');
+  window.currentJournalEntryId = null;
+  $('journalModalTitle').textContent = t('btn_new_entry') || 'New Entry';
   $('journalContent').value = '';
   $('journalContent').readOnly = false;
   $('saveJournalBtn').style.display = 'block';
+  $('updateJournalBtn').style.display = 'none';
+  $('deleteJournalBtn').style.display = 'none';
   $('journalModal').classList.add('open');
 }
 
 function openJournalEntry(id, content) {
   haptic('light');
-  $('journalModalTitle').textContent = t('journal_title');
+  window.currentJournalEntryId = id;
+  $('journalModalTitle').textContent = t('journal_title') || 'Edit Entry';
   $('journalContent').value = content;
-  $('journalContent').readOnly = true;
+  $('journalContent').readOnly = false;
   $('saveJournalBtn').style.display = 'none';
+  $('updateJournalBtn').style.display = 'block';
+  $('deleteJournalBtn').style.display = 'block';
   $('journalModal').classList.add('open');
 }
 
@@ -1251,10 +1299,60 @@ async function saveJournalEntry() {
   try {
     await apiFetch('/api/journal', { method: 'POST', body: { content } });
     haptic('success');
-    showToast(t('journal_saved'), 'success');
+    showToast(t('journal_saved') || 'Journal saved successfully', 'success');
     closeJournalModal();
     loadJournalEntries();
   } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function updateJournalEntry() {
+  const id = window.currentJournalEntryId;
+  const content = $('journalContent').value.trim();
+  if (!content || !id) return;
+  haptic('medium');
+  try {
+    await apiFetch(`/api/journal/${id}`, { method: 'PUT', body: { content } });
+    haptic('success');
+    showToast('Journal entry updated', 'success');
+    closeJournalModal();
+    loadJournalEntries();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function deleteJournalEntry() {
+  const id = window.currentJournalEntryId;
+  if (!id) return;
+  if (!confirm('Are you sure you want to delete this journal entry?')) return;
+  haptic('medium');
+  try {
+    await apiFetch(`/api/journal/${id}`, { method: 'DELETE' });
+    haptic('success');
+    showToast('Journal entry deleted', 'success');
+    closeJournalModal();
+    loadJournalEntries();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function formatJournalText(action) {
+  const textarea = $('journalContent');
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const text = textarea.value;
+  const selected = text.substring(start, end);
+  
+  let replacement = '';
+  if (action === 'bold') {
+    replacement = `**${selected}**`;
+  } else if (action === 'italic') {
+    replacement = `*${selected}*`;
+  } else if (action === 'list') {
+    replacement = selected.split('\n').map(line => line.startsWith('- ') ? line : `- ${line}`).join('\n');
+  }
+  
+  textarea.value = text.substring(0, start) + replacement + text.substring(end);
+  textarea.focus();
+  textarea.selectionStart = start;
+  textarea.selectionEnd = start + replacement.length;
 }
 
 // ─── Boot ─────────────────────────────────────────────────────

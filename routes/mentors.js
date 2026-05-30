@@ -87,7 +87,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     const { id: mentor_id } = req.telegramUser;
     const { data, error } = await supabase
       .from('mentorship_requests')
-      .select('*, user:user_id(anonymous_id, user_settings(display_name))')
+      .select('*, user:user_id(anonymous_id, sex, age_range, user_settings(display_name)), topic:topic_id(name)')
       .eq('mentor_id', mentor_id)
       .eq('status', 'pending');
     if (error) return res.status(500).json({ error: error.message });
@@ -192,6 +192,95 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     const { id: mentor_id } = req.telegramUser;
     const { data } = await supabase.from('mentor_notes').select('content').eq('mentor_id', mentor_id).eq('mentee_id', req.params.mentee_id).single();
     res.json(data || { content: '' });
+  });
+
+  // POST /api/mentors/transfer – transfer mentorship request or active assignment
+  router.post('/transfer', requireAuth, async (req, res) => {
+    const { id: current_mentor_id } = req.telegramUser;
+    const { type, id, target_mentor_id } = req.body;
+
+    if (!type || !id || !target_mentor_id) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const targetTid = parseInt(target_mentor_id);
+    if (isNaN(targetTid)) return res.status(400).json({ error: 'Invalid target mentor ID' });
+
+    try {
+      if (type === 'request') {
+        const { data: request, error: fetchErr } = await supabase
+          .from('mentorship_requests')
+          .select('*')
+          .eq('id', id)
+          .eq('mentor_id', current_mentor_id)
+          .single();
+
+        if (fetchErr || !request) return res.status(404).json({ error: 'Request not found or not assigned to you' });
+
+        const { error: updateErr } = await supabase
+          .from('mentorship_requests')
+          .update({ mentor_id: targetTid, updated_at: new Date().toISOString() })
+          .eq('id', id);
+
+        if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+        const { data: requester } = await supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', request.user_id).single();
+        const requesterName = requester?.user_settings?.display_name || requester?.anonymous_id || 'A user';
+
+        const { notifyMentorshipRequest } = require('../bot');
+        await notifyMentorshipRequest(targetTid, requesterName);
+
+        return res.json({ success: true });
+
+      } else if (type === 'assignment') {
+        const { data: assignment, error: fetchErr } = await supabase
+          .from('mentorship_assignments')
+          .select('*')
+          .eq('id', id)
+          .eq('mentor_id', current_mentor_id)
+          .eq('is_active', true)
+          .single();
+
+        if (fetchErr || !assignment) return res.status(404).json({ error: 'Active assignment not found' });
+
+        const { error: updateErr } = await supabase
+          .from('mentorship_assignments')
+          .update({ mentor_id: targetTid })
+          .eq('id', id);
+
+        if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+        const [{ data: user }, { data: newMentor }] = await Promise.all([
+          supabase.from('users').select('chat_id').eq('telegram_id', assignment.user_id).single(),
+          supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', targetTid).single()
+        ]);
+
+        const newMentorName = newMentor?.user_settings?.display_name || newMentor?.anonymous_id || 'Your new mentor';
+        const { safeSend, getUserLang } = require('../bot');
+        if (user?.chat_id) {
+          const lang = await getUserLang(assignment.user_id);
+          const text = lang === 'am'
+            ? `📋 የምክር አገልግሎትዎ ወደ አማካሪ *${newMentorName}* ተላልፏል።`
+            : `📋 Your mentorship has been transferred to mentor *${newMentorName}*.`;
+          await safeSend(user.chat_id, text);
+        }
+
+        const { data: menteeUser } = await supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', assignment.user_id).single();
+        const menteeName = menteeUser?.user_settings?.display_name || menteeUser?.anonymous_id || 'A mentee';
+        
+        const targetLang = await getUserLang(targetTid);
+        const targetText = targetLang === 'am'
+          ? `📋 አዲስ ተመካሪ በዝውውር ቀርቦልዎታል፡ *${menteeName}*`
+          : `📋 A new mentee has been transferred to you: *${menteeName}*`;
+        await safeSend(targetTid, targetText);
+
+        return res.json({ success: true });
+      }
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.status(400).json({ error: 'Invalid type' });
   });
 
   // DELETE /api/mentors/end-mentorship/:assignment_id

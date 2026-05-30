@@ -125,6 +125,13 @@
       </select>
     </div>
 
+    <div class="form-group">
+      <label class="form-label">Topics you need help with (Multi-select)</label>
+      <div id="regTopicsList" class="flex flex-wrap gap-8 py-8" style="max-height:180px;overflow-y:auto;background:var(--bg3);padding:8px;border-radius:var(--radius-sm)">
+        <!-- Dynamic topics chips -->
+      </div>
+    </div>
+
     <div class="flex gap-8">
       <button class="btn btn-ghost" onclick="showStep(0)">← Back</button>
       <button class="btn btn-primary flex-1" onclick="showStep(2)">Continue →</button>
@@ -448,6 +455,8 @@
             <label class="form-label">Max Mentees</label>
             <input id="settingMaxMentees" type="number" class="form-control" min="1" max="20" value="5" />
           </div>
+          <div class="divider"></div>
+          <button class="btn btn-outline btn-sm btn-full" onclick="openTopicModal(true)" data-i18n="settings_expertise_topics">My Expertise Topics</button>
         </div>
       </div>
     </div>
@@ -541,12 +550,21 @@
   <div class="modal-sheet">
     <div class="modal-handle"></div>
     <div id="journalModalTitle" class="modal-title" data-i18n="btn_new_entry">New Entry</div>
+    
+    <div class="journal-toolbar flex gap-8 mb-8">
+      <button type="button" class="btn btn-outline btn-xs" onclick="formatJournalText('bold')" style="padding: 2px 8px; font-size: 0.75rem;"><b>B</b></button>
+      <button type="button" class="btn btn-outline btn-xs" onclick="formatJournalText('italic')" style="padding: 2px 8px; font-size: 0.75rem;"><i>I</i></button>
+      <button type="button" class="btn btn-outline btn-xs" onclick="formatJournalText('list')" style="padding: 2px 8px; font-size: 0.75rem;">List</button>
+    </div>
+
     <div class="form-group">
       <textarea id="journalContent" class="form-control" rows="8" data-i18n="journal_write_prompt" placeholder="Write your thoughts here..."></textarea>
     </div>
     <div class="flex gap-8">
       <button class="btn btn-ghost flex-1" onclick="closeJournalModal()" data-i18n="btn_cancel">Cancel</button>
       <button id="saveJournalBtn" class="btn btn-primary flex-1" onclick="saveJournalEntry()" data-i18n="btn_done">Save</button>
+      <button id="updateJournalBtn" class="btn btn-primary flex-1 hidden" onclick="updateJournalEntry()">Update</button>
+      <button id="deleteJournalBtn" class="btn btn-danger flex-1 hidden" onclick="deleteJournalEntry()">Delete</button>
     </div>
   </div>
 </div>

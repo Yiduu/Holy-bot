@@ -71,6 +71,14 @@ module.exports = function authRoutes(supabase, requireAuth) {
     // Create default settings with nickname as display_name
     await supabase.from('user_settings').insert({ telegram_id, display_name: anonymous_id });
 
+    // Save topics if provided
+    const { topic_ids } = req.body;
+    if (Array.isArray(topic_ids) && topic_ids.length > 0) {
+      const inserts = topic_ids.map(tid => ({ telegram_id, topic_id: parseInt(tid) }));
+      const { error: topicErr } = await supabase.from('user_topics').insert(inserts);
+      if (topicErr) console.error('[Register] Topics insert error:', topicErr.message);
+    }
+
     res.status(201).json({ user });
   });
 

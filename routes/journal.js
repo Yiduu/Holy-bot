@@ -34,6 +34,25 @@ module.exports = function journalRoutes(supabase, requireAuth) {
     res.status(201).json(data);
   });
 
+  // PUT /api/journal/:id
+  router.put('/:id', requireAuth, async (req, res) => {
+    const { id: telegram_id } = req.telegramUser;
+    const { id: entryId } = req.params;
+    const { content } = req.body;
+    if (!content) return res.status(400).json({ error: 'Content is required' });
+
+    const { data, error } = await supabase
+      .from('journal_entries')
+      .update({ content, updated_at: new Date().toISOString() })
+      .eq('id', entryId)
+      .eq('telegram_id', telegram_id)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  });
+
   // DELETE /api/journal/:id
   router.delete('/:id', requireAuth, async (req, res) => {
     const { id: telegram_id } = req.telegramUser;

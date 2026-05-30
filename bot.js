@@ -391,7 +391,13 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
   // Loading indicator
   const loadMsg = await safeSendLoading(chatId, tSync(lang, 'loading_mentors'));
 
-  const { data: mIds } = await supabase.from('mentor_topics').select('telegram_id').eq('topic_id', topicId);
+  const numericTopicId = Number(topicId);
+  if (isNaN(numericTopicId)) {
+    if (loadMsg) await deleteMessage(chatId, loadMsg.message_id);
+    return safeSend(chatId, tSync(lang, 'no_mentors_topic'));
+  }
+
+  const { data: mIds } = await supabase.from('mentor_topics').select('telegram_id').eq('topic_id', numericTopicId);
   const ids = (mIds || []).map(x => x.telegram_id);
 
   if (!ids.length) {
@@ -401,7 +407,7 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
 
   // Check waiting list eligibility
   const { data: existingWait } = await supabase.from('waiting_list').select('id')
-    .eq('user_id', chatId).eq('topic_id', topicId).eq('notified', false).single();
+    .eq('user_id', chatId).eq('topic_id', numericTopicId).eq('notified', false).single();
 
   let query = supabase.from('users')
     .select('telegram_id, anonymous_id, public_alias, rating, rating_count, last_active, max_mentees, user_settings(bio, display_name)')
@@ -446,7 +452,7 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
     // No available mentors — offer waiting list
     const kb = { inline_keyboard: [] };
     if (!existingWait) {
-      kb.inline_keyboard.push([{ text: tSync(lang, 'btn_join_waitlist'), callback_data: `waitlist_join_${topicId}` }]);
+      kb.inline_keyboard.push([{ text: tSync(lang, 'btn_join_waitlist'), callback_data: `waitlist_join_${numericTopicId}` }]);
     } else {
       kb.inline_keyboard.push([{ text: tSync(lang, 'btn_already_waitlist'), callback_data: 'noop' }]);
     }
@@ -470,20 +476,20 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
     text += `${tSync(lang, 'label_slots')}: ${slots}\n`;
     text += `${tSync(lang, 'label_bio')}: ${bio.substring(0, 80)}${bio.length > 80 ? '…' : ''}\n\n`;
 
-    buttons.push([{ text: `${tSync(lang, 'btn_request')} ${displayName}`, callback_data: `mentor_req_${m.telegram_id}_${topicId}` }]);
+    buttons.push([{ text: `${tSync(lang, 'btn_request')} ${displayName}`, callback_data: `mentor_req_${m.telegram_id}_${numericTopicId}` }]);
   }
 
   // Sort buttons row
   const sortRow = SORT_OPTIONS.map(s => ({
     text: `${s === sort ? '✅ ' : ''}${tSync(lang, `sort_${s}`)}`,
-    callback_data: `mentor_sort_${s}_${topicId}_${page}`
+    callback_data: `mentor_sort_${s}_${numericTopicId}_${page}`
   }));
   buttons.push(sortRow);
 
   // Pagination row
   const navRow = [];
-  if (page > 0) navRow.push({ text: tSync(lang, 'btn_prev'), callback_data: `mentors_page_${page - 1}_${topicId}_${sort}` });
-  if (page < totalPages - 1) navRow.push({ text: tSync(lang, 'btn_next'), callback_data: `mentors_page_${page + 1}_${topicId}_${sort}` });
+  if (page > 0) navRow.push({ text: tSync(lang, 'btn_prev'), callback_data: `mentors_page_${page - 1}_${numericTopicId}_${sort}` });
+  if (page < totalPages - 1) navRow.push({ text: tSync(lang, 'btn_next'), callback_data: `mentors_page_${page + 1}_${numericTopicId}_${sort}` });
   if (navRow.length) buttons.push(navRow);
 
   await safeSend(chatId, text, { reply_markup: { inline_keyboard: buttons } });
@@ -859,8 +865,11 @@ async function broadcastToAll(message, roleFilter) {
 
 async function notifySessionInvite(chatId, sessionInfo) {
   const lang = await getUserLang(chatId);
+  const { data: settings } = await supabase.from('user_settings').select('timezone').eq('telegram_id', chatId).single();
+  const recipientTimezone = settings?.timezone || 'Africa/Addis_Ababa';
+  
   const link = `${APP_URL}?start=session_${sessionInfo.session_id}`;
-  const timeStr = formatUserDateTime(sessionInfo.scheduled_at);
+  const timeStr = formatUserDateTime(sessionInfo.scheduled_at, recipientTimezone);
   // Build plain-text invite to avoid Markdown issues with URLs and user-supplied titles
   const text = lang === 'am'
     ? `🙏 አዲስ ስብሰባ ታቅዷል!\n\nአስተናጋጅ: ${sessionInfo.host}\nርዕስ: ${sessionInfo.title}\nሰዓት: ${timeStr}\n\nለመቀላቀል: ${link}`
@@ -941,25 +950,57 @@ bot.on('message', async (msg) => {
         if (args.length > 1 && args[1].startsWith('session_')) {
           const sessionId = args[1].replace('session_', '');
           if (!user) {
-            // New user trying to join a session - start registration but keep the session ID
-            return startRegistration(chatId, sessionId);
-          }
+            // New user trying to join a session - prompt registration via Mini App
+            const lang = await getUserLang(chatId);
+            return safeSend(chatId, 'Please register via the web app to continue.', {
+              reply_markup: {
+                inline_keyboard: [[{
+                  text: 'Register',
+                  web_app: { url: `${APP_URL}?start=register` }
+                }]]
+              }
+            });
+        }
+
+        if (!user) {
           const lang = await getUserLang(chatId);
-          return bot.sendMessage(chatId, tSync(lang, 'session_invite'), {
+          return safeSend(chatId, 'Please register via the web app to continue.', {
             reply_markup: {
               inline_keyboard: [[{
-                text: tSync(lang, 'btn_join_session'),
-                web_app: { url: `${APP_URL}?start=session_${sessionId}` }
+                text: 'Register',
+                web_app: { url: `${APP_URL}?start=register` }
               }]]
             }
           });
         }
-
-        if (!user) return startRegistration(chatId);
         return showMainMenu(chatId, await t(chatId, 'welcome_back', { nick: mdEscape(user.anonymous_id) }));
       }
       if (command === '/menu') return showMainMenu(chatId);
-      if (command === '/apply') {
+              if (command === '/apply') {
+          // Ensure the user is registered via Mini App
+          const { data: userRecord } = await supabase.from('users').select('*').eq('telegram_id', chatId).single();
+          if (!userRecord) {
+            const lang = await getUserLang(chatId);
+            return safeSend(chatId, 'Please register via the web app to apply.', {
+              reply_markup: {
+                inline_keyboard: [[{
+                  text: 'Register',
+                  web_app: { url: `${APP_URL}?start=register` }
+                }]]
+              }
+            });
+          }
+
+          // User exists, check role
+          const { data: user } = await supabase.from('users').select('role').eq('telegram_id', chatId).single();
+          if (user?.role === 'mentor' || user?.role === 'admin')
+            return safeSend(chatId, await t(chatId, 'already_mentor'));
+          const { data: ex } = await supabase.from('mentor_applications').select('id')
+            .eq('telegram_id', chatId).eq('status', 'pending').single();
+          if (ex) return safeSend(chatId, await t(chatId, 'application_pending'));
+          setState(chatId, 'awaiting_mentor_q1');
+          return safeSend(chatId, await t(chatId, 'apply_q1'));
+        }
         const { data: user } = await supabase.from('users').select('role').eq('telegram_id', chatId).single();
         if (user?.role === 'mentor' || user?.role === 'admin')
           return safeSend(chatId, await t(chatId, 'already_mentor'));

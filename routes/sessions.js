@@ -50,7 +50,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       is_group: !!is_group,
       max_participants: is_group ? 10 : 2,
       title: title || (is_group ? 'Group Session' : '1-on-1 Session'),
-      scheduled_at: scheduled_at || new Date().toISOString(),
+      scheduled_at: scheduled_at ? new Date(scheduled_at).toISOString() : new Date().toISOString(),
       status: 'scheduled',
     }).select().single();
 
@@ -61,9 +61,10 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
 
     // Add mentee if provided (private session)
     if (mentee_id && !is_group) {
-      await supabase.from('session_participants').insert({ session_id: session.id, telegram_id: mentee_id });
+      const parsedMenteeId = parseInt(mentee_id);
+      await supabase.from('session_participants').insert({ session_id: session.id, telegram_id: parsedMenteeId });
       
-      const sock = onlineUsers.get(String(mentee_id));
+      const sock = onlineUsers.get(String(parsedMenteeId));
       if (sock) {
         io.to(sock).emit('session_invite', {
           session_id: session.id,
@@ -75,7 +76,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
         });
       }
 
-      await notifySessionInvite(mentee_id, {
+      await notifySessionInvite(parsedMenteeId, {
         session_id: session.id,
         host: hostUser.anonymous_id,
         title: session.title,
@@ -86,13 +87,15 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     // Handle group session participants if provided
     if (is_group && Array.isArray(req.body.participant_ids)) {
       for (const tid of req.body.participant_ids) {
+        const parsedTid = parseInt(tid);
+        if (isNaN(parsedTid)) continue;
         // Skip host if they are in the list
-        if (String(tid) === String(host_id)) continue;
+        if (String(parsedTid) === String(host_id)) continue;
 
-        await supabase.from('session_participants').upsert({ session_id: session.id, telegram_id: tid }, { onConflict: 'session_id,telegram_id' });
+        await supabase.from('session_participants').upsert({ session_id: session.id, telegram_id: parsedTid }, { onConflict: 'session_id,telegram_id' });
 
         // Notify via bot
-        await notifySessionInvite(tid, {
+        await notifySessionInvite(parsedTid, {
           session_id: session.id,
           host: hostUser.anonymous_id,
           title: session.title,
@@ -100,7 +103,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
         });
 
         // Notify via socket if online
-        const sock = onlineUsers.get(String(tid));
+        const sock = onlineUsers.get(String(parsedTid));
         if (sock) {
           io.to(sock).emit('session_invite', {
             session_id: session.id,
@@ -248,16 +251,15 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     const endedIds = endedSessions.map(s => s.id);
     console.log(`[Sessions] Removing user from ${endedIds.length} ended session(s).`);
 
-    // Step 3: Delete participant rows for those ended sessions
-    const { data: deleted, error: delErr } = await supabase
+    // Step 3: Delete participant rows for those ended sessions using count: 'exact'
+    const { count, error: delErr } = await supabase
       .from('session_participants')
-      .delete()
+      .delete({ count: 'exact' })
       .eq('telegram_id', telegram_id)
-      .in('session_id', endedIds)
-      .select();
+      .in('session_id', endedIds);
 
     if (delErr) return res.status(500).json({ error: delErr.message });
-    res.json({ success: true, count: deleted?.length || 0 });
+    res.json({ success: true, count: count || 0 });
   });
 
   return router;

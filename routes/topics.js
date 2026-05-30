@@ -83,5 +83,65 @@ module.exports = function topicRoutes(supabase, requireAuth, requireAdmin) {
     res.json(stats);
   });
 
+  // GET /api/topics/my - returns topics user is struggling with
+  router.get('/my', requireAuth, async (req, res) => {
+    const { id: telegram_id } = req.telegramUser;
+    const { data, error } = await supabase
+      .from('user_topics')
+      .select('topic_id, topics(*)')
+      .eq('telegram_id', telegram_id);
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  });
+
+  // POST /api/topics/my - replaces user's struggle topics
+  router.post('/my', requireAuth, async (req, res) => {
+    const { id: telegram_id } = req.telegramUser;
+    const { topic_ids } = req.body;
+    if (!Array.isArray(topic_ids)) return res.status(400).json({ error: 'topic_ids must be an array' });
+
+    // Delete old topics
+    const { error: delErr } = await supabase.from('user_topics').delete().eq('telegram_id', telegram_id);
+    if (delErr) return res.status(500).json({ error: delErr.message });
+
+    if (topic_ids.length > 0) {
+      const inserts = topic_ids.map(tid => ({ telegram_id, topic_id: parseInt(tid) }));
+      const { error: insErr } = await supabase.from('user_topics').insert(inserts);
+      if (insErr) return res.status(500).json({ error: insErr.message });
+    }
+    res.json({ success: true });
+  });
+
+  // GET /api/topics/my-expertise - returns mentor expertise topics
+  router.get('/my-expertise', requireAuth, async (req, res) => {
+    const { id: telegram_id } = req.telegramUser;
+    const { data, error } = await supabase
+      .from('mentor_topics')
+      .select('topic_id, topics(*)')
+      .eq('telegram_id', telegram_id);
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  });
+
+  // POST /api/topics/my-expertise - replaces mentor's expertise topics
+  router.post('/my-expertise', requireAuth, async (req, res) => {
+    const { id: telegram_id } = req.telegramUser;
+    const { topic_ids } = req.body;
+    if (!Array.isArray(topic_ids)) return res.status(400).json({ error: 'topic_ids must be an array' });
+
+    // Delete old expertise topics
+    const { error: delErr } = await supabase.from('mentor_topics').delete().eq('telegram_id', telegram_id);
+    if (delErr) return res.status(500).json({ error: delErr.message });
+
+    if (topic_ids.length > 0) {
+      const inserts = topic_ids.map(tid => ({ telegram_id, topic_id: parseInt(tid) }));
+      const { error: insErr } = await supabase.from('mentor_topics').insert(inserts);
+      if (insErr) return res.status(500).json({ error: insErr.message });
+    }
+    res.json({ success: true });
+  });
+
   return router;
 };
