@@ -992,8 +992,8 @@ bot.on('message', async (msg) => {
           }
 
           // User exists, check role
-          const { data: user } = await supabase.from('users').select('role').eq('telegram_id', chatId).single();
-          if (user?.role === 'mentor' || user?.role === 'admin')
+          const { data: userRole } = await supabase.from('users').select('role').eq('telegram_id', chatId).single();
+          if (userRole?.role === 'mentor' || userRole?.role === 'admin')
             return safeSend(chatId, await t(chatId, 'already_mentor'));
           const { data: ex } = await supabase.from('mentor_applications').select('id')
             .eq('telegram_id', chatId).eq('status', 'pending').single();
@@ -1001,14 +1001,8 @@ bot.on('message', async (msg) => {
           setState(chatId, 'awaiting_mentor_q1');
           return safeSend(chatId, await t(chatId, 'apply_q1'));
         }
-        const { data: user } = await supabase.from('users').select('role').eq('telegram_id', chatId).single();
-        if (user?.role === 'mentor' || user?.role === 'admin')
-          return safeSend(chatId, await t(chatId, 'already_mentor'));
-        const { data: ex } = await supabase.from('mentor_applications').select('id')
-          .eq('telegram_id', chatId).eq('status', 'pending').single();
-        if (ex) return safeSend(chatId, await t(chatId, 'application_pending'));
-        setState(chatId, 'awaiting_mentor_q1');
-        return safeSend(chatId, await t(chatId, 'apply_q1'));
+        
+
       }
       if (command === '/settopics') {
         const lang = await getUserLang(chatId);
