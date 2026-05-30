@@ -255,13 +255,9 @@ async function showOnboarding() {
   // Load topics for onboarding
   try {
     const topics = await apiFetch('/api/topics');
-    const container = $('regTopicsList');
-    if (container) {
-      container.innerHTML = topics.map(t => `
-        <div id="onb-topic-${t.id}" class="chip chip-outline" onclick="toggleOnboardingTopic(${t.id})">
-          ${escapeHtml(t.name)}
-        </div>
-      `).join('');
+    const select = $('regTopicsSelect');
+    if (select) {
+      select.innerHTML = topics.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
     }
   } catch (e) {
     console.error('Failed to load topics for onboarding:', e);
@@ -316,7 +312,7 @@ async function completeRegistration() {
   try {
     const data = await apiFetch('/api/auth/register', {
       method: 'POST',
-      body: { sex, age_range, education_level, nickname, chat_id: getTelegramData().user?.id, topic_ids: onboardingSelectedTopics },
+      body: { sex, age_range, education_level, nickname, chat_id: getTelegramData().user?.id, topic_ids: Array.from($('regTopicsSelect').selectedOptions).map(o => Number(o.value)) },
     });
     haptic('success');
     currentUser = data.user;
