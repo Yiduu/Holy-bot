@@ -69,7 +69,27 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     const { data: pending } = await supabase.from('mentorship_requests').select('id').eq('user_id', user_id).eq('mentor_id', mentor_id).eq('status', 'pending').single();
     if (pending) return res.status(409).json({ error: 'Request already pending' });
 
-    const { data, error } = await supabase.from('mentorship_requests').insert({ user_id, mentor_id, message }).select().single();
+    // Determine topic_id for the request
+    let topic_id = req.body.topic_id;
+    if (!topic_id) {
+      // Try to resolve a common topic between user and mentor
+      const [userTopicsRes, mentorTopicsRes] = await Promise.all([
+        supabase.from('user_topics').select('topic_id').eq('telegram_id', user_id),
+        supabase.from('mentor_topics').select('topic_id').eq('telegram_id', mentor_id)
+      ]);
+      const userTids = (userTopicsRes.data || []).map(t => t.topic_id);
+      const mentorTids = (mentorTopicsRes.data || []).map(t => t.topic_id);
+      const common = userTids.filter(id => mentorTids.includes(id));
+      if (common.length) topic_id = common[0];
+      else if (userTids.length) topic_id = userTids[0];
+      else if (mentorTids.length) topic_id = mentorTids[0];
+      else return res.status(400).json({ error: 'Unable to determine topic for mentorship request' });
+    }
+
+    const { data, error } = await supabase.from('mentorship_requests')
+      .insert({ user_id, mentor_id, message, topic_id })
+      .select()
+      .single();
     if (error) return res.status(500).json({ error: error.message });
 
     // Notify mentor

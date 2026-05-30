@@ -247,7 +247,6 @@ function toggleChatInput(visible) {
 
 // ─── Onboarding ───────────────────────────────────────────────
 let onboardingStep = 0;
-let onboardingSelectedTopics = [];
 
 async function showOnboarding() {
   $('loadingScreen')?.classList.add('hidden');
