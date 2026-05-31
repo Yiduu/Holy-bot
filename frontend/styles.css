@@ -184,7 +184,14 @@ h3 {
   justify-content: space-between;
   backdrop-filter: blur(16px);
 }
-
+.app-logo {
+  height: auto;
+  max-height: 32px; /* match admin button height */
+  width: auto;
+  max-width: 120px; /* keep proportion */
+  display: block;
+  object-fit: contain;
+}
 .app-header h2 {
   font-size: 1rem;
 }
