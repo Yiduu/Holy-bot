@@ -1230,15 +1230,8 @@ textarea.form-control {
 
 /* Header logo */
 .app-logo {
-  height: 32px;
+  height: 42px;
   width: auto;
   display: block;
   object-fit: contain;
-}
-
-/* Loading screen logo (already exists, but ensure it's styled) */
-.loading-logo-img {
-  width: 80px;
-  height: auto;
-  margin-bottom: 20px;
 }
