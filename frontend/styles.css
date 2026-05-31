@@ -178,8 +178,8 @@ h3 {
   z-index: 100;
   background: var(--bg);
   border-bottom: 1px solid var(--border-dim);
-  padding: 10px 16px;
-  min-height: 56px;
+  padding: 6px 16px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -196,9 +196,9 @@ h3 {
 */
 .app-logo {
   display: block;
-  height: 36px;
+  height: 30px;
   width: auto;
-  max-width: 140px;
+  max-width: 130px;
   object-fit: contain;
   flex-shrink: 0;
 }
@@ -1020,8 +1020,8 @@ textarea.form-control {
 
 /* ─── Theme Toggle ──────────────────────────────────────────── */
 .theme-btn {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--surface);
   border: 1px solid var(--border-dim);
