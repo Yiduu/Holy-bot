@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -27,7 +28,8 @@
       </div>
       <div id="groupParticipantsField" class="form-group hidden">
         <label class="form-label">Invite Participants (Mentees)</label>
-        <div id="menteeCheckboxes" style="max-height:150px;overflow-y:auto;background:var(--bg3);padding:8px;border-radius:var(--radius-sm)">
+        <div id="menteeCheckboxes"
+          style="max-height:150px;overflow-y:auto;background:var(--bg3);padding:8px;border-radius:var(--radius-sm)">
           <!-- Dynamic mentee list -->
         </div>
       </div>
@@ -41,547 +43,648 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
+
 <body>
 
-<!-- ─── Loading Screen ──────────────────────────────────────── -->
-<div id="loadingScreen" class="loading-screen">
-  <div class="loading-logo"><img src="holy%20logo.png" alt="Holy Logo" class="loading-logo-img"></div>
-  <div class="loading-spinner"></div>
-  <p style="font-size:.75rem;color:var(--text3)">Loading Holy...</p>
-</div>
-
-<!-- ─── Reconnect Banner ─────────────────────────────────────── -->
-<div id="reconnectBanner" class="reconnect-banner">⚠ Reconnecting...</div>
-
-<!-- ─── Onboarding ───────────────────────────────────────────── -->
-<div id="onboarding" style="display:none">
-  <div class="onboarding-header">
-    <div class="onboarding-logo">✦ Holy</div>
-    <div class="onboarding-sub">A safe space to forget the past and run for the future</div>
+  <!-- ─── Loading Screen ──────────────────────────────────────── -->
+  <div id="loadingScreen" class="loading-screen">
+    <div class="loading-logo"><img src="holy%20logo.png" alt="Holy Logo" class="loading-logo-img"></div>
+    <div class="loading-spinner"></div>
+    <p style="font-size:.75rem;color:var(--text3)">Loading Holy...</p>
   </div>
 
-  <div class="step-indicator">
-    <div class="step-dot active"></div>
-    <div class="step-dot"></div>
-    <div class="step-dot"></div>
-  </div>
+  <!-- ─── Reconnect Banner ─────────────────────────────────────── -->
+  <div id="reconnectBanner" class="reconnect-banner">⚠ Reconnecting...</div>
 
-  <!-- Step 0: Welcome -->
-  <div class="onboarding-step">
-    <div class="verse-card" style="margin-bottom:24px">
-      <div id="verseTextOnboarding" class="verse-text">"Therefore, if anyone is in Christ, the new creation has come: The old has gone, the new is here!"</div>
-      <div id="verseRefOnboarding" class="verse-ref">2 Corinthians 5:17</div>
-    </div>
-    <p style="color:var(--text2);font-size:.9rem;line-height:1.6;margin-bottom:24px">
-      This community is 100% anonymous. No real names, emails, or phone numbers are collected.
-      You will receive a randomly generated name that only you will know.
-    </p>
-    <div class="card" style="margin-bottom:24px">
-      <div class="flex items-center gap-8 mb-8"><span style="font-size:1.2rem">🔒</span><span class="text-sm">Fully anonymous — identity protected</span></div>
-      <div class="flex items-center gap-8 mb-8"><span style="font-size:1.2rem">🙏</span><span class="text-sm">Christian community of accountability</span></div>
-      <div class="flex items-center gap-8"><span style="font-size:1.2rem">📹</span><span class="text-sm">Free video sessions with mentors</span></div>
-    </div>
-    <button class="btn btn-primary btn-full" onclick="showStep(1)">Begin My Journey →</button>
-  </div>
-
-  <!-- Step 1: Basic info -->
-  <div class="onboarding-step hidden">
-    <h2 style="font-family:var(--font-display);color:var(--gold);margin-bottom:4px">Tell Us About You</h2>
-    <p class="text-sm text-dim mb-16">Anonymous info only – helps match you with the right mentor</p>
-
-    <div class="form-group">
-      <label class="form-label">Sex</label>
-      <select id="regSex" class="form-control">
-        <option value="">Select…</option>
-        <option value="M">Male</option>
-        <option value="F">Female</option>
-        <option value="prefer_not">Prefer not to say</option>
-      </select>
+  <!-- ─── Onboarding ───────────────────────────────────────────── -->
+  <div id="onboarding" style="display:none">
+    <div class="onboarding-header">
+      <div class="onboarding-logo">✦ Holy</div>
+      <div class="onboarding-sub">A safe space to forget the past and run for the future</div>
     </div>
 
-    <div class="form-group">
-      <label class="form-label">Age Range</label>
-      <select id="regAge" class="form-control">
-        <option value="">Select…</option>
-        <option value="13-17">13–17</option>
-        <option value="18-24">18–24</option>
-        <option value="25-34">25–34</option>
-        <option value="35-44">35–44</option>
-        <option value="45-54">45–54</option>
-        <option value="55+">55+</option>
-      </select>
+    <div class="step-indicator">
+      <div class="step-dot active"></div>
+      <div class="step-dot"></div>
+      <div class="step-dot"></div>
     </div>
 
-    <div class="form-group">
-      <label class="form-label">Education Level</label>
-      <select id="regEdu" class="form-control">
-        <option value="">Select…</option>
-        <option value="none">None</option>
-        <option value="primary">Primary</option>
-        <option value="secondary">Secondary / High School</option>
-        <option value="undergraduate">Undergraduate</option>
-        <option value="graduate">Graduate</option>
-        <option value="postgraduate">Postgraduate</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Topics you need help with (Select multiple)</label>
-      <select id="regTopicsSelect" class="form-control" multiple style="max-height:180px;overflow-y:auto;background:var(--bg3);padding:8px;border-radius:var(--radius-sm)">
-        <!-- Dynamic topics options will be populated here -->
-      </select>
-    </div>
-
-    <div class="flex gap-8">
-      <button class="btn btn-ghost" onclick="showStep(0)">← Back</button>
-      <button class="btn btn-primary flex-1" onclick="showStep(2)">Continue →</button>
-    </div>
-  </div>
-
-  <!-- Step 2: Confirm & Register -->
-  <div class="onboarding-step hidden">
-    <h2 style="font-family:var(--font-display);color:var(--gold);margin-bottom:4px">Your Identity</h2>
-    <p class="text-sm text-dim mb-16">Choose a nickname and commit to the journey</p>
-
-    <div class="form-group">
-      <label class="form-label">Anonymous Nickname</label>
-      <input id="regNickname" class="form-control" placeholder="e.g. HopeSeeker_22" maxlength="20" />
-      <p class="text-xs text-dim mt-4">3–20 chars, letters/numbers/underscores only</p>
-    </div>
-
-    <div class="card mb-16">
-      <p class="text-sm" style="line-height:1.7;color:var(--text2)">
-        ☑ I commit to honesty in my recovery journey<br>
-        ☑ I will treat fellow members with respect and anonymity<br>
-        ☑ I understand this is a support community, not a replacement for professional help<br>
-        ☑ I agree not to share harmful or inappropriate content
+    <!-- Step 0: Welcome -->
+    <div class="onboarding-step">
+      <div class="verse-card" style="margin-bottom:24px">
+        <div id="verseTextOnboarding" class="verse-text">"Therefore, if anyone is in Christ, the new creation has come:
+          The old has gone, the new is here!"</div>
+        <div id="verseRefOnboarding" class="verse-ref">2 Corinthians 5:17</div>
+      </div>
+      <p style="color:var(--text2);font-size:.9rem;line-height:1.6;margin-bottom:24px">
+        This community is 100% anonymous. No real names, emails, or phone numbers are collected.
+        You will receive a randomly generated name that only you will know.
       </p>
+      <div class="card" style="margin-bottom:24px">
+        <div class="flex items-center gap-8 mb-8"><span style="font-size:1.2rem">🔒</span><span class="text-sm">Fully
+            anonymous — identity protected</span></div>
+        <div class="flex items-center gap-8 mb-8"><span style="font-size:1.2rem">🙏</span><span
+            class="text-sm">Christian community of accountability</span></div>
+        <div class="flex items-center gap-8"><span style="font-size:1.2rem">📹</span><span class="text-sm">Free video
+            sessions with mentors</span></div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="showStep(1)">Begin My Journey →</button>
     </div>
 
-    <div class="flex gap-8">
-      <button class="btn btn-ghost" onclick="showStep(1)">← Back</button>
-      <button id="regBtn" class="btn btn-primary flex-1" onclick="completeRegistration()">Join the Community 🙏</button>
+    <!-- Step 1: Basic info -->
+    <div class="onboarding-step hidden">
+      <h2 style="font-family:var(--font-display);color:var(--gold);margin-bottom:4px">Tell Us About You</h2>
+      <p class="text-sm text-dim mb-16">Anonymous info only – helps match you with the right mentor</p>
+
+      <div class="form-group">
+        <label class="form-label">Sex</label>
+        <select id="regSex" class="form-control">
+          <option value="">Select…</option>
+          <option value="M">Male</option>
+          <option value="F">Female</option>
+          <option value="prefer_not">Prefer not to say</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Age Range</label>
+        <select id="regAge" class="form-control">
+          <option value="">Select…</option>
+          <option value="13-17">13–17</option>
+          <option value="18-24">18–24</option>
+          <option value="25-34">25–34</option>
+          <option value="35-44">35–44</option>
+          <option value="45-54">45–54</option>
+          <option value="55+">55+</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Education Level</label>
+        <select id="regEdu" class="form-control">
+          <option value="">Select…</option>
+          <option value="none">None</option>
+          <option value="primary">Primary</option>
+          <option value="secondary">Secondary / High School</option>
+          <option value="undergraduate">Undergraduate</option>
+          <option value="graduate">Graduate</option>
+          <option value="postgraduate">Postgraduate</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Topics you need help with (Select multiple)</label>
+        <select id="regTopicsSelect" class="form-control" multiple
+          style="max-height:180px;overflow-y:auto;background:var(--bg3);padding:8px;border-radius:var(--radius-sm)">
+          <!-- Dynamic topics options will be populated here -->
+        </select>
+      </div>
+
+      <div class="flex gap-8">
+        <button class="btn btn-ghost" onclick="showStep(0)">← Back</button>
+        <button class="btn btn-primary flex-1" onclick="showStep(2)">Continue →</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Confirm & Register -->
+    <div class="onboarding-step hidden">
+      <h2 style="font-family:var(--font-display);color:var(--gold);margin-bottom:4px">Your Identity</h2>
+      <p class="text-sm text-dim mb-16">Choose a nickname and commit to the journey</p>
+
+      <div class="form-group">
+        <label class="form-label">Anonymous Nickname</label>
+        <input id="regNickname" class="form-control" placeholder="e.g. HopeSeeker_22" maxlength="20" />
+        <p class="text-xs text-dim mt-4">3–20 chars, letters/numbers/underscores only</p>
+      </div>
+
+      <div class="card mb-16">
+        <p class="text-sm" style="line-height:1.7;color:var(--text2)">
+          ☑ I commit to honesty in my recovery journey<br>
+          ☑ I will treat fellow members with respect and anonymity<br>
+          ☑ I understand this is a support community, not a replacement for professional help<br>
+          ☑ I agree not to share harmful or inappropriate content
+        </p>
+      </div>
+
+      <div class="flex gap-8">
+        <button class="btn btn-ghost" onclick="showStep(1)">← Back</button>
+        <button id="regBtn" class="btn btn-primary flex-1" onclick="completeRegistration()">Join the Community
+          🙏</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ── Main App ──────────────────────────────────────────────── -->
-<div id="app" class="hidden">
+  <!-- ── Main App ──────────────────────────────────────────────── -->
+  <div id="app" class="hidden">
 
-  <!-- ── Page: Dashboard ──────────────────────────────────────── -->
-  <div id="page-dashboard" class="page">
-    <div class="app-header">
-      <h2>✦ Holy</h2>
-      <div class="header-actions">
-        <button id="adminBtn" class="btn btn-sm btn-outline hidden" onclick="window.location='/admin.html'">Admin</button>
-        <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon">☀️</span></button>
+    <!-- ── Page: Dashboard ──────────────────────────────────────── -->
+    <div id="page-dashboard" class="page">
+      <div class="app-header">
+        <img src="holy%20logo.png" alt="Holy Helper" class="app-logo" />
+        <div class="header-actions">
+          <button id="adminBtn" class="btn btn-sm btn-outline hidden"
+            onclick="window.location='/admin.html'">Admin</button>
+          <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon">☀️</span></button>
+        </div>
       </div>
-    </div>
-    <div class="page-content">
-      <!-- Daily Verse -->
-      <div class="verse-card">
-        <div id="verseText" class="verse-text">Loading today's verse...</div>
-        <div id="verseRef" class="verse-ref">...</div>
-      </div>
+      <div class="page-content">
+        <!-- Daily Verse -->
+        <div class="verse-card">
+          <div id="verseText" class="verse-text">Loading today's verse...</div>
+          <div id="verseRef" class="verse-ref">...</div>
+        </div>
 
-      <!-- Stats -->
-      <div class="section-title" data-i18n="My Progress">My Progress</div>
-      <div id="streakCard" class="card mb-16 streak-card" onclick="markStreakRead()">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-12">
-            <div class="streak-icon">🔥</div>
-            <div>
-              <div class="text-sm font-bold" data-i18n="Bible Streak">Bible Streak</div>
-              <div id="streakCount" class="text-xs text-dim">0 days</div>
+        <!-- Stats -->
+        <div class="section-title" data-i18n="My Progress">My Progress</div>
+        <div id="streakCard" class="card mb-16 streak-card" onclick="markStreakRead()">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-12">
+              <div class="streak-icon">🔥</div>
+              <div>
+                <div class="text-sm font-bold" data-i18n="Bible Streak">Bible Streak</div>
+                <div id="streakCount" class="text-xs text-dim">0 days</div>
+              </div>
             </div>
+            <button id="markReadBtn" class="btn btn-ghost btn-sm" data-i18n="btn_mark_read">Mark Read</button>
           </div>
-          <button id="markReadBtn" class="btn btn-ghost btn-sm" data-i18n="btn_mark_read">Mark Read</button>
+        </div>
+
+        <div class="section-title" data-i18n="Community">Community</div>
+        <div class="stats-grid mb-16">
+          <div class="stat-card">
+            <div id="statUsers" class="stat-num">–</div>
+            <div class="stat-label">Members</div>
+          </div>
+          <div class="stat-card">
+            <div id="statMentors" class="stat-num">–</div>
+            <div class="stat-label">Mentors</div>
+          </div>
+          <div class="stat-card">
+            <div id="statSessions" class="stat-num">–</div>
+            <div class="stat-label">Sessions Today</div>
+          </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="section-title">Weekly Activity</div>
+        <div class="chart-wrap mb-16" style="height:160px">
+          <canvas id="activityChart"></canvas>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="section-title">Quick Actions</div>
+        <div class="grid-2 mb-16">
+          <button class="btn btn-outline" onclick="navigate('mentors')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+            </svg>
+            Find Mentor
+          </button>
+          <button class="btn btn-outline" onclick="navigate('sessions')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <polygon points="23 7 16 12 23 17 23 7" />
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+            </svg>
+            Sessions
+          </button>
+          <button class="btn btn-outline" onclick="openApplyModal()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07" />
+              <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+            </svg>
+            Become Mentor
+          </button>
+          <button class="btn btn-outline" onclick="navigate('settings')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+            Settings
+          </button>
+        </div>
+
+        <!-- Support -->
+        <div class="section-title">Support</div>
+        <div class="card mb-16">
+          <div class="form-group"><label class="form-label">Subject</label><input id="ticketSubject"
+              class="form-control" placeholder="What do you need help with?" /></div>
+          <div class="form-group"><label class="form-label">Description</label><textarea id="ticketDesc"
+              class="form-control" rows="3" placeholder="Describe your issue..."></textarea></div>
+          <button class="btn btn-outline btn-sm" onclick="submitTicket()">Submit Ticket</button>
         </div>
       </div>
+    </div>
 
-      <div class="section-title" data-i18n="Community">Community</div>
-      <div class="stats-grid mb-16">
-        <div class="stat-card"><div id="statUsers" class="stat-num">–</div><div class="stat-label">Members</div></div>
-        <div class="stat-card"><div id="statMentors" class="stat-num">–</div><div class="stat-label">Mentors</div></div>
-        <div class="stat-card"><div id="statSessions" class="stat-num">–</div><div class="stat-label">Sessions Today</div></div>
+    <!-- ── Page: Mentors ─────────────────────────────────────────── -->
+    <div id="page-mentors" class="page">
+      <div class="app-header">
+        <h2>Find a Mentor</h2>
+        <button class="theme-btn" onclick="toggleTheme()"><span>☀️</span></button>
       </div>
-
-      <!-- Chart -->
-      <div class="section-title">Weekly Activity</div>
-      <div class="chart-wrap mb-16" style="height:160px">
-        <canvas id="activityChart"></canvas>
+      <div class="page-content">
+        <p class="text-sm text-dim mb-12">Connect with an anonymous mentor who has walked the path of recovery.</p>
+        <div id="mentorsList" style="display:flex;flex-direction:column;gap:10px">
+          <div class="loading-spinner" style="margin:40px auto"></div>
+        </div>
       </div>
+    </div>
 
-      <!-- Quick Actions -->
-      <div class="section-title">Quick Actions</div>
-      <div class="grid-2 mb-16">
-        <button class="btn btn-outline" onclick="navigate('mentors')">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-          Find Mentor
+    <!-- ── Page: Sessions ────────────────────────────────────────── -->
+    <div id="page-sessions" class="page">
+      <div class="app-header">
+        <h2 data-i18n="Sessions">Video Sessions</h2>
+        <button class="btn btn-ghost btn-sm" onclick="clearSessionHistory()" style="color:var(--danger)"
+          data-i18n="btn_clear">Clear</button>
+      </div>
+      <div class="page-content">
+        <div class="section-title">Start a Session (Mentors Only)</div>
+        <div class="grid-2 mb-16">
+          <button class="btn btn-primary" onclick="showScheduleModal(false)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <polygon points="23 7 16 12 23 17 23 7" />
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+            </svg>
+            1-on-1 Session
+          </button>
+          <button class="btn btn-outline" onclick="showScheduleModal(true)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            Group Session
+          </button>
+        </div>
+
+        <div class="section-title">My Private Sessions</div>
+        <div id="privateSessionsList" class="mb-16">
+          <div class="loading-spinner" style="margin:30px auto"></div>
+        </div>
+
+        <div class="section-title">Upcoming Group Sessions</div>
+        <div id="upcomingSessions">
+          <div class="loading-spinner" style="margin:30px auto"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Page: Video Room ──────────────────────────────────────── -->
+    <div id="page-video" class="page">
+      <div class="app-header">
+        <h2>Live Session</h2>
+        <button class="btn btn-sm btn-danger" onclick="navigate('sessions')">Leave</button>
+      </div>
+      <div class="page-content">
+        <div id="jitsiContainer" style="height:55vh;border-radius:14px;overflow:hidden;background:#000"></div>
+        <div id="sessionPasswordDisplay" class="text-sm text-dim mt-8" style="text-align:center"></div>
+      </div>
+    </div>
+
+    <!-- ── Page: Chat ─────────────────────────────────────────────── -->
+    <div id="page-chat" class="page">
+      <div class="app-header">
+        <h2 id="chatWith" data-i18n="Chat">Messages</h2>
+        <select id="chatPartnerSelect" class="form-control btn-sm" style="width:auto;display:none;background:var(--bg3)"
+          onchange="switchChatPartner(this.value)"></select>
+        <button class="btn btn-ghost btn-sm" onclick="clearChatHistory()" style="color:var(--danger)"
+          data-i18n="btn_clear">Clear</button>
+      </div>
+      <div id="chatMessages" class="chat-messages"></div>
+      <div id="typingIndicator" class="typing-indicator"></div>
+      <div id="chatInputRow" class="chat-input-row">
+        <input id="chatInput" class="chat-input" placeholder="Type a message…" oninput="handleChatTyping()"
+          onkeydown="if(event.key==='Enter')sendMessage()" />
+        <button class="chat-send-btn" onclick="sendMessage()">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
         </button>
-        <button class="btn btn-outline" onclick="navigate('sessions')">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-          Sessions
-        </button>
-        <button class="btn btn-outline" onclick="openApplyModal()">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/></svg>
-          Become Mentor
-        </button>
-        <button class="btn btn-outline" onclick="navigate('settings')">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          Settings
-        </button>
       </div>
 
-      <!-- Support -->
-      <div class="section-title">Support</div>
-      <div class="card mb-16">
-        <div class="form-group"><label class="form-label">Subject</label><input id="ticketSubject" class="form-control" placeholder="What do you need help with?" /></div>
-        <div class="form-group"><label class="form-label">Description</label><textarea id="ticketDesc" class="form-control" rows="3" placeholder="Describe your issue..."></textarea></div>
-        <button class="btn btn-outline btn-sm" onclick="submitTicket()">Submit Ticket</button>
+
+    </div>
+
+    <!-- ── Page: Mentorship Requests ──────────────────────────────── -->
+    <div id="page-requests" class="page">
+      <div class="app-header">
+        <h2 data-i18n="Requests">Requests</h2>
       </div>
-    </div>
-  </div>
-
-  <!-- ── Page: Mentors ─────────────────────────────────────────── -->
-  <div id="page-mentors" class="page">
-    <div class="app-header">
-      <h2>Find a Mentor</h2>
-      <button class="theme-btn" onclick="toggleTheme()"><span>☀️</span></button>
-    </div>
-    <div class="page-content">
-      <p class="text-sm text-dim mb-12">Connect with an anonymous mentor who has walked the path of recovery.</p>
-      <div id="mentorsList" style="display:flex;flex-direction:column;gap:10px">
-        <div class="loading-spinner" style="margin:40px auto"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Page: Sessions ────────────────────────────────────────── -->
-  <div id="page-sessions" class="page">
-    <div class="app-header">
-      <h2 data-i18n="Sessions">Video Sessions</h2>
-      <button class="btn btn-ghost btn-sm" onclick="clearSessionHistory()" style="color:var(--danger)" data-i18n="btn_clear">Clear</button>
-    </div>
-    <div class="page-content">
-      <div class="section-title">Start a Session (Mentors Only)</div>
-      <div class="grid-2 mb-16">
-        <button class="btn btn-primary" onclick="showScheduleModal(false)">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-          1-on-1 Session
-        </button>
-        <button class="btn btn-outline" onclick="showScheduleModal(true)">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Group Session
-        </button>
-      </div>
-
-      <div class="section-title">My Private Sessions</div>
-      <div id="privateSessionsList" class="mb-16">
-        <div class="loading-spinner" style="margin:30px auto"></div>
-      </div>
-
-      <div class="section-title">Upcoming Group Sessions</div>
-      <div id="upcomingSessions">
-        <div class="loading-spinner" style="margin:30px auto"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Page: Video Room ──────────────────────────────────────── -->
-  <div id="page-video" class="page">
-    <div class="app-header">
-      <h2>Live Session</h2>
-      <button class="btn btn-sm btn-danger" onclick="navigate('sessions')">Leave</button>
-    </div>
-    <div class="page-content">
-      <div id="jitsiContainer" style="height:55vh;border-radius:14px;overflow:hidden;background:#000"></div>
-      <div id="sessionPasswordDisplay" class="text-sm text-dim mt-8" style="text-align:center"></div>
-    </div>
-  </div>
-
-  <!-- ── Page: Chat ─────────────────────────────────────────────── -->
-  <div id="page-chat" class="page">
-    <div class="app-header">
-      <h2 id="chatWith" data-i18n="Chat">Messages</h2>
-      <select id="chatPartnerSelect" class="form-control btn-sm" style="width:auto;display:none;background:var(--bg3)" onchange="switchChatPartner(this.value)"></select>
-      <button class="btn btn-ghost btn-sm" onclick="clearChatHistory()" style="color:var(--danger)" data-i18n="btn_clear">Clear</button>
-    </div>
-    <div id="chatMessages" class="chat-messages"></div>
-<div id="typingIndicator" class="typing-indicator"></div>
-    <div id="chatInputRow" class="chat-input-row">
-      <input id="chatInput" class="chat-input" placeholder="Type a message…" oninput="handleChatTyping()" onkeydown="if(event.key==='Enter')sendMessage()" />
-      <button class="chat-send-btn" onclick="sendMessage()">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-          <line x1="22" y1="2" x2="11" y2="13"/> 
-          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-        </svg>
-      </button>
-    </div>
-
-    
-  </div>
-  
-  <!-- ── Page: Mentorship Requests ──────────────────────────────── -->
-  <div id="page-requests" class="page">
-    <div class="app-header">
-      <h2 data-i18n="Requests">Requests</h2>
-    </div>
-    <div class="page-content">
-      <p class="text-sm text-dim mb-12" data-i18n="Pending mentorship applications from users.">Pending mentorship applications from users.</p>
-      <div id="requestsList" style="display:flex;flex-direction:column;gap:10px">
-        <div class="loading-spinner" style="margin:40px auto"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Page: My Mentees (Mentor only) ────────────────────────── -->
-  <div id="page-my-mentees" class="page">
-    <div class="app-header">
-      <h2 data-i18n="My Mentees">My Mentees</h2>
-    </div>
-    <div class="page-content">
-      <div id="menteeStats" class="card mb-16" style="background:var(--gold-dim);border:1px solid var(--gold)">
-        <div class="flex justify-between items-center">
-          <span class="text-sm" data-i18n="Active Clients">Active Clients</span>
-          <span id="activeMenteeCount" class="stat-num" style="font-size:1.5rem">0</span>
+      <div class="page-content">
+        <p class="text-sm text-dim mb-12" data-i18n="Pending mentorship applications from users.">Pending mentorship
+          applications from users.</p>
+        <div id="requestsList" style="display:flex;flex-direction:column;gap:10px">
+          <div class="loading-spinner" style="margin:40px auto"></div>
         </div>
       </div>
-      <div id="menteesList" style="display:flex;flex-direction:column;gap:12px">
-        <div class="loading-spinner" style="margin:40px auto"></div>
+    </div>
+
+    <!-- ── Page: My Mentees (Mentor only) ────────────────────────── -->
+    <div id="page-my-mentees" class="page">
+      <div class="app-header">
+        <h2 data-i18n="My Mentees">My Mentees</h2>
+      </div>
+      <div class="page-content">
+        <div id="menteeStats" class="card mb-16" style="background:var(--gold-dim);border:1px solid var(--gold)">
+          <div class="flex justify-between items-center">
+            <span class="text-sm" data-i18n="Active Clients">Active Clients</span>
+            <span id="activeMenteeCount" class="stat-num" style="font-size:1.5rem">0</span>
+          </div>
+        </div>
+        <div id="menteesList" style="display:flex;flex-direction:column;gap:12px">
+          <div class="loading-spinner" style="margin:40px auto"></div>
+        </div>
       </div>
     </div>
-  </div>
 
 
-  <!-- ── Page: Journal ─────────────────────────────────────────── -->
-  <div id="page-journal" class="page">
-    <div class="app-header">
-      <h2 data-i18n="btn_journal">Journal</h2>
-      <button class="btn btn-sm btn-primary" onclick="showNewJournalEntry()" data-i18n="btn_new_entry">+ New</button>
-    </div>
-    <div class="page-content">
-      <div id="journalEntriesList" style="display:flex;flex-direction:column;gap:10px">
-        <div class="loading-spinner" style="margin:40px auto"></div>
+    <!-- ── Page: Journal ─────────────────────────────────────────── -->
+    <div id="page-journal" class="page">
+      <div class="app-header">
+        <h2 data-i18n="btn_journal">Journal</h2>
+        <button class="btn btn-sm btn-primary" onclick="showNewJournalEntry()" data-i18n="btn_new_entry">+ New</button>
+      </div>
+      <div class="page-content">
+        <div id="journalEntriesList" style="display:flex;flex-direction:column;gap:10px">
+          <div class="loading-spinner" style="margin:40px auto"></div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- ── Page: Settings ────────────────────────────────────────── -->
-  <div id="page-settings" class="page">
-    <div class="app-header">
-      <h2>Settings</h2>
-      <button class="btn btn-sm btn-primary" onclick="saveSettings()">Save</button>
-    </div>
-    <div class="page-content">
-      <!-- Identity -->
-      <div class="section-title" data-i18n="Identity">Identity</div>
-      <div class="card mb-16">
-        <div class="flex justify-between items-center mb-8">
-          <span class="text-sm text-dim" data-i18n="Anonymous ID">Anonymous ID</span>
-          <span id="userAnonId" class="chip chip-gold"></span>
-        </div>
-        <div class="flex justify-between items-center">
-          <span class="text-sm text-dim" data-i18n="Role">Role</span>
-          <span id="userRole" class="chip chip-blue"></span>
-        </div>
+    <!-- ── Page: Settings ────────────────────────────────────────── -->
+    <div id="page-settings" class="page">
+      <div class="app-header">
+        <h2>Settings</h2>
+        <button class="btn btn-sm btn-primary" onclick="saveSettings()">Save</button>
       </div>
+      <div class="page-content">
+        <!-- Identity -->
+        <div class="section-title" data-i18n="Identity">Identity</div>
+        <div class="card mb-16">
+          <div class="flex justify-between items-center mb-8">
+            <span class="text-sm text-dim" data-i18n="Anonymous ID">Anonymous ID</span>
+            <span id="userAnonId" class="chip chip-gold"></span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-sm text-dim" data-i18n="Role">Role</span>
+            <span id="userRole" class="chip chip-blue"></span>
+          </div>
+        </div>
 
-      <!-- Display -->
-      <div class="section-title" data-i18n="Display">Display</div>
-      <div class="card mb-16">
-        <div class="form-group">
-          <label class="form-label" data-i18n="Display Name (still anonymous)">Display Name (still anonymous)</label>
-          <input id="settingDisplayName" class="form-control" placeholder="Custom nickname…" />
-        </div>
-        <div class="form-group">
-          <label class="form-label" data-i18n="Timezone">Timezone</label>
-          <select id="settingTimezone" class="form-control">
-            <option value="UTC">UTC (GMT)</option>
-            <option value="Africa/Addis_Ababa">East Africa (Ethiopia)</option>
-            <option value="Europe/London">London</option>
-            <option value="Europe/Paris">Paris / Berlin</option>
-            <option value="America/New_York">New York (EST)</option>
-            <option value="America/Chicago">Chicago (CST)</option>
-            <option value="America/Denver">Denver (MST)</option>
-            <option value="America/Los_Angeles">Los Angeles (PST)</option>
-            <option value="Asia/Dubai">Dubai</option>
-            <option value="Asia/Jerusalem">Jerusalem</option>
-            <option value="Asia/Riyadh">Riyadh</option>
-            <option value="Asia/Nairobi">Nairobi</option>
-            <option value="Asia/Kolkata">India (IST)</option>
-            <option value="Asia/Singapore">Singapore / HK</option>
-            <option value="Australia/Sydney">Sydney</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" data-i18n="Language">Language</label>
-          <select id="settingLanguage" class="form-control" onchange="changeLanguage(this.value)">
-            <option value="en">English</option>
-            <option value="am">Amharic (አማርኛ)</option>
-          </select>
-        </div>
-        <div class="mt-8 flex items-center gap-8">
-          <span class="text-sm text-dim" data-i18n="Theme">Theme</span>
-          <button class="btn btn-ghost btn-sm" onclick="toggleTheme()" data-i18n="Toggle Dark/Light">Toggle Dark/Light</button>
-        </div>
-        <div class="divider"></div>
-        <button class="btn btn-outline btn-sm btn-full" onclick="openTopicModal()" data-i18n="settings_my_topics">My Topics</button>
-      </div>
-
-      <!-- Notifications -->
-      <div class="section-title" data-i18n="Notifications">Notifications</div>
-      <div class="card mb-16">
-        <div class="toggle-wrap"><span data-i18n="New Messages">New Messages</span><div id="toggleMessages" class="toggle on" onclick="toggleNotif('toggleMessages')"></div></div>
-        <div class="divider"></div>
-        <div class="toggle-wrap"><span data-i18n="Session Reminders">Session Reminders</span><div id="toggleSessions" class="toggle on" onclick="toggleNotif('toggleSessions')"></div></div>
-        <div class="divider"></div>
-        <div class="toggle-wrap"><span data-i18n="Daily Bible Verse">Daily Bible Verse</span><div id="toggleVerse" class="toggle on" onclick="toggleNotif('toggleVerse')"></div></div>
-      </div>
-
-      <!-- Mentor Settings -->
-      <div id="mentorSettings" class="hidden">
-        <div class="section-title">Mentor Profile</div>
+        <!-- Display -->
+        <div class="section-title" data-i18n="Display">Display</div>
         <div class="card mb-16">
           <div class="form-group">
-            <label class="form-label">Bio</label>
-            <textarea id="settingBio" class="form-control" rows="3" placeholder="Share a bit about your recovery journey…"></textarea>
+            <label class="form-label" data-i18n="Display Name (still anonymous)">Display Name (still anonymous)</label>
+            <input id="settingDisplayName" class="form-control" placeholder="Custom nickname…" />
           </div>
           <div class="form-group">
-            <label class="form-label">Specialization</label>
-            <input id="settingSpecialization" class="form-control" placeholder="e.g. Young adults, Married men…" />
+            <label class="form-label" data-i18n="Timezone">Timezone</label>
+            <select id="settingTimezone" class="form-control">
+              <option value="UTC">UTC (GMT)</option>
+              <option value="Africa/Addis_Ababa">East Africa (Ethiopia)</option>
+              <option value="Europe/London">London</option>
+              <option value="Europe/Paris">Paris / Berlin</option>
+              <option value="America/New_York">New York (EST)</option>
+              <option value="America/Chicago">Chicago (CST)</option>
+              <option value="America/Denver">Denver (MST)</option>
+              <option value="America/Los_Angeles">Los Angeles (PST)</option>
+              <option value="Asia/Dubai">Dubai</option>
+              <option value="Asia/Jerusalem">Jerusalem</option>
+              <option value="Asia/Riyadh">Riyadh</option>
+              <option value="Asia/Nairobi">Nairobi</option>
+              <option value="Asia/Kolkata">India (IST)</option>
+              <option value="Asia/Singapore">Singapore / HK</option>
+              <option value="Australia/Sydney">Sydney</option>
+            </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Max Mentees</label>
-            <input id="settingMaxMentees" type="number" class="form-control" min="1" max="20" value="5" />
+            <label class="form-label" data-i18n="Language">Language</label>
+            <select id="settingLanguage" class="form-control" onchange="changeLanguage(this.value)">
+              <option value="en">English</option>
+              <option value="am">Amharic (አማርኛ)</option>
+            </select>
+          </div>
+          <div class="mt-8 flex items-center gap-8">
+            <span class="text-sm text-dim" data-i18n="Theme">Theme</span>
+            <button class="btn btn-ghost btn-sm" onclick="toggleTheme()" data-i18n="Toggle Dark/Light">Toggle
+              Dark/Light</button>
           </div>
           <div class="divider"></div>
-          <button class="btn btn-outline btn-sm btn-full" onclick="openTopicModal(true)" data-i18n="settings_expertise_topics">My Expertise Topics</button>
+          <button class="btn btn-outline btn-sm btn-full" onclick="openTopicModal()" data-i18n="settings_my_topics">My
+            Topics</button>
         </div>
+
+        <!-- Notifications -->
+        <div class="section-title" data-i18n="Notifications">Notifications</div>
+        <div class="card mb-16">
+          <div class="toggle-wrap"><span data-i18n="New Messages">New Messages</span>
+            <div id="toggleMessages" class="toggle on" onclick="toggleNotif('toggleMessages')"></div>
+          </div>
+          <div class="divider"></div>
+          <div class="toggle-wrap"><span data-i18n="Session Reminders">Session Reminders</span>
+            <div id="toggleSessions" class="toggle on" onclick="toggleNotif('toggleSessions')"></div>
+          </div>
+          <div class="divider"></div>
+          <div class="toggle-wrap"><span data-i18n="Daily Bible Verse">Daily Bible Verse</span>
+            <div id="toggleVerse" class="toggle on" onclick="toggleNotif('toggleVerse')"></div>
+          </div>
+        </div>
+
+        <!-- Mentor Settings -->
+        <div id="mentorSettings" class="hidden">
+          <div class="section-title">Mentor Profile</div>
+          <div class="card mb-16">
+            <div class="form-group">
+              <label class="form-label">Bio</label>
+              <textarea id="settingBio" class="form-control" rows="3"
+                placeholder="Share a bit about your recovery journey…"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Specialization</label>
+              <input id="settingSpecialization" class="form-control" placeholder="e.g. Young adults, Married men…" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Max Mentees</label>
+              <input id="settingMaxMentees" type="number" class="form-control" min="1" max="20" value="5" />
+            </div>
+            <div class="divider"></div>
+            <button class="btn btn-outline btn-sm btn-full" onclick="openTopicModal(true)"
+              data-i18n="settings_expertise_topics">My Expertise Topics</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Bottom Navigation ─────────────────────────────────────── -->
+
+    <nav class="bottom-nav">
+      <div id="nav-dashboard" class="nav-item active" onclick="navigate('dashboard')">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <polyline points="9 22 9 12 15 12 15 22" />
+        </svg>
+        <span data-i18n="Home">Home</span>
+      </div>
+      <div id="nav-mentors" class="nav-item" onclick="navigate('mentors')">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+        <span data-i18n="Mentors">Mentors</span>
+      </div>
+      <div id="nav-sessions" class="nav-item" onclick="navigate('sessions')">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <polygon points="23 7 16 12 23 17 23 7" />
+          <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+        </svg>
+        <span data-i18n="Sessions">Sessions</span>
+      </div>
+      <div id="nav-chat" class="nav-item" onclick="navigate('chat')" style="position:relative">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+        <span id="chatBadge" class="nav-badge" style="display:none">0</span>
+        <span data-i18n="Chat">Chat</span>
+      </div>
+      <div id="nav-journal" class="nav-item" onclick="navigate('journal')">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+        </svg>
+        <span data-i18n="Journal">Journal</span>
+      </div>
+      <div id="nav-my-mentees" class="nav-item" onclick="navigate('my-mentees')" style="display:none">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+        <span data-i18n="Mentees">Mentees</span>
+      </div>
+      <div id="nav-requests" class="nav-item hidden" onclick="navigate('requests')">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <polyline points="16 11 18 13 22 9" />
+        </svg>
+        <span data-i18n="Requests">Requests</span>
+      </div>
+      <div id="nav-settings" class="nav-item" onclick="navigate('settings')">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+        <span data-i18n="Settings">Settings</span>
+      </div>
+    </nav>
+
+  </div><!-- /#app -->
+
+  <!-- ─── Apply to be Mentor Modal ──────────────────────────────── -->
+  <div id="applyModal" class="modal-overlay" onclick="if(event.target===this)closeApplyModal()">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Apply to Become a Mentor</div>
+      <p class="text-sm text-dim mb-16">Answer honestly. Admin will review your application.</p>
+
+      <div class="form-group">
+        <label class="form-label" data-i18n="apply_q1">Please select your sex:</label>
+        <select id="applySex" class="form-control">
+          <option value="" data-i18n="Select…">Select…</option>
+          <option value="M" data-i18n="sex_male">Male</option>
+          <option value="F" data-i18n="sex_female">Female</option>
+          <option value="prefer_not" data-i18n="sex_prefer_not">Prefer not to say</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" data-i18n="apply_q2">What is your educational background? (e.g., Bachelor's in
+          Psychology)</label>
+        <input id="applyEdu" class="form-control" placeholder="Your education background..." />
+      </div>
+      <div class="form-group">
+        <label class="form-label" data-i18n="apply_q3">Tell us about yourself (experience, qualifications, and why you
+          want to be a mentor):</label>
+        <textarea id="applyAbout" class="form-control" rows="4" placeholder="Tell us about yourself..."></textarea>
+      </div>
+
+      <div class="flex gap-8">
+        <button class="btn btn-ghost flex-1" onclick="closeApplyModal()">Cancel</button>
+        <button class="btn btn-primary flex-1" onclick="submitApplication()">Submit Application</button>
       </div>
     </div>
   </div>
 
-  <!-- ─── Bottom Navigation ─────────────────────────────────────── -->
-    
-  <nav class="bottom-nav">
-    <div id="nav-dashboard" class="nav-item active" onclick="navigate('dashboard')">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      <span data-i18n="Home">Home</span>
-    </div>
-    <div id="nav-mentors" class="nav-item" onclick="navigate('mentors')">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      <span data-i18n="Mentors">Mentors</span>
-    </div>
-    <div id="nav-sessions" class="nav-item" onclick="navigate('sessions')">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-      <span data-i18n="Sessions">Sessions</span>
-    </div>
-    <div id="nav-chat" class="nav-item" onclick="navigate('chat')" style="position:relative">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      <span id="chatBadge" class="nav-badge" style="display:none">0</span>
-      <span data-i18n="Chat">Chat</span>
-    </div>
-    <div id="nav-journal" class="nav-item" onclick="navigate('journal')">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-      <span data-i18n="Journal">Journal</span>
-    </div>
-    <div id="nav-my-mentees" class="nav-item" onclick="navigate('my-mentees')" style="display:none">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      <span data-i18n="Mentees">Mentees</span>
-    </div>
-    <div id="nav-requests" class="nav-item hidden" onclick="navigate('requests')">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
-      <span data-i18n="Requests">Requests</span>
-    </div>
-    <div id="nav-settings" class="nav-item" onclick="navigate('settings')">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      <span data-i18n="Settings">Settings</span>
-    </div>
-  </nav>
-
-</div><!-- /#app -->
-
-<!-- ─── Apply to be Mentor Modal ──────────────────────────────── -->
-<div id="applyModal" class="modal-overlay" onclick="if(event.target===this)closeApplyModal()">
-  <div class="modal-sheet">
-    <div class="modal-handle"></div>
-    <div class="modal-title">Apply to Become a Mentor</div>
-    <p class="text-sm text-dim mb-16">Answer honestly. Admin will review your application.</p>
-
-    <div class="form-group">
-      <label class="form-label" data-i18n="apply_q1">Please select your sex:</label>
-      <select id="applySex" class="form-control">
-        <option value="" data-i18n="Select…">Select…</option>
-        <option value="M" data-i18n="sex_male">Male</option>
-        <option value="F" data-i18n="sex_female">Female</option>
-        <option value="prefer_not" data-i18n="sex_prefer_not">Prefer not to say</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label class="form-label" data-i18n="apply_q2">What is your educational background? (e.g., Bachelor's in Psychology)</label>
-      <input id="applyEdu" class="form-control" placeholder="Your education background..." />
-    </div>
-    <div class="form-group">
-      <label class="form-label" data-i18n="apply_q3">Tell us about yourself (experience, qualifications, and why you want to be a mentor):</label>
-      <textarea id="applyAbout" class="form-control" rows="4" placeholder="Tell us about yourself..."></textarea>
-    </div>
-
-    <div class="flex gap-8">
-      <button class="btn btn-ghost flex-1" onclick="closeApplyModal()">Cancel</button>
-      <button class="btn btn-primary flex-1" onclick="submitApplication()">Submit Application</button>
+  <!-- ─── Select Mentee Modal (for Sessions) ────────────────────── -->
+  <div id="menteeSelectModal" class="modal-overlay" onclick="if(event.target===this)closeMenteeSelectModal()">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Select Mentee</div>
+      <p class="text-sm text-dim mb-16">Choose which mentee to invite to this private session.</p>
+      <div id="menteeSelectList" style="display:flex;flex-direction:column;gap:10px;max-height:50vh;overflow-y:auto">
+      </div>
+      <button class="btn btn-ghost btn-full mt-16" onclick="closeMenteeSelectModal()">Cancel</button>
     </div>
   </div>
-</div>
 
-<!-- ─── Select Mentee Modal (for Sessions) ────────────────────── -->
-<div id="menteeSelectModal" class="modal-overlay" onclick="if(event.target===this)closeMenteeSelectModal()">
-  <div class="modal-sheet">
-    <div class="modal-handle"></div>
-    <div class="modal-title">Select Mentee</div>
-    <p class="text-sm text-dim mb-16">Choose which mentee to invite to this private session.</p>
-    <div id="menteeSelectList" style="display:flex;flex-direction:column;gap:10px;max-height:50vh;overflow-y:auto"></div>
-    <button class="btn btn-ghost btn-full mt-16" onclick="closeMenteeSelectModal()">Cancel</button>
-  </div>
-</div>
+  <!-- ─── Journal Entry Modal ────────────────────────────────────── -->
+  <div id="journalModal" class="modal-overlay" onclick="if(event.target===this)closeJournalModal()">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div id="journalModalTitle" class="modal-title" data-i18n="btn_new_entry">New Entry</div>
 
-<!-- ─── Journal Entry Modal ────────────────────────────────────── -->
-<div id="journalModal" class="modal-overlay" onclick="if(event.target===this)closeJournalModal()">
-  <div class="modal-sheet">
-    <div class="modal-handle"></div>
-    <div id="journalModalTitle" class="modal-title" data-i18n="btn_new_entry">New Entry</div>
-    
-    <div class="journal-toolbar flex gap-8 mb-8">
-      <button type="button" class="btn btn-outline btn-xs" onclick="formatJournalText('bold')" style="padding: 2px 8px; font-size: 0.75rem;"><b>B</b></button>
-      <button type="button" class="btn btn-outline btn-xs" onclick="formatJournalText('italic')" style="padding: 2px 8px; font-size: 0.75rem;"><i>I</i></button>
-      <button type="button" class="btn btn-outline btn-xs" onclick="formatJournalText('list')" style="padding: 2px 8px; font-size: 0.75rem;">List</button>
-    </div>
+      <div class="journal-toolbar flex gap-8 mb-8">
+        <button type="button" class="btn btn-outline btn-xs" onclick="formatJournalText('bold')"
+          style="padding: 2px 8px; font-size: 0.75rem;"><b>B</b></button>
+        <button type="button" class="btn btn-outline btn-xs" onclick="formatJournalText('italic')"
+          style="padding: 2px 8px; font-size: 0.75rem;"><i>I</i></button>
+        <button type="button" class="btn btn-outline btn-xs" onclick="formatJournalText('list')"
+          style="padding: 2px 8px; font-size: 0.75rem;">List</button>
+      </div>
 
-    <div class="form-group">
-      <textarea id="journalContent" class="form-control" rows="8" data-i18n="journal_write_prompt" placeholder="Write your thoughts here..."></textarea>
-    </div>
-    <div class="flex gap-8">
-      <button class="btn btn-ghost flex-1" onclick="closeJournalModal()" data-i18n="btn_cancel">Cancel</button>
-      <button id="saveJournalBtn" class="btn btn-primary flex-1" onclick="saveJournalEntry()" data-i18n="btn_done">Save</button>
-      <button id="updateJournalBtn" class="btn btn-primary flex-1 hidden" onclick="updateJournalEntry()">Update</button>
-      <button id="deleteJournalBtn" class="btn btn-danger flex-1 hidden" onclick="deleteJournalEntry()">Delete</button>
+      <div class="form-group">
+        <textarea id="journalContent" class="form-control" rows="8" data-i18n="journal_write_prompt"
+          placeholder="Write your thoughts here..."></textarea>
+      </div>
+      <div class="flex gap-8">
+        <button class="btn btn-ghost flex-1" onclick="closeJournalModal()" data-i18n="btn_cancel">Cancel</button>
+        <button id="saveJournalBtn" class="btn btn-primary flex-1" onclick="saveJournalEntry()"
+          data-i18n="btn_done">Save</button>
+        <button id="updateJournalBtn" class="btn btn-primary flex-1 hidden"
+          onclick="updateJournalEntry()">Update</button>
+        <button id="deleteJournalBtn" class="btn btn-danger flex-1 hidden"
+          onclick="deleteJournalEntry()">Delete</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- ─── Topic Selection Modal ────────────────────────────────── -->
-<div id="topicModal" class="modal-overlay" onclick="if(event.target===this)closeTopicModal()">
-  <div class="modal-sheet">
-    <div class="modal-handle"></div>
-    <div class="modal-title" data-i18n="select_your_topics">Select Topics</div>
-    <div id="topicsList" class="flex flex-wrap gap-8 py-16" style="max-height:50vh;overflow-y:auto">
-      <!-- Dynamic topics -->
+  <!-- ─── Topic Selection Modal ────────────────────────────────── -->
+  <div id="topicModal" class="modal-overlay" onclick="if(event.target===this)closeTopicModal()">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title" data-i18n="select_your_topics">Select Topics</div>
+      <div id="topicsList" class="flex flex-wrap gap-8 py-16" style="max-height:50vh;overflow-y:auto">
+        <!-- Dynamic topics -->
+      </div>
+      <button class="btn btn-primary btn-full mt-16" onclick="saveTopics()" data-i18n="Save">Save Topics</button>
     </div>
-    <button class="btn btn-primary btn-full mt-16" onclick="saveTopics()" data-i18n="Save">Save Topics</button>
   </div>
-</div>
 
-<script src="locales.js"></script>
-<script src="app.js"></script>
+  <script src="locales.js"></script>
+  <script src="app.js"></script>
 </body>
+
 </html>
