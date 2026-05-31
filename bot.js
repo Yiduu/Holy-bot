@@ -422,12 +422,18 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
     .eq('user_id', chatId).eq('topic_id', numericTopicId).eq('notified', false).single();
 
   let query = supabase.from('users')
-    .select('telegram_id, anonymous_id, public_alias, rating, rating_count, last_active, max_mentees, user_settings(bio, display_name)')
+    .select('telegram_id, anonymous_id, rating, rating_count, last_active, max_mentees, user_settings(bio, display_name)')
     .in('telegram_id', ids)
     .eq('is_banned', false);
 
+  const { data: allMentors, error: queryError } = await query;
+  if (queryError) {
+    console.error('[listMentors] Supabase error:', queryError.message);
+    if (loadMsg) await deleteMessage(chatId, loadMsg.message_id);
+    return safeSend(chatId, tSync(lang, 'no_mentors_topic'));
+  }
+
   // Count active mentees per mentor to filter out full ones
-  const { data: allMentors } = await query;
   if (!allMentors?.length) {
     if (loadMsg) await deleteMessage(chatId, loadMsg.message_id);
     return safeSend(chatId, tSync(lang, 'no_mentors_topic'));
@@ -476,7 +482,7 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
 
   for (const m of paginated) {
     const badge = onlineBadge(m.last_active);
-    const displayName = mdEscape(m.public_alias || m.user_settings?.display_name || m.anonymous_id);
+    const displayName = mdEscape(m.user_settings?.display_name || m.anonymous_id);
     const bio = mdEscape(m.user_settings?.bio || tSync(lang, 'no_bio'));
     const stars = renderStars(m.rating, m.rating_count);
     const status = isOnline(m.last_active) ? tSync(lang, 'status_online') : tSync(lang, 'status_away');
@@ -880,7 +886,7 @@ async function notifySessionInvite(chatId, sessionInfo) {
   const { data: settings } = await supabase.from('user_settings').select('timezone').eq('telegram_id', chatId).single();
   let recipientTimezone = settings?.timezone || 'Africa/Addis_Ababa';
   if (!recipientTimezone || recipientTimezone === 'UTC') recipientTimezone = 'Africa/Addis_Ababa';
-  
+
   const link = `${APP_URL}?start=session_${sessionInfo.session_id}`;
   const timeStr = formatUserDateTime(sessionInfo.scheduled_at, recipientTimezone);
   // Build plain-text invite to avoid Markdown issues with URLs and user-supplied titles
@@ -959,7 +965,7 @@ bot.on('message', async (msg) => {
       if (command === '/start') {
         const args = text.split(' ');
         const { data: user } = await supabase.from('users').select('*').eq('telegram_id', chatId).single();
-        
+
         if (args.length > 1 && args[1].startsWith('session_')) {
           const sessionId = args[1].replace('session_', '');
           if (!user) {
@@ -1001,31 +1007,31 @@ bot.on('message', async (msg) => {
         return showMainMenu(chatId, await t(chatId, 'welcome_back', { nick: mdEscape(user.anonymous_id) }));
       }
       if (command === '/menu') return showMainMenu(chatId);
-              if (command === '/apply') {
-          // Ensure the user is registered via Mini App
-          const { data: userRecord } = await supabase.from('users').select('*').eq('telegram_id', chatId).single();
-          if (!userRecord) {
-            const lang = await getUserLang(chatId);
-            return safeSend(chatId, 'Please register via the web app to apply.', {
-              reply_markup: {
-                inline_keyboard: [[{
-                  text: 'Register',
-                  web_app: { url: `${APP_URL}?start=register` }
-                }]]
-              }
-            });
-          }
-
-          // User exists, check role
-          const { data: userRole } = await supabase.from('users').select('role').eq('telegram_id', chatId).single();
-          if (userRole?.role === 'mentor' || userRole?.role === 'admin')
-            return safeSend(chatId, await t(chatId, 'already_mentor'));
-          const { data: ex } = await supabase.from('mentor_applications').select('id')
-            .eq('telegram_id', chatId).eq('status', 'pending').single();
-          if (ex) return safeSend(chatId, await t(chatId, 'application_pending'));
-          setState(chatId, 'awaiting_mentor_q1');
-          return safeSend(chatId, await t(chatId, 'apply_q1'));
+      if (command === '/apply') {
+        // Ensure the user is registered via Mini App
+        const { data: userRecord } = await supabase.from('users').select('*').eq('telegram_id', chatId).single();
+        if (!userRecord) {
+          const lang = await getUserLang(chatId);
+          return safeSend(chatId, 'Please register via the web app to apply.', {
+            reply_markup: {
+              inline_keyboard: [[{
+                text: 'Register',
+                web_app: { url: `${APP_URL}?start=register` }
+              }]]
+            }
+          });
         }
+
+        // User exists, check role
+        const { data: userRole } = await supabase.from('users').select('role').eq('telegram_id', chatId).single();
+        if (userRole?.role === 'mentor' || userRole?.role === 'admin')
+          return safeSend(chatId, await t(chatId, 'already_mentor'));
+        const { data: ex } = await supabase.from('mentor_applications').select('id')
+          .eq('telegram_id', chatId).eq('status', 'pending').single();
+        if (ex) return safeSend(chatId, await t(chatId, 'application_pending'));
+        setState(chatId, 'awaiting_mentor_q1');
+        return safeSend(chatId, await t(chatId, 'apply_q1'));
+      }
       if (command === '/settopics') {
         const lang = await getUserLang(chatId);
         const kb = await getTopicPickerKeyboard([], 'set_topics_', lang);
@@ -1465,7 +1471,7 @@ bot.on('callback_query', async (query) => {
     const startParam = state.tempData.startParam;
     clearState(chatId);
     await showMainMenu(chatId, tSync(selectedLang, 'registration_complete', { lang: selectedLang === 'en' ? 'English' : 'አማርኛ' }));
-    
+
     if (startParam && startParam.startsWith('session_')) {
       const sessionId = startParam.replace('session_', '');
       await bot.sendMessage(chatId, tSync(selectedLang, 'session_invite'), {
