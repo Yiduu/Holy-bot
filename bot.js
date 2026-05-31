@@ -424,7 +424,8 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
   let query = supabase.from('users')
     .select('telegram_id, anonymous_id, rating, rating_count, last_active, max_mentees, user_settings(bio, display_name)')
     .in('telegram_id', ids)
-    .eq('is_banned', false);
+    .eq('is_banned', false)
+    .eq('role', 'mentor');
 
   const { data: allMentors, error: queryError } = await query;
   if (queryError) {
