@@ -1228,10 +1228,22 @@ textarea.form-control {
   white-space: nowrap;
 }
 
-/* Header logo */
+/* Header logo – visible and properly sized */
 .app-logo {
-  height: 72px;
+  height: auto;
+  max-height: 48px;
+  /* fits well in the header */
   width: auto;
+  max-width: 180px;
+  /* prevents super wide logos */
   display: block;
   object-fit: contain;
+}
+
+/* Make header taller to accommodate larger logo if needed */
+.app-header {
+  padding: 8px 16px;
+  /* was 12px – reduce slightly for balance */
+  min-height: 64px;
+  /* ensures space for logo */
 }
