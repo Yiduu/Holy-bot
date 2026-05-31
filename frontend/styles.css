@@ -178,20 +178,31 @@ h3 {
   z-index: 100;
   background: var(--bg);
   border-bottom: 1px solid var(--border-dim);
-  padding: 8px 16px;
+  padding: 10px 16px;
+  min-height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   backdrop-filter: blur(16px);
 }
+
+/* ─── Logo ──────────────────────────────────────────────────── */
+/*
+   Fixed height keeps the logo crisp and consistent on every device.
+   width: auto preserves the aspect ratio whether it's a wide wordmark
+   or a square icon. max-width prevents very wide logos from pushing
+   the action buttons off screen on narrow phones. flex-shrink: 0
+   ensures the logo never squishes — the right-side actions yield first.
+*/
 .app-logo {
-  height: auto;
-  max-height: 32px; /* match admin button height */
-  width: auto;
-  max-width: 120px; /* keep proportion */
   display: block;
+  height: 36px;
+  width: auto;
+  max-width: 140px;
   object-fit: contain;
+  flex-shrink: 0;
 }
+
 .app-header h2 {
   font-size: 1rem;
 }
@@ -1164,24 +1175,8 @@ textarea.form-control {
   margin: 16px 0;
 }
 
-.chat-input-row,
-#chatInputRow {
-  visibility: visible;
-}
-
 .hidden {
   display: none !important;
-}
-
-/* ─── Responsive ────────────────────────────────────────────── */
-@media (max-width: 380px) {
-  .stats-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .stat-card:last-child {
-    grid-column: span 2;
-  }
 }
 
 /* ─── Feature Extensions ────────────────────────────────────── */
@@ -1235,22 +1230,17 @@ textarea.form-control {
   white-space: nowrap;
 }
 
-/* Header logo – visible and properly sized */
-.app-logo {
-  height: auto;
-  max-height: 96px; /* match loading page logo size */
-  /* fits well in the header */
-  width: auto;
-  max-width: 180px;
-  /* prevents super wide logos */
-  display: block;
-  object-fit: contain;
-}
+/* ─── Responsive ────────────────────────────────────────────── */
+@media (max-width: 380px) {
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 
-/* Make header taller to accommodate larger logo if needed */
-.app-header {
-  padding: 8px 16px;
-  /* was 12px – reduce slightly for balance */
-  min-height: 64px;
-  /* ensures space for logo */
+  .stat-card:last-child {
+    grid-column: span 2;
+  }
+
+  .app-logo {
+    max-width: 110px;
+  }
 }
