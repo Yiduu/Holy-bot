@@ -178,8 +178,8 @@ h3 {
   z-index: 100;
   background: var(--bg);
   border-bottom: 1px solid var(--border-dim);
-  padding: 6px 16px;
-  height: 48px;
+  padding: 5px 16px;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -196,9 +196,9 @@ h3 {
 */
 .app-logo {
   display: block;
-  height: 30px;
+  height: 38px;
   width: auto;
-  max-width: 130px;
+  max-width: 150px;
   object-fit: contain;
   flex-shrink: 0;
 }
