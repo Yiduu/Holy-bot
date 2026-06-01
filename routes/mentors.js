@@ -211,95 +211,33 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .single();
     if (fetchErr) return res.status(404).json({ error: 'Request not found' });
 
-    // If accepting, run pre-flight checks before mutating anything
     if (action === 'accepted') {
-      // 1. Ensure the mentee does not already have an active assignment with anyone
-      const { data: existingActive, error: activeCheckErr } = await supabase
-        .from('mentorship_assignments')
-        .select('id, mentor_id')
-        .eq('user_id', reqData.user_id)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (activeCheckErr) return res.status(500).json({ error: activeCheckErr.message });
-
-      if (existingActive) {
-        return res.status(409).json({
-          error: 'This mentee already has an active mentor. End that assignment before accepting a new one.'
+      // Delegate the entire accept operation to a Postgres function so that
+      // the active-assignment check, request status update, and assignment
+      // upsert all happen inside one transaction with a row-level lock on the
+      // request.  This prevents duplicate-key violations on the partial unique
+      // index one_active_assignment_per_user when the mentor taps Accept more
+      // than once before the first response returns.
+      const { data: rpcData, error: rpcErr } = await supabase
+        .rpc('accept_mentorship_request', {
+          p_request_id: req.params.id,
+          p_mentor_id: mentor_id
         });
+
+      if (rpcErr) return res.status(500).json({ error: rpcErr.message });
+
+      // The function returns { error: '...' } on logical failures
+      if (rpcData?.error) {
+        const status = rpcData.error.includes('already has an active mentor') ? 409 : 400;
+        return res.status(status).json({ error: rpcData.error });
       }
-    }
-
-    // Update the request status
-    const { error: updateErr } = await supabase
-      .from('mentorship_requests')
-      .update({ status: action, updated_at: new Date().toISOString() })
-      .eq('id', req.params.id);
-    if (updateErr) return res.status(500).json({ error: updateErr.message });
-
-    // If accepted → create or reactivate assignment
-    if (action === 'accepted') {
-      // Resolve topic_id
-      let topic_id = reqData.topic_id;
-      if (!topic_id) {
-        const [userTopicsRes, mentorTopicsRes] = await Promise.all([
-          supabase.from('user_topics').select('topic_id').eq('telegram_id', reqData.user_id),
-          supabase.from('mentor_topics').select('topic_id').eq('telegram_id', mentor_id)
-        ]);
-        const uTids = (userTopicsRes.data || []).map(t => t.topic_id);
-        const mTids = (mentorTopicsRes.data || []).map(t => t.topic_id);
-        const common = uTids.filter(id => mTids.includes(id));
-        if (common.length > 0) {
-          topic_id = common[0];
-        } else if (uTids.length > 0) {
-          topic_id = uTids[0];
-        } else if (mTids.length > 0) {
-          topic_id = mTids[0];
-        }
-      }
-
-      // 2. Check for an existing inactive assignment for this exact (user_id, mentor_id) pair.
-      //    If found, reactivate it to avoid a duplicate-key violation on any unique index
-      //    that covers (user_id, mentor_id) regardless of is_active.
-      const { data: inactiveAssign, error: inactiveCheckErr } = await supabase
-        .from('mentorship_assignments')
-        .select('id')
-        .eq('user_id', reqData.user_id)
-        .eq('mentor_id', mentor_id)
-        .eq('is_active', false)
-        .order('ended_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (inactiveCheckErr) return res.status(500).json({ error: inactiveCheckErr.message });
-
-      if (inactiveAssign) {
-        // Reactivate the most-recently-ended assignment for this pair
-        const { error: reactivateErr } = await supabase
-          .from('mentorship_assignments')
-          .update({
-            is_active: true,
-            ended_at: null,
-            assigned_at: new Date().toISOString(),
-            topic_id: topic_id || null
-          })
-          .eq('id', inactiveAssign.id);
-
-        if (reactivateErr) return res.status(500).json({ error: reactivateErr.message });
-      } else {
-        // 3. No prior assignment exists for this pair – insert a fresh row
-        const { error: insertErr } = await supabase
-          .from('mentorship_assignments')
-          .insert({
-            user_id: reqData.user_id,
-            mentor_id,
-            topic_id: topic_id || null,
-            is_active: true,
-            assigned_at: new Date().toISOString()
-          });
-
-        if (insertErr) return res.status(500).json({ error: insertErr.message });
-      }
+    } else {
+      // Reject path: simple status update, no assignment changes needed
+      const { error: updateErr } = await supabase
+        .from('mentorship_requests')
+        .update({ status: action, updated_at: new Date().toISOString() })
+        .eq('id', req.params.id);
+      if (updateErr) return res.status(500).json({ error: updateErr.message });
     }
 
     // Notify user
