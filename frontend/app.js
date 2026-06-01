@@ -456,8 +456,26 @@ async function loadMentors() {
   const container = $('mentorsList');
   container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
 
+  // Populate topic filter dropdown if not already populated
+  const filterSelect = $('mentorTopicFilter');
+  if (filterSelect && filterSelect.options.length <= 1) {
+    const topics = await apiFetch('/api/topics');
+    filterSelect.innerHTML = '<option value="">All Topics</option>' + topics.map(t => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join('');
+  }
+
   try {
-    const mentors = await apiFetch('/api/mentors');
+    let mentors = await apiFetch('/api/mentors');
+    // Same‑sex filtering based on current user (unless "prefer not to say")
+    const userSex = currentUser?.sex;
+    if (userSex && userSex !== 'prefer_not') {
+      mentors = mentors.filter(m => m.sex === userSex);
+    }
+    // Apply selected topic filter
+    const selectedTopic = filterSelect?.value;
+    if (selectedTopic) {
+      mentors = mentors.filter(m => m.expertise_topics && m.expertise_topics.includes(selectedTopic));
+    }
+    
     if (!mentors.length) {
       container.innerHTML = '<div class="empty-state"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>No mentors available</span></div>';
       return;
@@ -467,16 +485,20 @@ async function loadMentors() {
       const name = m.user_settings?.display_name || m.anonymous_id;
       const bio = m.user_settings?.bio || 'No bio provided';
       const spec = m.user_settings?.specialization || '';
-      const mentees = m.mentee_count || 0;
-      const max = m.user_settings?.max_mentees || 5;
       const letter = name.charAt(0).toUpperCase();
+      const sexLabel = m.sex === 'male' ? 'Male' : m.sex === 'female' ? 'Female' : '';
+      const mentees = m.mentees_count || 0;
+      const max = m.max_mentees || 5;
+
       return `
-        <div class="mentor-card">
-          <div class="flex items-center gap-8">
-            <div class="mentor-avatar">${letter}</div>
-            <div class="mentor-info">
-              <div class="mentor-id">${escapeHtml(name)}</div>
-              <div class="mentor-bio">${escapeHtml(bio)}</div>
+        <div class=\"mentor-card\">
+          <div class=\"flex items-center gap-8\">
+            <div class=\"mentor-avatar\">${letter}</div>
+            <div class=\"mentor-info\">
+              <div class=\"mentor-id\">${escapeHtml(name)}</div>
+              ${sexLabel ? `<div class=\"mentor-sex\" style=\"font-size:0.85rem;color:var(--text2);margin-top:2px;\">${sexLabel}</div>` : ''}
+              <div class=\"mentor-bio\">${escapeHtml(bio)}</div>
+              ${m.expertise_topics && m.expertise_topics.length ? `<div class=\"mentor-topics\">${m.expertise_topics.map(t => `<span class=\"mentor-badge\">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
             </div>
           </div>
           <div class="mentor-meta">

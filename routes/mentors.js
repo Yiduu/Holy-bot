@@ -21,7 +21,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     let query = supabase
       .from('users')
-      .select('telegram_id, anonymous_id, user_settings(bio, specialization, max_mentees, display_name)')
+          .select('telegram_id, anonymous_id, sex, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
       .eq('is_banned', false);
 
@@ -59,11 +59,33 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     if (error) return res.status(500).json({ error: error.message });
 
-    // Enrich with mentee counts
-    const enriched = await Promise.all((data || []).map(async (mentor) => {
-      const { count } = await supabase.from('mentorship_assignments').select('id', { count: 'exact', head: true }).eq('mentor_id', mentor.telegram_id).eq('is_active', true);
-      return { ...mentor, mentee_count: count || 0 };
-    }));
+            // Enrich with mentee counts and expertise topics
+        const enriched = await Promise.all((data || []).map(async (mentor) => {
+          const { count } = await supabase.from('mentorship_assignments')
+            .select('id', { count: 'exact', head: true })
+            .eq('mentor_id', mentor.telegram_id)
+            .eq('is_active', true);
+
+          // Fetch mentor's topic IDs
+          const { data: mtRows } = await supabase.from('mentor_topics')
+            .select('topic_id')
+            .eq('telegram_id', mentor.telegram_id);
+          const topicIds = (mtRows || []).map(t => t.topic_id);
+
+          let expertise_topics = [];
+          if (topicIds.length) {
+            const { data: topics } = await supabase.from('topics')
+              .select('name')
+              .in('id', topicIds);
+            expertise_topics = (topics || []).map(t => t.name);
+          }
+
+          return {
+            ...mentor,
+            mentee_count: count || 0,
+            expertise_topics,
+          };
+        }));
 
     res.json(enriched);
   });
@@ -82,22 +104,22 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     const { data: pending } = await supabase.from('mentorship_requests').select('id').eq('user_id', user_id).eq('mentor_id', mentor_id).eq('status', 'pending').single();
     if (pending) return res.status(409).json({ error: 'Request already pending' });
 
-    // Determine topic_id for the request
-    let topic_id = req.body.topic_id;
-    if (!topic_id) {
-      // Try to resolve a common topic between user and mentor
-      const [userTopicsRes, mentorTopicsRes] = await Promise.all([
-        supabase.from('user_topics').select('topic_id').eq('telegram_id', user_id),
-        supabase.from('mentor_topics').select('topic_id').eq('telegram_id', mentor_id)
-      ]);
-      const userTids = (userTopicsRes.data || []).map(t => t.topic_id);
-      const mentorTids = (mentorTopicsRes.data || []).map(t => t.topic_id);
-      const common = userTids.filter(id => mentorTids.includes(id));
-      if (common.length) topic_id = common[0];
-      else if (userTids.length) topic_id = userTids[0];
-      else if (mentorTids.length) topic_id = mentorTids[0];
-      else return res.status(400).json({ error: 'Unable to determine topic for mentorship request' });
-    }
+// Determine topic_id for the request
+let topic_id = req.body.topic_id;
+if (!topic_id) {
+  // Resolve a common topic between user and mentor
+  const [userTopicsRes, mentorTopicsRes] = await Promise.all([
+    supabase.from('user_topics').select('topic_id').eq('telegram_id', user_id),
+    supabase.from('mentor_topics').select('topic_id').eq('telegram_id', mentor_id)
+  ]);
+  const userTids = (userTopicsRes.data || []).map(t => t.topic_id);
+  const mentorTids = (mentorTopicsRes.data || []).map(t => t.topic_id);
+  const common = userTids.filter(id => mentorTids.includes(id));
+  if (common.length === 0) {
+    return res.status(400).json({ error: 'User and mentor have no overlapping topics' });
+  }
+  topic_id = common[0];
+}
 
     const { data, error } = await supabase.from('mentorship_requests')
       .insert({ user_id, mentor_id, message, topic_id })
