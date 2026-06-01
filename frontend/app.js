@@ -63,9 +63,9 @@ async function apiFetch(path, opts = {}) {
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
   if (diff < 60000) return 'just now';
-  if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
-  return `${Math.floor(diff/86400000)}d ago`;
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  return `${Math.floor(diff / 86400000)}d ago`;
 }
 
 function formatTime(dateStr) {
@@ -99,7 +99,7 @@ function showToast(msg, type = 'info') {
   t.textContent = msg;
   t.style.cssText = `
     position:fixed;top:16px;left:50%;transform:translateX(-50%);
-    background:${type==='error'?'var(--danger)':type==='success'?'var(--success)':'var(--bg3)'};
+    background:${type === 'error' ? 'var(--danger)' : type === 'success' ? 'var(--success)' : 'var(--bg3)'};
     color:#fff;padding:10px 20px;border-radius:8px;z-index:9999;
     font-size:.85rem;font-weight:700;animation:fadeIn .2s ease;
     max-width:90vw;text-align:center;
@@ -153,7 +153,7 @@ async function init() {
 function handleDeepLink() {
   const tg = window.Telegram?.WebApp;
   const startParam = tg?.initDataUnsafe?.start_param;
-  
+
   if (startParam && startParam.startsWith('session_')) {
     const sessionId = startParam.replace('session_', '');
     setTimeout(() => joinSession(sessionId), 100);
@@ -252,7 +252,7 @@ let onboardingStep = 0;
 async function showOnboarding() {
   $('loadingScreen')?.classList.add('hidden');
   $('onboarding').style.display = 'flex';
-  
+
   // Load topics for onboarding
   try {
     const topics = await apiFetch('/api/topics');
@@ -263,7 +263,7 @@ async function showOnboarding() {
   } catch (e) {
     console.error('Failed to load topics for onboarding:', e);
   }
-  
+
   showStep(0);
 }
 
@@ -296,9 +296,9 @@ async function completeRegistration() {
   const education_level = $('regEdu').value;
   const nickname = $('regNickname').value.trim();
 
-  if (!sex || !age_range || !education_level || !nickname) { 
+  if (!sex || !age_range || !education_level || !nickname) {
     haptic('error');
-    showToast('Please complete all fields', 'error'); return; 
+    showToast('Please complete all fields', 'error'); return;
   }
 
   const nickRegex = /^[a-zA-Z0-9_]{3,20}$/;
@@ -352,7 +352,7 @@ function startApp() {
 }
 
 function keepAlive() {
-  setInterval(() => fetch(`${API}/health`).catch(() => {}), 4 * 60 * 1000);
+  setInterval(() => fetch(`${API}/health`).catch(() => { }), 4 * 60 * 1000);
 }
 
 // ─── Dashboard ────────────────────────────────────────────────
@@ -361,14 +361,14 @@ async function loadDashboard() {
     const verse = await apiFetch('/api/auth/verse');
     $('verseText').textContent = verse.text;
     $('verseRef').textContent = verse.reference;
-  } catch {}
+  } catch { }
 
   try {
     const stats = await apiFetch('/api/users/stats');
     $('statUsers').textContent = stats.total_users;
     $('statMentors').textContent = stats.active_mentors;
     $('statSessions').textContent = stats.sessions_today;
-  } catch {}
+  } catch { }
 
   loadActivityChart();
   loadStreak();
@@ -383,11 +383,11 @@ async function loadStreak() {
   try {
     const s = await apiFetch('/api/streaks');
     $('streakCount').textContent = t('streak_display', { count: s.current_streak });
-    
+
     // Check if already read today (Ethiopia time)
     const etNow = new Date(new Date().getTime() + (3 * 60 * 60 * 1000));
     const today = etNow.toISOString().split('T')[0];
-    
+
     const btn = $('markReadBtn');
     if (s.last_read_date === today) {
       btn.textContent = t('streak_already_read');
@@ -474,7 +474,7 @@ async function loadMentors() {
     if (selectedTopic) {
       mentors = mentors.filter(m => m.expertise_topics && m.expertise_topics.includes(selectedTopic));
     }
-    
+
     if (!mentors.length) {
       container.innerHTML = '<div class="empty-state"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>No mentors available</span></div>';
       return;
@@ -485,7 +485,7 @@ async function loadMentors() {
       const bio = m.user_settings?.bio || 'No bio provided';
       const spec = m.user_settings?.specialization || '';
       const letter = name.charAt(0).toUpperCase();
-      const sexLabel = m.sex === 'male' ? 'Male' : m.sex === 'female' ? 'Female' : '';
+      const sexLabel = m.sex === 'M' ? 'Male' : m.sex === 'F' ? 'Female' : '';
       const mentees = m.mentees_count || 0;
       const max = m.max_mentees || 5;
 
@@ -665,18 +665,18 @@ async function createSession(is_group = false, mentee_id = null, scheduled_at = 
 
     const title = customTitle || (is_group ? prompt('Session title (or leave blank):') : 'Private session');
     const finalScheduled = scheduled_at || new Date().toISOString();
-    
+
     const data = await apiFetch('/api/sessions/create', {
       method: 'POST',
-      body: { 
-        is_group, 
-        title, 
-        scheduled_at: finalScheduled, 
+      body: {
+        is_group,
+        title,
+        scheduled_at: finalScheduled,
         mentee_id: mentee_id || null,
         participant_ids: participant_ids.length ? participant_ids : undefined
       }
     });
-    
+
     haptic('success');
     showToast(is_group ? 'Group session created!' : 'Private session created!', 'success');
     if (new Date(finalScheduled) <= new Date()) {
@@ -698,13 +698,13 @@ function showScheduleModal(is_group, mentee_id = null) {
   const menteeList = document.getElementById('menteeCheckboxes');
   const modalTitle = document.getElementById('scheduleModalTitle');
   const btn = document.getElementById('scheduleBtn');
-  
+
   if (!modal) return;
-  
+
   modalTitle.textContent = is_group ? 'Schedule Group Session' : 'Schedule 1-on-1 Session';
   titleField.classList.toggle('hidden', !is_group);
   participantField.classList.toggle('hidden', !is_group);
-  
+
   if (is_group && menteeList) {
     menteeList.innerHTML = '<div class="text-xs text-dim">Loading mentees...</div>';
     apiFetch('/api/mentors/my-mentees').then(mentees => {
@@ -726,16 +726,16 @@ function showScheduleModal(is_group, mentee_id = null) {
   const now = new Date();
   now.setHours(now.getHours() + 1);
   document.getElementById('scheduleDate').value = now.toISOString().split('T')[0];
-  document.getElementById('scheduleTime').value = now.toTimeString().slice(0,5);
-  
+  document.getElementById('scheduleTime').value = now.toTimeString().slice(0, 5);
+
   modal.classList.add('open');
-  
+
   btn.onclick = () => {
     haptic('medium');
     const date = document.getElementById('scheduleDate').value;
     const time = document.getElementById('scheduleTime').value;
     const title = document.getElementById('scheduleTitle').value || (is_group ? 'Group Session' : '1-on-1 Session');
-    
+
     if (!date || !time) {
       haptic('error');
       showToast('Please pick date and time', 'error');
@@ -748,7 +748,7 @@ function showScheduleModal(is_group, mentee_id = null) {
         participant_ids.push(cb.value);
       });
     }
-    
+
     // Build a local Date (year, month-1, day, hour, minute) to avoid UTC conversion issues
     const [year, month, day] = date.split('-').map(Number);
     const [hour, minute] = time.split(':').map(Number);
@@ -777,7 +777,7 @@ function openMenteeSelectModal() {
   if (!modal || !list) return;
   list.innerHTML = '<div class="loading-spinner" style="margin:20px auto"></div>';
   modal.classList.add('open');
-  
+
   apiFetch('/api/mentors/my-mentees').then(mentees => {
     if (!mentees.length) {
       list.innerHTML = '<p class="text-center py-20">No active mentees.</p>';
@@ -825,17 +825,17 @@ function launchJitsi(roomName, roomPassword, displayName, token) {
         ...(roomPassword ? { password: roomPassword } : {}),
       },
       interfaceConfigOverwrite: {
-        TOOLBAR_BUTTONS: ['microphone','camera','chat','raisehand','fullscreen','tileview','hangup'],
+        TOOLBAR_BUTTONS: ['microphone', 'camera', 'chat', 'raisehand', 'fullscreen', 'tileview', 'hangup'],
         SHOW_JITSI_WATERMARK: false,
         MOBILE_APP_PROMO: false,
       },
       ...(token ? { jwt: token } : {}),
     };
-    
+
     if (window.jitsiApi) {
       try { window.jitsiApi.dispose(); } catch (e) { console.error(e); }
     }
-    
+
     window.jitsiApi = new JitsiMeetExternalAPI('meet.jit.si', options);
     window.jitsiApi.addEventListener('videoConferenceLeft', () => navigate('sessions'));
     window.jitsiApi.addEventListener('passwordRequired', () => {
@@ -865,7 +865,7 @@ async function loadChat() {
 
     const res = await apiFetch('/api/users/chat-partner');
     const selector = $('chatPartnerSelect');
-    
+
     if (res.type === 'none') {
       $('chatMessages').innerHTML = '<div class="empty-state"><span>No active mentorship.</span></div>';
       toggleChatInput(false);
@@ -885,10 +885,10 @@ async function loadChat() {
       $('chatWith').style.display = 'none';
       selector.style.display = 'block';
       selector.innerHTML = res.mentees.map(m => `<option value="${m.telegram_id}">${escapeHtml(m.display_name)}</option>`).join('');
-      
+
       const selectedId = targetId || res.mentees[0].telegram_id;
       selector.value = selectedId;
-      
+
       const partner = res.mentees.find(m => String(m.telegram_id) === String(selectedId)) || res.mentees[0];
       window.chatState = { with: partner.telegram_id, name: partner.anonymous_id };
       loadMessages(partner.telegram_id);
@@ -988,7 +988,7 @@ async function updateMessageBadge() {
       badge.textContent = count;
       badge.style.display = count > 0 ? 'flex' : 'none';
     }
-  } catch {}
+  } catch { }
 }
 
 // ─── Settings ─────────────────────────────────────────────────
@@ -1058,24 +1058,24 @@ async function submitApplication() {
   const sex = $('applySex').value;
   const edu = $('applyEdu').value.trim();
   const about = $('applyAbout').value.trim();
-  
-  if (!sex || !edu || !about) { 
-    haptic('error'); 
-    showToast('Please answer all questions', 'error'); 
-    return; 
+
+  if (!sex || !edu || !about) {
+    haptic('error');
+    showToast('Please answer all questions', 'error');
+    return;
   }
 
   try {
-    await apiFetch('/api/users/apply-mentor', { 
-      method: 'POST', 
-      body: { 
-        sex, 
-        educational_background: edu, 
+    await apiFetch('/api/users/apply-mentor', {
+      method: 'POST',
+      body: {
+        sex,
+        educational_background: edu,
         about_me: about,
         answer_q1: sex,
         answer_q2: edu,
         answer_q3: about
-      } 
+      }
     });
     haptic('success');
     showToast('Application submitted! 🙏', 'success');
@@ -1139,7 +1139,7 @@ async function loadMyMentees() {
   try {
     const mentees = await apiFetch('/api/mentors/my-mentees');
     const stats = await apiFetch('/api/mentors/my-mentees/stats');
-    
+
     $('activeMenteeCount').textContent = mentees.length;
     if (!mentees.length) {
       container.innerHTML = '<div class="empty-state"><span>No active mentees yet</span></div>';
@@ -1150,7 +1150,7 @@ async function loadMyMentees() {
     for (const m of mentees) {
       const { user, assigned_at, id: assignId } = m;
       const sessionCount = stats[user.telegram_id] || 0;
-      
+
       html += `
         <div class="card mb-12">
           <div class="flex justify-between items-start mb-8">
@@ -1171,7 +1171,7 @@ async function loadMyMentees() {
         </div>`;
     }
     container.innerHTML = html;
-    
+
     for (const m of mentees) {
       const note = await apiFetch(`/api/mentors/notes/${m.user.telegram_id}`);
       if (note.content) $(`note-${m.user.telegram_id}`).value = note.content;
@@ -1207,14 +1207,14 @@ async function openTopicModal(isExpertise = false) {
   window.isTopicModalExpertise = isExpertise;
   const container = $('topicsList');
   container.innerHTML = '<div class="loading-spinner" style="margin:20px auto"></div>';
-  
+
   const modalTitle = document.querySelector('#topicModal .modal-title');
   if (modalTitle) {
     modalTitle.textContent = isExpertise ? 'Select Expertise Topics' : 'Select Struggle Topics';
   }
-  
+
   $('topicModal').classList.add('open');
-  
+
   try {
     const myTopicsPath = isExpertise ? '/api/topics/my-expertise' : '/api/topics/my';
     const [all, mine] = await Promise.all([
@@ -1222,7 +1222,7 @@ async function openTopicModal(isExpertise = false) {
       apiFetch(myTopicsPath)
     ]);
     window.selectedTopics = mine.map(t => t.topic_id);
-    
+
     container.innerHTML = all.map(t => `
       <div id="topic-${t.id}" class="chip ${window.selectedTopics.includes(t.id) ? 'chip-gold' : 'chip-outline'}" onclick="toggleTopic(${t.id})">
         ${escapeHtml(t.name)}
@@ -1356,7 +1356,7 @@ function formatJournalText(action) {
   const end = textarea.selectionEnd;
   const text = textarea.value;
   const selected = text.substring(start, end);
-  
+
   let replacement = '';
   if (action === 'bold') {
     replacement = `**${selected}**`;
@@ -1365,7 +1365,7 @@ function formatJournalText(action) {
   } else if (action === 'list') {
     replacement = selected.split('\n').map(line => line.startsWith('- ') ? line : `- ${line}`).join('\n');
   }
-  
+
   textarea.value = text.substring(0, start) + replacement + text.substring(end);
   textarea.focus();
   textarea.selectionStart = start;
