@@ -608,6 +608,14 @@ textarea.form-control {
   color: var(--gold);
 }
 
+.mentor-sex {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text);
+  margin-top: 4px;
+  font-weight: 600;
+}
+
 .mentor-bio {
   font-size: 0.8rem;
   color: var(--text2);

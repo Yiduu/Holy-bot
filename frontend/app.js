@@ -496,7 +496,7 @@ async function loadMentors() {
             <div class=\"mentor-avatar\">${letter}</div>
             <div class=\"mentor-info\">
               <div class=\"mentor-id\">${escapeHtml(name)}</div>
-              ${sexLabel ? `<div class=\"mentor-sex\" style=\"font-size:0.85rem;color:var(--text2);margin-top:2px;\">${sexLabel}</div>` : ''}
+               ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
               <div class=\"mentor-bio\">${escapeHtml(bio)}</div>
             </div>
           </div>
