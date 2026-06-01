@@ -1015,7 +1015,7 @@ async function updateRequestsBadge() {
   try {
     const requests = await apiFetch('/api/mentors/my-requests');
     const count = requests.length;
-    const badge = $('#requestsBadge');
+    const badge = $('requestsBadge');
     if (badge) {
       badge.textContent = count;
       badge.style.display = count > 0 ? 'flex' : 'none';
