@@ -208,6 +208,7 @@ function connectSocket() {
   socket.on('new_mentorship_request', () => {
     haptic('success');
     showToast('New mentorship request received! 🙏', 'success');
+    updateRequestsBadge();  // update the badge count
     if (currentPage === 'requests') loadRequests();
   });
 }
@@ -552,12 +553,16 @@ async function loadRequests() {
       return;
     }
     container.innerHTML = requests.map(r => {
-      const name = r.sender?.user_settings?.display_name || r.sender?.anonymous_id || 'Anonymous';
+      const name = r.user?.user_settings?.display_name || r.user?.anonymous_id || 'Anonymous';
+      const sex = r.user?.sex === 'M' ? 'Male' : (r.user?.sex === 'F' ? 'Female' : 'Not specified');
+      const age = r.user?.age_range || 'Not specified';
+      const topic = r.topic?.name || 'General';
       return `
         <div class="mentor-card">
           <div class="mentor-info">
             <div class="mentor-id">${escapeHtml(name)}</div>
-            <div class="mentor-bio" style="margin-top:4px">${escapeHtml(r.message)}</div>
+            <div class="text-xs text-dim mt-1">${sex} · ${age} · Topic: ${escapeHtml(topic)}</div>
+            <div class="mentor-bio" style="margin-top:4px">${escapeHtml(r.message || 'No message provided')}</div>
           </div>
           <div class="flex gap-8 mt-12">
             <button class="btn btn-primary btn-sm flex-1" onclick="respondToRequest('${r.id}', 'accepted')">${t('btn_accept')}</button>
@@ -565,6 +570,7 @@ async function loadRequests() {
           </div>
         </div>`;
     }).join('');
+    updateRequestsBadge();  // ensure badge updates after loading
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`;
   }
