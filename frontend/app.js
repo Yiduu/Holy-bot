@@ -498,7 +498,6 @@ async function loadMentors() {
               <div class=\"mentor-id\">${escapeHtml(name)}</div>
               ${sexLabel ? `<div class=\"mentor-sex\" style=\"font-size:0.85rem;color:var(--text2);margin-top:2px;\">${sexLabel}</div>` : ''}
               <div class=\"mentor-bio\">${escapeHtml(bio)}</div>
-              ${m.expertise_topics && m.expertise_topics.length ? `<div class=\"mentor-topics\">${m.expertise_topics.map(t => `<span class=\"mentor-badge\">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
             </div>
           </div>
           <div class="mentor-meta">
