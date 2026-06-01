@@ -586,6 +586,7 @@ async function respondToRequest(requestId, action) {
     haptic('success');
     showToast(`Request ${action}`, 'success');
     loadRequests();
+    updateRequestsBadge();   // refresh badge after action
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
