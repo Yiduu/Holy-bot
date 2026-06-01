@@ -341,6 +341,8 @@ function startApp() {
   keepAlive();
   navigate('dashboard');
   updateMessageBadge();
+  updateRequestsBadge();
+
 
   if (String(currentUser?.telegram_id) === String(window.ADMIN_ID)) {
     $('adminBtn')?.classList.remove('hidden');
@@ -1001,6 +1003,20 @@ async function updateMessageBadge() {
       badge.style.display = count > 0 ? 'flex' : 'none';
     }
   } catch { }
+}
+async function updateRequestsBadge() {
+  if (currentUser?.role !== 'mentor') return;
+  try {
+    const requests = await apiFetch('/api/mentors/my-requests');
+    const count = requests.length;
+    const badge = $('#requestsBadge');
+    if (badge) {
+      badge.textContent = count;
+      badge.style.display = count > 0 ? 'flex' : 'none';
+    }
+  } catch (e) {
+    console.error('Failed to load requests count:', e);
+  }
 }
 
 // ─── Settings ─────────────────────────────────────────────────

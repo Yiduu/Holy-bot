@@ -127,12 +127,12 @@ if (!topic_id) {
       .single();
     if (error) return res.status(500).json({ error: error.message });
 
-    // Notify mentor
-    const { data: requester } = await supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', user_id).single();
-    const requesterName = requester?.user_settings?.display_name || requester?.anonymous_id || 'A user';
+    // Get mentee details and topic name
+    const { data: mentee } = await supabase.from('users').select('anonymous_id, sex, age_range').eq('telegram_id', user_id).single();
+    const { data: topicData } = await supabase.from('topics').select('name').eq('id', topic_id).single();
 
     const { notifyMentorshipRequest } = require('../bot');
-    await notifyMentorshipRequest(mentor_id, requesterName);
+    await notifyMentorshipRequest(mentor_id, user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData?.name);
 
     res.status(201).json(data);
   });
@@ -279,11 +279,12 @@ if (!topic_id) {
 
         if (updateErr) return res.status(500).json({ error: updateErr.message });
 
-        const { data: requester } = await supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', request.user_id).single();
-        const requesterName = requester?.user_settings?.display_name || requester?.anonymous_id || 'A user';
+        // Get mentee details and topic name
+        const { data: mentee } = await supabase.from('users').select('anonymous_id, sex, age_range').eq('telegram_id', request.user_id).single();
+        const { data: topicData } = await supabase.from('topics').select('name').eq('id', request.topic_id).single();
 
         const { notifyMentorshipRequest } = require('../bot');
-        await notifyMentorshipRequest(targetTid, requesterName);
+        await notifyMentorshipRequest(targetTid, request.user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData?.name);
 
         return res.json({ success: true });
 

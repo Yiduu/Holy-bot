@@ -918,11 +918,11 @@ async function notifySessionInvite(chatId, sessionInfo) {
   });
 }
 
-async function notifyMentorshipRequest(mentorId, requesterName) {
+async function notifyMentorshipRequest(mentorId, requesterId, requesterName, requesterSex, requesterAge, topicName) {
   const lang = await getUserLang(mentorId);
   const text = lang === 'am'
-    ? `🙏 አዲስ የምክር ጥያቄ!\n\nከ: *${mdEscape(requesterName)}*\n\nጥያቄውን ለመቀበል/ለመገምገም እባክዎን አፑን ይክፈቱ።`
-    : `🙏 *New Mentorship Request!*\n\nFrom: *${mdEscape(requesterName)}*\n\nPlease open the app to view and respond to this request.`;
+    ? `🙏 አዲስ የምክር ጥያቄ!\n\nከ: *${mdEscape(requesterName)}*\nጾታ: ${requesterSex === 'M' ? 'ወንድ' : (requesterSex === 'F' ? 'ሴት' : 'አልገለጸም')}\nዕድሜ: ${requesterAge || 'አልገለጸም'}\nርዕስ: *${mdEscape(topicName)}*\n\nጥያቄውን ለመቀበል/ለመገምገም እባክዎን አፑን ይክፈቱ።`
+    : `🙏 *New Mentorship Request!*\n\nFrom: *${mdEscape(requesterName)}*\nSex: ${requesterSex === 'M' ? 'Male' : (requesterSex === 'F' ? 'Female' : 'Not specified')}\nAge: ${requesterAge || 'Not specified'}\nTopic: *${mdEscape(topicName)}*\n\nPlease open the app to view and respond to this request.`;
 
   await safeSend(mentorId, text, {
     reply_markup: {
@@ -1305,13 +1305,17 @@ bot.on('message', async (msg) => {
       if (error) await safeSend(chatId, await t(chatId, 'request_failed'));
       else {
         const [{ data: u }, { data: topic }] = await Promise.all([
-          supabase.from('users').select('anonymous_id').eq('telegram_id', chatId).single(),
+          supabase.from('users').select('anonymous_id, sex, age_range').eq('telegram_id', chatId).single(),
           supabase.from('topics').select('name').eq('id', topicId).single()
         ]);
         const mentorLang = await getUserLang(mentorId);
-        await safeSend(mentorId, tSync(mentorLang, 'new_mentorship_request', {
-          nick: mdEscape(u.anonymous_id), topic: mdEscape(topic.name), message: mdEscape(msgStr || tSync(mentorLang, 'none'))
-        }), {
+        const menteeSex = u.sex === 'M' ? 'Male' : u.sex === 'F' ? 'Female' : 'Not specified';
+        const menteeAge = u.age_range || 'Not specified';
+        const requestText = mentorLang === 'am'
+          ? `🙏 አዲስ የምክር ጥያቄ!\n\nከ: *${mdEscape(u.anonymous_id)}*\nጾታ: ${menteeSex}\nዕድሜ: ${menteeAge}\nርዕስ: *${mdEscape(topic.name)}*\nመልዕክት: ${mdEscape(msgStr || '')}\n\nይቀበላሉ?`
+          : `🙏 *New Mentorship Request!*\n\nFrom: *${mdEscape(u.anonymous_id)}*\nSex: ${menteeSex}\nAge: ${menteeAge}\nTopic: *${mdEscape(topic.name)}*\nMessage: ${mdEscape(msgStr || 'None')}\n\nDo you accept?`;
+
+        await safeSend(mentorId, requestText, {
           reply_markup: {
             inline_keyboard: [[
               { text: tSync(mentorLang, 'btn_accept'), callback_data: `mentor_accept_${chatId}_${topicId}` },
@@ -1523,13 +1527,31 @@ bot.on('callback_query', async (query) => {
 
   // Mentor Requests
   else if (data.startsWith('mentor_req_')) {
-    const parts = data.split('_'); // mentor_req_{id}_{topicId}
-    setState(chatId, 'mentor_req_msg', null, { mentorId: parts[2], topicId: parts[3] });
+    const parts = data.split('_'); // mentor_req_{mentorId}_{topicId}
+    const mentorId = parts[2];
+    const topicId = parts[3];
+    
+    // Fetch mentee details
+    const { data: menteeData } = await supabase
+      .from('users')
+      .select('anonymous_id, sex, age_range')
+      .eq('telegram_id', chatId)
+      .single();
+    
+    setState(chatId, 'mentor_req_msg', null, { 
+      mentorId: mentorId, 
+      topicId: topicId,
+      menteeName: menteeData?.anonymous_id,
+      menteeSex: menteeData?.sex,
+      menteeAge: menteeData?.age_range
+    });
+    
     await safeSend(chatId, tSync(lang, 'mentor_req_msg_prompt'));
+    
     // Prevent opposite‑sex requests
     const [{ data: mentee }, { data: mentor }] = await Promise.all([
       supabase.from('users').select('sex').eq('telegram_id', chatId).single(),
-      supabase.from('users').select('sex').eq('telegram_id', parts[2]).single()
+      supabase.from('users').select('sex').eq('telegram_id', mentorId).single()
     ]);
 
     if (mentee?.sex !== 'prefer_not' && mentor?.sex !== 'prefer_not' && mentee?.sex !== mentor?.sex) {

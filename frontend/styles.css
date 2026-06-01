@@ -608,7 +608,7 @@ textarea.form-control {
   color: var(--gold);
 }
 
-.mentor-sex {
+.mentor-sex, .mentor-topic {
   display: block;
   font-size: 0.85rem;
   color: var(--gold);
