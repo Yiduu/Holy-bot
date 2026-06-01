@@ -421,11 +421,25 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
   const { data: existingWait } = await supabase.from('waiting_list').select('id')
     .eq('user_id', chatId).eq('topic_id', numericTopicId).eq('notified', false).single();
 
+  // Get user's sex for same‑sex matching
+  const { data: userData } = await supabase
+    .from('users')
+    .select('sex')
+    .eq('telegram_id', chatId)
+    .single();
+
+  const userSex = userData?.sex;
+
   let query = supabase.from('users')
     .select('telegram_id, anonymous_id, rating, rating_count, last_active, max_mentees, user_settings(bio, display_name)')
     .in('telegram_id', ids)
     .eq('is_banned', false)
     .eq('role', 'mentor');
+
+  // Apply same‑sex filter (unless user chose 'prefer_not')
+  if (userSex && userSex !== 'prefer_not') {
+    query = query.eq('sex', userSex);
+  }
 
   const { data: allMentors, error: queryError } = await query;
   if (queryError) {
@@ -1512,6 +1526,16 @@ bot.on('callback_query', async (query) => {
     const parts = data.split('_'); // mentor_req_{id}_{topicId}
     setState(chatId, 'mentor_req_msg', null, { mentorId: parts[2], topicId: parts[3] });
     await safeSend(chatId, tSync(lang, 'mentor_req_msg_prompt'));
+    // Prevent opposite‑sex requests
+    const [{ data: mentee }, { data: mentor }] = await Promise.all([
+      supabase.from('users').select('sex').eq('telegram_id', chatId).single(),
+      supabase.from('users').select('sex').eq('telegram_id', parts[2]).single()
+    ]);
+
+    if (mentee?.sex !== 'prefer_not' && mentor?.sex !== 'prefer_not' && mentee?.sex !== mentor?.sex) {
+      await safeSend(chatId, "❌ You can only request mentorship from a mentor of the same sex.");
+      return bot.answerCallbackQuery(query.id);
+    }
   } else if (data.startsWith('mentor_accept_')) {
     const parts = data.split('_'); // mentor_accept_{uid}_{tid}
     await acceptMentorship(chatId, parts[2], parts[3]);

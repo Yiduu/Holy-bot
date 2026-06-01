@@ -8,14 +8,27 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
   // GET /api/mentors – list available mentors
   router.get('/', requireAuth, async (req, res) => {
     let { topic_id, topic } = req.query;
-  if (topic && !topic_id) topic_id = topic;
-    
+    if (topic && !topic_id) topic_id = topic;
+
+    // Get user's sex for same‑sex matching
+    const { data: userData } = await supabase
+      .from('users')
+      .select('sex')
+      .eq('telegram_id', req.telegramUser.id)
+      .single();
+
+    const userSex = userData?.sex;
+
     let query = supabase
       .from('users')
       .select('telegram_id, anonymous_id, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
       .eq('is_banned', false);
-    
+
+    if (userSex && userSex !== 'prefer_not') {
+      query = query.eq('sex', userSex);
+    }
+
     // Resolve topic identifier (can be ID, slug, or name)
     if (topic_id) {
       // If not a pure number, look up the numeric ID from topics table
@@ -95,7 +108,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     // Notify mentor
     const { data: requester } = await supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', user_id).single();
     const requesterName = requester?.user_settings?.display_name || requester?.anonymous_id || 'A user';
-    
+
     const { notifyMentorshipRequest } = require('../bot');
     await notifyMentorshipRequest(mentor_id, requesterName);
 
@@ -162,7 +175,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     // Notify user
     const { data: mentor } = await supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', mentor_id).single();
     const mentorName = mentor?.user_settings?.display_name || mentor?.anonymous_id || 'Your mentor';
-    
+
     const { notifyMentorshipAccepted, notifyMentorshipRejected } = require('../bot');
     if (action === 'accepted') {
       await notifyMentorshipAccepted(reqData.user_id, mentorName);
@@ -287,7 +300,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
         const { data: menteeUser } = await supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', assignment.user_id).single();
         const menteeName = menteeUser?.user_settings?.display_name || menteeUser?.anonymous_id || 'A mentee';
-        
+
         const targetLang = await getUserLang(targetTid);
         const targetText = targetLang === 'am'
           ? `📋 አዲስ ተመካሪ በዝውውር ቀርቦልዎታል፡ *${menteeName}*`
