@@ -97,17 +97,27 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     if (!mentor_id) return res.status(400).json({ error: 'mentor_id required' });
 
     // Check user has no active mentor
-    const { data: activeAssign } = await supabase.from('mentorship_assignments').select('id').eq('user_id', user_id).eq('is_active', true).single();
+    const { data: activeAssign } = await supabase
+      .from('mentorship_assignments')
+      .select('id')
+      .eq('user_id', user_id)
+      .eq('is_active', true)
+      .single();
     if (activeAssign) return res.status(409).json({ error: 'You already have an active mentor' });
 
-    // Check no pending request to same mentor
-    const { data: pending } = await supabase.from('mentorship_requests').select('id').eq('user_id', user_id).eq('mentor_id', mentor_id).eq('status', 'pending').single();
-    if (pending) return res.status(409).json({ error: 'Request already pending' });
+    // Check for existing pending request
+    const { data: existingPending } = await supabase
+      .from('mentorship_requests')
+      .select('id')
+      .eq('user_id', user_id)
+      .eq('mentor_id', mentor_id)
+      .eq('status', 'pending')
+      .single();
+    if (existingPending) return res.status(409).json({ error: 'Request already pending' });
 
     // Determine topic_id for the request
     let topic_id = req.body.topic_id;
     if (!topic_id) {
-      // Resolve a common topic between user and mentor
       const [userTopicsRes, mentorTopicsRes] = await Promise.all([
         supabase.from('user_topics').select('topic_id').eq('telegram_id', user_id),
         supabase.from('mentor_topics').select('topic_id').eq('telegram_id', mentor_id)
@@ -121,15 +131,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       topic_id = common[0];
     }
 
-    // First, delete any orphaned 'pending' request (safety)
-    await supabase
-      .from('mentorship_requests')
-      .delete()
-      .eq('user_id', user_id)
-      .eq('mentor_id', mentor_id)
-      .eq('status', 'pending');
-
-    // Check if there is an existing 'rejected' request to update
+    // Check for existing rejected request – update it instead of inserting
     const { data: existingRejected } = await supabase
       .from('mentorship_requests')
       .select('id')
@@ -138,43 +140,47 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .eq('status', 'rejected')
       .single();
 
-    let data, error;
+    let result;
     if (existingRejected) {
       // Update the rejected request to pending
-      const updateRes = await supabase
+      result = await supabase
         .from('mentorship_requests')
         .update({
           status: 'pending',
           message,
           topic_id,
-          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
         .eq('id', existingRejected.id)
         .select()
         .single();
-      data = updateRes.data;
-      error = updateRes.error;
     } else {
       // Insert new request
-      const insertRes = await supabase
+      result = await supabase
         .from('mentorship_requests')
         .insert({ user_id, mentor_id, message, topic_id })
         .select()
         .single();
-      data = insertRes.data;
-      error = insertRes.error;
     }
-    if (error) return res.status(500).json({ error: error.message });
 
-    // Get mentee details and topic name
-    const { data: mentee } = await supabase.from('users').select('anonymous_id, sex, age_range').eq('telegram_id', user_id).single();
-    const { data: topicData } = await supabase.from('topics').select('name').eq('id', topic_id).single();
+    if (result.error) return res.status(500).json({ error: result.error.message });
+
+    // Get mentee details and topic name for notification
+    const { data: mentee } = await supabase
+      .from('users')
+      .select('anonymous_id, sex, age_range')
+      .eq('telegram_id', user_id)
+      .single();
+    const { data: topicData } = await supabase
+      .from('topics')
+      .select('name')
+      .eq('id', topic_id)
+      .single();
 
     const { notifyMentorshipRequest } = require('../bot');
     await notifyMentorshipRequest(mentor_id, user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData?.name);
 
-    res.status(201).json(data);
+    res.status(201).json(result.data);
   });
 
   // GET /api/mentors/my-requests – mentor sees incoming requests
@@ -196,15 +202,21 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     if (!['accepted', 'rejected'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
 
-    const { data: reqData, error: reqErr } = await supabase
+    // First, get the request to ensure it exists and belongs to this mentor
+    const { data: reqData, error: fetchErr } = await supabase
       .from('mentorship_requests')
-      .update({ status: action, updated_at: new Date().toISOString() })
+      .select('*')
       .eq('id', req.params.id)
       .eq('mentor_id', mentor_id)
-      .select()
       .single();
+    if (fetchErr) return res.status(404).json({ error: 'Request not found' });
 
-    if (reqErr) return res.status(500).json({ error: reqErr.message });
+    // Update the request status
+    const { error: updateErr } = await supabase
+      .from('mentorship_requests')
+      .update({ status: action, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id);
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
 
     // If accepted → create assignment with resolved topic_id
     if (action === 'accepted') {
@@ -235,7 +247,11 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     }
 
     // Notify user
-    const { data: mentor } = await supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', mentor_id).single();
+    const { data: mentor } = await supabase
+      .from('users')
+      .select('anonymous_id, user_settings(display_name)')
+      .eq('telegram_id', mentor_id)
+      .single();
     const mentorName = mentor?.user_settings?.display_name || mentor?.anonymous_id || 'Your mentor';
 
     const { notifyMentorshipAccepted, notifyMentorshipRejected } = require('../bot');
@@ -245,7 +261,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       await notifyMentorshipRejected(reqData.user_id, mentorName);
     }
 
-    res.json(reqData);
+    res.json({ success: true, status: action });
   });
 
   // GET /api/mentors/my-mentees – list active mentees
@@ -263,11 +279,18 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
   // GET /api/mentors/my-mentees/stats – session counts per mentee
   router.get('/my-mentees/stats', requireAuth, async (req, res) => {
     const { id: mentor_id } = req.telegramUser;
-    const { data: assignments } = await supabase.from('mentorship_assignments').select('user_id').eq('mentor_id', mentor_id).eq('is_active', true);
+    const { data: assignments } = await supabase
+      .from('mentorship_assignments')
+      .select('user_id')
+      .eq('mentor_id', mentor_id)
+      .eq('is_active', true);
     if (!assignments) return res.json({});
     const stats = {};
     for (const a of assignments) {
-      const { count } = await supabase.from('session_participants').select('session_id', { count: 'exact', head: true }).eq('telegram_id', a.user_id);
+      const { count } = await supabase
+        .from('session_participants')
+        .select('session_id', { count: 'exact', head: true })
+        .eq('telegram_id', a.user_id);
       stats[a.user_id] = count || 0;
     }
     res.json(stats);
@@ -277,7 +300,11 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
   router.post('/notes', requireAuth, async (req, res) => {
     const { id: mentor_id } = req.telegramUser;
     const { mentee_id, content } = req.body;
-    const { data, error } = await supabase.from('mentor_notes').upsert({ mentor_id, mentee_id, content, updated_at: new Date().toISOString() }, { onConflict: 'mentor_id,mentee_id' }).select().single();
+    const { data, error } = await supabase
+      .from('mentor_notes')
+      .upsert({ mentor_id, mentee_id, content, updated_at: new Date().toISOString() }, { onConflict: 'mentor_id,mentee_id' })
+      .select()
+      .single();
     if (error) return res.status(500).json({ error: error.message });
     res.json(data);
   });
@@ -285,7 +312,12 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
   // GET /api/mentors/notes/:mentee_id – get private note
   router.get('/notes/:mentee_id', requireAuth, async (req, res) => {
     const { id: mentor_id } = req.telegramUser;
-    const { data } = await supabase.from('mentor_notes').select('content').eq('mentor_id', mentor_id).eq('mentee_id', req.params.mentee_id).single();
+    const { data } = await supabase
+      .from('mentor_notes')
+      .select('content')
+      .eq('mentor_id', mentor_id)
+      .eq('mentee_id', req.params.mentee_id)
+      .single();
     res.json(data || { content: '' });
   });
 
@@ -320,8 +352,16 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
         if (updateErr) return res.status(500).json({ error: updateErr.message });
 
         // Get mentee details and topic name
-        const { data: mentee } = await supabase.from('users').select('anonymous_id, sex, age_range').eq('telegram_id', request.user_id).single();
-        const { data: topicData } = await supabase.from('topics').select('name').eq('id', request.topic_id).single();
+        const { data: mentee } = await supabase
+          .from('users')
+          .select('anonymous_id, sex, age_range')
+          .eq('telegram_id', request.user_id)
+          .single();
+        const { data: topicData } = await supabase
+          .from('topics')
+          .select('name')
+          .eq('id', request.topic_id)
+          .single();
 
         const { notifyMentorshipRequest } = require('../bot');
         await notifyMentorshipRequest(targetTid, request.user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData?.name);
@@ -361,7 +401,11 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
           await safeSend(user.chat_id, text);
         }
 
-        const { data: menteeUser } = await supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', assignment.user_id).single();
+        const { data: menteeUser } = await supabase
+          .from('users')
+          .select('anonymous_id, user_settings(display_name)')
+          .eq('telegram_id', assignment.user_id)
+          .single();
         const menteeName = menteeUser?.user_settings?.display_name || menteeUser?.anonymous_id || 'A mentee';
 
         const targetLang = await getUserLang(targetTid);
@@ -382,7 +426,11 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
   // DELETE /api/mentors/end-mentorship/:assignment_id
   router.delete('/end-mentorship/:assignment_id', requireAuth, async (req, res) => {
     const { id: mentor_id } = req.telegramUser;
-    const { error } = await supabase.from('mentorship_assignments').update({ is_active: false, ended_at: new Date().toISOString() }).eq('id', req.params.assignment_id).eq('mentor_id', mentor_id);
+    const { error } = await supabase
+      .from('mentorship_assignments')
+      .update({ is_active: false, ended_at: new Date().toISOString() })
+      .eq('id', req.params.assignment_id)
+      .eq('mentor_id', mentor_id);
     if (error) return res.status(500).json({ error: error.message });
     res.json({ success: true });
   });
