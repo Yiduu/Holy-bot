@@ -121,10 +121,41 @@ if (!topic_id) {
   topic_id = common[0];
 }
 
-    const { data, error } = await supabase.from('mentorship_requests')
-      .insert({ user_id, mentor_id, message, topic_id })
-      .select()
+    // Check for existing rejected request to reuse and avoid duplicate constraint errors
+    const { data: rejected } = await supabase
+      .from('mentorship_requests')
+      .select('id')
+      .eq('user_id', user_id)
+      .eq('mentor_id', mentor_id)
+      .eq('status', 'rejected')
       .single();
+
+    let data, error;
+    if (rejected) {
+      const updateRes = await supabase
+        .from('mentorship_requests')
+        .update({
+          status: 'pending',
+          message,
+          topic_id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', rejected.id)
+        .select()
+        .single();
+      data = updateRes.data;
+      error = updateRes.error;
+    } else {
+      const insertRes = await supabase
+        .from('mentorship_requests')
+        .insert({ user_id, mentor_id, message, topic_id })
+        .select()
+        .single();
+      data = insertRes.data;
+      error = insertRes.error;
+    }
+
     if (error) return res.status(500).json({ error: error.message });
 
     // Get mentee details and topic name
