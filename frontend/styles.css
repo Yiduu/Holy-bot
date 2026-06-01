@@ -611,9 +611,9 @@ textarea.form-control {
 .mentor-sex {
   display: block;
   font-size: 0.85rem;
-  color: var(--text);
+  color: var(--gold);
   margin-top: 4px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .mentor-bio {
