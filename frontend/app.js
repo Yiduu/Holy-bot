@@ -837,7 +837,7 @@ function launchJitsi(roomName, roomPassword, displayName, token) {
         ...(roomPassword ? { password: roomPassword } : {}),
       },
       interfaceConfigOverwrite: {
-        TOOLBAR_BUTTONS: ['microphone', 'camera', 'chat', 'raisehand', 'fullscreen', 'tileview', 'hangup'],
+        TOOLBAR_BUTTONS: ['microphone', 'camera', 'desktop', 'chat', 'raisehand', 'fullscreen', 'tileview', 'hangup'],
         SHOW_JITSI_WATERMARK: false,
         MOBILE_APP_PROMO: false,
       },
@@ -848,7 +848,7 @@ function launchJitsi(roomName, roomPassword, displayName, token) {
       try { window.jitsiApi.dispose(); } catch (e) { console.error(e); }
     }
 
-    window.jitsiApi = new JitsiMeetExternalAPI('meet.jit.si', options);
+    window.jitsiApi = new JitsiMeetExternalAPI('meet.opensuse.org', options);
     window.jitsiApi.addEventListener('videoConferenceLeft', () => navigate('sessions'));
     window.jitsiApi.addEventListener('passwordRequired', () => {
       if (roomPassword) window.jitsiApi.executeCommand('password', roomPassword);
