@@ -211,6 +211,17 @@ function connectSocket() {
     updateRequestsBadge();  // update the badge count
     if (currentPage === 'requests') loadRequests();
   });
+
+  // Fired when a request is accepted or rejected — from the mini app OR the bot
+  socket.on('mentorship_request_updated', ({ requestId, status } = {}) => {
+    updateRequestsBadge();
+    if (currentPage === 'requests') {
+      loadRequests();
+    } else if (status === 'accepted') {
+      haptic('success');
+      showToast('A mentorship request was accepted \u2713', 'success');
+    }
+  });
 }
 
 // ─── Navigation ───────────────────────────────────────────────

@@ -100,6 +100,7 @@ io.on('connection', (socket) => {
 // Export for routes
 app.set('supabase', supabase);
 app.set('io', io);
+global._io = io
 app.set('onlineUsers', onlineUsers);
 
 // ─── Telegram initData validation ─────────────────────────────────────────────

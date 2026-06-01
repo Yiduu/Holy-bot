@@ -849,6 +849,16 @@ async function acceptMentorship(mentorId, userId, topicId) {
   await safeSend(userId, tSync(userLang, 'mentorship_accepted'));
   await safeSend(mentorId, tSync(mentorLang, 'mentorship_accepted_mentor'));
 
+  // Notify mini app via socket so it refreshes without needing a manual reload
+  try {
+    const io = global._io;
+    if (io) {
+      io.to(String(mentorId)).emit('mentorship_request_updated', { status: 'accepted' });
+    }
+  } catch (e) {
+    console.error('[bot] socket emit error (non-fatal):', e.message);
+  }
+
   // Log success
   console.log(`[Accept] Assignment created: mentor=${mentorId}, user=${userId}, topic=${topicId}`);
 }
@@ -1530,24 +1540,24 @@ bot.on('callback_query', async (query) => {
     const parts = data.split('_'); // mentor_req_{mentorId}_{topicId}
     const mentorId = parts[2];
     const topicId = parts[3];
-    
+
     // Fetch mentee details
     const { data: menteeData } = await supabase
       .from('users')
       .select('anonymous_id, sex, age_range')
       .eq('telegram_id', chatId)
       .single();
-    
-    setState(chatId, 'mentor_req_msg', null, { 
-      mentorId: mentorId, 
+
+    setState(chatId, 'mentor_req_msg', null, {
+      mentorId: mentorId,
       topicId: topicId,
       menteeName: menteeData?.anonymous_id,
       menteeSex: menteeData?.sex,
       menteeAge: menteeData?.age_range
     });
-    
+
     await safeSend(chatId, tSync(lang, 'mentor_req_msg_prompt'));
-    
+
     // Prevent opposite‑sex requests
     const [{ data: mentee }, { data: mentor }] = await Promise.all([
       supabase.from('users').select('sex').eq('telegram_id', chatId).single(),

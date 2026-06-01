@@ -240,19 +240,36 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       if (updateErr) return res.status(500).json({ error: updateErr.message });
     }
 
-    // Notify user
-    const { data: mentor } = await supabase
-      .from('users')
-      .select('anonymous_id, user_settings(display_name)')
-      .eq('telegram_id', mentor_id)
-      .single();
-    const mentorName = mentor?.user_settings?.display_name || mentor?.anonymous_id || 'Your mentor';
+    // Notify user — wrapped in try/catch so a bot/Telegram failure never blocks the HTTP response
+    try {
+      const { data: mentor } = await supabase
+        .from('users')
+        .select('anonymous_id, user_settings(display_name)')
+        .eq('telegram_id', mentor_id)
+        .single();
+      const mentorName = mentor?.user_settings?.display_name || mentor?.anonymous_id || 'Your mentor';
 
-    const { notifyMentorshipAccepted, notifyMentorshipRejected } = require('../bot');
-    if (action === 'accepted') {
-      await notifyMentorshipAccepted(reqData.user_id, mentorName);
-    } else {
-      await notifyMentorshipRejected(reqData.user_id, mentorName);
+      const { notifyMentorshipAccepted, notifyMentorshipRejected } = require('../bot');
+      if (action === 'accepted') {
+        await notifyMentorshipAccepted(reqData.user_id, mentorName);
+      } else {
+        await notifyMentorshipRejected(reqData.user_id, mentorName);
+      }
+    } catch (notifyErr) {
+      console.error('[mentors] notification error (non-fatal):', notifyErr.message);
+    }
+
+    // Emit socket event so the mini app refreshes in real-time
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(String(mentor_id)).emit('mentorship_request_updated', {
+          requestId: req.params.id,
+          status: action
+        });
+      }
+    } catch (socketErr) {
+      console.error('[mentors] socket emit error (non-fatal):', socketErr.message);
     }
 
     res.json({ success: true, status: action });
