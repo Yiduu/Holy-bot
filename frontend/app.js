@@ -456,12 +456,11 @@ async function loadMentors() {
   const container = $('mentorsList');
   container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
 
-  // Populate topic filter dropdown if not already populated
-  const filterSelect = $('mentorTopicFilter');
-  if (filterSelect && filterSelect.options.length <= 1) {
-    const topics = await apiFetch('/api/topics');
-    filterSelect.innerHTML = '<option value="">All Topics</option>' + topics.map(t => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join('');
-  }
+  // Populate topic filter dropdown
+  const filterSelect = $('mentorTopicSelect');
+  // Always fetch and set topics
+  const topics = await apiFetch('/api/topics');
+  filterSelect.innerHTML = '<option value="">All Topics</option>' + topics.map(t => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join('');
 
   try {
     let mentors = await apiFetch('/api/mentors');
