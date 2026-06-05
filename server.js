@@ -76,6 +76,8 @@ app.use('/api/admin/broadcast', broadcastLimiter);
 // ─── Socket.IO (presence + typing) ────────────────────────────────────────────
 const io = new Server(server, { cors: { origin: '*' } });
 const onlineUsers = new Map(); // telegram_id → socket_id
+global.io = io;
+global.onlineUsers = onlineUsers;
 
 io.on('connection', (socket) => {
   socket.on('auth', (telegram_id) => {

@@ -568,31 +568,39 @@ async function getActiveChatPartners(chatId) {
 }
 
 async function forwardMessage(fromId, toId, text) {
-  await supabase.from('messages').insert({ from_id: fromId, to_id: toId, content: text });
+  // Insert message into database
+  const { data: msg, error } = await supabase
+    .from('messages')
+    .insert({ from_id: fromId, to_id: toId, content: text })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[forwardMessage] DB error:', error);
+    return;
+  }
+
+  // Send Telegram notification (existing code)
   const [{ data: sender }, { data: recipient }] = await Promise.all([
     supabase.from('users').select('anonymous_id, role').eq('telegram_id', fromId).single(),
     supabase.from('users').select('chat_id').eq('telegram_id', toId).single()
   ]);
+
   const lang = await getUserLang(toId);
   if (recipient?.chat_id) {
     const roleLabel = sender?.role === 'mentor' ? tSync(lang, 'role_mentor') : tSync(lang, 'role_mentee');
     const msgText = tSync(lang, 'msg_from_partner', { role: roleLabel, nick: mdEscape(sender?.anonymous_id), text: mdEscape(text) });
-
-    const partnersInfo = await getActiveChatPartners(toId);
-    const hasMultiple = partnersInfo && partnersInfo.partners.length > 1;
-
-    const extra = {};
-    if (hasMultiple) {
-      extra.reply_markup = {
-        inline_keyboard: [[{
-          text: lang === 'am' ? `💬 ከ @${sender?.anonymous_id} ጋር አውራ` : `💬 Chat with @${sender?.anonymous_id}`,
-          callback_data: `focus_chat_${fromId}`
-        }]]
-      };
-    }
-
-    await safeSend(recipient.chat_id, msgText, extra);
+    await safeSend(recipient.chat_id, msgText);
     setState(toId, 'chat_active', fromId);
+  }
+
+  // ✨ NEW: Emit socket event for mini app real-time update
+  if (global.io && global.onlineUsers) {
+    const recipientSocket = global.onlineUsers.get(String(toId));
+    if (recipientSocket) {
+      global.io.to(recipientSocket).emit('new_message', msg);
+      console.log(`[Socket] Real-time message sent to ${toId}`);
+    }
   }
 }
 
