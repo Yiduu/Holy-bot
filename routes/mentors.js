@@ -132,17 +132,19 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     }
 
     // Check for existing rejected request – update it instead of inserting
-    const { data: existingRejected } = await supabase
+    const { data: existingAny } = await supabase
       .from('mentorship_requests')
-      .select('id')
+      .select('id, status')
       .eq('user_id', user_id)
       .eq('mentor_id', mentor_id)
-      .eq('status', 'rejected')
-      .single();
+      .maybeSingle();
 
     let result;
-    if (existingRejected) {
-      // Update the rejected request to pending
+    if (existingAny) {
+      if (existingAny.status === 'pending') {
+        return res.status(409).json({ error: 'Request already pending' });
+      }
+      // Re‑activate a rejected or accepted request (so we don't cause duplicate key)
       result = await supabase
         .from('mentorship_requests')
         .update({
@@ -151,18 +153,18 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
           topic_id,
           updated_at: new Date().toISOString()
         })
-        .eq('id', existingRejected.id)
+        .eq('id', existingAny.id)
         .select()
         .single();
     } else {
-      // Insert new request
+      // Insert a completely new request
       result = await supabase
         .from('mentorship_requests')
         .insert({ user_id, mentor_id, message, topic_id })
         .select()
         .single();
     }
-
+    console.log('[Mentorship Request]', { user_id, mentor_id, topic_id, existingAny, result });
     if (result.error) return res.status(500).json({ error: result.error.message });
 
     // Get mentee details and topic name for notification
@@ -212,27 +214,23 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     if (fetchErr) return res.status(404).json({ error: 'Request not found' });
 
     if (action === 'accepted') {
-      // Delegate the entire accept operation to a Postgres function so that
-      // the active-assignment check, request status update, and assignment
-      // upsert all happen inside one transaction with a row-level lock on the
-      // request.  This prevents duplicate-key violations on the partial unique
-      // index one_active_assignment_per_user when the mentor taps Accept more
-      // than once before the first response returns.
-      const { data: rpcData, error: rpcErr } = await supabase
-        .rpc('accept_mentorship_request', {
-          p_request_id: req.params.id,
-          p_mentor_id: mentor_id
-        });
+      console.log(`[Accept] Trying to accept request ${req.params.id} by mentor ${mentor_id}`);
+      // Call the new robust RPC (we'll create it in Step 2)
+      const { data, error: rpcErr } = await supabase.rpc('accept_mentorship_request_v2', {
+        p_request_id: req.params.id,
+        p_mentor_id: mentor_id
+      });
 
-      if (rpcErr) return res.status(500).json({ error: rpcErr.message });
-
-      // The function returns { error: '...' } on logical failures
-      if (rpcData?.error) {
-        const status = rpcData.error.includes('already has an active mentor') ? 409 : 400;
-        return res.status(status).json({ error: rpcData.error });
+      if (rpcErr) {
+        console.error('[Accept] RPC error:', rpcErr);
+        return res.status(500).json({ error: rpcErr.message });
+      }
+      if (data && data.error) {
+        const status = data.error.includes('already has an active mentor') ? 409 : 400;
+        return res.status(status).json({ error: data.error });
       }
     } else {
-      // Reject path: simple status update, no assignment changes needed
+      // Reject path stays the same
       const { error: updateErr } = await supabase
         .from('mentorship_requests')
         .update({ status: action, updated_at: new Date().toISOString() })
