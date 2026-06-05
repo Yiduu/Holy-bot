@@ -968,7 +968,13 @@ async function notifyMentorshipRejected(userId, mentorName) {
 
   await safeSend(userId, text);
 }
-
+// Plain text offline message notification – no formatting, no buttons
+async function notifyMessage(recipientId, senderName, messageContent) {
+  // Send only the message content (clean, no prefix)
+  await bot.sendMessage(recipientId, messageContent);
+  // Optional: include sender name (uncomment next line, comment above)
+  // await bot.sendMessage(recipientId, `${senderName}: ${messageContent}`);
+}
 
 // ─── Message Handler ──────────────────────────────────────────────────────────
 
@@ -1930,5 +1936,6 @@ module.exports = {
   notifySessionInvite,
   notifyMentorshipRequest,
   notifyMentorshipAccepted,
-  notifyMentorshipRejected
+  notifyMentorshipRejected,
+  notifyMessage
 };

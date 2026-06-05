@@ -83,6 +83,7 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     if (error) return res.status(500).json({ error: error.message });
 
     // Real-time push to recipient
+    // Real-time push to recipient
     const recipientSocket = onlineUsers.get(String(to_id));
     if (recipientSocket) {
       io.to(recipientSocket).emit('new_message', msg);
@@ -91,7 +92,8 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     const { data: sender } = await supabase.from('users').select('anonymous_id').eq('telegram_id', from_id).single();
     if (sender && !onlineUsers.has(String(to_id))) {
       const { notifyMessage } = require('../bot');
-      await notifyMessage(to_id, sender.anonymous_id);
+      // Pass the actual message content (clean, no prefix)
+      await notifyMessage(to_id, sender.anonymous_id, content);
     }
 
     res.status(201).json(msg);
