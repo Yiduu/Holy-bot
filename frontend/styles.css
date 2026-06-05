@@ -226,6 +226,38 @@ h3 {
   align-items: stretch;
   z-index: 200;
   backdrop-filter: blur(20px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  gap: 4px;
+  padding: 0 8px;
+}
+
+.bottom-nav::-webkit-scrollbar {
+  height: 2px;
+}
+
+.nav-item {
+  flex: 0 0 auto;
+  /* Don't shrink, don't grow, base auto width */
+  min-width: 60px;
+  /* Enough for icon + text */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 4px;
+  color: var(--text3);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color var(--transition);
+  position: relative;
 }
 
 .nav-item {
@@ -608,7 +640,8 @@ textarea.form-control {
   color: var(--gold);
 }
 
-.mentor-sex, .mentor-topic {
+.mentor-sex,
+.mentor-topic {
   display: block;
   font-size: 0.85rem;
   color: var(--gold);
