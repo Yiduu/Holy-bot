@@ -1247,6 +1247,7 @@ async function endMentorship(assignId) {
 // ─── Topics ───────────────────────────────────────────────────
 window.selectedTopics = [];
 window.isTopicModalExpertise = false;
+let allTopicsCache = [];
 
 async function openTopicModal(isExpertise = false) {
   haptic('light');
@@ -1261,20 +1262,40 @@ async function openTopicModal(isExpertise = false) {
 
   $('topicModal').classList.add('open');
 
+  // Clear previous search
+  const searchInput = $('topicSearch');
+  if (searchInput) searchInput.value = '';
+
   try {
     const myTopicsPath = isExpertise ? '/api/topics/my-expertise' : '/api/topics/my';
     const [all, mine] = await Promise.all([
       apiFetch('/api/topics'),
       apiFetch(myTopicsPath)
     ]);
+    allTopicsCache = all;
     window.selectedTopics = mine.map(t => t.topic_id);
 
-    container.innerHTML = all.map(t => `
-      <div id="topic-${t.id}" class="chip ${window.selectedTopics.includes(t.id) ? 'chip-gold' : 'chip-outline'}" onclick="toggleTopic(${t.id})">
-        ${escapeHtml(t.name)}
-      </div>
-    `).join('');
+    renderTopicList(allTopicsCache, window.selectedTopics);
+
+    // Add search listener (if not already attached)
+    if (searchInput && !searchInput._listenerAdded) {
+      searchInput._listenerAdded = true;
+      searchInput.oninput = () => {
+        const filtered = allTopicsCache.filter(t => t.name.toLowerCase().includes(searchInput.value.toLowerCase()));
+        renderTopicList(filtered, window.selectedTopics);
+      };
+    }
   } catch (e) { container.innerHTML = `<p class="text-danger">${e.message}</p>`; }
+}
+
+function renderTopicList(topics, selectedIds) {
+  const container = $('topicsList');
+  if (!container) return;
+  container.innerHTML = topics.map(t => `
+    <div id="topic-${t.id}" class="chip ${selectedIds.includes(t.id) ? 'chip-gold' : 'chip-outline'}" onclick="toggleTopic(${t.id})">
+      ${escapeHtml(t.name)}
+    </div>
+  `).join('');
 }
 
 function toggleTopic(id) {
