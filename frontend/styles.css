@@ -1013,6 +1013,8 @@ textarea.form-control {
   display: flex;
   flex-direction: column;
   padding: 40px 24px;
+  overflow-y: auto;
+  max-height: 100vh;
 }
 
 .onboarding-header {
