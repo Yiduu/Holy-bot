@@ -630,7 +630,10 @@ async function loadSessions() {
               <div class="session-title">${escapeHtml(title)}</div>
               <div class="session-sub">${scheduled} • ${session.status}</div>
             </div>
-            ${session.status === 'scheduled' ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>` : `<span class="chip chip-green">${t('btn_done')}</span>`}
+            ${session.status === 'scheduled' ? `<div style="display:flex; gap:8px;">
+  <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>
+  <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">🌐 Browser</button>
+</div>` : `<span class="chip chip-green">${t('btn_done')}</span>`}
           </div>`;
       }).filter(Boolean).join('');
     }
@@ -675,13 +678,35 @@ async function joinSession(session_id) {
   haptic('medium');
   try {
     const data = await apiFetch(`/api/sessions/${session_id}/join`);
+
+    // Detect Plus Messenger (also covers Telegram Plus, Nicegram, etc.)
+    const ua = navigator.userAgent;
+    const isPlus = ua.includes('Plus') || ua.includes('TelegramPlus') || ua.includes('Nicegram');
+
+    if (isPlus) {
+      if (confirm("⚠️ Your current app may not support video calls.\nOpen in your phone's browser instead?")) {
+        // Build the external URL (same room, same name, disable deep linking)
+        const externalUrl = `https://${data.jitsi_domain}/${data.room_name}#config.disableDeepLinking=true&userInfo.displayName=${encodeURIComponent(data.display_name)}${data.jitsi_token ? `&jwt=${data.jitsi_token}` : ''}`;
+        window.open(externalUrl, '_blank');
+        return;
+      }
+    }
+
     launchJitsi(data.room_name, data.room_password, data.display_name, data.jitsi_token);
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
   }
 }
-
+async function openSessionInBrowser(session_id) {
+  try {
+    const data = await apiFetch(`/api/sessions/${session_id}/join`);
+    const url = `https://${data.jitsi_domain}/${data.room_name}#config.disableDeepLinking=true&userInfo.displayName=${encodeURIComponent(data.display_name)}`;
+    window.open(url, '_blank');
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
 async function createSession(is_group = false, mentee_id = null, scheduled_at = null, customTitle = null, participant_ids = []) {
   haptic('light');
   try {
