@@ -245,7 +245,11 @@ function navigate(page) {
     case 'requests': loadRequests(); break;
     case 'settings': loadSettings(); break;
     case 'my-mentees': loadMyMentees(); break;
-    case 'journal': loadJournalEntries(); break;
+    case 'journal':
+      journalView = 'list';
+      loadJournalEntries();
+      $('journalViewToggle').innerHTML = '📅 Calendar';
+      break;
   }
 }
 
@@ -1337,14 +1341,22 @@ async function loadJournalEntries() {
       return;
     }
     container.innerHTML = entries.map(e => `
-      <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`)">
+      <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`, '${e.mood || 'neutral'}')">
         <div class="journal-date">${formatDateTime(e.created_at)}</div>
-        <div class="journal-preview">${escapeHtml(e.content)}</div>
+        <div class="journal-mood">${getMoodIcon(e.mood)}</div>
+        <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
       </div>
     `).join('');
   } catch (e) { container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`; }
 }
 
+function getMoodIcon(mood) {
+  switch (mood) {
+    case 'happy': return '😊';
+    case 'sad': return '😢';
+    default: return '😐';
+  }
+}
 window.currentJournalEntryId = null;
 
 function showNewJournalEntry() {
@@ -1353,18 +1365,20 @@ function showNewJournalEntry() {
   $('journalModalTitle').textContent = t('btn_new_entry') || 'New Entry';
   $('journalContent').value = '';
   $('journalContent').readOnly = false;
+  $('journalMood').value = 'neutral';
   $('saveJournalBtn').style.display = 'block';
   $('updateJournalBtn').style.display = 'none';
   $('deleteJournalBtn').style.display = 'none';
   $('journalModal').classList.add('open');
 }
 
-function openJournalEntry(id, content) {
+function openJournalEntry(id, content, mood = 'neutral') {
   haptic('light');
   window.currentJournalEntryId = id;
   $('journalModalTitle').textContent = t('journal_title') || 'Edit Entry';
   $('journalContent').value = content;
   $('journalContent').readOnly = false;
+  $('journalMood').value = mood;
   $('saveJournalBtn').style.display = 'none';
   $('updateJournalBtn').style.display = 'block';
   $('deleteJournalBtn').style.display = 'block';
@@ -1378,10 +1392,11 @@ function closeJournalModal() {
 
 async function saveJournalEntry() {
   const content = $('journalContent').value.trim();
+  const mood = $('journalMood').value;
   if (!content) return;
   haptic('medium');
   try {
-    await apiFetch('/api/journal', { method: 'POST', body: { content } });
+    await apiFetch('/api/journal', { method: 'POST', body: { content, mood } });
     haptic('success');
     showToast(t('journal_saved') || 'Journal saved successfully', 'success');
     closeJournalModal();
@@ -1392,10 +1407,11 @@ async function saveJournalEntry() {
 async function updateJournalEntry() {
   const id = window.currentJournalEntryId;
   const content = $('journalContent').value.trim();
+  const mood = $('journalMood').value;
   if (!content || !id) return;
   haptic('medium');
   try {
-    await apiFetch(`/api/journal/${id}`, { method: 'PUT', body: { content } });
+    await apiFetch(`/api/journal/${id}`, { method: 'PUT', body: { content, mood } });
     haptic('success');
     showToast('Journal entry updated', 'success');
     closeJournalModal();
@@ -1438,6 +1454,82 @@ function formatJournalText(action) {
   textarea.selectionStart = start;
   textarea.selectionEnd = start + replacement.length;
 }
+let journalView = 'list'; // 'list' or 'calendar'
 
+function toggleJournalView() {
+  if (journalView === 'list') {
+    journalView = 'calendar';
+    showJournalCalendar();
+    $('journalViewToggle').innerHTML = '📋 List';
+  } else {
+    journalView = 'list';
+    loadJournalEntries();
+    $('journalViewToggle').innerHTML = '📅 Calendar';
+  }
+}
+
+async function showJournalCalendar() {
+  $('journalEntriesList').innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
+  const entries = await apiFetch('/api/journal');
+  const entriesByDate = {};
+  entries.forEach(e => {
+    const date = new Date(e.created_at).toISOString().split('T')[0];
+    if (!entriesByDate[date]) entriesByDate[date] = [];
+    entriesByDate[date].push(e);
+  });
+
+  const today = new Date();
+  let currentYear = today.getFullYear();
+  let currentMonth = today.getMonth();
+
+  function renderCalendar() {
+    const firstDay = new Date(currentYear, currentMonth, 1);
+    const startDay = firstDay.getDay(); // 0 = Sunday
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+    let html = `<div class="calendar-header">
+      <button class="btn btn-sm btn-ghost" onclick="prevMonth()">◀</button>
+      <span>${firstDay.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
+      <button class="btn btn-sm btn-ghost" onclick="nextMonth()">▶</button>
+    </div><div class="calendar-grid">`;
+    const weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    weekdays.forEach(d => html += `<div class="calendar-weekday">${d}</div>`);
+    for (let i = 0; i < startDay; i++) html += `<div class="calendar-day empty"></div>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const hasEntries = entriesByDate[dateStr] && entriesByDate[dateStr].length > 0;
+      html += `<div class="calendar-day ${hasEntries ? 'has-entry' : ''}" onclick="showEntriesForDate('${dateStr}')">${d}</div>`;
+    }
+    html += `</div>`;
+    $('journalEntriesList').innerHTML = html;
+  }
+
+  window.prevMonth = () => {
+    if (currentMonth === 0) { currentMonth = 11; currentYear--; }
+    else currentMonth--;
+    renderCalendar();
+  };
+  window.nextMonth = () => {
+    if (currentMonth === 11) { currentMonth = 0; currentYear++; }
+    else currentMonth++;
+    renderCalendar();
+  };
+  window.showEntriesForDate = async (dateStr) => {
+    const entries = await apiFetch(`/api/journal/by-date?date=${dateStr}`);
+    if (!entries.length) {
+      showToast('No entries for this date', 'info');
+      return;
+    }
+    $('journalEntriesList').innerHTML = entries.map(e => `
+      <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`, '${e.mood || 'neutral'}')">
+        <div class="journal-date">${formatDateTime(e.created_at)}</div>
+        <div class="journal-mood">${getMoodIcon(e.mood)}</div>
+        <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
+      </div>
+    `).join('');
+    $('journalEntriesList').insertAdjacentHTML('afterbegin', `<button class="btn btn-sm btn-ghost" onclick="loadJournalEntries()">← Back to all entries</button>`);
+  };
+  renderCalendar();
+}
 // ─── Boot ─────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);

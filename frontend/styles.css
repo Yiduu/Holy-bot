@@ -1308,3 +1308,86 @@ textarea.form-control {
   width: 100%;
   padding: 0;
 }
+
+/* Journal mood icon */
+.journal-mood {
+  font-size: 1.2rem;
+  margin-right: 8px;
+}
+
+.journal-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg2);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--gold);
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-bottom: 8px;
+}
+
+.journal-item:hover {
+  background: var(--bg3);
+}
+
+.journal-date {
+  font-size: 0.7rem;
+  color: var(--text3);
+  min-width: 80px;
+}
+
+.journal-preview {
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Calendar styles */
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  text-align: center;
+}
+
+.calendar-weekday {
+  font-weight: bold;
+  color: var(--gold);
+  padding: 8px 0;
+}
+
+.calendar-day {
+  padding: 10px 0;
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.calendar-day.has-entry {
+  background: var(--gold-dim);
+  color: var(--gold);
+  font-weight: bold;
+}
+
+.calendar-day.empty {
+  background: transparent;
+  cursor: default;
+}
+
+.calendar-day:not(.empty):hover {
+  background: var(--gold);
+  color: #1a1200;
+}

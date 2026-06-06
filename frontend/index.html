@@ -416,7 +416,12 @@
     <div id="page-journal" class="page">
       <div class="app-header">
         <h2 data-i18n="btn_journal">Journal</h2>
-        <button class="btn btn-sm btn-primary" onclick="showNewJournalEntry()" data-i18n="btn_new_entry">+ New</button>
+        <div>
+          <button id="journalViewToggle" class="btn btn-sm btn-outline" onclick="toggleJournalView()">📅
+            Calendar</button>
+          <button class="btn btn-sm btn-primary" onclick="showNewJournalEntry()" data-i18n="btn_new_entry">+
+            New</button>
+        </div>
       </div>
       <div class="page-content">
         <div id="journalEntriesList" style="display:flex;flex-direction:column;gap:10px">
@@ -661,6 +666,14 @@
           style="padding: 2px 8px; font-size: 0.75rem;">List</button>
       </div>
 
+      <div class="form-group">
+        <label class="form-label">Mood</label>
+        <select id="journalMood" class="form-control">
+          <option value="happy">😊 Happy</option>
+          <option value="neutral">😐 Neutral</option>
+          <option value="sad">😢 Sad</option>
+        </select>
+      </div>
       <div class="form-group">
         <textarea id="journalContent" class="form-control" rows="8" data-i18n="journal_write_prompt"
           placeholder="Write your thoughts here..."></textarea>
