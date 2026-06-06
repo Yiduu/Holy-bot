@@ -216,27 +216,39 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     res.json({ success: true });
   });
 
-  // DELETE /api/sessions/my – clear ended/past session history
+  // Alternative: fetch IDs first, then delete
   router.delete('/my', requireAuth, async (req, res) => {
     const { id: telegram_id } = req.telegramUser;
     console.log('[Sessions] Clearing history for user:', telegram_id);
 
-    // Delete participant records for sessions that are already ended or cancelled AND scheduled in the past
-    const { data, error, count } = await supabase
+    // 1. Get IDs of ended/past sessions
+    const { data: sessions, error: fetchErr } = await supabase
+      .from('video_sessions')
+      .select('id')
+      .in('status', ['ended', 'cancelled'])
+      .lt('scheduled_at', new Date().toISOString());
+
+    if (fetchErr) {
+      console.error('[Sessions] Fetch error:', fetchErr);
+      return res.status(500).json({ error: fetchErr.message });
+    }
+
+    if (!sessions || sessions.length === 0) {
+      return res.json({ success: true, count: 0 });
+    }
+
+    const sessionIds = sessions.map(s => s.id);
+
+    // 2. Delete participant records for those sessions
+    const { count, error: delErr } = await supabase
       .from('session_participants')
       .delete({ count: 'exact' })
       .eq('telegram_id', telegram_id)
-      .in('session_id',
-        supabase
-          .from('video_sessions')
-          .select('id')
-          .in('status', ['ended', 'cancelled'])
-          .lt('scheduled_at', new Date().toISOString())
-      );
+      .in('session_id', sessionIds);
 
-    if (error) {
-      console.error('[Sessions] Delete error:', error);
-      return res.status(500).json({ error: error.message });
+    if (delErr) {
+      console.error('[Sessions] Delete error:', delErr);
+      return res.status(500).json({ error: delErr.message });
     }
 
     console.log(`[Sessions] Deleted ${count} participant records`);
