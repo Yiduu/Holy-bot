@@ -216,65 +216,33 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     res.json({ success: true });
   });
 
-  // DELETE /api/sessions/my – clear session history (remove self from ended sessions)
+  // DELETE /api/sessions/my – clear ended/past session history
   router.delete('/my', requireAuth, async (req, res) => {
     const { id: telegram_id } = req.telegramUser;
-    console.log('[Sessions] Clearing history for:', telegram_id);
+    console.log('[Sessions] Clearing history for user:', telegram_id);
 
-    // Step 1: Get all session IDs where user is a participant
-    const { data: participations, error: partErr } = await supabase
-      .from('session_participants')
-      .select('session_id')
-      .eq('telegram_id', telegram_id);
-
-    if (partErr) {
-      console.error('[Sessions] Error fetching participations:', partErr);
-      return res.status(500).json({ error: partErr.message });
-    }
-
-    if (!participations?.length) {
-      return res.json({ success: true, count: 0 });
-    }
-
-    const participatedIds = participations.map(p => p.session_id);
-
-    // Step 2: Get sessions that are NOT scheduled/active in the future (i.e., ended, cancelled, or past)
-    const now = new Date().toISOString();
-    const { data: futureActive, error: futureErr } = await supabase
-      .from('video_sessions')
-      .select('id')
-      .in('id', participatedIds)
-      .in('status', ['scheduled', 'active'])
-      .gt('scheduled_at', now);
-
-    if (futureErr) {
-      console.error('[Sessions] Error checking future sessions:', futureErr);
-      return res.status(500).json({ error: futureErr.message });
-    }
-
-    const futureIds = new Set((futureActive || []).map(s => s.id));
-    const idsToDelete = participatedIds.filter(id => !futureIds.has(id));
-
-    if (!idsToDelete.length) {
-      console.log('[Sessions] No sessions to clear');
-      return res.json({ success: true, count: 0 });
-    }
-
-    // Step 3: Delete participant records for those sessions
-    const { count, error: delErr } = await supabase
+    // Delete participant records for sessions that are already ended or cancelled AND scheduled in the past
+    const { data, error, count } = await supabase
       .from('session_participants')
       .delete({ count: 'exact' })
       .eq('telegram_id', telegram_id)
-      .in('session_id', idsToDelete);
+      .in('session_id',
+        supabase
+          .from('video_sessions')
+          .select('id')
+          .in('status', ['ended', 'cancelled'])
+          .lt('scheduled_at', new Date().toISOString())
+      );
 
-    if (delErr) {
-      console.error('[Sessions] Delete error:', delErr);
-      return res.status(500).json({ error: delErr.message });
+    if (error) {
+      console.error('[Sessions] Delete error:', error);
+      return res.status(500).json({ error: error.message });
     }
 
     console.log(`[Sessions] Deleted ${count} participant records`);
-    return res.json({ success: true, count: count || 0 });
+    res.json({ success: true, count: count || 0 });
   });
+
 
   return router;
 };
