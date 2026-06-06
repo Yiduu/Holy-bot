@@ -10,7 +10,7 @@ module.exports = function journalRoutes(supabase, requireAuth) {
     const { id: telegram_id } = req.telegramUser;
     const { data, error } = await supabase
       .from('journal_entries')
-      .select('id, content, created_at')
+      .select('id, content, mood, created_at')
       .eq('telegram_id', telegram_id)
       .order('created_at', { ascending: false });
 

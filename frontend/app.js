@@ -1366,9 +1366,9 @@ function showNewJournalEntry() {
   $('journalContent').value = '';
   $('journalContent').readOnly = false;
   $('journalMood').value = 'neutral';
-  $('saveJournalBtn').style.display = 'block';
-  $('updateJournalBtn').style.display = 'none';
-  $('deleteJournalBtn').style.display = 'none';
+  $('saveJournalBtn').classList.remove('hidden');
+  $('updateJournalBtn').classList.add('hidden');
+  $('deleteJournalBtn').classList.add('hidden');
   $('journalModal').classList.add('open');
 }
 
@@ -1379,9 +1379,9 @@ function openJournalEntry(id, content, mood = 'neutral') {
   $('journalContent').value = content;
   $('journalContent').readOnly = false;
   $('journalMood').value = mood;
-  $('saveJournalBtn').style.display = 'none';
-  $('updateJournalBtn').style.display = 'block';
-  $('deleteJournalBtn').style.display = 'block';
+  $('saveJournalBtn').classList.add('hidden');
+  $('updateJournalBtn').classList.remove('hidden');
+  $('deleteJournalBtn').classList.remove('hidden');
   $('journalModal').classList.add('open');
 }
 
