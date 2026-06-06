@@ -1291,3 +1291,11 @@ textarea.form-control {
   width: auto;
   object-fit: contain;
 }
+
+#topicsList .chip {
+  display: block;
+  width: 100%;
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
+}

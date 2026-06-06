@@ -684,11 +684,11 @@
       <div class="modal-title" data-i18n="select_your_topics">Select Topics</div>
       <input type="text" id="topicSearch" class="form-control" placeholder="Search topics..."
         style="margin-bottom:12px;" />
-      <div id="topicsList" class="flex flex-wrap gap-8 py-16" style="max-height:40vh;overflow-y:auto">
-        <!-- Dynamic topics -->
-      </div>
-      <button class="btn btn-primary btn-full mt-16" onclick="saveTopics()" data-i18n="Save">Save Topics</button>
+      <div id="topicsList" class="flex flex-col gap-8 py-16" style="max-height:40vh;overflow-y:auto"></div>
+      <!-- Dynamic topics -->
     </div>
+    <button class="btn btn-primary btn-full mt-16" onclick="saveTopics()" data-i18n="Save">Save Topics</button>
+  </div>
   </div>
 
   <script src="locales.js"></script>
