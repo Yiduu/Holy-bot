@@ -675,7 +675,7 @@ async function joinSession(session_id) {
   haptic('medium');
   try {
     const data = await apiFetch(`/api/sessions/${session_id}/join`);
-    launchJitsi(data.room_name, data.room_password, data.display_name, data.jitsi_token);
+    launchJitsi(data.room_name, data.room_password, data.display_name, data.jitsi_token, data.jitsi_domain);
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
@@ -840,7 +840,7 @@ function startPrivateSession(menteeId) {
   showScheduleModal(false, menteeId);
 }
 
-function launchJitsi(roomName, roomPassword, displayName, token) {
+function launchJitsi(roomName, roomPassword, displayName, token, jitsiDomain = 'meet.jit.si') {
   navigate('video');
   const container = $('jitsiContainer');
   if (!container) return;
@@ -864,6 +864,9 @@ function launchJitsi(roomName, roomPassword, displayName, token) {
         TOOLBAR_BUTTONS: ['microphone', 'camera', 'desktop', 'chat', 'raisehand', 'fullscreen', 'tileview', 'hangup'],
         SHOW_JITSI_WATERMARK: false,
         MOBILE_APP_PROMO: false,
+        CONNECTION_INDICATOR_DISABLED: true,
+        SETTINGS_SECTIONS: ['devices', 'moderator', 'profile', 'sounds'],
+        TOOLBAR_ALWAYS_VISIBLE: false,
       },
       ...(token ? { jwt: token } : {}),
     };
@@ -872,7 +875,7 @@ function launchJitsi(roomName, roomPassword, displayName, token) {
       try { window.jitsiApi.dispose(); } catch (e) { console.error(e); }
     }
 
-    window.jitsiApi = new JitsiMeetExternalAPI('meet.opensuse.org', options);
+    window.jitsiApi = new JitsiMeetExternalAPI(jitsiDomain, options);
     window.jitsiApi.addEventListener('videoConferenceLeft', () => navigate('sessions'));
     window.jitsiApi.addEventListener('passwordRequired', () => {
       if (roomPassword) window.jitsiApi.executeCommand('password', roomPassword);
@@ -883,7 +886,7 @@ function launchJitsi(roomName, roomPassword, displayName, token) {
     initJitsi();
   } else {
     const script = document.createElement('script');
-    script.src = 'https://meet.jit.si/external_api.js';
+    script.src = `https://${jitsiDomain}/external_api.js`;
     script.onload = initJitsi;
     document.head.appendChild(script);
   }
