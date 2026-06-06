@@ -63,7 +63,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     if (mentee_id && !is_group) {
       const parsedMenteeId = parseInt(mentee_id);
       await supabase.from('session_participants').insert({ session_id: session.id, telegram_id: parsedMenteeId });
-      
+
       const sock = onlineUsers.get(String(parsedMenteeId));
       if (sock) {
         io.to(sock).emit('session_invite', {
@@ -221,52 +221,59 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     const { id: telegram_id } = req.telegramUser;
     console.log('[Sessions] Clearing history for:', telegram_id);
 
-    // Step 1: Find all session IDs this user participated in
+    // Step 1: Get all session IDs where user is a participant
     const { data: participations, error: partErr } = await supabase
       .from('session_participants')
       .select('session_id')
       .eq('telegram_id', telegram_id);
 
-    if (partErr) return res.status(500).json({ error: partErr.message });
+    if (partErr) {
+      console.error('[Sessions] Error fetching participations:', partErr);
+      return res.status(500).json({ error: partErr.message });
+    }
+
     if (!participations?.length) {
-      console.log('[Sessions] User has no session participation records.');
       return res.json({ success: true, count: 0 });
     }
 
     const participatedIds = participations.map(p => p.session_id);
 
-    // Step 2: Identify upcoming scheduled or active sessions in the future
-    const nowIso = new Date().toISOString();
-    const { data: activeFutureSessions, error: sessErr } = await supabase
+    // Step 2: Get sessions that are NOT scheduled/active in the future (i.e., ended, cancelled, or past)
+    const now = new Date().toISOString();
+    const { data: futureActive, error: futureErr } = await supabase
       .from('video_sessions')
       .select('id')
       .in('id', participatedIds)
       .in('status', ['scheduled', 'active'])
-      .gt('scheduled_at', nowIso);
+      .gt('scheduled_at', now);
 
-    if (sessErr) return res.status(500).json({ error: sessErr.message });
+    if (futureErr) {
+      console.error('[Sessions] Error checking future sessions:', futureErr);
+      return res.status(500).json({ error: futureErr.message });
+    }
 
-    // Everything that is NOT an upcoming scheduled/active session in the future
-    // (i.e. past sessions, ended sessions, or deleted/orphaned sessions) is cleared.
-    const futureSessionIds = new Set((activeFutureSessions || []).map(s => s.id));
-    const idsToClear = participatedIds.filter(id => !futureSessionIds.has(id));
+    const futureIds = new Set((futureActive || []).map(s => s.id));
+    const idsToDelete = participatedIds.filter(id => !futureIds.has(id));
 
-    if (!idsToClear.length) {
-      console.log('[Sessions] No session history to clear.');
+    if (!idsToDelete.length) {
+      console.log('[Sessions] No sessions to clear');
       return res.json({ success: true, count: 0 });
     }
 
-    console.log(`[Sessions] Removing user from ${idsToClear.length} session(s) history.`);
-
-    // Step 3: Delete participant rows for those sessions using count: 'exact'
+    // Step 3: Delete participant records for those sessions
     const { count, error: delErr } = await supabase
       .from('session_participants')
       .delete({ count: 'exact' })
       .eq('telegram_id', telegram_id)
-      .in('session_id', idsToClear);
+      .in('session_id', idsToDelete);
 
-    if (delErr) return res.status(500).json({ error: delErr.message });
-    res.json({ success: true, count: count || 0 });
+    if (delErr) {
+      console.error('[Sessions] Delete error:', delErr);
+      return res.status(500).json({ error: delErr.message });
+    }
+
+    console.log(`[Sessions] Deleted ${count} participant records`);
+    return res.json({ success: true, count: count || 0 });
   });
 
   return router;
