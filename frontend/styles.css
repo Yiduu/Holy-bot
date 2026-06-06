@@ -1293,7 +1293,7 @@ textarea.form-control {
   object-fit: contain;
 }
 
-/* Make each chip in the topic modal full width */
+/* Make chips inside topic modal full width with centered text */
 #topicsList .chip {
   display: block;
   width: 100%;
@@ -1303,7 +1303,7 @@ textarea.form-control {
   box-sizing: border-box;
 }
 
-/* Ensure the container takes full width */
+/* Ensure the topics list container takes full width */
 #topicsList {
   width: 100%;
   padding: 0;
