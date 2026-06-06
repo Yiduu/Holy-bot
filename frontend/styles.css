@@ -928,6 +928,7 @@ textarea.form-control {
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+  margin: 0 !important;
   text-transform: uppercase;
 }
 
@@ -1292,10 +1293,18 @@ textarea.form-control {
   object-fit: contain;
 }
 
+/* Make each chip in the topic modal full width */
 #topicsList .chip {
   display: block;
   width: 100%;
   text-align: center;
-  white-space: normal;
-  word-break: break-word;
+  padding: 12px 16px;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+/* Ensure the container takes full width */
+#topicsList {
+  width: 100%;
+  padding: 0;
 }
