@@ -630,10 +630,10 @@ async function loadSessions() {
               <div class="session-title">${escapeHtml(title)}</div>
               <div class="session-sub">${scheduled} • ${session.status}</div>
             </div>
-            ${session.status === 'scheduled' ? `<div style="display:flex; gap:8px;">
-  <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>
-  <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">🌐 Browser</button>
-</div>` : `<span class="chip chip-green">${t('btn_done')}</span>`}
+            ${session.status === 'scheduled' ? `<div style="display:flex; flex-direction:column; gap:6px;">
+              <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>
+              <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">Browser</button>
+            </div>` : `<span class="chip chip-green">${t('btn_done')}</span>`}
           </div>`;
       }).filter(Boolean).join('');
     }

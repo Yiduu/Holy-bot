@@ -1393,3 +1393,17 @@ textarea.form-control {
   background: var(--gold);
   color: #1a1200;
 }
+
+.session-item {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.session-body {
+  flex: 2;
+  min-width: 120px;
+}
+
+.session-item .btn-sm {
+  white-space: nowrap;
+}
