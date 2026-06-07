@@ -225,7 +225,6 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     const { data: sessions, error: fetchErr } = await supabase
       .from('video_sessions')
       .select('id')
-      .in('status', ['ended', 'cancelled'])
       .lt('scheduled_at', new Date().toISOString());
 
     if (fetchErr) {
