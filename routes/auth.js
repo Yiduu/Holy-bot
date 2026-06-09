@@ -85,12 +85,48 @@ module.exports = function authRoutes(supabase, requireAuth) {
   // GET /api/auth/verse – today's daily verse
   router.get('/verse', async (req, res) => {
     const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('daily_verses')
       .select('*')
       .eq('is_active', true);
 
-    if (error || !data?.length) return res.json({ reference: 'Philippians 4:13', text: 'I can do all this through him who gives me strength.' });
+    // Auto-migrate database records if English references are detected
+    if (!error && data && data.length > 0) {
+      const hasEnglish = data.some(v => /[a-zA-Z]/.test(v.reference));
+      if (hasEnglish) {
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          const sqlPath = path.join(__dirname, '..', 'supabase', 'seed.sql');
+          const sql = fs.readFileSync(sqlPath, 'utf8');
+
+          const regex = /\(\s*'([^']+)'\s*,\s*'([^']+)'\s*,\s*'([^']+)'\s*\)/g;
+          let match;
+          const verses = [];
+          while ((match = regex.exec(sql)) !== null) {
+            verses.push({
+              reference: match[1],
+              text: match[2],
+              theme: match[3],
+              is_active: true
+            });
+          }
+
+          if (verses.length > 0) {
+            await supabase.from('daily_verses').delete().neq('theme', 'non-existent-theme-to-delete-all');
+            await supabase.from('daily_verses').insert(verses);
+            const refetched = await supabase.from('daily_verses').select('*').eq('is_active', true);
+            if (refetched.data && refetched.data.length > 0) {
+              data = refetched.data;
+            }
+          }
+        } catch (migrationErr) {
+          console.error('[Migration] Failed to migrate daily_verses to Amharic:', migrationErr);
+        }
+      }
+    }
+
+    if (error || !data?.length) return res.json({ reference: 'ፊልጵ 4:13', text: 'ኃይልን በሚሰጠኝ በክርስቶስ ሁሉን እችላለሁ።' });
 
     const verse = data[dayOfYear % data.length];
     res.json(verse);
