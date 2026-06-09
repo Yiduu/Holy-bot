@@ -122,7 +122,7 @@ function renderThread(messages) {
           <div class="message-text">${escapeHtml(msg.content)}</div>
           <div class="message-footer">
             <span class="message-time">${formatTime(msg.created_at)}</span>
-            <button class="reply-btn" onclick="showReplyForm('${msg.id}')">↩️ Reply</button>
+            <button class="reply-btn" onclick="showReplyForm('${msg.id}')">↩ Reply</button>
           </div>
         </div>
         <div id="${replyFormId}" class="reply-form">
@@ -1075,7 +1075,7 @@ function renderMessage(msg, isSent, senderName) {
     <div class="message-text">${escapeHtml(msg.content)}</div>
     <div class="message-footer">
       <span class="message-time">${formatTime(msg.created_at)}</span>
-      <button class="reply-btn" onclick="showReplyForm('${msg.id}')">↩️ Reply</button>
+      <button class="reply-btn" onclick="showReplyForm('${msg.id}')">↩ Reply</button>
     </div>
   </div>`;
 }
