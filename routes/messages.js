@@ -57,7 +57,7 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
   // POST /api/messages – send message
   router.post('/', requireAuth, async (req, res) => {
     const { id: from_id } = req.telegramUser;
-    const { to_id, content } = req.body;
+    const { to_id, content, parent_id } = req.body;
 
     if (!to_id || !content?.trim()) return res.status(400).json({ error: 'to_id and content required' });
     if (content.length > 2000) return res.status(400).json({ error: 'Message too long' });
@@ -76,7 +76,7 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
 
     const { data: msg, error } = await supabase
       .from('messages')
-      .insert({ from_id, to_id, content: content.trim(), is_flagged })
+      .insert({ from_id, to_id, content: content.trim(), is_flagged, parent_id: parent_id || null })
       .select()
       .single();
 

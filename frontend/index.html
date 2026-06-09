@@ -366,14 +366,22 @@
       <div id="chatMessages" class="chat-messages"></div>
       <div id="typingIndicator" class="typing-indicator"></div>
       <div id="chatInputRow" class="chat-input-row">
-        <input id="chatInput" class="chat-input" placeholder="Type a message…" oninput="handleChatTyping()"
-          onkeydown="if(event.key==='Enter')sendMessage()" />
-        <button class="chat-send-btn" onclick="sendMessage()">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <line x1="22" y1="2" x2="11" y2="13" />
-            <polygon points="22 2 15 22 11 13 2 9 22 2" />
-          </svg>
-        </button>
+        <div id="replyIndicator" class="reply-indicator hidden">
+          <span id="replyText">Replying to...</span>
+          <button class="reply-cancel" onclick="cancelReply()">✖</button>
+        </div>
+        <div class="chat-input-wrapper">
+          <input id="chatInput" class="chat-input" placeholder="Type a message…" oninput="handleChatTyping()"
+            onkeydown="if(event.key==='Enter')sendMessage()" />
+          <button class="emoji-btn" onclick="toggleEmojiPicker()">😊</button>
+          <button class="chat-send-btn" onclick="sendMessage()">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </div>
+        <div id="emojiPicker" class="emoji-picker hidden"></div>
       </div>
 
 

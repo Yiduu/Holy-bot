@@ -1407,3 +1407,138 @@ textarea.form-control {
 .session-item .btn-sm {
   white-space: nowrap;
 }
+
+/* Reply indicator */
+.reply-indicator {
+  background: var(--gold-dim);
+  border-left: 3px solid var(--gold);
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 4px 12px 0;
+  border-radius: 12px;
+}
+
+.reply-cancel {
+  background: none;
+  border: none;
+  color: var(--text2);
+  cursor: pointer;
+}
+
+/* Emoji picker */
+.chat-input-wrapper {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  position: relative;
+}
+
+.emoji-btn {
+  background: var(--bg3);
+  border: 1px solid var(--border-dim);
+  border-radius: 20px;
+  padding: 0 12px;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.emoji-picker {
+  position: absolute;
+  bottom: 70px;
+  right: 12px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  width: 220px;
+  box-shadow: var(--shadow);
+  z-index: 100;
+}
+
+.emoji-picker.hidden {
+  display: none;
+}
+
+.emoji-picker button {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.emoji-picker button:hover {
+  background: var(--gold-dim);
+}
+
+/* Threaded replies */
+.message-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.reply-btn {
+  background: none;
+  border: none;
+  font-size: 0.7rem;
+  color: var(--text3);
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.reply-btn:hover {
+  opacity: 1;
+}
+
+.replies-container {
+  margin-left: 32px;
+  border-left: 2px solid var(--border);
+  padding-left: 12px;
+  margin-top: 4px;
+}
+
+.reply-form {
+  margin-top: 6px;
+  margin-left: 32px;
+  display: none;
+  gap: 6px;
+  align-items: center;
+}
+
+.reply-form.visible {
+  display: flex;
+}
+
+.reply-input {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border-dim);
+  border-radius: 16px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.reply-send,
+.cancel-reply {
+  background: var(--gold);
+  border: none;
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.cancel-reply {
+  background: var(--bg3);
+  color: var(--text2);
+}

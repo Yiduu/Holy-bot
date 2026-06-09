@@ -92,7 +92,87 @@ function escapeHtml(str) {
   d.textContent = str || '';
   return d.innerHTML;
 }
+function buildMessageTree(messages) {
+  const map = new Map();
+  const roots = [];
+  messages.forEach(msg => {
+    map.set(msg.id, { ...msg, replies: [] });
+  });
+  messages.forEach(msg => {
+    if (msg.parent_id && map.has(msg.parent_id)) {
+      map.get(msg.parent_id).replies.push(map.get(msg.id));
+    } else {
+      roots.push(map.get(msg.id));
+    }
+  });
+  roots.forEach(root => {
+    root.replies.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  });
+  return roots;
+}
 
+function renderThread(messages) {
+  if (!messages || !messages.length) return '';
+  return messages.map(msg => {
+    const isSent = msg.from_id === currentUser?.telegram_id;
+    const replyFormId = `reply-form-${msg.id}`;
+    return `
+      <div class="message-thread" data-msg-id="${msg.id}">
+        <div class="message-bubble ${isSent ? 'sent' : 'received'}">
+          <div class="message-text">${escapeHtml(msg.content)}</div>
+          <div class="message-footer">
+            <span class="message-time">${formatTime(msg.created_at)}</span>
+            <button class="reply-btn" onclick="showReplyForm('${msg.id}')">↩️ Reply</button>
+          </div>
+        </div>
+        <div id="${replyFormId}" class="reply-form">
+          <input type="text" id="reply-input-${msg.id}" class="reply-input" placeholder="Write a reply..." />
+          <button class="reply-send" onclick="sendReply('${msg.id}')">Send</button>
+          <button class="cancel-reply" onclick="hideReplyForm('${msg.id}')">Cancel</button>
+        </div>
+        <div class="replies-container">
+          ${msg.replies ? renderThread(msg.replies) : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function showReplyForm(messageId) {
+  const form = document.getElementById(`reply-form-${messageId}`);
+  if (form) form.classList.add('visible');
+  document.getElementById(`reply-input-${messageId}`)?.focus();
+}
+
+function hideReplyForm(messageId) {
+  const form = document.getElementById(`reply-form-${messageId}`);
+  if (form) form.classList.remove('visible');
+}
+
+async function sendReply(parentId) {
+  const input = document.getElementById(`reply-input-${parentId}`);
+  const content = input.value.trim();
+  if (!content || !window.chatState.with) return;
+
+  input.value = '';
+  hideReplyForm(parentId);
+
+  try {
+    await apiFetch('/api/messages', {
+      method: 'POST',
+      body: {
+        to_id: window.chatState.with,
+        content,
+        parent_id: parentId
+      }
+    });
+    loadMessages(window.chatState.with);
+    haptic('light');
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
+}
 function showToast(msg, type = 'info') {
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
@@ -181,7 +261,7 @@ function connectSocket() {
   });
   socket.on('new_message', (msg) => {
     if (currentPage === 'chat' && window.chatState?.with === msg.from_id) {
-      appendMessage(msg, false);
+      loadMessages(window.chatState.with);
     } else {
       updateMessageBadge();
       showToast('New message received');
@@ -982,17 +1062,21 @@ function openChat(partnerId) {
 async function loadMessages(with_id) {
   try {
     const messages = await apiFetch(`/api/messages/${with_id}`);
+    const messageTree = buildMessageTree(messages);
     const container = $('chatMessages');
-    container.innerHTML = messages.map(m => renderMessage(m)).join('');
+    container.innerHTML = renderThread(messageTree);
     container.scrollTop = container.scrollHeight;
   } catch (e) { console.error(e); }
 }
 
-function renderMessage(msg) {
-  const isSent = msg.from_id === currentUser?.telegram_id;
+
+function renderMessage(msg, isSent, senderName) {
   return `<div class="message-bubble ${isSent ? 'sent' : 'received'}">
-    ${escapeHtml(msg.content)}
-    <div class="message-time">${formatTime(msg.created_at)}</div>
+    <div class="message-text">${escapeHtml(msg.content)}</div>
+    <div class="message-footer">
+      <span class="message-time">${formatTime(msg.created_at)}</span>
+      <button class="reply-btn" onclick="showReplyForm('${msg.id}')">↩️ Reply</button>
+    </div>
   </div>`;
 }
 
