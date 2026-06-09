@@ -334,7 +334,7 @@ const I18N = {
     "Become Mentor": "አማካሪ ሁን",
     "Settings": "ማስተካከያዎች",
     "Find a Mentor": "አማካሪ ፈልግ",
-    "Connect with an anonymous mentor who has walked the path of recovery.": "በማገገም ጎዳና ላይ ከተጓዘ ስም-አልባ አማካሪ ጋር ይገናኙ።",
+    "Connect with an anonymous mentor who has walked the path of recovery.": "በማገገም ጎዳና ላይ ከተጓዘ አማካሪ ጋር ይገናኙ።",
     "Select a topic to find mentors": "አማካሪዎችን ለማግኘት ርዕስ ይምረጡ",
     "Start a Session (Mentors Only)": "ስብሰባ ይጀምሩ (ለአማካሪዎች ብቻ)",
     "1-on-1 Session": "የ1-ለ-1 ስብሰባ",
