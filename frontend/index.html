@@ -212,26 +212,26 @@
         <div class="stats-grid mb-16">
           <div class="stat-card">
             <div id="statUsers" class="stat-num">–</div>
-            <div class="stat-label">Members</div>
+            <div class="stat-label" data-i18n="Members">Members</div>
           </div>
           <div class="stat-card">
             <div id="statMentors" class="stat-num">–</div>
-            <div class="stat-label">Mentors</div>
+            <div class="stat-label" data-i18n="Mentors">Mentors</div>
           </div>
           <div class="stat-card">
             <div id="statSessions" class="stat-num">–</div>
-            <div class="stat-label">Sessions Today</div>
+            <div class="stat-label" data-i18n="Sessions Today">Sessions Today</div>
           </div>
         </div>
 
         <!-- Chart -->
-        <div class="section-title">Weekly Activity</div>
+        <div class="section-title" data-i18n="Weekly Activity">Weekly Activity</div>
         <div class="chart-wrap mb-16" style="height:160px">
           <canvas id="activityChart"></canvas>
         </div>
 
         <!-- Quick Actions -->
-        <div class="section-title">Quick Actions</div>
+        <div class="section-title" data-i18n="Quick Actions">Quick Actions</div>
         <div class="grid-2 mb-16">
           <button class="btn btn-outline" onclick="navigate('mentors')">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -239,7 +239,7 @@
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
             </svg>
-            Find Mentor
+            <span data-i18n="Find Mentor">Find Mentor</span>
           </button>
           <button class="btn btn-outline" onclick="navigate('sessions')">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -247,7 +247,7 @@
               <polygon points="23 7 16 12 23 17 23 7" />
               <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
             </svg>
-            Sessions
+            <span data-i18n="Sessions">Sessions</span>
           </button>
           <button class="btn btn-outline" onclick="openApplyModal()">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -255,7 +255,7 @@
               <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07" />
               <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
             </svg>
-            Become Mentor
+            <span data-i18n="Become Mentor">Become Mentor</span>
           </button>
           <button class="btn btn-outline" onclick="navigate('settings')">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -264,18 +264,22 @@
               <path
                 d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
-            Settings
+            <span data-i18n="Settings">Settings</span>
           </button>
         </div>
 
         <!-- Support -->
-        <div class="section-title">Support</div>
+        <div class="section-title" data-i18n="Support">Support</div>
         <div class="card mb-16">
-          <div class="form-group"><label class="form-label">Subject</label><input id="ticketSubject"
-              class="form-control" placeholder="What do you need help with?" /></div>
-          <div class="form-group"><label class="form-label">Description</label><textarea id="ticketDesc"
-              class="form-control" rows="3" placeholder="Describe your issue..."></textarea></div>
-          <button class="btn btn-outline btn-sm" onclick="submitTicket()">Submit Ticket</button>
+          <div class="form-group">
+            <label class="form-label" data-i18n="Subject">Subject</label>
+            <input id="ticketSubject" class="form-control" placeholder="What do you need help with?" data-i18n="What do you need help with?" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="Description">Description</label>
+            <textarea id="ticketDesc" class="form-control" rows="3" placeholder="Describe your issue..." data-i18n="Describe your issue..."></textarea>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="submitTicket()" data-i18n="Submit Ticket">Submit Ticket</button>
         </div>
       </div>
     </div>
@@ -283,15 +287,15 @@
     <!-- ── Page: Mentors ─────────────────────────────────────────── -->
     <div id="page-mentors" class="page">
       <div class="app-header">
-        <h2>Find a Mentor</h2>
+        <h2 data-i18n="Find a Mentor">Find a Mentor</h2>
         <button class="theme-btn" onclick="toggleTheme()"><span>☀️</span></button>
       </div>
       <div class="page-content">
-        <p class="text-sm text-dim mb-12">Connect with an anonymous mentor who has walked the path of recovery.</p>
+        <p class="text-sm text-dim mb-12" data-i18n="Connect with an anonymous mentor who has walked the path of recovery.">Connect with an anonymous mentor who has walked the path of recovery.</p>
         <div class="form-group mb-12">
-          <label class="form-label">Select a topic to find mentors</label>
+          <label class="form-label" data-i18n="Select a topic to find mentors">Select a topic to find mentors</label>
           <select id="mentorTopicSelect" class="form-control" onchange="loadMentors()">
-            <option value="">-- Loading topics --</option>
+            <option value="" data-i18n="All Topics">-- Loading topics --</option>
           </select>
         </div>
         <div id="mentorsList" style="display:flex;flex-direction:column;gap:10px">
@@ -308,7 +312,7 @@
           data-i18n="btn_clear">Clear</button>
       </div>
       <div class="page-content">
-        <div class="section-title">Start a Session (Mentors Only)</div>
+        <div class="section-title" data-i18n="Start a Session (Mentors Only)">Start a Session (Mentors Only)</div>
         <div class="grid-2 mb-16">
           <button class="btn btn-primary" onclick="showScheduleModal(false)">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -316,7 +320,7 @@
               <polygon points="23 7 16 12 23 17 23 7" />
               <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
             </svg>
-            1-on-1 Session
+            <span data-i18n="1-on-1 Session">1-on-1 Session</span>
           </button>
           <button class="btn btn-outline" onclick="showScheduleModal(true)">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -326,16 +330,16 @@
               <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
               <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
-            Group Session
+            <span data-i18n="Group Session">Group Session</span>
           </button>
         </div>
 
-        <div class="section-title">My Private Sessions</div>
+        <div class="section-title" data-i18n="My Private Sessions">My Private Sessions</div>
         <div id="privateSessionsList" class="mb-16">
           <div class="loading-spinner" style="margin:30px auto"></div>
         </div>
 
-        <div class="section-title">Upcoming Group Sessions</div>
+        <div class="section-title" data-i18n="Upcoming Group Sessions">Upcoming Group Sessions</div>
         <div id="upcomingSessions">
           <div class="loading-spinner" style="margin:30px auto"></div>
         </div>

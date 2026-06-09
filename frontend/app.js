@@ -385,7 +385,7 @@ function navigate(page) {
     case 'journal':
       journalView = 'list';
       loadJournalEntries();
-      $('journalViewToggle').innerHTML = '📅 Calendar';
+      $('journalViewToggle').innerHTML = '📅 ' + t('Calendar');
       break;
   }
 }
@@ -1370,6 +1370,15 @@ function applyLanguage() {
   });
   const langSelect = $('settingLanguage');
   if (langSelect) langSelect.value = currentLanguage;
+
+  const toggleBtn = $('journalViewToggle');
+  if (toggleBtn) {
+    if (journalView === 'list') {
+      toggleBtn.innerHTML = '📅 ' + t('Calendar');
+    } else {
+      toggleBtn.innerHTML = '📋 ' + t('List');
+    }
+  }
 }
 
 function changeLanguage(lang) {
@@ -1658,11 +1667,11 @@ function toggleJournalView() {
   if (journalView === 'list') {
     journalView = 'calendar';
     showJournalCalendar();
-    $('journalViewToggle').innerHTML = '📋 List';
+    $('journalViewToggle').innerHTML = '📋 ' + t('List');
   } else {
     journalView = 'list';
     loadJournalEntries();
-    $('journalViewToggle').innerHTML = '📅 Calendar';
+    $('journalViewToggle').innerHTML = '📅 ' + t('Calendar');
   }
 }
 
