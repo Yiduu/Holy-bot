@@ -240,7 +240,7 @@ const I18N = {
     "Subject": "ርዕስ",
     "Description": "መግለጫ",
     "Submit Ticket": "ጥያቄ አስገባ",
-    "Active Clients": "ንቁ ደንበኞች",
+    "Active Clients": "ንቁ አገልግሎት ፈላጊዎች",
     "Anonymous ID": "መታወቅያ",
     "Role": "ሚና",
     "Display Name": "ስም",
