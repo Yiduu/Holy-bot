@@ -83,7 +83,6 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     if (error) return res.status(500).json({ error: error.message });
 
     // Real-time push to recipient
-    // Real-time push to recipient
     const recipientSocket = onlineUsers.get(String(to_id));
     if (recipientSocket) {
       io.to(recipientSocket).emit('new_message', msg);
@@ -99,17 +98,79 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     res.status(201).json(msg);
   });
 
-  // DELETE /api/messages/:with – clear history
-  router.delete('/:with', requireAuth, async (req, res) => {
-    const { id: my_id } = req.telegramUser;
-    const other_id = parseInt(req.params.with);
+  // PATCH /api/messages/:id – edit a message
+  router.patch('/:id', requireAuth, async (req, res) => {
+    const { id: user_id } = req.telegramUser;
+    const { content } = req.body;
+    const messageId = req.params.id;
+
+    if (!content || content.trim().length === 0) {
+      return res.status(400).json({ error: 'Content cannot be empty' });
+    }
+    if (content.length > 2000) {
+      return res.status(400).json({ error: 'Message too long' });
+    }
+
+    const { data: msg, error: fetchErr } = await supabase
+      .from('messages')
+      .select('from_id, to_id, created_at, is_deleted')
+      .eq('id', messageId)
+      .single();
+
+    if (fetchErr) return res.status(404).json({ error: 'Message not found' });
+    if (msg.from_id !== user_id) return res.status(403).json({ error: 'Not your message' });
+    if (msg.is_deleted) return res.status(400).json({ error: 'Cannot edit deleted message' });
+
+    const TWO_DAYS = 2 * 24 * 60 * 60 * 1000;
+    if (Date.now() - new Date(msg.created_at).getTime() > TWO_DAYS) {
+      return res.status(403).json({ error: 'Edit time limit exceeded (2 days)' });
+    }
+
+    const { data, error } = await supabase
+      .from('messages')
+      .update({ content: content.trim(), edited_at: new Date().toISOString() })
+      .eq('id', messageId)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const recipientSocket = onlineUsers.get(String(msg.to_id));
+    if (recipientSocket) io.to(recipientSocket).emit('message_edited', data);
+    const senderSocket = onlineUsers.get(String(user_id));
+    if (senderSocket && senderSocket !== recipientSocket) io.to(senderSocket).emit('message_edited', data);
+
+    res.json(data);
+  });
+
+  // DELETE /api/messages/:id – soft delete
+  router.delete('/:id', requireAuth, async (req, res) => {
+    const { id: user_id } = req.telegramUser;
+    const messageId = req.params.id;
+
+    const { data: msg, error: fetchErr } = await supabase
+      .from('messages')
+      .select('from_id, to_id, is_deleted')
+      .eq('id', messageId)
+      .single();
+
+    if (fetchErr) return res.status(404).json({ error: 'Message not found' });
+    if (msg.from_id !== user_id) return res.status(403).json({ error: 'Not your message' });
+    if (msg.is_deleted) return res.status(400).json({ error: 'Already deleted' });
 
     const { error } = await supabase
       .from('messages')
-      .delete()
-      .or(`and(from_id.eq.${my_id},to_id.eq.${other_id}),and(from_id.eq.${other_id},to_id.eq.${my_id})`);
+      .update({ is_deleted: true, content: null, edited_at: null })
+      .eq('id', messageId);
 
     if (error) return res.status(500).json({ error: error.message });
+
+    const placeholder = { id: messageId, is_deleted: true };
+    const recipientSocket = onlineUsers.get(String(msg.to_id));
+    if (recipientSocket) io.to(recipientSocket).emit('message_deleted', placeholder);
+    const senderSocket = onlineUsers.get(String(user_id));
+    if (senderSocket && senderSocket !== recipientSocket) io.to(senderSocket).emit('message_deleted', placeholder);
+
     res.json({ success: true });
   });
 

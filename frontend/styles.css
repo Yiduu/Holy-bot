@@ -1562,3 +1562,27 @@ textarea.form-control {
   flex-direction: column;
   width: 100%;
 }
+
+/* Message options button */
+.more-options-btn {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: var(--text3);
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: 6px;
+}
+
+.message-bubble.sent .message-footer {
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.message-bubble.received .message-footer {
+  justify-content: flex-start;
+}
+
+.message-text em {
+  opacity: 0.7;
+}

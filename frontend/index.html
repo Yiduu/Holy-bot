@@ -717,6 +717,16 @@
 
   <script src="locales.js"></script>
   <script src="app.js?v=1.1"></script>
+
+  <!-- Message Options Modal -->
+  <div id="messageOptionsModal" class="modal-overlay" onclick="if(event.target===this)closeMessageOptions()">
+    <div class="modal-sheet" style="max-width:300px; text-align:center;">
+      <div class="modal-handle"></div>
+      <button class="btn btn-primary btn-full" onclick="editMessage()">✏️ Edit</button>
+      <button class="btn btn-danger btn-full mt-8" onclick="deleteMessage()">🗑️ Delete</button>
+      <button class="btn btn-ghost btn-full mt-8" onclick="closeMessageOptions()">Cancel</button>
+    </div>
+  </div>
 </body>
 
 </html>

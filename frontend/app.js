@@ -116,12 +116,15 @@ function renderThread(messages) {
   return messages.map(msg => {
     const isSent = msg.from_id === currentUser?.telegram_id;
     const replyFormId = `reply-form-${msg.id}`;
+    const editedMark = msg.edited ? ' <small style="font-size:0.65rem; opacity:0.7;">(edited)</small>' : '';
+    const displayContent = msg.is_deleted ? '🗑️ <em>Message deleted</em>' : escapeHtml(msg.content);
     return `
       <div class="message-thread" data-msg-id="${msg.id}">
         <div class="message-bubble ${isSent ? 'sent' : 'received'}">
-          <div class="message-text">${escapeHtml(msg.content)}</div>
+          <div class="message-text">${displayContent}${editedMark}</div>
           <div class="message-footer">
             <span class="message-time">${formatTime(msg.created_at)}</span>
+            ${!msg.is_deleted && isSent ? `<button class="more-options-btn" onclick="showMessageOptions('${msg.id}')">⋯</button>` : ''}
             <button class="reply-btn" onclick="showReplyForm('${msg.id}')">↩ Reply</button>
           </div>
         </div>
@@ -168,6 +171,49 @@ async function sendReply(parentId) {
     });
     loadMessages(window.chatState.with);
     haptic('light');
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
+}
+let currentMessageId = null;
+
+function showMessageOptions(messageId) {
+  currentMessageId = messageId;
+  document.getElementById('messageOptionsModal').classList.add('open');
+}
+
+function closeMessageOptions() {
+  currentMessageId = null;
+  document.getElementById('messageOptionsModal').classList.remove('open');
+}
+
+async function editMessage() {
+  if (!currentMessageId) return;
+  const newContent = prompt('Edit your message:');
+  if (!newContent || newContent.trim() === '') return;
+  try {
+    await apiFetch(`/api/messages/${currentMessageId}`, {
+      method: 'PATCH',
+      body: { content: newContent.trim() }
+    });
+    closeMessageOptions();
+    loadMessages(window.chatState.with);
+    haptic('light');
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
+}
+
+async function deleteMessage() {
+  if (!currentMessageId) return;
+  if (!confirm('Delete this message for everyone?')) return;
+  try {
+    await apiFetch(`/api/messages/${currentMessageId}`, { method: 'DELETE' });
+    closeMessageOptions();
+    loadMessages(window.chatState.with);
+    haptic('medium');
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
@@ -300,6 +346,17 @@ function connectSocket() {
     } else if (status === 'accepted') {
       haptic('success');
       showToast('A mentorship request was accepted \u2713', 'success');
+    }
+  });
+  socket.on('message_edited', (editedMsg) => {
+    if (currentPage === 'chat' && window.chatState?.with) {
+      loadMessages(window.chatState.with);
+    }
+  });
+
+  socket.on('message_deleted', ({ id }) => {
+    if (currentPage === 'chat' && window.chatState?.with) {
+      loadMessages(window.chatState.with);
     }
   });
 }
