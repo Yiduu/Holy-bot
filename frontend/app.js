@@ -1107,6 +1107,7 @@ async function sendMessage() {
   if (!content || !window.chatState.with) return;
 
   input.value = '';
+  $('emojiPicker')?.classList.add('hidden');
   try {
     const msg = await apiFetch('/api/messages', {
       method: 'POST',
@@ -1124,6 +1125,37 @@ function handleChatTyping() {
     socket.emit('typing', { to_id: window.chatState.with });
   }
 }
+
+function toggleEmojiPicker() {
+  const picker = $('emojiPicker');
+  if (!picker) return;
+
+  if (picker.children.length === 0) {
+    const emojis = ['😊', '😂', '🤣', '❤️', '👍', '🙏', '🔥', '😍', '😭', '😘', '😎', '😢', '😡', '😱', '🤔', '🙌', '👏', '🎉', '🌟', '💡', '💯', '🤝', '🙄', '💔'];
+    picker.innerHTML = emojis.map(emoji => `<button onclick="insertEmoji('${emoji}')">${emoji}</button>`).join('');
+  }
+
+  picker.classList.toggle('hidden');
+}
+
+function insertEmoji(emoji) {
+  const input = $('chatInput');
+  if (!input) return;
+  input.value += emoji;
+  input.focus();
+  handleChatTyping();
+}
+
+// Close emoji picker when clicking outside
+document.addEventListener('click', (e) => {
+  const picker = $('emojiPicker');
+  const btn = document.querySelector('.emoji-btn');
+  if (picker && !picker.classList.contains('hidden')) {
+    if (!picker.contains(e.target) && e.target !== btn && !btn?.contains(e.target)) {
+      picker.classList.add('hidden');
+    }
+  }
+});
 
 async function updateMessageBadge() {
   try {
