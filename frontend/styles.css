@@ -715,6 +715,20 @@ textarea.form-control {
   animation: msgPop 0.2s ease;
 }
 
+.message-bubble.sent {
+  align-self: flex-end;
+  background: linear-gradient(135deg, var(--gold) 0%, #A87C2A 100%);
+  color: #1A1200;
+  border-radius: 16px 16px 4px 16px;
+}
+
+.message-bubble.received {
+  align-self: flex-start;
+  background: var(--bg3);
+  border: 1px solid var(--border-dim);
+  border-radius: 16px 16px 16px 4px;
+}
+
 @keyframes msgPop {
   from {
     opacity: 0;
@@ -1541,4 +1555,10 @@ textarea.form-control {
 .cancel-reply {
   background: var(--bg3);
   color: var(--text2);
+}
+
+.message-thread {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
 }
