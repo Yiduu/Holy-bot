@@ -438,7 +438,7 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
 
   // Apply same‑sex filter (unless user chose 'prefer_not')
   if (userSex && userSex !== 'prefer_not') {
-    query = query.eq('sex', userSex);
+    query = query.or(`sex.eq.${userSex},sex.eq.prefer_not`);
   }
 
   const { data: allMentors, error: queryError } = await query;

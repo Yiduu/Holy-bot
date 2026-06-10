@@ -26,7 +26,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .eq('is_banned', false);
 
     if (userSex && userSex !== 'prefer_not') {
-      query = query.eq('sex', userSex);
+      query = query.or(`sex.eq.${userSex},sex.eq.prefer_not`);
     }
 
     // Resolve topic identifier (can be ID, slug, or name)
