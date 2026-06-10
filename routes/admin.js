@@ -114,12 +114,12 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       .range(offset, offset + limit - 1);
 
     if (error) {
-        console.error('[Admin] Error fetching applications:', error);
-        return res.status(500).json({ error: error.message });
+      console.error('[Admin] Error fetching applications:', error);
+      return res.status(500).json({ error: error.message });
     }
-    
+
     if (!data?.length) {
-        console.log(`[Admin] No applications found for status: ${status}`);
+      console.log(`[Admin] No applications found for status: ${status}`);
     }
     res.json({ applications: data || [], total: count || 0, page, pages: Math.ceil((count || 0) / limit) });
   });
@@ -140,7 +140,20 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     if (appErr) return res.status(500).json({ error: appErr.message });
 
     if (action === 'approved') {
-      await supabase.from('users').update({ role: 'mentor' }).eq('telegram_id', app.telegram_id);
+      // Get the user's current sex
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('sex')
+        .eq('telegram_id', app.telegram_id)
+        .single();
+
+      let updateData = { role: 'mentor' };
+      // If the application has a sex and it's different from the user's current sex, update it
+      if (app.sex && currentUser?.sex !== app.sex) {
+        updateData.sex = app.sex;
+      }
+
+      await supabase.from('users').update(updateData).eq('telegram_id', app.telegram_id);
       await supabase.from('mentors').upsert({ telegram_id: app.telegram_id }, { onConflict: 'telegram_id' });
       const { notifyMentorApproved } = require('../bot');
       await notifyMentorApproved(app.telegram_id);
