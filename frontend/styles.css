@@ -1586,3 +1586,49 @@ textarea.form-control {
 .message-text em {
   opacity: 0.7;
 }
+
+/* Ensure full viewport height and proper overflow */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Each page takes remaining space and scrolls independently */
+.page {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: var(--nav-h);
+  /* push content above fixed nav */
+  scroll-behavior: smooth;
+}
+
+/* Bottom navigation: fixed at bottom, always visible */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-h);
+  background: var(--bg2);
+  border-top: 1px solid var(--border-dim);
+  display: flex;
+  align-items: stretch;
+  z-index: 1000;
+  backdrop-filter: blur(20px);
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  gap: 4px;
+  padding: 0 8px;
+}
