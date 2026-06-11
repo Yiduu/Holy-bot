@@ -64,6 +64,7 @@
 
 html {
   font-size: 16px;
+  height: 100%;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -71,8 +72,8 @@ body {
   font-family: var(--font-body);
   background: var(--bg);
   color: var(--text);
-  min-height: 100vh;
-  overflow-x: hidden;
+  height: 100%;
+  overflow: hidden;
   transition: background var(--transition), color var(--transition);
 }
 
@@ -136,16 +137,17 @@ h3 {
 
 /* ─── Layout ────────────────────────────────────────────────── */
 #app {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  overflow: hidden;
 }
 
 .page {
   display: none;
   flex-direction: column;
   flex: 1;
-  padding: 0 0 var(--nav-h);
+  overflow: hidden;
   animation: fadeIn 0.3s ease;
 }
 
@@ -156,7 +158,8 @@ h3 {
 .page-content {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 16px 16px calc(16px + var(--nav-h)) 16px;
+  -webkit-overflow-scrolling: touch;
 }
 
 @keyframes fadeIn {
@@ -184,19 +187,13 @@ h3 {
   align-items: center;
   justify-content: space-between;
   backdrop-filter: blur(16px);
+  flex-shrink: 0;
 }
 
 /* ─── Logo ──────────────────────────────────────────────────── */
-/*
-   Fixed height keeps the logo crisp and consistent on every device.
-   width: auto preserves the aspect ratio whether it's a wide wordmark
-   or a square icon. max-width prevents very wide logos from pushing
-   the action buttons off screen on narrow phones. flex-shrink: 0
-   ensures the logo never squishes — the right-side actions yield first.
-*/
 .app-logo {
   display: block;
-  height: 38px;
+  height: 46px;
   width: auto;
   max-width: 150px;
   object-fit: contain;
@@ -224,8 +221,9 @@ h3 {
   border-top: 1px solid var(--border-dim);
   display: flex;
   align-items: stretch;
-  z-index: 200;
+  z-index: 9999;
   backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   overflow-x: auto;
   overflow-y: hidden;
   white-space: nowrap;
@@ -233,31 +231,11 @@ h3 {
   scrollbar-width: thin;
   gap: 4px;
   padding: 0 8px;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .bottom-nav::-webkit-scrollbar {
   height: 2px;
-}
-
-.nav-item {
-  flex: 0 0 auto;
-  /* Don't shrink, don't grow, base auto width */
-  min-width: 60px;
-  /* Enough for icon + text */
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 8px 4px;
-  color: var(--text3);
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: color var(--transition);
-  position: relative;
 }
 
 .nav-item {
@@ -696,6 +674,7 @@ textarea.form-control {
   flex-direction: column;
   gap: 8px;
   background: var(--bg);
+  -webkit-overflow-scrolling: touch;
 }
 
 #page-chat.active {
@@ -741,20 +720,6 @@ textarea.form-control {
   }
 }
 
-.message-bubble.sent {
-  align-self: flex-end;
-  background: linear-gradient(135deg, var(--gold) 0%, #A87C2A 100%);
-  color: #1A1200;
-  border-radius: 16px 16px 4px 16px;
-}
-
-.message-bubble.received {
-  align-self: flex-start;
-  background: var(--bg3);
-  border: 1px solid var(--border-dim);
-  border-radius: 16px 16px 16px 4px;
-}
-
 .message-time {
   font-size: 0.65rem;
   color: var(--text3);
@@ -768,6 +733,7 @@ textarea.form-control {
 
 .chat-input-row {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   padding: 10px 16px;
   border-top: 1px solid var(--border-dim);
@@ -777,14 +743,11 @@ textarea.form-control {
   left: 0;
   right: 0;
   z-index: 10;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
-  transform: translateY(0);
+  flex-shrink: 0;
 }
 
 .chat-input-row.hidden {
   display: none !important;
-  transform: translateY(20px);
-  opacity: 0;
 }
 
 .chat-input {
@@ -825,6 +788,7 @@ textarea.form-control {
   font-size: 0.75rem;
   color: var(--text3);
   padding: 0 12px;
+  flex-shrink: 0;
 }
 
 /* ─── Video Room ────────────────────────────────────────────── */
@@ -868,6 +832,12 @@ textarea.form-control {
   font-size: 2rem;
   color: var(--gold);
   letter-spacing: 0.1em;
+}
+
+.loading-logo-img {
+  height: 80px;
+  width: auto;
+  object-fit: contain;
 }
 
 .loading-spinner {
@@ -1018,6 +988,18 @@ textarea.form-control {
   margin-bottom: 16px;
 }
 
+/* ─── Modal (center style for schedule) ────────────────────── */
+.modal {
+  background: var(--bg2);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-dim);
+  padding: 20px;
+  width: calc(100% - 32px);
+  max-width: 400px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
 /* ─── Onboarding ─────────────────────────────────────────────── */
 #onboarding {
   position: fixed;
@@ -1046,10 +1028,24 @@ textarea.form-control {
   margin-bottom: 8px;
 }
 
+.onboarding-logo-img {
+  height: 110px;
+  width: auto;
+  object-fit: contain;
+}
+
 .onboarding-sub {
   font-size: 0.85rem;
   color: var(--text2);
   line-height: 1.5;
+}
+
+.onboarding-step {
+  width: 100%;
+}
+
+.onboarding-step.hidden {
+  display: none;
 }
 
 .step-indicator {
@@ -1107,6 +1103,7 @@ textarea.form-control {
 .session-item {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 12px;
   border-radius: var(--radius-sm);
@@ -1134,8 +1131,8 @@ textarea.form-control {
 }
 
 .session-body {
-  flex: 1;
-  min-width: 0;
+  flex: 2;
+  min-width: 120px;
 }
 
 .session-title {
@@ -1152,92 +1149,11 @@ textarea.form-control {
   margin-top: 2px;
 }
 
-/* ─── Utilities ─────────────────────────────────────────────── */
-.text-gold {
-  color: var(--gold);
+.session-item .btn-sm {
+  white-space: nowrap;
 }
 
-.text-dim {
-  color: var(--text2);
-}
-
-.text-sm {
-  font-size: 0.8rem;
-}
-
-.text-xs {
-  font-size: 0.7rem;
-}
-
-.mt-4 {
-  margin-top: 4px;
-}
-
-.mt-8 {
-  margin-top: 8px;
-}
-
-.mt-12 {
-  margin-top: 12px;
-}
-
-.mt-16 {
-  margin-top: 16px;
-}
-
-.mb-8 {
-  margin-bottom: 8px;
-}
-
-.mb-12 {
-  margin-bottom: 12px;
-}
-
-.mb-16 {
-  margin-bottom: 16px;
-}
-
-.gap-8 {
-  gap: 8px;
-}
-
-.flex {
-  display: flex;
-}
-
-.flex-col {
-  flex-direction: column;
-}
-
-.items-center {
-  align-items: center;
-}
-
-.justify-between {
-  justify-content: space-between;
-}
-
-.flex-1 {
-  flex: 1;
-}
-
-.grid-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.divider {
-  height: 1px;
-  background: var(--border-dim);
-  margin: 16px 0;
-}
-
-.hidden {
-  display: none !important;
-}
-
-/* ─── Feature Extensions ────────────────────────────────────── */
+/* ─── Streak Card ───────────────────────────────────────────── */
 .streak-card {
   background: linear-gradient(135deg, rgba(255, 165, 0, 0.1) 0%, rgba(255, 69, 0, 0.05) 100%);
   border: 1px solid rgba(255, 165, 0, 0.2);
@@ -1260,72 +1176,7 @@ textarea.form-control {
   font-size: 1.2rem;
 }
 
-.journal-item {
-  padding: 12px;
-  background: var(--bg2);
-  border-radius: var(--radius-sm);
-  border-left: 3px solid var(--gold);
-  cursor: pointer;
-  transition: background 0.2s;
-  margin-bottom: 8px;
-}
-
-.journal-item:hover {
-  background: var(--bg3);
-}
-
-.journal-date {
-  font-size: 0.7rem;
-  color: var(--text3);
-  margin-bottom: 4px;
-}
-
-.journal-preview {
-  font-size: 0.85rem;
-  color: var(--text2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ─── Responsive ────────────────────────────────────────────── */
-@media (max-width: 380px) {
-  .stats-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .stat-card:last-child {
-    grid-column: span 2;
-  }
-
-  .app-logo {
-    max-width: 110px;
-  }
-}
-
-.onboarding-logo-img {
-  height: 110px;
-  width: auto;
-  object-fit: contain;
-}
-
-/* Make chips inside topic modal full width with centered text */
-#topicsList .chip {
-  display: block;
-  width: 100%;
-  text-align: center;
-  padding: 12px 16px;
-  margin: 0;
-  box-sizing: border-box;
-}
-
-/* Ensure the topics list container takes full width */
-#topicsList {
-  width: 100%;
-  padding: 0;
-}
-
-/* Journal mood icon */
+/* ─── Journal ───────────────────────────────────────────────── */
 .journal-mood {
   font-size: 1.2rem;
   margin-right: 8px;
@@ -1363,7 +1214,7 @@ textarea.form-control {
   white-space: nowrap;
 }
 
-/* Calendar styles */
+/* ─── Calendar ──────────────────────────────────────────────── */
 .calendar-header {
   display: flex;
   justify-content: space-between;
@@ -1408,21 +1259,7 @@ textarea.form-control {
   color: #1a1200;
 }
 
-.session-item {
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.session-body {
-  flex: 2;
-  min-width: 120px;
-}
-
-.session-item .btn-sm {
-  white-space: nowrap;
-}
-
-/* Reply indicator */
+/* ─── Reply indicator ───────────────────────────────────────── */
 .reply-indicator {
   background: var(--gold-dim);
   border-left: 3px solid var(--gold);
@@ -1431,7 +1268,7 @@ textarea.form-control {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 4px 12px 0;
+  margin: 4px 0 0;
   border-radius: 12px;
 }
 
@@ -1442,12 +1279,13 @@ textarea.form-control {
   cursor: pointer;
 }
 
-/* Emoji picker */
+/* ─── Chat input wrapper ────────────────────────────────────── */
 .chat-input-wrapper {
   display: flex;
   gap: 8px;
   flex: 1;
   position: relative;
+  align-items: center;
 }
 
 .emoji-btn {
@@ -1457,12 +1295,15 @@ textarea.form-control {
   padding: 0 12px;
   font-size: 1.2rem;
   cursor: pointer;
+  height: 40px;
+  flex-shrink: 0;
 }
 
+/* ─── Emoji Picker ──────────────────────────────────────────── */
 .emoji-picker {
   position: absolute;
-  bottom: 70px;
-  right: 12px;
+  bottom: 52px;
+  right: 0;
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -1472,7 +1313,7 @@ textarea.form-control {
   gap: 8px;
   width: 220px;
   box-shadow: var(--shadow);
-  z-index: 100;
+  z-index: 200;
 }
 
 .emoji-picker.hidden {
@@ -1492,12 +1333,21 @@ textarea.form-control {
   background: var(--gold-dim);
 }
 
-/* Threaded replies */
+/* ─── Threaded replies ──────────────────────────────────────── */
 .message-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-top: 4px;
+}
+
+.message-bubble.sent .message-footer {
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.message-bubble.received .message-footer {
+  justify-content: flex-start;
 }
 
 .reply-btn {
@@ -1563,7 +1413,7 @@ textarea.form-control {
   width: 100%;
 }
 
-/* Message options button */
+/* ─── Message options button ────────────────────────────────── */
 .more-options-btn {
   background: none;
   border: none;
@@ -1574,61 +1424,133 @@ textarea.form-control {
   margin-left: 6px;
 }
 
-.message-bubble.sent .message-footer {
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-.message-bubble.received .message-footer {
-  justify-content: flex-start;
-}
-
 .message-text em {
   opacity: 0.7;
 }
 
-/* Ensure full viewport height and proper overflow */
-html,
-body {
-  height: 100%;
-  overflow: hidden;
+/* ─── Topic modal ───────────────────────────────────────────── */
+#topicsList .chip {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 12px 16px;
   margin: 0;
+  box-sizing: border-box;
+}
+
+#topicsList {
+  width: 100%;
   padding: 0;
 }
 
-#app {
-  height: 100%;
+/* ─── Utilities ─────────────────────────────────────────────── */
+.text-gold {
+  color: var(--gold);
+}
+
+.text-dim {
+  color: var(--text2);
+}
+
+.text-sm {
+  font-size: 0.8rem;
+}
+
+.text-xs {
+  font-size: 0.7rem;
+}
+
+.mt-4 {
+  margin-top: 4px;
+}
+
+.mt-8 {
+  margin-top: 8px;
+}
+
+.mt-12 {
+  margin-top: 12px;
+}
+
+.mt-16 {
+  margin-top: 16px;
+}
+
+.mb-8 {
+  margin-bottom: 8px;
+}
+
+.mb-12 {
+  margin-bottom: 12px;
+}
+
+.mb-16 {
+  margin-bottom: 16px;
+}
+
+.gap-8 {
+  gap: 8px;
+}
+
+.gap-12 {
+  gap: 12px;
+}
+
+.flex {
   display: flex;
+}
+
+.flex-col {
   flex-direction: column;
-  overflow: hidden;
 }
 
-/* Each page takes remaining space and scrolls independently */
-.page {
+.items-center {
+  align-items: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.flex-1 {
   flex: 1;
-  overflow-y: auto;
-  padding-bottom: var(--nav-h);
-  /* push content above fixed nav */
-  scroll-behavior: smooth;
 }
 
-/* Bottom navigation: fixed at bottom, always visible */
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: var(--nav-h);
-  background: var(--bg2);
-  border-top: 1px solid var(--border-dim);
-  display: flex;
-  align-items: stretch;
-  z-index: 1000;
-  backdrop-filter: blur(20px);
-  overflow-x: auto;
-  white-space: nowrap;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  gap: 4px;
-  padding: 0 8px;
+.font-bold {
+  font-weight: 700;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border-dim);
+  margin: 16px 0;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ─── Responsive ────────────────────────────────────────────── */
+@media (max-width: 380px) {
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .stat-card:last-child {
+    grid-column: span 2;
+  }
+
+  .app-logo {
+    max-width: 110px;
+  }
 }
