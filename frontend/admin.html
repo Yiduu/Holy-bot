@@ -1413,6 +1413,13 @@
             </nav>
 
             <div class="sidebar-footer">
+                <a href="index.html" class="nav-item"
+                    style="margin-bottom:10px;border-radius:var(--radius-sm);border:1px solid var(--border-dim)">
+                    <svg viewBox="0 0 24 24">
+                        <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                    Back to App
+                </a>
                 <div class="sidebar-user">
                     <div class="user-avatar">A</div>
                     <div>
@@ -1537,7 +1544,8 @@
                                     <circle cx="12" cy="12" r="10" />
                                     <line x1="12" y1="8" x2="12" y2="12" />
                                     <line x1="12" y1="16" x2="12.01" y2="16" />
-                                </svg></div>
+                                </svg>
+                            </div>
                             <div class="quick-btn-label">Open Tickets</div>
                             <div class="quick-btn-sub" id="qa-tix">Loading…</div>
                         </div>
@@ -1872,7 +1880,7 @@
         }
         function pager(id, page, pages, fn) {
             const c = document.getElementById(id);
-            if (!c || pages <= 1) { if (c) c.innerHTML = ''; return; }
+            if (!c || !pages || pages <= 1) { if (c) c.innerHTML = ''; return; }
             let h = `<button class="page-btn" onclick="${fn}(${page - 1})" ${page <= 1 ? 'disabled' : ''}>‹</button>`;
             for (let i = Math.max(1, page - 2); i <= Math.min(pages, page + 2); i++)
                 h += `<button class="page-btn${i === page ? ' active' : ''}" onclick="${fn}(${i})">${i}</button>`;
