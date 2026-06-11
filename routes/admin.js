@@ -34,7 +34,22 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       open_tickets: openTickets.count || 0,
     });
   });
+  // Add after the stats endpoint
+  router.get('/activity', async (req, res) => {
+    const { data } = await supabase.rpc('get_daily_active_users', { days: 7 });
+    res.json(data || []);
+  });
 
+  router.get('/users/:id/details', async (req, res) => {
+    const { id } = req.params;
+    const [user, messages, sessions, journal] = await Promise.all([
+      supabase.from('users').select('*').eq('telegram_id', id).single(),
+      supabase.from('messages').select('*').or(`from_id.eq.${id},to_id.eq.${id}`).limit(20),
+      supabase.from('video_sessions').select('*').eq('host_id', id),
+      supabase.from('journal_entries').select('*').eq('telegram_id', id)
+    ]);
+    res.json({ user: user.data, messages: messages.data, sessions: sessions.data, journal: journal.data });
+  });
   // GET /api/admin/users?page=1&search=&role=
   router.get('/users', async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
