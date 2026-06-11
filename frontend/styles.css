@@ -214,19 +214,17 @@ h3 {
 }
 
 /* ─── Bottom Nav ────────────────────────────────────────────── */
-/* ─── Bottom Nav ────────────────────────────────────────────── */
 .bottom-nav {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  width: 100%;
   height: var(--nav-h);
   background: var(--bg2);
   border-top: 1px solid var(--border-dim);
   display: flex;
   align-items: stretch;
-  z-index: 999; /* ensure above other elements */
+  z-index: 200;
   backdrop-filter: blur(20px);
   overflow-x: auto;
   overflow-y: hidden;
@@ -235,11 +233,6 @@ h3 {
   scrollbar-width: thin;
   gap: 4px;
   padding: 0 8px;
-}
-
-/* Ensure body has bottom padding so content not hidden behind nav */
-body {
-  padding-bottom: var(--nav-h);
 }
 
 .bottom-nav::-webkit-scrollbar {
