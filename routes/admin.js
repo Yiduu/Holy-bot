@@ -1,8 +1,6 @@
 'use strict';
 
 const express = require('express');
-// FIX: Moved require() calls to the top of the file (out of route handlers)
-// and corrected the relative path from routes/admin.js → bot.js at project root.
 
 module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
   const router = express.Router();
@@ -12,7 +10,7 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     await supabase.from('audit_logs').insert({ admin_id, action, target_id, target_type, details });
   }
 
-  // GET /api/admin/stats
+  // ==================== STATS ====================
   router.get('/stats', async (req, res) => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
 
@@ -34,23 +32,49 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       open_tickets: openTickets.count || 0,
     });
   });
-  // Add after the stats endpoint
+
+  // ==================== ACTIVITY CHART ====================
   router.get('/activity', async (req, res) => {
-    const { data } = await supabase.rpc('get_daily_active_users', { days: 7 });
-    res.json(data || []);
+    const { data, error } = await supabase.rpc('get_daily_active_users', { days: 7 });
+    if (error) return res.status(500).json({ error: error.message });
+    // Transform to { labels: [], counts: [] } for frontend
+    const labels = data.map(d => d.date);
+    const counts = data.map(d => d.active);
+    res.json({ labels, counts });
   });
 
-  router.get('/users/:id/details', async (req, res) => {
+  // ==================== USER DETAILS ====================
+  router.get('/users/:id', async (req, res) => {
     const { id } = req.params;
-    const [user, messages, sessions, journal] = await Promise.all([
-      supabase.from('users').select('*').eq('telegram_id', id).single(),
-      supabase.from('messages').select('*').or(`from_id.eq.${id},to_id.eq.${id}`).limit(20),
-      supabase.from('video_sessions').select('*').eq('host_id', id),
-      supabase.from('journal_entries').select('*').eq('telegram_id', id)
-    ]);
-    res.json({ user: user.data, messages: messages.data, sessions: sessions.data, journal: journal.data });
+    const { data, error } = await supabase.from('users').select('*').eq('telegram_id', id).single();
+    if (error) return res.status(404).json({ error: 'User not found' });
+    res.json(data);
   });
-  // GET /api/admin/users?page=1&search=&role=
+
+  router.get('/users/:id/messages', async (req, res) => {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .or(`from_id.eq.${id},to_id.eq.${id}`)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ messages: data || [] });
+  });
+
+  router.get('/users/:id/sessions', async (req, res) => {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('video_sessions')
+      .select('*')
+      .eq('host_id', id)
+      .order('created_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ sessions: data || [] });
+  });
+
+  // ==================== USERS LIST (paginated) ====================
   router.get('/users', async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = 25;
@@ -69,7 +93,7 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.json({ users: data || [], total: count || 0, page, pages: Math.ceil((count || 0) / limit) });
   });
 
-  // PATCH /api/admin/users/:id/role
+  // ==================== USER ACTIONS ====================
   router.patch('/users/:id/role', async (req, res) => {
     const admin_id = req.telegramUser.id;
     const telegram_id = parseInt(req.params.id);
@@ -88,7 +112,6 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.json({ success: true });
   });
 
-  // PATCH /api/admin/users/:id/ban
   router.patch('/users/:id/ban', async (req, res) => {
     const admin_id = req.telegramUser.id;
     const telegram_id = parseInt(req.params.id);
@@ -99,7 +122,6 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.json({ success: true });
   });
 
-  // DELETE /api/admin/users/:id/delete
   router.delete('/users/:id/delete', async (req, res) => {
     const admin_id = req.telegramUser.id;
     const telegram_id = parseInt(req.params.id);
@@ -114,35 +136,31 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.json({ success: true });
   });
 
-  // GET /api/admin/applications
+  // ==================== MENTOR APPLICATIONS ====================
   router.get('/applications', async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = 20;
     const offset = (page - 1) * limit;
-    const status = req.query.status || 'pending';
+    const status = req.query.status === 'all' ? null : (req.query.status || 'pending');
 
-    const { data, count, error } = await supabase
+    let query = supabase
       .from('mentor_applications')
-      .select('*, user:users(anonymous_id, sex, age_range, created_at)', { count: 'exact' })
-      .eq('status', status)
+      .select('*, user:users(anonymous_id, sex, age_range, created_at)', { count: 'exact' });
+
+    if (status) query = query.eq('status', status);
+
+    const { data, count, error } = await query
       .order('submitted_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (error) {
-      console.error('[Admin] Error fetching applications:', error);
-      return res.status(500).json({ error: error.message });
-    }
+    if (error) return res.status(500).json({ error: error.message });
 
-    if (!data?.length) {
-      console.log(`[Admin] No applications found for status: ${status}`);
-    }
     res.json({ applications: data || [], total: count || 0, page, pages: Math.ceil((count || 0) / limit) });
   });
 
-  // PATCH /api/admin/applications/:id
   router.patch('/applications/:id', async (req, res) => {
     const admin_id = req.telegramUser.id;
-    const { action, admin_note } = req.body; // 'approved' | 'rejected'
+    const { action, admin_note } = req.body;
     if (!['approved', 'rejected'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
 
     const { data: app, error: appErr } = await supabase
@@ -155,7 +173,6 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     if (appErr) return res.status(500).json({ error: appErr.message });
 
     if (action === 'approved') {
-      // Get the user's current sex
       const { data: currentUser } = await supabase
         .from('users')
         .select('sex')
@@ -163,7 +180,6 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
         .single();
 
       let updateData = { role: 'mentor' };
-      // If the application has a sex and it's different from the user's current sex, update it
       if (app.sex && currentUser?.sex !== app.sex) {
         updateData.sex = app.sex;
       }
@@ -172,7 +188,7 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       await supabase.from('mentors').upsert({ telegram_id: app.telegram_id }, { onConflict: 'telegram_id' });
       const { notifyMentorApproved } = require('../bot');
       await notifyMentorApproved(app.telegram_id);
-    } else if (action === 'rejected') {
+    } else {
       const { notifyMentorRejected } = require('../bot');
       await notifyMentorRejected(app.telegram_id);
     }
@@ -181,7 +197,7 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.json({ success: true, application: app });
   });
 
-  // GET /api/admin/messages?flagged=true
+  // ==================== MESSAGES ====================
   router.get('/messages', async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = 50;
@@ -190,12 +206,39 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     let query = supabase.from('messages').select('*', { count: 'exact' });
     if (req.query.flagged === 'true') query = query.eq('is_flagged', true);
 
-    const { data, count, error } = await query.order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+    const { data, count, error } = await query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
     if (error) return res.status(500).json({ error: error.message });
     res.json({ messages: data || [], total: count || 0, page, pages: Math.ceil((count || 0) / limit) });
   });
 
-  // GET /api/admin/tickets
+  router.patch('/messages/:id/unflag', async (req, res) => {
+    const admin_id = req.telegramUser.id;
+    const { id } = req.params;
+    const { error } = await supabase
+      .from('messages')
+      .update({ is_flagged: false })
+      .eq('id', id);
+    if (error) return res.status(500).json({ error: error.message });
+    await logAudit(admin_id, 'unflag_message', id, 'message');
+    res.json({ success: true });
+  });
+
+  router.delete('/messages/:id', async (req, res) => {
+    const admin_id = req.telegramUser.id;
+    const { id } = req.params;
+    const { error } = await supabase
+      .from('messages')
+      .delete()
+      .eq('id', id);
+    if (error) return res.status(500).json({ error: error.message });
+    await logAudit(admin_id, 'delete_message', id, 'message');
+    res.json({ success: true });
+  });
+
+  // ==================== SUPPORT TICKETS ====================
   router.get('/tickets', async (req, res) => {
     const { data, error } = await supabase
       .from('support_tickets')
@@ -206,7 +249,6 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.json(data || []);
   });
 
-  // PATCH /api/admin/tickets/:id
   router.patch('/tickets/:id', async (req, res) => {
     const admin_id = req.telegramUser.id;
     const { admin_reply, status } = req.body;
@@ -221,7 +263,7 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.json(data);
   });
 
-  // POST /api/admin/broadcast
+  // ==================== BROADCAST ====================
   router.post('/broadcast', async (req, res) => {
     const admin_id = req.telegramUser.id;
     const { message, role_filter } = req.body;
@@ -239,21 +281,24 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.json({ sent_to: users?.length || 0 });
   });
 
-  // GET /api/admin/audit-logs
+  // ==================== AUDIT LOGS ====================
   router.get('/audit-logs', async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = 50;
     const offset = (page - 1) * limit;
-    const { data, count, error } = await supabase
-      .from('audit_logs')
-      .select('*', { count: 'exact' })
+
+    let query = supabase.from('audit_logs').select('*', { count: 'exact' });
+    if (req.query.action) query = query.eq('action', req.query.action);
+
+    const { data, count, error } = await query
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
+
     if (error) return res.status(500).json({ error: error.message });
-    res.json({ logs: data || [], total: count || 0, page });
+    res.json({ logs: data || [], total: count || 0, page, pages: Math.ceil((count || 0) / limit) });
   });
 
-  // GET /api/admin/export/:table – CSV export
+  // ==================== EXPORT CSV ====================
   router.get('/export/:table', async (req, res) => {
     const allowed = ['users', 'messages', 'video_sessions', 'mentor_applications', 'support_tickets'];
     if (!allowed.includes(req.params.table)) return res.status(400).json({ error: 'Table not exportable' });
@@ -271,14 +316,17 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.send(csv);
   });
 
-  // PATCH /api/admin/mentors/:id/disqualify
+  // ==================== DISQUALIFY MENTOR ====================
   router.patch('/mentors/:id/disqualify', async (req, res) => {
     const admin_id = req.telegramUser.id;
     const telegram_id = parseInt(req.params.id);
 
     await supabase.from('users').update({ role: 'user' }).eq('telegram_id', telegram_id);
     await supabase.from('mentors').update({ is_active: false }).eq('telegram_id', telegram_id);
-    await supabase.from('mentorship_assignments').update({ is_active: false, ended_at: new Date().toISOString() }).eq('mentor_id', telegram_id).eq('is_active', true);
+    await supabase.from('mentorship_assignments')
+      .update({ is_active: false, ended_at: new Date().toISOString() })
+      .eq('mentor_id', telegram_id)
+      .eq('is_active', true);
 
     await logAudit(admin_id, 'disqualify_mentor', telegram_id, 'mentor');
     res.json({ success: true });
