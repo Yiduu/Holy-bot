@@ -2,428 +2,1742 @@
 <html lang="en" data-theme="dark">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Holy – Admin Console</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Holy Helper – Admin</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <style>
-        /* Additional admin-specific styles */
-        .admin-layout {
-            display: flex;
-            min-height: 100vh;
+        :root {
+            --gold: #C9A84C;
+            --gold-dim: rgba(201, 168, 76, 0.10);
+            --gold-hover: rgba(201, 168, 76, 0.18);
+            --accent: #7B8FF7;
+
+            --bg: #0E0F14;
+            --bg2: #13141A;
+            --bg3: #1A1B23;
+            --surface: #1F2029;
+            --surface2: #252630;
+
+            --border: rgba(255, 255, 255, 0.10);
+            --border-dim: rgba(255, 255, 255, 0.06);
+
+            --text: #F0EEE8;
+            --text2: #9C9A92;
+            --text3: #5C5A54;
+
+            --success: #4CAF82;
+            --warn: #E8A239;
+            --danger: #E05252;
+            --info: #5B9CF6;
+
+            --sidebar-w: 230px;
+            --radius: 10px;
+            --radius-sm: 7px;
+            --transition: 0.15s ease;
+            --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            --font-mono: "JetBrains Mono", "Fira Code", monospace;
         }
 
-        .admin-sidebar {
-            width: 260px;
+        [data-theme="light"] {
+            --bg: #F4F3EE;
+            --bg2: #ECEAE4;
+            --bg3: #E4E2DB;
+            --surface: #FFFFFF;
+            --surface2: #F8F7F3;
+            --border: rgba(0, 0, 0, 0.10);
+            --border-dim: rgba(0, 0, 0, 0.06);
+            --text: #1A1916;
+            --text2: #5A5850;
+            --text3: #9A9890;
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        html,
+        body {
+            height: 100%;
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 14px;
+            line-height: 1.5
+        }
+
+        button,
+        input,
+        select,
+        textarea {
+            font-family: inherit;
+            font-size: inherit;
+            color: inherit
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none
+        }
+
+        /* ── Layout ──────────────────────────────────────────────── */
+        .layout {
+            display: flex;
+            height: 100vh;
+            overflow: hidden
+        }
+
+        /* ── Sidebar ─────────────────────────────────────────────── */
+        .sidebar {
+            width: var(--sidebar-w);
+            flex-shrink: 0;
             background: var(--bg2);
             border-right: 1px solid var(--border-dim);
             display: flex;
             flex-direction: column;
             position: fixed;
-            height: 100vh;
-            overflow-y: auto;
-            transition: transform 0.2s;
-            z-index: 100;
-        }
-
-        .admin-sidebar.collapsed {
-            transform: translateX(-260px);
-        }
-
-        .sidebar-header {
-            padding: 24px 20px;
-            border-bottom: 1px solid var(--border-dim);
+            top: 0;
+            left: 0;
+            bottom: 0;
+            z-index: 200;
+            transition: transform 0.25s ease;
+            overflow: hidden;
         }
 
         .sidebar-logo {
-            font-family: var(--font-display);
-            font-size: 1.2rem;
-            color: var(--gold);
-            letter-spacing: 0.08em;
+            padding: 22px 18px 18px;
+            border-bottom: 1px solid var(--border-dim);
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
-        .sidebar-logo span {
-            font-size: 0.7rem;
+        .logo-mark {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #C9A84C 0%, #A07830 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .logo-text {
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: .01em
+        }
+
+        .logo-sub {
+            font-size: 10px;
             color: var(--text3);
-            display: block;
-            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            margin-top: 1px
         }
 
         .sidebar-nav {
             flex: 1;
-            padding: 16px 0;
+            padding: 10px 0;
+            overflow-y: auto
         }
 
-        .sidebar-item {
+        .nav-section {
+            padding: 12px 18px 4px;
+            font-size: 10px;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: .1em;
+        }
+
+        .nav-item {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 12px 20px;
+            gap: 9px;
+            padding: 9px 18px;
             cursor: pointer;
+            font-size: 13px;
             color: var(--text2);
-            transition: all 0.2s;
-            border-left: 3px solid transparent;
+            transition: all var(--transition);
+            border-left: 2px solid transparent;
+            position: relative;
         }
 
-        .sidebar-item:hover {
-            background: var(--surface);
-            color: var(--text);
-        }
-
-        .sidebar-item.active {
-            color: var(--gold);
-            border-left-color: var(--gold);
-            background: var(--gold-dim);
-        }
-
-        .sidebar-item svg {
-            width: 20px;
-            height: 20px;
+        .nav-item svg {
+            width: 16px;
+            height: 16px;
             stroke: currentColor;
             fill: none;
+            stroke-width: 2;
+            flex-shrink: 0
         }
 
-        .admin-main {
+        .nav-item:hover {
+            color: var(--text);
+            background: var(--surface)
+        }
+
+        .nav-item.active {
+            color: var(--gold);
+            border-left-color: var(--gold);
+            background: var(--gold-dim)
+        }
+
+        .nav-badge {
+            margin-left: auto;
+            padding: 1px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 700;
+            background: var(--danger);
+            color: #fff;
+        }
+
+        .nav-badge.gold {
+            background: var(--gold);
+            color: #1a1300
+        }
+
+        .sidebar-footer {
+            padding: 14px 18px;
+            border-top: 1px solid var(--border-dim)
+        }
+
+        .sidebar-user {
+            display: flex;
+            align-items: center;
+            gap: 9px
+        }
+
+        .user-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--gold-dim);
+            border: 1px solid var(--gold);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: var(--gold);
+            flex-shrink: 0
+        }
+
+        /* ── Main ────────────────────────────────────────────────── */
+        .main {
             flex: 1;
-            margin-left: 260px;
-            min-height: 100vh;
-            background: var(--bg);
+            margin-left: var(--sidebar-w);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden
         }
 
-        .admin-topbar {
+        /* ── Topbar ──────────────────────────────────────────────── */
+        .topbar {
+            height: 52px;
+            flex-shrink: 0;
+            background: var(--bg);
+            border-bottom: 1px solid var(--border-dim);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
             position: sticky;
             top: 0;
-            background: var(--bg2);
-            border-bottom: 1px solid var(--border-dim);
-            padding: 12px 24px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
             z-index: 50;
         }
 
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        .menu-btn {
+            display: none;
+            width: 32px;
+            height: 32px;
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .menu-btn svg {
+            width: 16px;
+            height: 16px;
+            stroke: var(--text2);
+            fill: none;
+            stroke-width: 2
+        }
+
         .topbar-title {
-            font-family: var(--font-display);
-            font-size: 1.2rem;
+            font-size: 15px;
+            font-weight: 600
         }
 
-        .admin-content {
-            padding: 24px;
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px
         }
 
+        /* ws status dot */
+        .ws-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 6px var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        .ws-dot.offline {
+            background: var(--danger);
+            box-shadow: 0 0 6px var(--danger)
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .5
+            }
+        }
+
+        /* ── Content ─────────────────────────────────────────────── */
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px
+        }
+
+        /* ── Panes ───────────────────────────────────────────────── */
+        .pane {
+            display: none;
+            animation: fadeIn .2s ease
+        }
+
+        .pane.active {
+            display: block
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(4px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+
+        /* ── Stat cards ──────────────────────────────────────────── */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 32px;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px
         }
 
         .stat-card {
             background: var(--surface);
             border: 1px solid var(--border-dim);
             border-radius: var(--radius);
-            padding: 20px;
+            padding: 16px;
+            position: relative;
+            overflow: hidden;
         }
 
-        .stat-value {
-            font-size: 2rem;
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--gold) 0%, transparent 100%);
+            opacity: 0;
+            transition: opacity var(--transition);
+        }
+
+        .stat-card:hover::before {
+            opacity: 1
+        }
+
+        .stat-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px
+        }
+
+        .stat-icon svg {
+            width: 16px;
+            height: 16px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2
+        }
+
+        .stat-icon.gold {
+            background: var(--gold-dim);
+            color: var(--gold)
+        }
+
+        .stat-icon.blue {
+            background: rgba(91, 156, 246, .12);
+            color: var(--info)
+        }
+
+        .stat-icon.green {
+            background: rgba(76, 175, 130, .12);
+            color: var(--success)
+        }
+
+        .stat-icon.red {
+            background: rgba(224, 82, 82, .12);
+            color: var(--danger)
+        }
+
+        .stat-icon.warn {
+            background: rgba(232, 162, 57, .12);
+            color: var(--warn)
+        }
+
+        .stat-num {
+            font-size: 26px;
             font-weight: 700;
-            color: var(--gold);
+            letter-spacing: -.02em;
+            color: var(--text)
         }
 
         .stat-label {
-            font-size: 0.75rem;
+            font-size: 11px;
             color: var(--text3);
             text-transform: uppercase;
-            margin-top: 4px;
+            letter-spacing: .07em;
+            margin-top: 2px
         }
 
-        .section-header {
+        .stat-sub {
+            font-size: 11px;
+            color: var(--text2);
+            margin-top: 4px
+        }
+
+        .stat-change {
+            font-size: 11px;
+            margin-top: 4px
+        }
+
+        .stat-change.up {
+            color: var(--success)
+        }
+
+        .stat-change.dn {
+            color: var(--danger)
+        }
+
+        /* ── Chart card ──────────────────────────────────────────── */
+        .chart-card {
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            margin-bottom: 20px;
+        }
+
+        .chart-header {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            margin: 24px 0 16px;
+            justify-content: space-between;
+            margin-bottom: 14px
+        }
+
+        .chart-title {
+            font-size: 13px;
+            font-weight: 600
+        }
+
+        /* ── Section header ──────────────────────────────────────── */
+        .section-hdr {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+            gap: 8px
         }
 
         .section-title {
-            font-family: var(--font-display);
-            font-size: 1rem;
-            color: var(--gold);
+            font-size: 14px;
+            font-weight: 600
         }
 
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
+        /* ── Toolbar ─────────────────────────────────────────────── */
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+            flex-wrap: wrap
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 160px;
+            padding: 7px 12px;
+            background: var(--bg3);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            transition: border-color var(--transition);
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: var(--gold)
+        }
+
+        .filter-select {
+            padding: 7px 12px;
+            background: var(--bg3);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--gold)
+        }
+
+        option {
+            background: var(--bg3)
+        }
+
+        /* ── Tables ──────────────────────────────────────────────── */
+        .table-wrap {
             background: var(--surface);
+            border: 1px solid var(--border-dim);
             border-radius: var(--radius);
             overflow: hidden;
         }
 
-        .data-table th,
-        .data-table td {
-            padding: 12px 16px;
-            text-align: left;
-            border-bottom: 1px solid var(--border-dim);
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12.5px
         }
 
-        .data-table th {
+        thead th {
             background: var(--bg3);
-            font-weight: 600;
-            color: var(--gold);
+            padding: 9px 12px;
+            text-align: left;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: var(--text3);
+            border-bottom: 1px solid var(--border-dim);
+            white-space: nowrap;
         }
 
-        .status-badge {
+        tbody tr {
+            border-bottom: 1px solid var(--border-dim);
+            transition: background var(--transition)
+        }
+
+        tbody tr:last-child {
+            border-bottom: none
+        }
+
+        tbody tr:hover {
+            background: var(--surface2)
+        }
+
+        tbody td {
+            padding: 9px 12px;
+            color: var(--text2);
+            vertical-align: middle
+        }
+
+        tbody td:first-child {
+            color: var(--text)
+        }
+
+        /* ── Buttons ─────────────────────────────────────────────── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: var(--radius-sm);
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all var(--transition);
+            white-space: nowrap;
+        }
+
+        .btn svg {
+            width: 14px;
+            height: 14px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2
+        }
+
+        .btn-primary {
+            background: var(--gold);
+            color: #1a1200
+        }
+
+        .btn-primary:hover {
+            background: #D4AF55;
+            transform: translateY(-1px)
+        }
+
+        .btn-ghost {
+            background: var(--surface2);
+            color: var(--text2);
+            border: 1px solid var(--border-dim)
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--border);
+            color: var(--text)
+        }
+
+        .btn-outline {
+            background: none;
+            color: var(--text2);
+            border: 1px solid var(--border)
+        }
+
+        .btn-outline:hover {
+            color: var(--text);
+            border-color: var(--border-dim)
+        }
+
+        .btn-danger {
+            background: rgba(224, 82, 82, .15);
+            color: var(--danger);
+            border: 1px solid rgba(224, 82, 82, .2)
+        }
+
+        .btn-danger:hover {
+            background: rgba(224, 82, 82, .25)
+        }
+
+        .btn-success {
+            background: rgba(76, 175, 130, .15);
+            color: var(--success);
+            border: 1px solid rgba(76, 175, 130, .2)
+        }
+
+        .btn-success:hover {
+            background: rgba(76, 175, 130, .25)
+        }
+
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 11.5px
+        }
+
+        .btn-icon {
+            padding: 6px;
+            border-radius: var(--radius-sm)
+        }
+
+        .btn-full {
+            width: 100%;
+            justify-content: center
+        }
+
+        .btn:disabled {
+            opacity: .4;
+            cursor: not-allowed;
+            transform: none
+        }
+
+        /* ── Chips ───────────────────────────────────────────────── */
+        .chip {
             display: inline-block;
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 10.5px;
             font-weight: 600;
+            letter-spacing: .03em;
         }
 
-        .status-active {
-            background: var(--success);
-            color: #fff;
+        .chip-gold {
+            background: var(--gold-dim);
+            color: var(--gold);
+            border: 1px solid rgba(201, 168, 76, .25)
         }
 
-        .status-banned {
-            background: var(--danger);
-            color: #fff;
+        .chip-blue {
+            background: rgba(91, 156, 246, .12);
+            color: var(--info);
+            border: 1px solid rgba(91, 156, 246, .2)
         }
 
-        .status-pending {
-            background: var(--warn);
-            color: #000;
+        .chip-green {
+            background: rgba(76, 175, 130, .12);
+            color: var(--success);
+            border: 1px solid rgba(76, 175, 130, .2)
         }
 
+        .chip-red {
+            background: rgba(224, 82, 82, .12);
+            color: var(--danger);
+            border: 1px solid rgba(224, 82, 82, .2)
+        }
+
+        .chip-gray {
+            background: var(--surface2);
+            color: var(--text2);
+            border: 1px solid var(--border-dim)
+        }
+
+        /* ── Pagination ──────────────────────────────────────────── */
         .pagination {
             display: flex;
-            gap: 8px;
+            gap: 5px;
             justify-content: center;
-            margin-top: 20px;
+            margin-top: 14px;
+            flex-wrap: wrap
         }
 
-        .modal {
+        .page-btn {
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            color: var(--text2);
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+
+        .page-btn:hover {
+            border-color: var(--border);
+            color: var(--text)
+        }
+
+        .page-btn.active {
+            background: var(--gold-dim);
+            border-color: rgba(201, 168, 76, .3);
+            color: var(--gold)
+        }
+
+        .page-btn:disabled {
+            opacity: .3;
+            cursor: not-allowed
+        }
+
+        /* ── Application cards ───────────────────────────────────── */
+        .app-card {
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius);
+            padding: 18px;
+            margin-bottom: 12px;
+            transition: border-color var(--transition);
+        }
+
+        .app-card:hover {
+            border-color: var(--border)
+        }
+
+        .app-card-hdr {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            gap: 10px
+        }
+
+        .app-id {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--gold)
+        }
+
+        .app-meta {
+            font-size: 11px;
+            color: var(--text3);
+            margin-top: 3px
+        }
+
+        .app-q {
+            margin-bottom: 10px
+        }
+
+        .app-q-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            color: var(--text3);
+            margin-bottom: 3px
+        }
+
+        .app-q-ans {
+            font-size: 12.5px;
+            color: var(--text2);
+            line-height: 1.6
+        }
+
+        .app-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 14px;
+            flex-wrap: wrap
+        }
+
+        /* ── Ticket cards ────────────────────────────────────────── */
+        .ticket-card {
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 10px;
+        }
+
+        .ticket-hdr {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 8px
+        }
+
+        .ticket-subject {
+            font-size: 13px;
+            font-weight: 600
+        }
+
+        .ticket-meta {
+            font-size: 11px;
+            color: var(--text3);
+            margin-top: 2px
+        }
+
+        .ticket-body {
+            font-size: 12.5px;
+            color: var(--text2);
+            line-height: 1.6;
+            margin-bottom: 12px
+        }
+
+        .admin-reply-preview {
+            background: var(--bg3);
+            border-left: 3px solid var(--gold);
+            padding: 10px 12px;
+            border-radius: 0 6px 6px 0;
+            margin-bottom: 12px;
+            font-size: 12px;
+            color: var(--text2);
+        }
+
+        .admin-reply-preview strong {
+            color: var(--gold);
+            display: block;
+            font-size: 11px;
+            margin-bottom: 3px
+        }
+
+        .ticket-reply {
+            display: flex;
+            flex-direction: column;
+            gap: 8px
+        }
+
+        /* ── Inline textarea ─────────────────────────────────────── */
+        .inline-area {
+            padding: 8px 10px;
+            background: var(--bg3);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 12.5px;
+            width: 100%;
+            resize: vertical;
+            min-height: 56px;
+            transition: border-color var(--transition);
+        }
+
+        .inline-area:focus {
+            outline: none;
+            border-color: var(--gold)
+        }
+
+        /* ── Broadcast ───────────────────────────────────────────── */
+        .broadcast-wrap {
+            max-width: 580px
+        }
+
+        .char-counter {
+            text-align: right;
+            font-size: 11px;
+            color: var(--text3);
+            margin-top: 4px
+        }
+
+        .broadcast-preview {
+            background: var(--bg3);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            margin-top: 12px;
+            font-size: 12.5px;
+            color: var(--text2);
+            line-height: 1.6;
+        }
+
+        .preview-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            color: var(--text3);
+            margin-bottom: 6px
+        }
+
+        /* ── Form elements ───────────────────────────────────────── */
+        .form-group {
+            margin-bottom: 14px
+        }
+
+        .form-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: var(--text3);
+            display: block;
+            margin-bottom: 5px
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 8px 11px;
+            background: var(--bg3);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            transition: border-color var(--transition);
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--gold)
+        }
+
+        textarea.form-control {
+            resize: vertical;
+            min-height: 70px
+        }
+
+        /* ── Toggle ──────────────────────────────────────────────── */
+        .toggle-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 12.5px
+        }
+
+        .toggle {
+            width: 36px;
+            height: 20px;
+            background: var(--surface2);
+            border-radius: 10px;
+            position: relative;
+            cursor: pointer;
+            transition: background .2s;
+            border: 1px solid var(--border-dim);
+        }
+
+        .toggle::after {
+            content: '';
+            position: absolute;
+            left: 3px;
+            top: 3px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--text3);
+            transition: all .2s;
+        }
+
+        .toggle.on {
+            background: var(--gold);
+            border-color: var(--gold)
+        }
+
+        .toggle.on::after {
+            left: 19px;
+            background: #1a1200
+        }
+
+        /* ── Modal ───────────────────────────────────────────────── */
+        .modal-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
+            inset: 0;
+            background: rgba(0, 0, 0, .6);
+            z-index: 500;
             display: none;
             align-items: center;
             justify-content: center;
-            z-index: 1000;
+            padding: 20px;
+            backdrop-filter: blur(4px);
         }
 
-        .modal.active {
-            display: flex;
+        .modal-overlay.open {
+            display: flex
         }
 
-        .modal-content {
+        .modal {
             background: var(--bg2);
-            border-radius: var(--radius);
-            max-width: 500px;
-            width: 90%;
+            border: 1px solid var(--border);
+            border-radius: 14px;
             padding: 24px;
+            width: 100%;
+            max-width: 440px;
+            max-height: 90vh;
+            overflow-y: auto;
         }
 
-        @media (max-width: 768px) {
-            .admin-sidebar {
-                transform: translateX(-260px);
+        .modal-title {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 18px
+        }
+
+        /* ── User detail modal ───────────────────────────────────── */
+        .detail-tabs {
+            display: flex;
+            gap: 2px;
+            margin-bottom: 16px;
+            background: var(--bg3);
+            border-radius: 8px;
+            padding: 3px
+        }
+
+        .detail-tab {
+            flex: 1;
+            padding: 6px;
+            text-align: center;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text2);
+            transition: all var(--transition)
+        }
+
+        .detail-tab.active {
+            background: var(--surface);
+            color: var(--text);
+            font-weight: 600
+        }
+
+        .detail-pane {
+            display: none
+        }
+
+        .detail-pane.active {
+            display: block
+        }
+
+        /* ── Audit ───────────────────────────────────────────────── */
+        .audit-action {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            background: rgba(91, 156, 246, .1);
+            color: var(--info);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* ── Quick actions ───────────────────────────────────────── */
+        .quick-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px
+        }
+
+        .quick-btn {
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius);
+            padding: 14px;
+            cursor: pointer;
+            transition: all var(--transition);
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .quick-btn:hover {
+            border-color: var(--border);
+            transform: translateY(-2px)
+        }
+
+        .quick-btn-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 7px;
+            display: flex;
+            align-items: center;
+            justify-content: center
+        }
+
+        .quick-btn-icon svg {
+            width: 15px;
+            height: 15px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2
+        }
+
+        .quick-btn-label {
+            font-size: 12px;
+            font-weight: 600
+        }
+
+        .quick-btn-sub {
+            font-size: 11px;
+            color: var(--text3)
+        }
+
+        /* ── Empty state ─────────────────────────────────────────── */
+        .empty {
+            padding: 40px 20px;
+            text-align: center;
+            color: var(--text3);
+            font-size: 13px
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text3);
+            font-size: 13px
+        }
+
+        /* ── Theme toggle ────────────────────────────────────────── */
+        .theme-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-sm);
+            background: var(--surface2);
+            border: 1px solid var(--border-dim);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all var(--transition);
+        }
+
+        .theme-btn:hover {
+            border-color: var(--border)
+        }
+
+        /* ── Refresh btn ─────────────────────────────────────────── */
+        .refresh-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-sm);
+            background: var(--surface2);
+            border: 1px solid var(--border-dim);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition);
+        }
+
+        .refresh-btn svg {
+            width: 15px;
+            height: 15px;
+            fill: none;
+            stroke: var(--text2);
+            stroke-width: 2
+        }
+
+        .refresh-btn:hover {
+            border-color: var(--border)
+        }
+
+        .refresh-btn.spinning svg {
+            animation: spin .6s linear infinite
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        /* ── Overlay dim ─────────────────────────────────────────── */
+        .sidebar-dim {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .5);
+            z-index: 199;
+        }
+
+        /* ── Export buttons ──────────────────────────────────────── */
+        .export-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-top: 10px
+        }
+
+        /* ── Divider ─────────────────────────────────────────────── */
+        .divider {
+            height: 1px;
+            background: var(--border-dim);
+            margin: 18px 0
+        }
+
+        /* ── Broadcast result ────────────────────────────────────── */
+        #broadcastResult {
+            margin-top: 10px;
+            font-size: 12.5px;
+            color: var(--success)
+        }
+
+        /* ── Topics table ────────────────────────────────────────── */
+        code.slug {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            background: var(--bg3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: var(--accent)
+        }
+
+        /* ── Toast ───────────────────────────────────────────────── */
+        .toast {
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 9px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 9999;
+            animation: fadeIn .2s ease;
+            pointer-events: none;
+            white-space: nowrap;
+            max-width: 90vw;
+            text-align: center;
+        }
+
+        /* ── Responsive ──────────────────────────────────────────── */
+        @media(max-width:768px) {
+            .sidebar {
+                transform: translateX(-100%)
             }
 
-            .admin-sidebar.open {
-                transform: none;
+            .sidebar.open {
+                transform: none
             }
 
-            .admin-main {
-                margin-left: 0;
+            .main {
+                margin-left: 0
             }
 
-            .sidebar-toggle {
-                display: block;
+            .menu-btn {
+                display: flex
             }
+
+            .content {
+                padding: 14px
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr)
+            }
+        }
+
+        /* ── Scrollbar ───────────────────────────────────────────── */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--border-dim)
+        }
+
+        /* ── RT badge pulse ──────────────────────────────────────── */
+        .live-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 10.5px;
+            background: rgba(76, 175, 130, .12);
+            color: var(--success);
+            border: 1px solid rgba(76, 175, 130, .2);
         }
     </style>
 </head>
 
 <body>
-    <div class="admin-layout">
-        <aside class="admin-sidebar" id="adminSidebar">
-            <div class="sidebar-header">
-                <div class="sidebar-logo">✧ HOLY ✧<span>Admin Console</span></div>
+
+    <div class="sidebar-dim" id="sidebarDim" onclick="closeSidebar()"></div>
+
+    <div class="layout">
+
+        <!-- ── Sidebar ──────────────────────────────────────────── -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-logo">
+                <div class="logo-mark">✦</div>
+                <div>
+                    <div class="logo-text">Holy Helper</div>
+                    <div class="logo-sub">Admin Panel</div>
+                </div>
             </div>
+
             <nav class="sidebar-nav">
-                <div class="sidebar-item active" data-tab="dashboard">📊 Dashboard</div>
-                <div class="sidebar-item" data-tab="users">👥 Users</div>
-                <div class="sidebar-item" data-tab="applications">📋 Applications</div>
-                <div class="sidebar-item" data-tab="messages">💬 Messages</div>
-                <div class="sidebar-item" data-tab="tickets">🎫 Support</div>
-                <div class="sidebar-item" data-tab="topics">🏷️ Topics</div>
-                <div class="sidebar-item" data-tab="broadcast">📢 Broadcast</div>
-                <div class="sidebar-item" data-tab="audit">📜 Audit Log</div>
+                <div class="nav-section">Main</div>
+                <div class="nav-item active" onclick="showTab('overview')" id="nav-overview">
+                    <svg viewBox="0 0 24 24">
+                        <rect x="3" y="3" width="7" height="7" rx="1" />
+                        <rect x="14" y="3" width="7" height="7" rx="1" />
+                        <rect x="14" y="14" width="7" height="7" rx="1" />
+                        <rect x="3" y="14" width="7" height="7" rx="1" />
+                    </svg>
+                    Overview
+                </div>
+
+                <div class="nav-section">Management</div>
+                <div class="nav-item" onclick="showTab('users')" id="nav-users">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    Users
+                </div>
+                <div class="nav-item" onclick="showTab('applications')" id="nav-applications">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                    Applications
+                    <span id="pendingBadge" class="nav-badge gold" style="display:none">0</span>
+                </div>
+                <div class="nav-item" onclick="showTab('messages')" id="nav-messages">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                    Messages
+                </div>
+                <div class="nav-item" onclick="showTab('tickets')" id="nav-tickets">
+                    <svg viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    Support Tickets
+                    <span id="ticketsBadge" class="nav-badge" style="display:none">0</span>
+                </div>
+                <div class="nav-item" onclick="showTab('topics')" id="nav-topics">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                        <path d="M2 17l10 5 10-5" />
+                        <path d="M2 12l10 5 10-5" />
+                    </svg>
+                    Topics
+                </div>
+
+                <div class="nav-section">Tools</div>
+                <div class="nav-item" onclick="showTab('broadcast')" id="nav-broadcast">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M22 2L11 13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    </svg>
+                    Broadcast
+                </div>
+                <div class="nav-item" onclick="showTab('audit')" id="nav-audit">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="9" y1="15" x2="15" y2="15" />
+                    </svg>
+                    Audit Log
+                </div>
             </nav>
+
+            <div class="sidebar-footer">
+                <div class="sidebar-user">
+                    <div class="user-avatar">A</div>
+                    <div>
+                        <div style="font-size:12px;font-weight:600">Admin</div>
+                        <div style="font-size:11px;color:var(--text3)">Super Admin</div>
+                    </div>
+                </div>
+            </div>
         </aside>
 
-        <main class="admin-main">
-            <div class="admin-topbar">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
-                    <span class="topbar-title" id="topbarTitle">Dashboard</span>
+        <!-- ── Main ──────────────────────────────────────────────── -->
+        <main class="main">
+            <div class="topbar">
+                <div class="topbar-left">
+                    <button class="menu-btn" onclick="toggleSidebar()">
+                        <svg viewBox="0 0 24 24">
+                            <line x1="3" y1="12" x2="21" y2="12" />
+                            <line x1="3" y1="6" x2="21" y2="6" />
+                            <line x1="3" y1="18" x2="21" y2="18" />
+                        </svg>
+                    </button>
+                    <span class="topbar-title" id="topbarTitle">Overview</span>
                 </div>
-                <div>
-                    <button class="btn btn-sm btn-outline" onclick="refreshData()">⟳ Refresh</button>
-                    <button class="theme-btn" onclick="toggleTheme()">🌓</button>
+                <div class="topbar-right">
+                    <div class="live-badge" id="wsStatus">
+                        <div class="ws-dot" id="wsDot"></div>
+                        <span id="wsLabel">Live</span>
+                    </div>
+                    <button class="refresh-btn" id="refreshBtn" onclick="refreshCurrent()" title="Refresh">
+                        <svg viewBox="0 0 24 24">
+                            <polyline points="23 4 23 10 17 10" />
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                        </svg>
+                    </button>
+                    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
                 </div>
             </div>
-            <div class="admin-content" id="adminContent">
-                <!-- Dashboard Tab -->
-                <div id="tab-dashboard" class="tab-content active">
+
+            <div class="content">
+
+                <!-- ── Overview ─────────────────────────────────────── -->
+                <div class="pane active" id="pane-overview">
                     <div class="stats-grid" id="statsGrid">
                         <div class="stat-card">
-                            <div class="stat-value" id="statUsers">—</div>
-                            <div class="stat-label">Total Users</div>
+                            <div class="stat-icon blue"><svg viewBox="0 0 24 24">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                    <circle cx="9" cy="7" r="4" />
+                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                                </svg></div>
+                            <div class="stat-num" id="st-users">–</div>
+                            <div class="stat-label">Total Members</div>
+                            <div class="stat-sub" id="st-new">0 new today</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-value" id="statMentors">—</div>
-                            <div class="stat-label">Mentors</div>
+                            <div class="stat-icon gold"><svg viewBox="0 0 24 24">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                </svg></div>
+                            <div class="stat-num" id="st-mentors">–</div>
+                            <div class="stat-label">Active Mentors</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-value" id="statPending">—</div>
+                            <div class="stat-icon warn"><svg viewBox="0 0 24 24">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                </svg></div>
+                            <div class="stat-num" id="st-pending">–</div>
                             <div class="stat-label">Pending Apps</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-value" id="statFlagged">—</div>
-                            <div class="stat-label">Flagged Msgs</div>
+                            <div class="stat-icon red"><svg viewBox="0 0 24 24">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                                </svg></div>
+                            <div class="stat-num" id="st-flagged">–</div>
+                            <div class="stat-label">Flagged Messages</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-value" id="statTickets">—</div>
+                            <div class="stat-icon green"><svg viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="12" y1="8" x2="12" y2="12" />
+                                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                                </svg></div>
+                            <div class="stat-num" id="st-tickets">–</div>
                             <div class="stat-label">Open Tickets</div>
                         </div>
                     </div>
-                    <canvas id="activityChart" height="200" style="max-height: 300px;"></canvas>
+
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <div class="chart-title">User Growth – Last 7 Days</div>
+                            <div class="live-badge">
+                                <div class="ws-dot"></div> Live
+                            </div>
+                        </div>
+                        <canvas id="growthChart" height="80"></canvas>
+                    </div>
+
+                    <div class="section-hdr">
+                        <div class="section-title">Quick Actions</div>
+                    </div>
+                    <div class="quick-grid">
+                        <div class="quick-btn" onclick="showTab('applications')">
+                            <div class="quick-btn-icon" style="background:var(--gold-dim);color:var(--gold)"><svg
+                                    viewBox="0 0 24 24">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                    <polyline points="14 2 14 8 20 8" />
+                                </svg></div>
+                            <div class="quick-btn-label">Review Applications</div>
+                            <div class="quick-btn-sub" id="qa-apps">Loading…</div>
+                        </div>
+                        <div class="quick-btn" onclick="showTab('messages')">
+                            <div class="quick-btn-icon" style="background:rgba(224,82,82,.12);color:var(--danger)"><svg
+                                    viewBox="0 0 24 24">
+                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                                </svg></div>
+                            <div class="quick-btn-label">Flagged Messages</div>
+                            <div class="quick-btn-sub" id="qa-msgs">Loading…</div>
+                        </div>
+                        <div class="quick-btn" onclick="showTab('tickets')">
+                            <div class="quick-btn-icon" style="background:rgba(76,175,130,.12);color:var(--success)">
+                                <svg viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="12" y1="8" x2="12" y2="12" />
+                                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                                </svg></div>
+                            <div class="quick-btn-label">Open Tickets</div>
+                            <div class="quick-btn-sub" id="qa-tix">Loading…</div>
+                        </div>
+                        <div class="quick-btn" onclick="showTab('broadcast')">
+                            <div class="quick-btn-icon" style="background:rgba(91,156,246,.12);color:var(--info)"><svg
+                                    viewBox="0 0 24 24">
+                                    <path d="M22 2L11 13" />
+                                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                </svg></div>
+                            <div class="quick-btn-label">Send Broadcast</div>
+                            <div class="quick-btn-sub">Reach all members</div>
+                        </div>
+                    </div>
+
+                    <div class="divider"></div>
+                    <div class="section-hdr">
+                        <div class="section-title">Data Export</div>
+                    </div>
+                    <div class="export-row">
+                        <button class="btn btn-ghost btn-sm" onclick="exportTable('users')">↓ Users CSV</button>
+                        <button class="btn btn-ghost btn-sm" onclick="exportTable('messages')">↓ Messages CSV</button>
+                        <button class="btn btn-ghost btn-sm" onclick="exportTable('video_sessions')">↓ Sessions
+                            CSV</button>
+                        <button class="btn btn-ghost btn-sm" onclick="exportTable('mentor_applications')">↓ Applications
+                            CSV</button>
+                        <button class="btn btn-ghost btn-sm" onclick="exportTable('support_tickets')">↓ Tickets
+                            CSV</button>
+                    </div>
                 </div>
 
-                <!-- Users Tab -->
-                <div id="tab-users" class="tab-content" style="display:none">
-                    <div class="section-header">
-                        <div class="section-title">User Management</div><input type="text" id="userSearch"
-                            placeholder="Search by anonymous ID..." class="form-control" style="width:200px">
+                <!-- ── Users ─────────────────────────────────────────── -->
+                <div class="pane" id="pane-users">
+                    <div class="toolbar">
+                        <input class="search-box" id="userSearch" placeholder="Search by anonymous ID or Telegram ID…"
+                            oninput="debounceUsers()" />
+                        <select class="filter-select" id="userRoleFilter" onchange="loadUsers(1)">
+                            <option value="">All Roles</option>
+                            <option value="user">Users</option>
+                            <option value="mentor">Mentors</option>
+                        </select>
                     </div>
-                    <div class="data-table-wrap">
-                        <table class="data-table" id="usersTable">
+                    <div class="table-wrap">
+                        <table>
                             <thead>
                                 <tr>
-                                    <th>ID</th>
-                                    <th>Anonymous</th>
+                                    <th>Anonymous ID</th>
                                     <th>Role</th>
                                     <th>Sex</th>
                                     <th>Age</th>
+                                    <th>Joined</th>
                                     <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
-                            <tbody id="usersTableBody">
+                            <tbody id="usersBody">
                                 <tr>
-                                    <td colspan="7">Loading...</td>
+                                    <td colspan="7" class="loading">Loading…</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
-                    <div class="pagination" id="usersPagination"></div>
+                    <div class="pagination" id="usersPager"></div>
                 </div>
 
-                <!-- Applications Tab -->
-                <div id="tab-applications" class="tab-content" style="display:none">
-                    <div class="section-header">
-                        <div class="section-title">Mentor Applications</div><select id="appStatusFilter"
-                            class="form-control" style="width:150px">
+                <!-- ── Applications ──────────────────────────────────── -->
+                <div class="pane" id="pane-applications">
+                    <div class="toolbar">
+                        <select class="filter-select" id="appFilter" onchange="loadApps(1)">
                             <option value="pending">Pending</option>
                             <option value="approved">Approved</option>
                             <option value="rejected">Rejected</option>
+                            <option value="">All</option>
                         </select>
                     </div>
-                    <div id="applicationsList"></div>
-                    <div class="pagination" id="appsPagination"></div>
+                    <div id="appsContainer">
+                        <div class="loading">Loading…</div>
+                    </div>
+                    <div class="pagination" id="appsPager"></div>
                 </div>
 
-                <!-- Messages Tab -->
-                <div id="tab-messages" class="tab-content" style="display:none">
-                    <div class="section-header">
-                        <div class="section-title">Flagged Messages</div><label><input type="checkbox"
-                                id="showFlaggedOnly" checked> Show flagged only</label>
+                <!-- ── Messages ──────────────────────────────────────── -->
+                <div class="pane" id="pane-messages">
+                    <div class="toolbar">
+                        <label
+                            style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text2);cursor:pointer">
+                            <input type="checkbox" id="flaggedOnly" onchange="loadMessages(1)" checked />
+                            Show flagged messages only
+                        </label>
                     </div>
-                    <div class="data-table-wrap">
-                        <table class="data-table" id="messagesTable">
+                    <div class="table-wrap">
+                        <table>
                             <thead>
                                 <tr>
                                     <th>From</th>
                                     <th>To</th>
                                     <th>Content</th>
-                                    <th>Time</th>
-                                    <th>Action</th>
+                                    <th>Flag</th>
+                                    <th>Sent</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
-                            <tbody id="messagesTableBody"></tbody>
+                            <tbody id="msgsBody">
+                                <tr>
+                                    <td colspan="6" class="loading">Loading…</td>
+                                </tr>
+                            </tbody>
                         </table>
                     </div>
-                    <div class="pagination" id="msgPagination"></div>
+                    <div class="pagination" id="msgsPager"></div>
                 </div>
 
-                <!-- Tickets Tab -->
-                <div id="tab-tickets" class="tab-content" style="display:none">
-                    <div class="section-header">
-                        <div class="section-title">Support Tickets</div>
+                <!-- ── Tickets ────────────────────────────────────────── -->
+                <div class="pane" id="pane-tickets">
+                    <div id="ticketsContainer">
+                        <div class="loading">Loading…</div>
                     </div>
-                    <div id="ticketsList"></div>
                 </div>
 
-                <!-- Topics Tab -->
-                <div id="tab-topics" class="tab-content" style="display:none">
-                    <div class="section-header">
-                        <div class="section-title">Manage Topics</div><button class="btn btn-primary btn-sm"
-                            onclick="openTopicModal()">+ Add Topic</button>
+                <!-- ── Topics ─────────────────────────────────────────── -->
+                <div class="pane" id="pane-topics">
+                    <div class="section-hdr">
+                        <div class="section-title">Counseling Topics</div>
+                        <button class="btn btn-primary btn-sm" onclick="openTopicModal()">
+                            <svg viewBox="0 0 24 24">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                            Add Topic
+                        </button>
                     </div>
-                    <div class="data-table-wrap">
-                        <table class="data-table" id="topicsTable">
+                    <div class="table-wrap">
+                        <table>
                             <thead>
                                 <tr>
                                     <th>Name</th>
                                     <th>Slug</th>
-                                    <th>Active</th>
+                                    <th>Description</th>
+                                    <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
-                            <tbody id="topicsTableBody"></tbody>
+                            <tbody id="topicsBody">
+                                <tr>
+                                    <td colspan="5" class="loading">Loading…</td>
+                                </tr>
+                            </tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- Broadcast Tab -->
-                <div id="tab-broadcast" class="tab-content" style="display:none">
-                    <div class="section-header">
-                        <div class="section-title">Send Broadcast</div>
-                    </div>
-                    <div class="card"><textarea id="broadcastMsg" rows="5" placeholder="Type your message here..."
-                            class="form-control"></textarea><select id="broadcastRole" class="form-control mt-8">
-                            <option value="">All Users</option>
-                            <option value="user">Users Only</option>
-                            <option value="mentor">Mentors Only</option>
-                        </select><button class="btn btn-primary mt-8" onclick="sendBroadcast()">Send Broadcast</button>
-                        <div id="broadcastResult" class="mt-8 text-success"></div>
+                <!-- ── Broadcast ─────────────────────────────────────── -->
+                <div class="pane" id="pane-broadcast">
+                    <div class="broadcast-wrap">
+                        <div class="form-group">
+                            <label class="form-label">Target Audience</label>
+                            <select id="broadcastRole" class="form-control">
+                                <option value="">All Members</option>
+                                <option value="user">Users Only</option>
+                                <option value="mentor">Mentors Only</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Message</label>
+                            <textarea id="broadcastMsg" class="form-control" rows="6"
+                                placeholder="Write your announcement…" maxlength="1000"
+                                oninput="updateBroadcastPreview()"></textarea>
+                            <div class="char-counter"><span id="broadcastLen">0</span>/1000</div>
+                        </div>
+                        <div id="broadcastPreviewWrap" style="display:none">
+                            <div class="preview-label">Preview</div>
+                            <div class="broadcast-preview" id="broadcastPreview"></div>
+                        </div>
+                        <div style="margin-top:14px">
+                            <button class="btn btn-primary" onclick="sendBroadcast()">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M22 2L11 13" />
+                                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                </svg>
+                                Send Broadcast
+                            </button>
+                        </div>
+                        <div id="broadcastResult"></div>
                     </div>
                 </div>
 
-                <!-- Audit Tab -->
-                <div id="tab-audit" class="tab-content" style="display:none">
-                    <div class="section-header">
-                        <div class="section-title">Admin Audit Log</div>
+                <!-- ── Audit ──────────────────────────────────────────── -->
+                <div class="pane" id="pane-audit">
+                    <div class="toolbar">
+                        <select class="filter-select" id="auditFilter" onchange="loadAudit(1)">
+                            <option value="">All Actions</option>
+                            <option value="approve_application">Approve Application</option>
+                            <option value="reject_application">Reject Application</option>
+                            <option value="ban_user">Ban User</option>
+                            <option value="delete_user">Delete User</option>
+                            <option value="resolve_ticket">Resolve Ticket</option>
+                            <option value="broadcast">Broadcast</option>
+                        </select>
                     </div>
-                    <div class="data-table-wrap">
-                        <table class="data-table" id="auditTable">
+                    <div class="table-wrap">
+                        <table>
                             <thead>
                                 <tr>
                                     <th>Time</th>
@@ -433,100 +1747,652 @@
                                     <th>Details</th>
                                 </tr>
                             </thead>
-                            <tbody id="auditTableBody"></tbody>
+                            <tbody id="auditBody">
+                                <tr>
+                                    <td colspan="5" class="loading">Loading…</td>
+                                </tr>
+                            </tbody>
                         </table>
                     </div>
-                    <div class="pagination" id="auditPagination"></div>
+                    <div class="pagination" id="auditPager"></div>
                 </div>
-            </div>
+
+            </div><!-- /content -->
         </main>
+    </div><!-- /layout -->
+
+    <!-- ── Topic Modal ───────────────────────────────────────── -->
+    <div class="modal-overlay" id="topicModal">
+        <div class="modal">
+            <div class="modal-title" id="topicModalTitle">Add Topic</div>
+            <input type="hidden" id="topicId" />
+            <div class="form-group">
+                <label class="form-label">Name</label>
+                <input type="text" id="topicName" class="form-control" placeholder="e.g. Pornography Addiction" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Slug</label>
+                <input type="text" id="topicSlug" class="form-control" placeholder="e.g. porn_addiction" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea id="topicDesc" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="toggle-wrap" style="margin-bottom:18px">
+                <span>Active</span>
+                <div id="topicActive" class="toggle on" onclick="this.classList.toggle('on')"></div>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-primary btn-full" onclick="saveTopic()">Save Topic</button>
+                <button class="btn btn-ghost btn-full" onclick="closeTopicModal()">Cancel</button>
+            </div>
+        </div>
     </div>
 
-    <!-- Modals -->
-    <div id="topicModal" class="modal">
-        <div class="modal-content">
-            <h3>Topic</h3><input type="hidden" id="topicId"><input type="text" id="topicName" placeholder="Name"
-                class="form-control"><input type="text" id="topicSlug" placeholder="Slug"
-                class="form-control mt-8"><textarea id="topicDesc" placeholder="Description"
-                class="form-control mt-8"></textarea><label class="flex items-center gap-8 mt-8"><input type="checkbox"
-                    id="topicActive" checked> Active</label>
-            <div class="flex gap-8 mt-16"><button class="btn btn-primary" onclick="saveTopic()">Save</button><button
-                    class="btn btn-outline" onclick="closeTopicModal()">Cancel</button></div>
+    <!-- ── User Detail Modal ─────────────────────────────────── -->
+    <div class="modal-overlay" id="userDetailModal">
+        <div class="modal" style="max-width:520px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+                <div class="modal-title" id="detailTitle" style="margin-bottom:0">User Details</div>
+                <button class="btn btn-ghost btn-sm btn-icon" onclick="closeDetailModal()">
+                    <svg viewBox="0 0 24 24"
+                        style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="detail-tabs">
+                <div class="detail-tab active" onclick="showDetailTab('info')">Info</div>
+                <div class="detail-tab" onclick="showDetailTab('messages')">Messages</div>
+                <div class="detail-tab" onclick="showDetailTab('sessions')">Sessions</div>
+            </div>
+            <div class="detail-pane active" id="detail-info">
+                <div id="detailInfoContent" class="loading">Loading…</div>
+            </div>
+            <div class="detail-pane" id="detail-messages">
+                <div id="detailMsgsContent" class="loading">Loading…</div>
+            </div>
+            <div class="detail-pane" id="detail-sessions">
+                <div id="detailSessContent" class="loading">Loading…</div>
+            </div>
         </div>
     </div>
 
     <script>
+        /* ── Config ────────────────────────────────────────────────── */
         const API = window.location.origin;
-        let currentTab = 'dashboard';
-        let usersPage = 1, appsPage = 1, msgPage = 1, auditPage = 1;
+        let activeTab = 'overview';
+        let usersPage = 1, appsPage = 1, msgsPage = 1, auditPage = 1;
+        let userTimer = null;
+        let growthChart = null;
+        let wsConn = null;
+        let currentDetailId = null;
 
-        function getHeaders() {
-            const initData = window.Telegram?.WebApp?.initData || '';
-            const userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id || '';
-            return { 'Content-Type': 'application/json', 'x-telegram-init-data': initData, 'x-telegram-id': String(userId) };
+        /* ── Auth headers ──────────────────────────────────────────── */
+        function hdrs() {
+            return {
+                'Content-Type': 'application/json',
+                'x-telegram-init-data': window.Telegram?.WebApp?.initData || '',
+                'x-telegram-id': String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || ''),
+            };
         }
-        async function apiFetch(path, opts = {}) {
-            const res = await fetch(`${API}${path}`, { ...opts, headers: { ...getHeaders(), ...(opts.headers || {}) }, body: opts.body ? JSON.stringify(opts.body) : undefined });
-            if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `HTTP ${res.status}`); }
+        async function api(path, opts = {}) {
+            const res = await fetch(`${API}${path}`, {
+                ...opts, headers: { ...hdrs(), ...(opts.headers || {}) },
+                body: opts.body ? JSON.stringify(opts.body) : undefined,
+            });
+            if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`); }
+            const ct = res.headers.get('content-type') || '';
+            if (ct.includes('text/csv')) return res.blob();
             return res.json();
         }
-        function showToast(msg, type = 'info') { alert(msg); } // simple
 
-        // Tab switching
-        document.querySelectorAll('.sidebar-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const tab = item.dataset.tab;
-                document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-                item.classList.add('active');
-                document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
-                document.getElementById(`tab-${tab}`).style.display = 'block';
-                currentTab = tab;
-                document.getElementById('topbarTitle').innerText = item.innerText.trim();
-                if (tab === 'dashboard') loadDashboard();
-                if (tab === 'users') loadUsers(1);
-                if (tab === 'applications') loadApplications(1);
-                if (tab === 'messages') loadMessages(1);
-                if (tab === 'tickets') loadTickets();
-                if (tab === 'topics') loadTopics();
-                if (tab === 'audit') loadAudit(1);
-            });
-        });
-
-        async function loadDashboard() {
-            const stats = await apiFetch('/api/admin/stats');
-            document.getElementById('statUsers').innerText = stats.total_users;
-            document.getElementById('statMentors').innerText = stats.active_mentors;
-            document.getElementById('statPending').innerText = stats.pending_applications;
-            document.getElementById('statFlagged').innerText = stats.flagged_messages;
-            document.getElementById('statTickets').innerText = stats.open_tickets;
-            // chart
-            const activity = await apiFetch('/api/admin/activity');
-            const ctx = document.getElementById('activityChart').getContext('2d');
-            new Chart(ctx, { type: 'line', data: { labels: activity.map(d => d.date), datasets: [{ label: 'Active Users', data: activity.map(d => d.active), borderColor: 'var(--gold)' }] } });
+        /* ── Toast ─────────────────────────────────────────────────── */
+        function toast(msg, type = 'info') {
+            const t = document.createElement('div');
+            t.className = 'toast';
+            const bg = { error: 'var(--danger)', success: 'var(--success)', info: 'var(--bg3)' }[type] || 'var(--bg3)';
+            t.style.background = bg;
+            t.style.color = type === 'info' ? 'var(--text)' : '#fff';
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(() => t.style.opacity = '0', 2500);
+            setTimeout(() => t.remove(), 2800);
         }
 
-        async function loadUsers(page) {
+        /* ── Helpers ───────────────────────────────────────────────── */
+        function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+        function ago(d) {
+            const diff = Date.now() - new Date(d).getTime();
+            if (diff < 60000) return 'just now';
+            if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+            if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+            return `${Math.floor(diff / 86400000)}d ago`;
+        }
+        function pager(id, page, pages, fn) {
+            const c = document.getElementById(id);
+            if (!c || pages <= 1) { if (c) c.innerHTML = ''; return; }
+            let h = `<button class="page-btn" onclick="${fn}(${page - 1})" ${page <= 1 ? 'disabled' : ''}>‹</button>`;
+            for (let i = Math.max(1, page - 2); i <= Math.min(pages, page + 2); i++)
+                h += `<button class="page-btn${i === page ? ' active' : ''}" onclick="${fn}(${i})">${i}</button>`;
+            h += `<button class="page-btn" onclick="${fn}(${page + 1})" ${page >= pages ? 'disabled' : ''}>›</button>`;
+            c.innerHTML = h;
+        }
+
+        /* ── Theme ─────────────────────────────────────────────────── */
+        function setTheme(t) {
+            document.documentElement.setAttribute('data-theme', t);
+            localStorage.setItem('holyTheme', t);
+            document.getElementById('themeBtn').textContent = t === 'light' ? '🌙' : '☀️';
+            rebuildChart();
+        }
+        function toggleTheme() {
+            setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+        }
+        setTheme(localStorage.getItem('holyTheme') || 'dark');
+
+        /* ── Sidebar ───────────────────────────────────────────────── */
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebarDim').style.display =
+                document.getElementById('sidebar').classList.contains('open') ? 'block' : 'none';
+        }
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('sidebarDim').style.display = 'none';
+        }
+
+        /* ── Tab nav ────────────────────────────────────────────────── */
+        const TITLES = {
+            overview: 'Overview', users: 'Users', applications: 'Mentor Applications',
+            messages: 'Message Moderation', tickets: 'Support Tickets', topics: 'Counseling Topics',
+            broadcast: 'Broadcast', audit: 'Audit Log'
+        };
+
+        function showTab(tab) {
+            document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById(`pane-${tab}`).classList.add('active');
+            document.getElementById(`nav-${tab}`).classList.add('active');
+            document.getElementById('topbarTitle').textContent = TITLES[tab] || tab;
+            activeTab = tab; closeSidebar();
+            const loaders = {
+                overview: loadStats, users: () => loadUsers(1), applications: () => loadApps(1),
+                messages: () => loadMessages(1), tickets: loadTickets, topics: loadTopics,
+                broadcast: () => { }, audit: () => loadAudit(1)
+            };
+            loaders[tab]?.();
+        }
+
+        function refreshCurrent() {
+            const btn = document.getElementById('refreshBtn');
+            btn.classList.add('spinning');
+            loadStats();
+            showTab(activeTab);
+            setTimeout(() => btn.classList.remove('spinning'), 600);
+        }
+
+        /* ── WebSocket ──────────────────────────────────────────────── */
+        function connectWS() {
+            try {
+                const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+                wsConn = new WebSocket(`${proto}://${location.host}`);
+                wsConn.onopen = () => setWSStatus(true);
+                wsConn.onclose = () => { setWSStatus(false); setTimeout(connectWS, 5000); };
+                wsConn.onerror = () => setWSStatus(false);
+                wsConn.onmessage = e => {
+                    try {
+                        const d = JSON.parse(e.data);
+                        if (d.event === 'new_ticket') { loadStats(); if (activeTab === 'tickets') loadTickets(); }
+                        if (d.event === 'broadcast') { toast('Broadcast delivered', 'success'); }
+                    } catch { }
+                };
+            } catch { setWSStatus(false); }
+        }
+        function setWSStatus(on) {
+            document.getElementById('wsDot').className = 'ws-dot' + (on ? '' : ' offline');
+            document.getElementById('wsLabel').textContent = on ? 'Live' : 'Offline';
+        }
+        connectWS();
+
+        /* ── Stats ──────────────────────────────────────────────────── */
+        async function loadStats() {
+            try {
+                const s = await api('/api/admin/stats');
+                set('st-users', s.total_users ?? '–');
+                set('st-new', `${s.new_today ?? 0} new today`);
+                set('st-mentors', s.active_mentors ?? '–');
+                set('st-pending', s.pending_applications ?? '–');
+                set('st-flagged', s.flagged_messages ?? '–');
+                set('st-tickets', s.open_tickets ?? '–');
+
+                const pb = document.getElementById('pendingBadge');
+                const p = s.pending_applications ?? 0;
+                pb.textContent = p; pb.style.display = p > 0 ? 'inline' : 'none';
+
+                const tb = document.getElementById('ticketsBadge');
+                const t = s.open_tickets ?? 0;
+                tb.textContent = t; tb.style.display = t > 0 ? 'inline' : 'none';
+
+                set('qa-apps', `${p} pending`);
+                set('qa-msgs', `${s.flagged_messages ?? 0} flagged`);
+                set('qa-tix', `${t} open`);
+
+                loadActivityChart();
+            } catch (e) {
+                /* fallback: show mock data if backend not connected */
+                set('st-users', '1,247'); set('st-new', '12 new today');
+                set('st-mentors', '38'); set('st-pending', '7');
+                set('st-flagged', '3'); set('st-tickets', '5');
+                set('qa-apps', '7 pending'); set('qa-msgs', '3 flagged'); set('qa-tix', '5 open');
+                loadActivityChart();
+            }
+        }
+
+        function set(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+
+        /* ── Activity chart ─────────────────────────────────────────── */
+        async function loadActivityChart() {
+            let labels, data;
+            try {
+                const d = await api('/api/admin/activity');
+                labels = d.labels; data = d.counts;
+            } catch {
+                const now = new Date();
+                labels = Array.from({ length: 7 }, (_, i) => {
+                    const d = new Date(now); d.setDate(d.getDate() - 6 + i);
+                    return d.toLocaleDateString('en', { weekday: 'short' });
+                });
+                data = [42, 58, 47, 81, 63, 95, 112];
+            }
+            buildChart(labels, data);
+        }
+
+        function buildChart(labels, data) {
+            const canvas = document.getElementById('growthChart');
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+            const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
+            const textColor = isDark ? '#5C5A54' : '#9A9890';
+            if (growthChart) growthChart.destroy();
+            growthChart = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        label: 'New Users', data,
+                        borderColor: '#C9A84C', borderWidth: 2,
+                        backgroundColor: 'rgba(201,168,76,0.08)',
+                        pointBackgroundColor: '#C9A84C',
+                        pointRadius: 4, tension: 0.4, fill: true,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false }, tooltip: {
+                            backgroundColor: isDark ? '#1F2029' : '#fff',
+                            titleColor: isDark ? '#F0EEE8' : '#1A1916',
+                            bodyColor: isDark ? '#9C9A92' : '#5A5850',
+                            borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                            borderWidth: 1,
+                        }
+                    },
+                    scales: {
+                        x: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 11 } } },
+                        y: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 11 } }, beginAtZero: true },
+                    },
+                }
+            });
+        }
+        function rebuildChart() { if (growthChart) loadActivityChart(); }
+
+        /* ── Users ──────────────────────────────────────────────────── */
+        function debounceUsers() { clearTimeout(userTimer); userTimer = setTimeout(() => loadUsers(1), 400); }
+
+        async function loadUsers(page = 1) {
             usersPage = page;
             const search = document.getElementById('userSearch').value;
-            const res = await apiFetch(`/api/admin/users?page=${page}&search=${encodeURIComponent(search)}`);
-            const tbody = document.getElementById('usersTableBody');
-            tbody.innerHTML = res.users.map(u => `<tr><td>${u.telegram_id}</td><td>${u.anonymous_id}</td><td>${u.role}</td><td>${u.sex || '-'}</td><td>${u.age_range || '-'}</td><td><span class="status-badge ${u.is_banned ? 'status-banned' : 'status-active'}">${u.is_banned ? 'Banned' : 'Active'}</span></td><td><button class="btn btn-sm" onclick="toggleBan(${u.telegram_id}, ${!u.is_banned})">${u.is_banned ? 'Unban' : 'Ban'}</button> <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.telegram_id})">Delete</button></td></tr>`).join('');
+            const role = document.getElementById('userRoleFilter').value;
+            const body = document.getElementById('usersBody');
+            body.innerHTML = '<tr><td colspan="7" class="loading">Loading…</td></tr>';
+            try {
+                let url = `/api/admin/users?page=${page}`;
+                if (search) url += `&search=${encodeURIComponent(search)}`;
+                if (role) url += `&role=${role}`;
+                const d = await api(url);
+                if (!d.users?.length) { body.innerHTML = '<tr><td colspan="7" class="loading">No users found</td></tr>'; return; }
+                body.innerHTML = d.users.map(u => `<tr>
+      <td><span style="font-family:var(--font-mono);font-size:11px;color:var(--gold)">${esc(u.anonymous_id)}</span></td>
+      <td><span class="chip ${u.role === 'mentor' ? 'chip-gold' : 'chip-blue'}">${u.role}</span></td>
+      <td>${u.sex || '–'}</td>
+      <td>${u.age_range || '–'}</td>
+      <td>${ago(u.created_at)}</td>
+      <td><span class="${u.is_banned ? 'chip chip-red' : 'chip chip-green'}">${u.is_banned ? 'Banned' : 'Active'}</span></td>
+      <td>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="viewUser(${u.telegram_id},'${esc(u.anonymous_id)}')">View</button>
+          ${u.role === 'user' ? `<button class="btn btn-ghost btn-sm" onclick="changeRole(${u.telegram_id},'mentor')">→ Mentor</button>` : ''}
+          ${u.role === 'mentor' ? `<button class="btn btn-ghost btn-sm" onclick="disqualify(${u.telegram_id})">Disqualify</button>` : ''}
+          <button class="btn btn-sm ${u.is_banned ? 'btn-success' : 'btn-danger'}" onclick="toggleBan(${u.telegram_id},${!u.is_banned})">${u.is_banned ? 'Unban' : 'Ban'}</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.telegram_id},'${esc(u.anonymous_id)}')">Delete</button>
+        </div>
+      </td>
+    </tr>`).join('');
+                pager('usersPager', page, d.pages, 'loadUsers');
+            } catch (e) { body.innerHTML = `<tr><td colspan="7" class="loading">${e.message}</td></tr>`; }
         }
 
-        async function loadApplications(page) {
-            const status = document.getElementById('appStatusFilter').value;
-            const res = await apiFetch(`/api/admin/applications?status=${status}&page=${page}`);
-            const container = document.getElementById('applicationsList');
-            container.innerHTML = res.applications.map(app => `<div class="card mb-12"><div><strong>${app.user?.anonymous_id}</strong> - ${app.status}</div><div>Sex: ${app.sex}</div><div>Education: ${app.educational_background}</div><div>About: ${app.about_me}</div>${app.status === 'pending' ? `<div class="mt-8"><textarea id="note-${app.id}" placeholder="Admin note" class="form-control"></textarea><button class="btn btn-primary btn-sm" onclick="reviewApp('${app.id}','approved')">Approve</button> <button class="btn btn-danger btn-sm" onclick="reviewApp('${app.id}','rejected')">Reject</button></div>` : ''}</div>`).join('');
+        async function changeRole(tid, role) {
+            if (!confirm(`Change role to ${role}?`)) return;
+            try { await api(`/api/admin/users/${tid}/role`, { method: 'PATCH', body: { role } }); toast(`Role → ${role}`, 'success'); loadUsers(usersPage); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+        async function toggleBan(tid, banned) {
+            if (!confirm(`${banned ? 'Ban' : 'Unban'} this user?`)) return;
+            try { await api(`/api/admin/users/${tid}/ban`, { method: 'PATCH', body: { banned } }); toast(banned ? 'Banned' : 'Unbanned', 'success'); loadUsers(usersPage); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+        async function disqualify(tid) {
+            if (!confirm('Disqualify this mentor?')) return;
+            try { await api(`/api/admin/mentors/${tid}/disqualify`, { method: 'PATCH' }); toast('Disqualified', 'success'); loadUsers(usersPage); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+        async function deleteUser(tid, anon) {
+            if (!confirm(`⚠️ PERMANENTLY delete ${anon}? All data removed. Cannot be undone.`)) return;
+            try { await api(`/api/admin/users/${tid}/delete`, { method: 'DELETE' }); toast(`${anon} deleted`, 'success'); loadUsers(usersPage); loadStats(); }
+            catch (e) { toast(e.message, 'error'); }
         }
 
-        // Add more functions: loadMessages, loadTickets, loadTopics, etc. (similar to existing admin.js but enhanced)
-        // I'll provide the complete admin.js backend routes in next message.
+        /* ── User detail modal ──────────────────────────────────────── */
+        function viewUser(tid, anon) {
+            currentDetailId = tid;
+            document.getElementById('detailTitle').textContent = anon;
+            document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.detail-pane').forEach(p => p.classList.remove('active'));
+            document.querySelector('.detail-tab').classList.add('active');
+            document.getElementById('detail-info').classList.add('active');
+            document.getElementById('userDetailModal').classList.add('open');
+            loadDetailInfo(tid);
+        }
+        function closeDetailModal() { document.getElementById('userDetailModal').classList.remove('open'); }
+        function showDetailTab(t) {
+            document.querySelectorAll('.detail-tab').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.detail-pane').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(`detail-${t}`).classList.add('active');
+            if (t === 'messages') loadDetailMsgs(currentDetailId);
+            if (t === 'sessions') loadDetailSess(currentDetailId);
+        }
+        async function loadDetailInfo(tid) {
+            const c = document.getElementById('detailInfoContent');
+            c.innerHTML = '<div class="loading">Loading…</div>';
+            try {
+                const u = await api(`/api/admin/users/${tid}`);
+                c.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12.5px">
+      ${row('Anonymous ID', u.anonymous_id)}
+      ${row('Telegram ID', u.telegram_id)}
+      ${row('Role', u.role)}
+      ${row('Sex', u.sex || '–')}
+      ${row('Age Range', u.age_range || '–')}
+      ${row('Status', u.is_banned ? 'Banned' : 'Active')}
+      ${row('Joined', ago(u.created_at))}
+    </div>`;
+            } catch (e) { c.innerHTML = `<div class="loading">${e.message}</div>`; }
+        }
+        function row(l, v) { return `<div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">${l}</div><div>${esc(String(v))}</div></div>`; }
+        async function loadDetailMsgs(tid) {
+            const c = document.getElementById('detailMsgsContent');
+            c.innerHTML = '<div class="loading">Loading…</div>';
+            try {
+                const d = await api(`/api/admin/users/${tid}/messages`);
+                if (!d.messages?.length) { c.innerHTML = '<div class="empty">No messages</div>'; return; }
+                c.innerHTML = d.messages.slice(0, 20).map(m => `<div style="padding:7px 0;border-bottom:1px solid var(--border-dim)">
+      <div style="font-size:11px;color:var(--text3)">${ago(m.created_at)}</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-top:2px">${esc(m.content)}</div>
+    </div>`).join('');
+            } catch (e) { c.innerHTML = `<div class="loading">${e.message}</div>`; }
+        }
+        async function loadDetailSess(tid) {
+            const c = document.getElementById('detailSessContent');
+            c.innerHTML = '<div class="loading">Loading…</div>';
+            try {
+                const d = await api(`/api/admin/users/${tid}/sessions`);
+                if (!d.sessions?.length) { c.innerHTML = '<div class="empty">No sessions</div>'; return; }
+                c.innerHTML = d.sessions.map(s => `<div style="padding:7px 0;border-bottom:1px solid var(--border-dim);font-size:12.5px">
+      <span style="color:var(--text3)">${ago(s.created_at)}</span> · <span>${esc(s.status || '')}</span>
+    </div>`).join('');
+            } catch (e) { c.innerHTML = `<div class="loading">${e.message}</div>`; }
+        }
 
-        function toggleSidebar() { document.getElementById('adminSidebar').classList.toggle('open'); }
-        function refreshData() { if (currentTab === 'dashboard') loadDashboard(); else if (currentTab === 'users') loadUsers(usersPage); /* etc */ }
+        /* ── Applications ───────────────────────────────────────────── */
+        async function loadApps(page = 1) {
+            appsPage = page;
+            const status = document.getElementById('appFilter').value;
+            const c = document.getElementById('appsContainer');
+            c.innerHTML = '<div class="loading">Loading…</div>';
+            try {
+                const d = await api(`/api/admin/applications?status=${status}&page=${page}`);
+                if (!d.applications?.length) { c.innerHTML = '<div class="empty">No applications found</div>'; document.getElementById('appsPager').innerHTML = ''; return; }
+                c.innerHTML = d.applications.map(a => `
+      <div class="app-card" id="app-${a.id}">
+        <div class="app-card-hdr">
+          <div>
+            <div class="app-id">${esc(a.user?.anonymous_id || 'Unknown')}</div>
+            <div class="app-meta">${a.user?.sex || '?'} · ${a.user?.age_range || '?'} · submitted ${ago(a.submitted_at)}</div>
+          </div>
+          <span class="chip ${a.status === 'pending' ? 'chip-gold' : a.status === 'approved' ? 'chip-green' : 'chip-red'}">${a.status}</span>
+        </div>
+        <div class="app-q"><div class="app-q-label">Educational Background</div><div class="app-q-ans">${esc(a.educational_background || a.answer_q2 || '–')}</div></div>
+        <div class="app-q"><div class="app-q-label">About Me</div><div class="app-q-ans">${esc(a.about_me || a.answer_q3 || '–')}</div></div>
+        ${a.admin_note ? `<div class="app-q"><div class="app-q-label">Admin Note</div><div class="app-q-ans">${esc(a.admin_note)}</div></div>` : ''}
+        ${a.status === 'pending' ? `
+          <div class="app-actions">
+            <textarea class="inline-area" id="note-${a.id}" placeholder="Optional admin note…" rows="2"></textarea>
+          </div>
+          <div class="app-actions">
+            <button class="btn btn-success btn-sm" onclick="reviewApp('${a.id}','approved')">✓ Approve</button>
+            <button class="btn btn-danger btn-sm" onclick="reviewApp('${a.id}','rejected')">✗ Reject</button>
+          </div>`: ''}
+      </div>`).join('');
+                pager('appsPager', page, d.pages, 'loadApps');
+            } catch (e) { c.innerHTML = `<div class="loading">${e.message}</div>`; }
+        }
+        async function reviewApp(id, action) {
+            const note = document.getElementById(`note-${id}`)?.value || '';
+            try { await api(`/api/admin/applications/${id}`, { method: 'PATCH', body: { action, admin_note: note } }); toast(`Application ${action}`, 'success'); loadApps(appsPage); loadStats(); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+
+        /* ── Messages ───────────────────────────────────────────────── */
+        async function loadMessages(page = 1) {
+            msgsPage = page;
+            const flagged = document.getElementById('flaggedOnly').checked;
+            const body = document.getElementById('msgsBody');
+            body.innerHTML = '<tr><td colspan="6" class="loading">Loading…</td></tr>';
+            try {
+                const d = await api(`/api/admin/messages?flagged=${flagged}&page=${page}`);
+                if (!d.messages?.length) { body.innerHTML = '<tr><td colspan="6" class="loading">No messages found</td></tr>'; document.getElementById('msgsPager').innerHTML = ''; return; }
+                body.innerHTML = d.messages.map(m => `<tr>
+      <td><span style="font-family:var(--font-mono);font-size:11px">${m.from_id}</span></td>
+      <td><span style="font-family:var(--font-mono);font-size:11px">${m.to_id}</span></td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.content)}</td>
+      <td>${m.is_flagged ? '<span class="chip chip-red">⚑ Flagged</span>' : '<span class="chip chip-green">OK</span>'}</td>
+      <td style="white-space:nowrap">${ago(m.created_at)}</td>
+      <td>
+        <div style="display:flex;gap:5px">
+          ${m.is_flagged ? `<button class="btn btn-ghost btn-sm" onclick="unflagMsg('${m.id}')">Unflag</button>` : ''}
+          <button class="btn btn-danger btn-sm" onclick="deleteMsg('${m.id}')">Delete</button>
+        </div>
+      </td>
+    </tr>`).join('');
+                pager('msgsPager', page, d.pages, 'loadMessages');
+            } catch (e) { body.innerHTML = `<tr><td colspan="6" class="loading">${e.message}</td></tr>`; }
+        }
+        async function unflagMsg(id) {
+            try { await api(`/api/admin/messages/${id}/unflag`, { method: 'PATCH' }); toast('Unflagged', 'success'); loadMessages(msgsPage); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+        async function deleteMsg(id) {
+            if (!confirm('Delete this message?')) return;
+            try { await api(`/api/admin/messages/${id}`, { method: 'DELETE' }); toast('Message deleted', 'success'); loadMessages(msgsPage); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+
+        /* ── Tickets ────────────────────────────────────────────────── */
+        async function loadTickets() {
+            const c = document.getElementById('ticketsContainer');
+            c.innerHTML = '<div class="loading">Loading…</div>';
+            try {
+                const tickets = await api('/api/admin/tickets');
+                if (!tickets?.length) { c.innerHTML = '<div class="empty">🎉 No open tickets</div>'; return; }
+                c.innerHTML = tickets.map(t => `
+      <div class="ticket-card" id="ticket-${t.id}">
+        <div class="ticket-hdr">
+          <div>
+            <div class="ticket-subject">${esc(t.subject)}</div>
+            <div class="ticket-meta">From ${esc(t.user?.anonymous_id || String(t.telegram_id))} · ${ago(t.created_at)}</div>
+          </div>
+          <span class="chip ${t.status === 'open' ? 'chip-gold' : t.status === 'in_progress' ? 'chip-blue' : 'chip-green'}">${t.status}</span>
+        </div>
+        <div class="ticket-body">${esc(t.description)}</div>
+        ${t.admin_reply ? `<div class="admin-reply-preview"><strong>Admin replied:</strong>${esc(t.admin_reply)}</div>` : ''}
+        <div class="ticket-reply">
+          <textarea class="inline-area" id="reply-${t.id}" placeholder="Write a reply…" rows="2">${esc(t.admin_reply || '')}</textarea>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="replyTicket('${t.id}','in_progress')">Reply & Keep Open</button>
+            <button class="btn btn-success btn-sm" onclick="replyTicket('${t.id}','resolved')">✓ Resolve</button>
+          </div>
+        </div>
+      </div>`).join('');
+            } catch (e) { c.innerHTML = `<div class="loading">${e.message}</div>`; }
+        }
+        async function replyTicket(id, status) {
+            const reply = document.getElementById(`reply-${id}`).value.trim();
+            if (!reply) { toast('Write a reply first', 'error'); return; }
+            try { await api(`/api/admin/tickets/${id}`, { method: 'PATCH', body: { admin_reply: reply, status } }); toast('Ticket updated', 'success'); loadTickets(); loadStats(); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+
+        /* ── Topics ─────────────────────────────────────────────────── */
+        async function loadTopics() {
+            const body = document.getElementById('topicsBody');
+            body.innerHTML = '<tr><td colspan="5" class="loading">Loading…</td></tr>';
+            try {
+                const topics = await api('/api/topics/admin');
+                body.innerHTML = topics.map(t => `<tr>
+      <td><strong>${esc(t.name)}</strong></td>
+      <td><code class="slug">${esc(t.slug)}</code></td>
+      <td style="font-size:11.5px;max-width:200px">${esc(t.description)}</td>
+      <td><span class="chip ${t.is_active ? 'chip-green' : 'chip-gray'}">${t.is_active ? 'Active' : 'Disabled'}</span></td>
+      <td>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-ghost btn-sm" onclick="editTopic(${JSON.stringify(t).replace(/"/g, '&quot;')})">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteTopic('${t.id}')">Delete</button>
+        </div>
+      </td>
+    </tr>`).join('');
+            } catch (e) { body.innerHTML = `<tr><td colspan="5" class="loading">${e.message}</td></tr>`; }
+        }
+        function openTopicModal() {
+            document.getElementById('topicModalTitle').textContent = 'Add Topic';
+            document.getElementById('topicId').value = '';
+            document.getElementById('topicName').value = '';
+            document.getElementById('topicSlug').value = '';
+            document.getElementById('topicDesc').value = '';
+            document.getElementById('topicActive').classList.add('on');
+            document.getElementById('topicModal').classList.add('open');
+        }
+        function closeTopicModal() { document.getElementById('topicModal').classList.remove('open'); }
+        function editTopic(t) {
+            document.getElementById('topicModalTitle').textContent = 'Edit Topic';
+            document.getElementById('topicId').value = t.id;
+            document.getElementById('topicName').value = t.name;
+            document.getElementById('topicSlug').value = t.slug;
+            document.getElementById('topicDesc').value = t.description;
+            t.is_active ? document.getElementById('topicActive').classList.add('on') : document.getElementById('topicActive').classList.remove('on');
+            document.getElementById('topicModal').classList.add('open');
+        }
+        async function saveTopic() {
+            const id = document.getElementById('topicId').value;
+            const body = {
+                name: document.getElementById('topicName').value,
+                slug: document.getElementById('topicSlug').value,
+                description: document.getElementById('topicDesc').value,
+                is_active: document.getElementById('topicActive').classList.contains('on'),
+            };
+            try {
+                await api(id ? `/api/topics/${id}` : '/api/topics', { method: id ? 'PUT' : 'POST', body });
+                toast('Topic saved', 'success'); closeTopicModal(); loadTopics();
+            } catch (e) { toast(e.message, 'error'); }
+        }
+        async function deleteTopic(id) {
+            if (!confirm('Delete this topic?')) return;
+            try { await api(`/api/topics/${id}`, { method: 'DELETE' }); toast('Deleted', 'success'); loadTopics(); }
+            catch (e) { toast(e.message, 'error'); }
+        }
+
+        /* ── Broadcast ──────────────────────────────────────────────── */
+        function updateBroadcastPreview() {
+            const msg = document.getElementById('broadcastMsg').value;
+            document.getElementById('broadcastLen').textContent = msg.length;
+            const wrap = document.getElementById('broadcastPreviewWrap');
+            const prev = document.getElementById('broadcastPreview');
+            if (msg.trim()) { wrap.style.display = 'block'; prev.textContent = msg; }
+            else { wrap.style.display = 'none'; }
+        }
+        async function sendBroadcast() {
+            const message = document.getElementById('broadcastMsg').value.trim();
+            const role_filter = document.getElementById('broadcastRole').value || undefined;
+            if (!message) { toast('Write a message first', 'error'); return; }
+            if (!confirm(`Send broadcast${role_filter ? ' to ' + role_filter + 's' : ' to all members'}?`)) return;
+            try {
+                const d = await api('/api/admin/broadcast', { method: 'POST', body: { message, role_filter } });
+                document.getElementById('broadcastResult').textContent = `✓ Sent to ${d.sent_to || 0} members`;
+                document.getElementById('broadcastMsg').value = '';
+                document.getElementById('broadcastLen').textContent = '0';
+                document.getElementById('broadcastPreviewWrap').style.display = 'none';
+                toast('Broadcast sent!', 'success');
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        /* ── Audit ──────────────────────────────────────────────────── */
+        async function loadAudit(page = 1) {
+            auditPage = page;
+            const filter = document.getElementById('auditFilter').value;
+            const body = document.getElementById('auditBody');
+            body.innerHTML = '<tr><td colspan="5" class="loading">Loading…</td></tr>';
+            try {
+                let url = `/api/admin/audit-logs?page=${page}`;
+                if (filter) url += `&action=${filter}`;
+                const d = await api(url);
+                if (!d.logs?.length) { body.innerHTML = '<tr><td colspan="5" class="loading">No logs found</td></tr>'; document.getElementById('auditPager').innerHTML = ''; return; }
+                body.innerHTML = d.logs.map(l => `<tr>
+      <td style="white-space:nowrap;font-size:11px">${ago(l.created_at)}</td>
+      <td style="font-size:11px">${l.admin_id}</td>
+      <td><span class="audit-action">${esc(l.action)}</span></td>
+      <td style="font-size:11px">${l.target_id || '–'} ${l.target_type ? `<span style="color:var(--text3)">(${l.target_type})</span>` : ''}</td>
+      <td style="font-size:11px;color:var(--text3);max-width:180px;overflow:hidden;text-overflow:ellipsis;font-family:var(--font-mono)">${esc(JSON.stringify(l.details || {}))}</td>
+    </tr>`).join('');
+                pager('auditPager', page, Math.ceil((d.total || 0) / 50), 'loadAudit');
+            } catch (e) { body.innerHTML = `<tr><td colspan="5" class="loading">${e.message}</td></tr>`; }
+        }
+
+        /* ── Export ─────────────────────────────────────────────────── */
+        async function exportTable(table) {
+            try {
+                const blob = await api(`/api/admin/export/${table}`);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = `${table}-export.csv`;
+                document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(url);
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        /* ── Init ───────────────────────────────────────────────────── */
         window.Telegram?.WebApp?.ready();
-        loadDashboard();
+        loadStats();
     </script>
 </body>
 
