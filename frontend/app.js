@@ -146,6 +146,7 @@ function showReplyForm(messageId) {
   if (form) form.classList.add('visible');
   document.getElementById(`reply-input-${messageId}`)?.focus();
 }
+window.setReplyTo = showReplyForm;
 
 function hideReplyForm(messageId) {
   const form = document.getElementById(`reply-form-${messageId}`);
@@ -238,8 +239,8 @@ function showToast(msg, type = 'info') {
 function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('theme', theme);
-  const icon = $('themeIcon');
-  if (icon) icon.textContent = theme === 'light' ? '🌙' : '☀️';
+  const icon = theme === 'light' ? '🌙' : '☀️';
+  $$('.theme-btn span').forEach(s => s.textContent = icon);
 }
 function toggleTheme() {
   haptic('light');
@@ -514,7 +515,7 @@ function keepAlive() {
 }
 
 // ─── Dashboard ────────────────────────────────────────────────
-async function loadDashboard() {
+window.loadDashboard = async function loadDashboard() {
   try {
     const verse = await apiFetch('/api/auth/verse');
     $('verseText').textContent = verse.text;
@@ -558,6 +559,7 @@ async function loadStreak() {
     }
   } catch (e) { console.error('Streak error:', e); }
 }
+const loadDashboard = window.loadDashboard;
 
 async function markStreakRead() {
   if ($('markReadBtn').disabled) return;
@@ -615,7 +617,7 @@ async function loadMentors() {
   const filterSelect = $('mentorTopicSelect');
   const selectedTopic = filterSelect ? filterSelect.value : '';
 
-  container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
+  container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
 
   try {
     // Fetch all mentors (API already filters by same sex)
@@ -697,7 +699,7 @@ async function requestMentorship(mentor_id) {
 async function loadRequests() {
   const container = $('requestsList');
   if (!container) return;
-  container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
+  container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
   try {
     const requests = await apiFetch('/api/mentors/my-requests');
     if (!requests.length) {
@@ -1392,7 +1394,7 @@ function changeLanguage(lang) {
 // ─── Mentor Management ────────────────────────────────────────
 async function loadMyMentees() {
   const container = $('menteesList');
-  container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
+  container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
   try {
     const mentees = await apiFetch('/api/mentors/my-mentees');
     const stats = await apiFetch('/api/mentors/my-mentees/stats');
@@ -1540,7 +1542,7 @@ async function saveTopics() {
 // ─── Journal ──────────────────────────────────────────────────
 async function loadJournalEntries() {
   const container = $('journalEntriesList');
-  container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
+  container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
   try {
     const entries = await apiFetch('/api/journal');
     if (!entries.length) {
@@ -1739,4 +1741,5 @@ async function showJournalCalendar() {
   renderCalendar();
 }
 // ─── Boot ─────────────────────────────────────────────────────
+window.loadDashboard = loadDashboard;
 document.addEventListener('DOMContentLoaded', init);
