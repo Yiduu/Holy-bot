@@ -1554,3 +1554,21 @@ textarea.form-control {
     max-width: 110px;
   }
 }
+
+/* ─── Fix: Schedule modal clears bottom nav ─────────────────── */
+#scheduleModal {
+  align-items: center;
+  /* center vertically instead of bottom-anchored */
+  padding: 16px;
+  padding-bottom: calc(16px + var(--nav-h));
+}
+
+#scheduleModal .modal {
+  max-height: calc(85vh - var(--nav-h));
+  overflow-y: auto;
+}
+
+/* ─── Fix: All bottom-sheet modals clear bottom nav ─────────── */
+.modal-sheet {
+  padding-bottom: calc(20px + var(--nav-h));
+}
