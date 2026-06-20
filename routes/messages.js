@@ -160,7 +160,7 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
 
     const { error } = await supabase
       .from('messages')
-      .update({ is_deleted: true, content: null, edited_at: null })
+      .update({ is_deleted: true, edited_at: null })
       .eq('id', messageId);
 
     if (error) return res.status(500).json({ error: error.message });
