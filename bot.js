@@ -13,10 +13,12 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
+
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
-
-const APP_URL = process.env.MINI_APP_URL || 'https://your-app.com';
+console.log('[Bot] MINI_APP_URL from env =', process.env.MINI_APP_URL);
+const APP_URL = process.env.MINI_APP_URL || 'https://holy-bot-etvy.onrender.com';
+console.log('[Bot] APP_URL set to =', APP_URL);
 const ONLINE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 const DEFAULT_MAX_MENTEES = parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
 const PAGE_SIZE = 5;
