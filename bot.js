@@ -16,6 +16,19 @@ require('dotenv').config();
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+
+// Handle polling/network errors gracefully to prevent process crashes and clean up logs
+bot.on('polling_error', (error) => {
+  if (error.code === 'EFATAL' && error.message.includes('ECONNRESET')) {
+    console.warn('[Bot] Polling connection reset (ECONNRESET). Telegram or network closed the connection. Retrying...');
+  } else {
+    console.warn('[Bot] Polling warning:', error.message || error);
+  }
+});
+
+bot.on('error', (error) => {
+  console.error('[Bot] General error:', error);
+});
 console.log('[Bot] MINI_APP_URL from env =', process.env.MINI_APP_URL);
 const APP_URL = process.env.MINI_APP_URL || 'https://holy-bot-etvy.onrender.com';
 console.log('[Bot] APP_URL set to =', APP_URL);
