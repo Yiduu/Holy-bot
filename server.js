@@ -40,10 +40,10 @@ app.use(express.static('frontend'));
 
 // ─── Rate Limiters ────────────────────────────────────────────────────────────
 
-// General API limiter: 100 requests per 15 minutes per IP
+// General API limiter: 500 requests per 15 minutes per IP (increased to prevent blocking users on CGNAT or active sessions)
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 500,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
@@ -113,8 +113,9 @@ function validateTelegramData(initData) {
     if (!hash) return null;
     params.delete('hash');
 
+    // Use deterministic byte-order (ASCII) sorting to ensure consistency across environments
     const dataCheckString = [...params.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => (a > b ? 1 : -1))
       .map(([k, v]) => `${k}=${v}`)
       .join('\n');
 
@@ -130,9 +131,10 @@ function validateTelegramData(initData) {
 
     if (computedHash !== hash) return null;
 
-    // Check auth date (max 1 hour old)
+    // Check auth date (allow up to 24 hours per Telegram guidelines, plus 5-minute clock skew window)
     const authDate = parseInt(params.get('auth_date') || '0', 10);
-    if (Date.now() / 1000 - authDate > 3600) return null;
+    const age = Date.now() / 1000 - authDate;
+    if (age > 86400 || age < -300) return null;
 
     const userJson = params.get('user');
     return userJson ? JSON.parse(userJson) : null;
