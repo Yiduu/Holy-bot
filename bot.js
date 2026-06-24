@@ -401,8 +401,7 @@ async function startRegistration(chatId, startParam = null) {
   await safeSend(chatId, "Welcome! Let's get you set up. First, what is your sex?", {
     reply_markup: {
       inline_keyboard: [
-        [{ text: 'Male', callback_data: 'reg_sex_M' }, { text: 'Female', callback_data: 'reg_sex_F' }],
-        [{ text: 'Prefer not to say', callback_data: 'reg_sex_prefer_not' }]
+        [{ text: 'Male', callback_data: 'reg_sex_M' }, { text: 'Female', callback_data: 'reg_sex_F' }]
       ]
     }
   });
