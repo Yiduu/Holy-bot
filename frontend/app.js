@@ -179,6 +179,29 @@ function closeMsgMenu() {
   document.querySelectorAll('.msg-context-menu.open').forEach(m => m.classList.remove('open'));
 }
 
+/* ── Chat Partner Dropdown helpers ──────────────────────────── */
+function isUserOnline(lastActive) {
+  if (!lastActive) return false;
+  return Date.now() - new Date(lastActive).getTime() < 5 * 60 * 1000;
+}
+
+function toggleChatPartnerDropdown(e) {
+  e.stopPropagation();
+  const menu = $('chatPartnerDropdownMenu');
+  if (!menu) return;
+  const isOpen = menu.classList.contains('open');
+  closeChatPartnerDropdown();
+  if (!isOpen) {
+    menu.classList.add('open');
+    setTimeout(() => document.addEventListener('click', closeChatPartnerDropdown, { once: true }), 0);
+  }
+}
+
+function closeChatPartnerDropdown() {
+  $('chatPartnerDropdownMenu')?.classList.remove('open');
+}
+
+
 async function editMessageInline(msgId) {
   currentMessageId = msgId;
   await editMessage();
@@ -669,7 +692,46 @@ async function loadMentors() {
   container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
 
   try {
-    // Fetch all mentors (API already filters by same sex)
+    // 1. Fetch active mentor if the user is a mentee ('user')
+    let activeMentorHtml = '';
+    let hasActiveMentor = false;
+
+    if (currentUser?.role === 'user') {
+      try {
+        const activeAssignment = await apiFetch('/api/users/my-mentor');
+        if (activeAssignment && activeAssignment.mentor) {
+          hasActiveMentor = true;
+          const m = activeAssignment.mentor;
+          const name = m.user_settings?.display_name || m.anonymous_id;
+          const bio = m.user_settings?.bio || 'No bio provided';
+          const letter = name.charAt(0).toUpperCase();
+          const sexLabel = m.sex === 'M' ? 'Male' : m.sex === 'F' ? 'Female' : '';
+
+          activeMentorHtml = `
+            <div class="card gold-border mb-16" style="border: 2px solid var(--gold);">
+              <div class="text-xs font-bold uppercase tracking-wider mb-8" style="color:var(--gold)" data-i18n="your_active_mentor">
+                ${t('your_active_mentor') || 'Your Active Mentor'}
+              </div>
+              <div class="flex items-center gap-8 mb-12">
+                <div class="mentor-avatar">${letter}</div>
+                <div class="mentor-info">
+                  <div class="mentor-id">${escapeHtml(name)}</div>
+                  ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
+                  <div class="mentor-bio">${escapeHtml(bio)}</div>
+                </div>
+              </div>
+              <div class="flex gap-8">
+                <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${m.telegram_id}')" data-i18n="btn_message">${t('btn_message') || 'Message'}</button>
+                <button class="btn btn-danger btn-sm" onclick="endMentorship()" data-i18n="btn_end">${t('btn_end') || 'End Mentorship'}</button>
+              </div>
+            </div>`;
+        }
+      } catch (err) {
+        console.error('Error fetching active mentor:', err);
+      }
+    }
+
+    // 2. Fetch all mentors (API already filters by same sex)
     let mentors = await apiFetch('/api/mentors');
 
     // Apply topic filter (mentor.expertise_topics is an array of topic names)
@@ -677,44 +739,51 @@ async function loadMentors() {
       mentors = mentors.filter(m => m.expertise_topics && m.expertise_topics.includes(selectedTopic));
     }
 
+    let mentorsListHtml = '';
     if (!mentors.length) {
       let message = 'No mentors available';
       if (selectedTopic && selectedTopic !== '') {
         message = `No mentors available for "${selectedTopic}"`;
       }
-      container.innerHTML = `<div class="empty-state"><span>${message}</span></div>`;
-      return;
+      mentorsListHtml = `<div class="empty-state"><span>${message}</span></div>`;
+    } else {
+      // Render mentor cards
+      mentorsListHtml = mentors.map(m => {
+        const name = m.user_settings?.display_name || m.anonymous_id;
+        const bio = m.user_settings?.bio || 'No bio provided';
+        const spec = m.user_settings?.specialization || '';
+        const letter = name.charAt(0).toUpperCase();
+        const sexLabel = m.sex === 'M' ? 'Male' : m.sex === 'F' ? 'Female' : '';
+        const mentees = m.mentee_count || 0;
+        const max = m.user_settings?.max_mentees || 5;
+
+        // If user already has an active mentor, disable requesting other mentors
+        const canRequest = !hasActiveMentor && mentees < max;
+
+        return `
+          <div class="mentor-card">
+            <div class="flex items-center gap-8">
+              <div class="mentor-avatar">${letter}</div>
+              <div class="mentor-info">
+                <div class="mentor-id">${escapeHtml(name)}</div>
+                ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
+                <div class="mentor-bio">${escapeHtml(bio)}</div>
+              </div>
+            </div>
+            <div class="mentor-meta">
+              ${spec ? `<span class="mentor-badge badge-spec">${escapeHtml(spec)}</span>` : ''}
+              <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentee')}s</span>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="requestMentorship(${m.telegram_id})" ${!canRequest ? 'disabled' : ''}>
+              ${mentees >= max ? t('none') : t('btn_request')}
+            </button>
+          </div>`;
+      }).join('');
     }
 
-    // Render mentor cards
-    container.innerHTML = mentors.map(m => {
-      const name = m.user_settings?.display_name || m.anonymous_id;
-      const bio = m.user_settings?.bio || 'No bio provided';
-      const spec = m.user_settings?.specialization || '';
-      const letter = name.charAt(0).toUpperCase();
-      const sexLabel = m.sex === 'M' ? 'Male' : m.sex === 'F' ? 'Female' : '';
-      const mentees = m.mentee_count || 0;
-      const max = m.user_settings?.max_mentees || 5;
-
-      return `
-        <div class="mentor-card">
-          <div class="flex items-center gap-8">
-            <div class="mentor-avatar">${letter}</div>
-            <div class="mentor-info">
-              <div class="mentor-id">${escapeHtml(name)}</div>
-              ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
-              <div class="mentor-bio">${escapeHtml(bio)}</div>
-            </div>
-          </div>
-          <div class="mentor-meta">
-            ${spec ? `<span class="mentor-badge badge-spec">${escapeHtml(spec)}</span>` : ''}
-            <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentee')}s</span>
-          </div>
-          <button class="btn btn-outline btn-sm" onclick="requestMentorship(${m.telegram_id})" ${mentees >= max ? 'disabled' : ''}>
-            ${mentees >= max ? t('none') : t('btn_request')}
-          </button>
-        </div>`;
-    }).join('');
+    container.innerHTML = activeMentorHtml + mentorsListHtml;
+    // Apply localizations to any newly rendered elements
+    applyLanguage();
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`;
   }
@@ -1113,32 +1182,55 @@ async function loadChat() {
     window.pendingChatPartner = null;
 
     const res = await apiFetch('/api/users/chat-partner');
-    const selector = $('chatPartnerSelect');
+    const partnerWrapper = $('chatPartnerWrapper');
 
     if (res.type === 'none') {
       $('chatMessages').innerHTML = '<div class="empty-state"><span>No active mentorship.</span></div>';
       toggleChatInput(false);
       $('chatWith').style.display = 'block';
       $('chatWith').textContent = 'Messages';
-      selector.style.display = 'none';
+      if (partnerWrapper) partnerWrapper.style.display = 'none';
       return;
     }
 
     if (res.type === 'single') {
-      selector.style.display = 'none';
+      if (partnerWrapper) partnerWrapper.style.display = 'none';
       $('chatWith').style.display = 'block';
       $('chatWith').textContent = res.partner.display_name;
       window.chatState = { with: res.partner.telegram_id, name: res.partner.anonymous_id };
       loadMessages(res.partner.telegram_id);
     } else {
       $('chatWith').style.display = 'none';
-      selector.style.display = 'block';
-      selector.innerHTML = res.mentees.map(m => `<option value="${m.telegram_id}">${escapeHtml(m.display_name)}</option>`).join('');
+      if (partnerWrapper) partnerWrapper.style.display = 'block';
 
       const selectedId = targetId || res.mentees[0].telegram_id;
-      selector.value = selectedId;
-
       const partner = res.mentees.find(m => String(m.telegram_id) === String(selectedId)) || res.mentees[0];
+
+      // Update selected partner name in custom dropdown button
+      const selectedNameEl = $('chatPartnerSelectedName');
+      if (selectedNameEl) {
+        selectedNameEl.textContent = partner.display_name;
+      }
+
+      // Render custom menu items
+      const menu = $('chatPartnerDropdownMenu');
+      if (menu) {
+        menu.innerHTML = res.mentees.map(m => {
+          const isSelected = String(m.telegram_id) === String(partner.telegram_id);
+          const activeStyle = isSelected ? 'background: var(--surface); color: var(--gold);' : '';
+          const isOnline = isUserOnline(m.last_active);
+          const dotColor = isOnline ? 'var(--success)' : 'var(--text3)';
+          const dotLabel = isOnline ? 'Online' : 'Offline';
+
+          return `
+            <button class="msg-menu-item" style="justify-content: space-between; align-items: center; ${activeStyle}" onclick="switchChatPartner('${m.telegram_id}'); closeChatPartnerDropdown()">
+              <span style="font-weight: ${isSelected ? '700' : '500'};">${escapeHtml(m.display_name)}</span>
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: ${dotColor}; display: inline-block;" title="${dotLabel}"></span>
+            </button>
+          `;
+        }).join('');
+      }
+
       window.chatState = { with: partner.telegram_id, name: partner.anonymous_id };
       loadMessages(partner.telegram_id);
     }
@@ -1152,6 +1244,8 @@ async function loadChat() {
       toggleChatInput(false);
     }
     $('chatWith').textContent = 'Error loading chat';
+    const partnerWrapper = $('chatPartnerWrapper');
+    if (partnerWrapper) partnerWrapper.style.display = 'none';
   }
 }
 
@@ -1160,6 +1254,8 @@ function switchChatPartner(tid) {
   window.chatState.with = tid;
   toggleChatInput(true);
   loadMessages(tid);
+  window.pendingChatPartner = tid;
+  loadChat();
 }
 
 function openChat(partnerId) {
@@ -1481,14 +1577,30 @@ async function saveMentorNote(menteeId) {
 }
 
 async function endMentorship(assignId) {
-  if (!confirm('End this mentorship assignment?')) return;
-  haptic('medium');
-  try {
-    await apiFetch(`/api/mentors/end-mentorship/${assignId}`, { method: 'DELETE' });
-    haptic('success');
-    showToast(t('mentorship_ended'), 'success');
-    loadMyMentees();
-  } catch (e) { haptic('error'); showToast(e.message, 'error'); }
+  if (assignId && typeof assignId === 'string') {
+    // Mentor Flow (from My Mentees list)
+    if (!confirm('End this mentorship assignment?')) return;
+    haptic('medium');
+    try {
+      await apiFetch(`/api/mentors/end-mentorship/${assignId}`, { method: 'DELETE' });
+      haptic('success');
+      showToast(t('mentorship_ended'), 'success');
+      loadMyMentees();
+    } catch (e) { haptic('error'); showToast(e.message, 'error'); }
+  } else {
+    // Mentee Flow (from Mentors Page)
+    if (!confirm(t('confirm_end_mentorship') || 'Are you sure you want to end your mentorship?')) return;
+    haptic('medium');
+    try {
+      await apiFetch('/api/users/end-mentorship', { method: 'POST' });
+      haptic('success');
+      showToast(t('mentorship_ended'), 'success');
+      navigate('dashboard');
+    } catch (e) {
+      haptic('error');
+      showToast(e.message, 'error');
+    }
+  }
 }
 
 // ─── Topics ───────────────────────────────────────────────────

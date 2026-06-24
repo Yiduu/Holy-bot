@@ -1960,5 +1960,8 @@ module.exports = {
   notifyMentorshipRequest,
   notifyMentorshipAccepted,
   notifyMentorshipRejected,
-  notifyMessage
+  notifyMessage,
+  endMentorship,
+  safeSend,
+  getUserLang
 };

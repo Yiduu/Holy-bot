@@ -168,5 +168,42 @@ module.exports = function userRoutes(supabase, requireAuth) {
     res.json(result);
   });
 
+  // POST /api/users/end-mentorship
+  router.post('/end-mentorship', requireAuth, async (req, res) => {
+    const { id: telegram_id } = req.telegramUser;
+    
+    try {
+      // Find active assignment where user is the mentee
+      const { data: assignment, error } = await supabase
+        .from('mentorship_assignments')
+        .select('id, mentor_id')
+        .eq('user_id', telegram_id)
+        .eq('is_active', true)
+        .single();
+        
+      if (error || !assignment) {
+        return res.status(404).json({ error: 'No active mentorship found' });
+      }
+
+      // Update assignment
+      const { error: updateErr } = await supabase
+        .from('mentorship_assignments')
+        .update({ is_active: false, ended_at: new Date().toISOString() })
+        .eq('id', assignment.id);
+        
+      if (updateErr) {
+        return res.status(500).json({ error: updateErr.message });
+      }
+
+      // Call bot's endMentorship to handle notifications and rating prompts
+      const { endMentorship: botEndMentorship } = require('../bot');
+      await botEndMentorship(telegram_id, assignment.mentor_id, 'mentee');
+
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return router;
 };

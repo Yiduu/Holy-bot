@@ -338,8 +338,17 @@
     <div id="page-chat" class="page">
       <div class="app-header">
         <h2 id="chatWith" data-i18n="Chat">Messages</h2>
-        <select id="chatPartnerSelect" class="form-control btn-sm" style="width:auto;display:none;background:var(--bg3)"
-          onchange="switchChatPartner(this.value)"></select>
+        <div id="chatPartnerWrapper" style="display:none; position:relative;">
+          <button id="chatPartnerDropdownBtn" class="btn btn-outline btn-sm flex items-center gap-4" style="border-radius:12px;background:var(--bg3);color:var(--text);font-weight:600;padding:6px 12px;" onclick="toggleChatPartnerDropdown(event)">
+            <span id="chatPartnerSelectedName">Select Mentee</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div id="chatPartnerDropdownMenu" class="msg-context-menu" style="top: calc(100% + 4px); bottom: auto; right: 0; min-width: 180px; transform-origin: top right;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
         <button class="btn btn-ghost btn-sm" onclick="clearChatHistory()" style="color:var(--danger)"
           data-i18n="btn_clear">Clear</button>
       </div>
