@@ -114,7 +114,7 @@ function buildMessageTree(messages) {
 function renderThread(messages) {
   if (!messages || !messages.length) return '';
   return messages.map(msg => {
-    const isSent = msg.from_id === currentUser?.telegram_id;
+    const isSent = String(msg.from_id) === String(currentUser?.telegram_id);
     const replyFormId = `reply-form-${msg.id}`;
     const editedMark = msg.edited ? ' <small style="font-size:0.65rem; opacity:0.7;">(edited)</small>' : '';
     const displayContent = msg.is_deleted ? '🗑️ <em>Message deleted</em>' : escapeHtml(msg.content);
@@ -1139,10 +1139,10 @@ function renderMessage(msg, isSent, senderName) {
   </div>`;
 }
 
-function appendMessage(msg, isSent) {
+function appendMessage(msg) {
   const container = $('chatMessages');
   const div = document.createElement('div');
-  div.innerHTML = renderMessage(msg);
+  div.innerHTML = renderThread([msg]);
   container.appendChild(div.firstChild);
   container.scrollTop = container.scrollHeight;
 }
@@ -1172,7 +1172,7 @@ async function sendMessage() {
       method: 'POST',
       body: { to_id: window.chatState.with, content }
     });
-    appendMessage(msg, true);
+    appendMessage(msg);
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
