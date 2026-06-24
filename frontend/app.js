@@ -8,10 +8,6 @@ let currentUser = null;
 let currentPage = 'dashboard';
 let jitsiApi = null;
 let chart = null;
-let mediaRecorder = null;
-let recordedChunks = [];
-let recordingTimer = null;
-let recordingSeconds = 0;
 
 // ─── Helpers ──────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -118,21 +114,10 @@ function buildMessageTree(messages) {
 function renderThread(messages) {
   if (!messages || !messages.length) return '';
   return messages.map(msg => {
-    const isSent = String(msg.from_id) === String(currentUser?.telegram_id);
+    const isSent = msg.from_id === currentUser?.telegram_id;
     const replyFormId = `reply-form-${msg.id}`;
     const editedMark = msg.edited ? ' <small style="font-size:0.65rem; opacity:0.7;">(edited)</small>' : '';
-    let displayContent;
-    if (msg.is_deleted) {
-      displayContent = '🗑️ <em>Message deleted</em>';
-    } else {
-      const voiceMatch = msg.content.match(/\[voice:(.*?)\]/);
-      if (voiceMatch) {
-        const url = voiceMatch[1];
-        displayContent = `<div class="voice-message"><button class="play-btn" onclick="toggleVoicePlay(this, '${url}')">▶️</button><span class="voice-duration">0:00</span></div>`;
-      } else {
-        displayContent = escapeHtml(msg.content);
-      }
-    }
+    const displayContent = msg.is_deleted ? '🗑️ <em>Message deleted</em>' : escapeHtml(msg.content);
     return `
       <div class="message-thread" data-msg-id="${msg.id}">
         <div class="message-bubble ${isSent ? 'sent' : 'received'}">
@@ -1154,10 +1139,10 @@ function renderMessage(msg, isSent, senderName) {
   </div>`;
 }
 
-function appendMessage(msg) {
+function appendMessage(msg, isSent) {
   const container = $('chatMessages');
   const div = document.createElement('div');
-  div.innerHTML = renderThread([msg]);
+  div.innerHTML = renderMessage(msg);
   container.appendChild(div.firstChild);
   container.scrollTop = container.scrollHeight;
 }
@@ -1187,89 +1172,12 @@ async function sendMessage() {
       method: 'POST',
       body: { to_id: window.chatState.with, content }
     });
-    appendMessage(msg);
+    appendMessage(msg, true);
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
   }
 }
-
-// ─── Voice Recording Functions ─────────────────────────────────────
-function toggleVoiceRecord() {
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    stopVoiceRecord(true);
-  } else {
-    startVoiceRecord();
-  }
-}
-
-function startVoiceRecord() {
-  if (!window.chatState?.with) { showToast('Select a chat partner first', 'error'); return; }
-  navigator.mediaDevices.getUserMedia({ audio: true })
-    .then(stream => {
-      mediaRecorder = new MediaRecorder(stream);
-      recordedChunks = [];
-      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
-      mediaRecorder.start();
-      // UI updates
-      const indicator = $('recordingIndicator');
-      if (indicator) indicator.classList.remove('hidden');
-      recordingSeconds = 0;
-      updateRecordingTimer();
-      recordingTimer = setInterval(updateRecordingTimer, 1000);
-    })
-    .catch(err => { console.error('Mic permission error', err); showToast('Microphone permission denied', 'error'); });
-}
-
-function stopVoiceRecord(shouldSend) {
-  if (mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.stop();
-    mediaRecorder.stream.getTracks().forEach(t => t.stop());
-  }
-  clearInterval(recordingTimer);
-  const indicator = $('recordingIndicator');
-  if (indicator) indicator.classList.add('hidden');
-  if (!shouldSend) {
-    recordedChunks = [];
-    return;
-  }
-  const blob = new Blob(recordedChunks, { type: 'audio/webm' });
-  const reader = new FileReader();
-  reader.onloadend = () => {
-    const base64data = reader.result;
-    apiFetch('/api/messages', { method: 'POST', body: { to_id: window.chatState.with, audio: base64data } })
-      .then(msg => { appendMessage(msg); })
-      .catch(e => { console.error(e); showToast(e.message, 'error'); });
-  };
-  reader.readAsDataURL(blob);
-  recordedChunks = [];
-}
-
-function updateRecordingTimer() {
-  recordingSeconds++;
-  const mins = Math.floor(recordingSeconds / 60);
-  const secs = recordingSeconds % 60;
-  const timerEl = $('recordingTimer');
-  if (timerEl) timerEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-function toggleVoicePlay(btn, url) {
-  if (!btn._audio) {
-    btn._audio = new Audio(url);
-    btn._audio.addEventListener('ended', () => {
-      btn.textContent = '▶️';
-      btn._audio = null;
-    });
-  }
-  if (btn._audio.paused) {
-    btn._audio.play();
-    btn.textContent = '⏸️';
-  } else {
-    btn._audio.pause();
-    btn.textContent = '▶️';
-  }
-}
-
 
 function handleChatTyping() {
   if (socket && window.chatState.with) {

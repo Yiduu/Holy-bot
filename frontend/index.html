@@ -351,22 +351,15 @@
           <button class="reply-cancel" onclick="cancelReply()">✖</button>
         </div>
         <div class="chat-input-wrapper">
-          <button class="voice-btn" onclick="toggleVoiceRecord()" title="Record Voice">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v12"/><circle cx="12" cy="16" r="4"/></svg>
-          </button>
           <input id="chatInput" class="chat-input" placeholder="Type a message…" oninput="handleChatTyping()"
             onkeydown="if(event.key==='Enter')sendMessage()" />
           <button class="emoji-btn" onclick="toggleEmojiPicker()">😊</button>
           <button class="chat-send-btn" onclick="sendMessage()">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
           </button>
-          <div id="recordingIndicator" class="recording-indicator hidden" style="display:flex;align-items:center;gap:8px;margin-left:8px;">
-            <span class="recording-dot" style="width:10px;height:10px;background:red;border-radius:50%;animation:pulse 1.5s infinite;"></span>
-            <span id="recordingTimer">0:00</span>
-            <button class="cancel-record-btn" onclick="stopVoiceRecord(false)" title="Cancel">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6v12"/><path d="M16 6v12"/><path d="M5 6l1 14h12l1-14"/></svg>
-            </button>
-          </div>
         </div>
         <div id="emojiPicker" class="emoji-picker hidden"></div>
       </div>
