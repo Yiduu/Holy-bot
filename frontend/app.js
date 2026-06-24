@@ -489,6 +489,17 @@ async function showOnboarding() {
     if (select) {
       select.innerHTML = topics.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
     }
+
+    // Populate dynamic chips
+    const chipsContainer = $('regTopicsChips');
+    if (chipsContainer) {
+      chipsContainer.innerHTML = topics.map(t => `
+        <div class="topic-chip" id="onb-topic-${t.id}" onclick="toggleOnboardingTopicChip(${t.id})">
+          <span class="chip-icon">+</span>
+          <span class="chip-name">${escapeHtml(t.name)}</span>
+        </div>
+      `).join('');
+    }
   } catch (e) {
     console.error('Failed to load topics for onboarding:', e);
   }
@@ -496,27 +507,120 @@ async function showOnboarding() {
   showStep(0);
 }
 
-function toggleOnboardingTopic(id) {
+function toggleOnboardingTopicChip(id) {
   haptic('light');
-  const idx = onboardingSelectedTopics.indexOf(id);
-  const el = $(`onb-topic-${id}`);
-  if (idx > -1) {
-    onboardingSelectedTopics.splice(idx, 1);
-    if (el) el.className = 'chip chip-outline';
-  } else {
-    onboardingSelectedTopics.push(id);
-    if (el) el.className = 'chip chip-gold';
+  const select = $('regTopicsSelect');
+  if (!select) return;
+
+  const option = Array.from(select.options).find(o => Number(o.value) === id);
+  if (!option) return;
+
+  option.selected = !option.selected;
+
+  const chip = $(`onb-topic-${id}`);
+  if (chip) {
+    chip.classList.toggle('active', option.selected);
+    const icon = chip.querySelector('.chip-icon');
+    if (icon) {
+      icon.textContent = option.selected ? '✓' : '+';
+    }
   }
 }
 
 function showStep(step) {
   haptic('light');
   onboardingStep = step;
+
+  // Update step dots if any
   $$('.step-dot').forEach((d, i) => {
     d.classList.toggle('active', i === step);
     d.classList.toggle('done', i < step);
   });
+
+  // Update stepper connectors
+  const fill = $('ob-step-line-fill');
+  if (fill) {
+    fill.style.width = (step / 2 * 100) + '%';
+  }
+
+  // Update stepper active states
+  $$('.stepper-step').forEach((d, i) => {
+    d.classList.toggle('active', i === step);
+    d.classList.toggle('done', i < step);
+  });
+
   $$('.onboarding-step').forEach((s, i) => s.classList.toggle('hidden', i !== step));
+  clearAllFieldErrors();
+}
+
+function goToStepIfValid(step) {
+  if (step === 0) {
+    showStep(0);
+  } else if (step === 1) {
+    showStep(1);
+  } else if (step === 2) {
+    validateStep1AndGo(2);
+  }
+}
+
+function showInlineError(fieldId, message) {
+  const field = $(fieldId);
+  if (!field) return;
+
+  field.classList.add('is-invalid');
+  const parent = field.closest('.form-group-ob') || field.parentNode;
+  let errorDiv = parent.querySelector('.inline-error');
+  if (!errorDiv) {
+    errorDiv = document.createElement('div');
+    errorDiv.className = 'inline-error';
+    parent.appendChild(errorDiv);
+  }
+  errorDiv.innerHTML = `⚠️ ${escapeHtml(message)}`;
+}
+
+function clearFieldError(fieldId) {
+  const field = $(fieldId);
+  if (!field) return;
+  field.classList.remove('is-invalid');
+  const parent = field.closest('.form-group-ob') || field.parentNode;
+  const errorDiv = parent.querySelector('.inline-error');
+  if (errorDiv) {
+    errorDiv.remove();
+  }
+}
+
+function clearAllFieldErrors() {
+  $$('.inline-error').forEach(el => el.remove());
+  $$('.form-control-ob').forEach(el => el.classList.remove('is-invalid'));
+}
+
+function validateStep1AndGo(nextStep) {
+  const sex = $('regSex').value;
+  const age_range = $('regAge').value;
+  const education_level = $('regEdu').value;
+
+  clearAllFieldErrors();
+
+  let hasError = false;
+  if (!sex) {
+    showInlineError('regSex', 'Please select your sex');
+    hasError = true;
+  }
+  if (!age_range) {
+    showInlineError('regAge', 'Please select your age range');
+    hasError = true;
+  }
+  if (!education_level) {
+    showInlineError('regEdu', 'Please select your education level');
+    hasError = true;
+  }
+
+  if (hasError) {
+    haptic('error');
+    return;
+  }
+
+  showStep(nextStep);
 }
 
 async function completeRegistration() {
@@ -525,15 +629,43 @@ async function completeRegistration() {
   const education_level = $('regEdu').value;
   const nickname = $('regNickname').value.trim();
 
-  if (!sex || !age_range || !education_level || !nickname) {
-    haptic('error');
-    showToast('Please complete all fields', 'error'); return;
+  clearAllFieldErrors();
+
+  let hasError = false;
+  if (!sex) {
+    showInlineError('regSex', 'Sex selection is required');
+    hasError = true;
+  }
+  if (!age_range) {
+    showInlineError('regAge', 'Age range is required');
+    hasError = true;
+  }
+  if (!education_level) {
+    showInlineError('regEdu', 'Education level is required');
+    hasError = true;
   }
 
-  const nickRegex = /^[a-zA-Z0-9_]{3,20}$/;
-  if (!nickRegex.test(nickname)) {
+  if (!nickname) {
+    showInlineError('regNickname', 'Anonymous nickname is required');
+    hasError = true;
+  } else {
+    const nickRegex = /^[a-zA-Z0-9_]{3,20}$/;
+    if (!nickRegex.test(nickname)) {
+      showInlineError('regNickname', '3-20 characters: letters, numbers, and underscores only');
+      hasError = true;
+    }
+  }
+
+  if (hasError) {
     haptic('error');
-    showToast('Invalid nickname format (3-20 chars, no spaces)', 'error'); return;
+    if (!sex || !age_range || !education_level) {
+      showStep(1);
+      if (!sex) showInlineError('regSex', 'Sex selection is required');
+      if (!age_range) showInlineError('regAge', 'Age range is required');
+      if (!education_level) showInlineError('regEdu', 'Education level is required');
+    }
+    showToast('Please correct the errors below', 'error');
+    return;
   }
 
   const regBtn = $('regBtn');
@@ -542,7 +674,14 @@ async function completeRegistration() {
   try {
     const data = await apiFetch('/api/auth/register', {
       method: 'POST',
-      body: { sex, age_range, education_level, nickname, chat_id: getTelegramData().user?.id, topic_ids: Array.from($('regTopicsSelect').selectedOptions).map(o => Number(o.value)) },
+      body: {
+        sex,
+        age_range,
+        education_level,
+        nickname,
+        chat_id: getTelegramData().user?.id,
+        topic_ids: Array.from($('regTopicsSelect').selectedOptions).map(o => Number(o.value))
+      },
     });
     haptic('success');
     currentUser = data.user;
@@ -551,8 +690,8 @@ async function completeRegistration() {
     showToast('Welcome! You are now registered 🙏', 'success');
   } catch (e) {
     haptic('error');
-    if (e.message.includes('taken')) {
-      showToast('Nickname taken, try another', 'error');
+    if (e.message.toLowerCase().includes('taken')) {
+      showInlineError('regNickname', 'This nickname is already taken. Please try another.');
     } else {
       showToast(e.message, 'error');
     }
