@@ -1132,25 +1132,6 @@ async function loadMessages(with_id) {
   } catch (e) { console.error(e); }
 }
 
-
-function renderMessage(msg, isSent, senderName) {
-  return `<div class="message-bubble ${isSent ? 'sent' : 'received'}">
-    <div class="message-text">${escapeHtml(msg.content)}</div>
-    <div class="message-footer">
-      <span class="message-time">${formatTime(msg.created_at)}</span>
-      <button class="reply-btn" onclick="showReplyForm('${msg.id}')">↩ Reply</button>
-    </div>
-  </div>`;
-}
-
-function appendMessage(msg, isSent) {
-  const container = $('chatMessages');
-  const div = document.createElement('div');
-  div.innerHTML = renderMessage(msg);
-  container.appendChild(div.firstChild);
-  container.scrollTop = container.scrollHeight;
-}
-
 async function clearChatHistory() {
   if (!window.chatState?.with) return;
   if (!confirm('Clear all messages in this conversation? This cannot be undone.')) return;
@@ -1172,11 +1153,11 @@ async function sendMessage() {
   input.value = '';
   $('emojiPicker')?.classList.add('hidden');
   try {
-    const msg = await apiFetch('/api/messages', {
+    await apiFetch('/api/messages', {
       method: 'POST',
       body: { to_id: window.chatState.with, content }
     });
-    appendMessage(msg, true);
+    await loadMessages(window.chatState.with);
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
