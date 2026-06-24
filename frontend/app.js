@@ -111,6 +111,10 @@ function buildMessageTree(messages) {
   return roots;
 }
 
+/* ── SVG icon constants ──────────────────────────────────────── */
+const ICON_REPLY = `<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>`;
+const ICON_MORE = `<svg class="msg-icon" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>`;
+
 function renderThread(messages) {
   if (!messages || !messages.length) return '';
   return messages
@@ -119,7 +123,7 @@ function renderThread(messages) {
       const isSent = msg.from_id === currentUser?.telegram_id;
       const replyFormId = `reply-form-${msg.id}`;
       const editedMark = msg.edited_at
-        ? '<span class="msg-edited">(edited)</span>'
+        ? '<span class="msg-edited">edited</span>'
         : '';
       const hasReplies = msg.replies && msg.replies.filter(r => !r.is_deleted).length > 0;
       return `
@@ -129,8 +133,20 @@ function renderThread(messages) {
             <div class="message-footer">
               <span class="message-time">${formatTime(msg.created_at)}</span>
               <span class="msg-footer-actions">
-                ${isSent ? `<button class="more-options-btn" onclick="showMessageOptions('${msg.id}')" aria-label="Options">⋯</button>` : ''}
-                <button class="reply-btn" onclick="showReplyForm('${msg.id}')" aria-label="Reply">↩</button>
+                ${isSent ? `
+                  <button class="msg-action-btn" onclick="toggleMsgMenu('${msg.id}', event)" aria-label="Options">${ICON_MORE}</button>
+                  <div class="msg-context-menu" id="msg-menu-${msg.id}">
+                    <button class="msg-menu-item" onclick="editMessageInline('${msg.id}');closeMsgMenu()">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      Edit
+                    </button>
+                    <button class="msg-menu-item danger" onclick="deleteMessageInline('${msg.id}');closeMsgMenu()">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                      Delete
+                    </button>
+                  </div>
+                ` : ''}
+                <button class="msg-action-btn" onclick="showReplyForm('${msg.id}')" aria-label="Reply">${ICON_REPLY}</button>
               </span>
             </div>
           </div>
@@ -143,6 +159,34 @@ function renderThread(messages) {
         </div>
       `;
     }).join('');
+}
+
+/* ── Inline context-menu helpers ────────────────────────────── */
+function toggleMsgMenu(msgId, e) {
+  e.stopPropagation();
+  const menu = document.getElementById(`msg-menu-${msgId}`);
+  if (!menu) return;
+  const isOpen = menu.classList.contains('open');
+  closeMsgMenu(); // close any other open menu first
+  if (!isOpen) {
+    menu.classList.add('open');
+    // close on next outside tap
+    setTimeout(() => document.addEventListener('click', closeMsgMenu, { once: true }), 0);
+  }
+}
+
+function closeMsgMenu() {
+  document.querySelectorAll('.msg-context-menu.open').forEach(m => m.classList.remove('open'));
+}
+
+async function editMessageInline(msgId) {
+  currentMessageId = msgId;
+  await editMessage();
+}
+
+async function deleteMessageInline(msgId) {
+  currentMessageId = msgId;
+  await deleteMessage();
 }
 
 function showReplyForm(messageId) {
@@ -184,6 +228,7 @@ async function sendReply(parentId) {
 let currentMessageId = null;
 
 function showMessageOptions(messageId) {
+  // Legacy: kept for any external callers; routes to inline menu flow
   currentMessageId = messageId;
   document.getElementById('messageOptionsModal').classList.add('open');
 }
@@ -331,9 +376,9 @@ function connectSocket() {
   });
   socket.on('typing', ({ from_id }) => {
     if (window.chatState?.with === from_id) {
-      $('typingIndicator').textContent = 'typing...';
+      $('typingIndicator').innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>';
       clearTimeout(window.typingTimeout);
-      window.typingTimeout = setTimeout(() => { $('typingIndicator').textContent = ''; }, 2000);
+      window.typingTimeout = setTimeout(() => { $('typingIndicator').innerHTML = ''; }, 2000);
     }
   });
   socket.on('new_mentorship_request', () => {
@@ -1131,6 +1176,10 @@ async function loadMessages(with_id) {
     container.scrollTop = container.scrollHeight;
   } catch (e) { console.error(e); }
 }
+
+
+
+
 
 async function clearChatHistory() {
   if (!window.chatState?.with) return;
