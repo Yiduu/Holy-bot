@@ -113,32 +113,36 @@ function buildMessageTree(messages) {
 
 function renderThread(messages) {
   if (!messages || !messages.length) return '';
-  return messages.map(msg => {
-    const isSent = msg.from_id === currentUser?.telegram_id;
-    const replyFormId = `reply-form-${msg.id}`;
-    const editedMark = msg.edited ? ' <small style="font-size:0.65rem; opacity:0.7;">(edited)</small>' : '';
-    const displayContent = msg.is_deleted ? '🗑️ <em>Message deleted</em>' : escapeHtml(msg.content);
-    return `
-      <div class="message-thread" data-msg-id="${msg.id}">
-        <div class="message-bubble ${isSent ? 'sent' : 'received'}">
-          <div class="message-text">${displayContent}${editedMark}</div>
-          <div class="message-footer">
-            <span class="message-time">${formatTime(msg.created_at)}</span>
-            ${!msg.is_deleted && isSent ? `<button class="more-options-btn" onclick="showMessageOptions('${msg.id}')">⋯</button>` : ''}
-            <button class="reply-btn" onclick="showReplyForm('${msg.id}')">↩ Reply</button>
+  return messages
+    .filter(msg => !msg.is_deleted)
+    .map(msg => {
+      const isSent = msg.from_id === currentUser?.telegram_id;
+      const replyFormId = `reply-form-${msg.id}`;
+      const editedMark = msg.edited_at
+        ? '<span class="msg-edited">(edited)</span>'
+        : '';
+      const hasReplies = msg.replies && msg.replies.filter(r => !r.is_deleted).length > 0;
+      return `
+        <div class="message-thread ${isSent ? 'thread-sent' : 'thread-received'}" data-msg-id="${msg.id}">
+          <div class="message-bubble ${isSent ? 'sent' : 'received'}">
+            <div class="message-text">${escapeHtml(msg.content)}${editedMark}</div>
+            <div class="message-footer">
+              <span class="message-time">${formatTime(msg.created_at)}</span>
+              <span class="msg-footer-actions">
+                ${isSent ? `<button class="more-options-btn" onclick="showMessageOptions('${msg.id}')" aria-label="Options">⋯</button>` : ''}
+                <button class="reply-btn" onclick="showReplyForm('${msg.id}')" aria-label="Reply">↩</button>
+              </span>
+            </div>
           </div>
+          <div id="${replyFormId}" class="reply-form">
+            <input type="text" id="reply-input-${msg.id}" class="reply-input" placeholder="Write a reply…" autocomplete="off" />
+            <button class="reply-send" onclick="sendReply('${msg.id}')">Send</button>
+            <button class="cancel-reply" onclick="hideReplyForm('${msg.id}')">✕</button>
+          </div>
+          ${hasReplies ? `<div class="replies-container">${renderThread(msg.replies)}</div>` : ''}
         </div>
-        <div id="${replyFormId}" class="reply-form">
-          <input type="text" id="reply-input-${msg.id}" class="reply-input" placeholder="Write a reply..." />
-          <button class="reply-send" onclick="sendReply('${msg.id}')">Send</button>
-          <button class="cancel-reply" onclick="hideReplyForm('${msg.id}')">Cancel</button>
-        </div>
-        <div class="replies-container">
-          ${msg.replies ? renderThread(msg.replies) : ''}
-        </div>
-      </div>
-    `;
-  }).join('');
+      `;
+    }).join('');
 }
 
 function showReplyForm(messageId) {
