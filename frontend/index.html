@@ -27,121 +27,250 @@
   <!-- ─── Reconnect Banner ─────────────────────────────────────── -->
   <div id="reconnectBanner" class="reconnect-banner">⚠ Reconnecting...</div>
 
-  <!-- ─── Onboarding ───────────────────────────────────────────── -->
+  <!-- ─── Onboarding (Premium Redesign) ──────────────────────── -->
   <div id="onboarding" style="display:none">
-    <div class="onboarding-header">
-      <img src="Holy%20logo1.png" alt="Holy Helper Logo" class="onboarding-logo-img" />
-      <div class="onboarding-sub">A safe space to forget the past and run for the future</div>
-    </div>
 
-    <div class="step-indicator">
-      <div class="step-dot active"></div>
-      <div class="step-dot"></div>
-      <div class="step-dot"></div>
-    </div>
+    <!-- Ambient background layers -->
+    <div class="ob-bg-orb ob-orb1"></div>
+    <div class="ob-bg-orb ob-orb2"></div>
 
-    <!-- Step 0: Welcome -->
-    <div class="onboarding-step">
-      <div class="verse-card" style="margin-bottom:24px">
-        <div id="verseTextOnboarding" class="verse-text">"ብረት ብረትን ይስለዋል ሰውም ባልንጀራውን ይስላል"</div>
-        <div id="verseRefOnboarding" class="verse-ref">ምሳሌ 27:17</div>
+    <!-- ── Logo / Brand ── -->
+    <div class="ob-brand">
+      <div class="ob-logo-ring">
+        <img src="Holy%20logo1.png" alt="Holy" class="ob-logo-img" />
       </div>
-      <p style="color:var(--text2);font-size:.9rem;line-height:1.6;margin-bottom:24px">
-        This community is 100% anonymous. No real names, emails, or phone numbers are collected.
-        You will receive a randomly generated name that only you will know.
+      <p class="ob-tagline">A safe space to forget the past<br>and run for the future</p>
+    </div>
+
+    <!-- ── Step Indicator ── -->
+    <div class="ob-steps">
+      <div class="ob-step-track">
+        <div id="ob-step-fill" class="ob-step-fill" style="width:0%"></div>
+      </div>
+      <div class="ob-step-labels">
+        <span class="ob-step-label active" id="slabel-0">Welcome</span>
+        <span class="ob-step-label" id="slabel-1">About You</span>
+        <span class="ob-step-label" id="slabel-2">Register</span>
+      </div>
+    </div>
+
+    <!-- ══ Step 0: Welcome ══ -->
+    <div class="onboarding-step ob-panel">
+
+      <!-- Verse block – now a standalone illuminated panel -->
+      <div class="ob-verse-panel">
+        <svg class="ob-verse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 2L2 7l10 5 10-5-10-5z" />
+          <path d="M2 17l10 5 10-5" />
+          <path d="M2 12l10 5 10-5" />
+        </svg>
+        <blockquote id="verseTextOnboarding" class="ob-verse-text">"ብረት ብረትን ይስለዋል ሰውም ባልንጀራውን ይስላል"</blockquote>
+        <cite id="verseRefOnboarding" class="ob-verse-ref">ምሳሌ 27:17</cite>
+      </div>
+
+      <p class="ob-body-text">
+        This community is <strong>100% anonymous.</strong> No real names, emails, or phone numbers are collected.
+        You receive a name only you will know.
       </p>
-      <div class="card" style="margin-bottom:24px">
-        <div class="flex items-center gap-8 mb-8"><span style="font-size:1.2rem">🔒</span><span class="text-sm">Fully
-            anonymous — identity protected</span></div>
-        <div class="flex items-center gap-8 mb-8"><span style="font-size:1.2rem">🙏</span><span
-            class="text-sm">Christian community of accountability</span></div>
-        <div class="flex items-center gap-8"><span style="font-size:1.2rem">📹</span><span class="text-sm">Free video
-            sessions with mentors</span></div>
+
+      <!-- Feature rows with SVG icons -->
+      <div class="ob-features">
+        <div class="ob-feature-row">
+          <div class="ob-feat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
+          <div class="ob-feat-text">
+            <span class="ob-feat-title">Fully Anonymous</span>
+            <span class="ob-feat-sub">Your identity is always protected</span>
+          </div>
+        </div>
+        <div class="ob-feature-divider"></div>
+        <div class="ob-feature-row">
+          <div class="ob-feat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </div>
+          <div class="ob-feat-text">
+            <span class="ob-feat-title">Christian Accountability</span>
+            <span class="ob-feat-sub">A community built on faith & honesty</span>
+          </div>
+        </div>
+        <div class="ob-feature-divider"></div>
+        <div class="ob-feature-row">
+          <div class="ob-feat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M15 10l4.553-2.07A1 1 0 0 1 21 8.87v6.26a1 1 0 0 1-1.447.9L15 14" />
+              <rect x="1" y="6" width="14" height="12" rx="2" />
+            </svg>
+          </div>
+          <div class="ob-feat-text">
+            <span class="ob-feat-title">Free Mentor Sessions</span>
+            <span class="ob-feat-sub">Live video support, at no cost</span>
+          </div>
+        </div>
       </div>
-      <button class="btn btn-primary btn-full" onclick="showStep(1)">Begin My Journey →</button>
+
+      <button class="ob-btn-primary" onclick="showStep(1)">
+        Begin My Journey
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
+      </button>
     </div>
 
-    <!-- Step 1: Basic info -->
-    <div class="onboarding-step hidden">
-      <h2 style="font-family:var(--font-display);color:var(--gold);margin-bottom:4px">Tell Us About You</h2>
-      <p class="text-sm text-dim mb-16">Anonymous info only – helps match you with the right mentor</p>
-
-      <div class="form-group">
-        <label class="form-label">Sex</label>
-        <select id="regSex" class="form-control">
-          <option value="">Select…</option>
-          <option value="M">Male</option>
-          <option value="F">Female</option>
-          <option value="prefer_not">Prefer not to say</option>
-        </select>
+    <!-- ══ Step 1: Basic Info ══ -->
+    <div class="onboarding-step ob-panel hidden">
+      <div class="ob-step-heading">
+        <svg class="ob-step-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+        <div>
+          <h2 class="ob-heading">Tell Us About You</h2>
+          <p class="ob-sub">Anonymous info only — helps match you with the right mentor</p>
+        </div>
       </div>
 
-      <div class="form-group">
-        <label class="form-label">Age Range</label>
-        <select id="regAge" class="form-control">
-          <option value="">Select…</option>
-          <option value="13-17">13–17</option>
-          <option value="18-24">18–24</option>
-          <option value="25-34">25–34</option>
-          <option value="35-44">35–44</option>
-          <option value="45-54">45–54</option>
-          <option value="55+">55+</option>
-        </select>
+      <div class="ob-field-group">
+        <label class="ob-label">Sex</label>
+        <div class="ob-select-wrap">
+          <select id="regSex" class="ob-select">
+            <option value="">Select…</option>
+            <option value="M">Male</option>
+            <option value="F">Female</option>
+            <option value="prefer_not">Prefer not to say</option>
+          </select>
+          <svg class="ob-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </div>
       </div>
 
-      <div class="form-group">
-        <label class="form-label">Education Level</label>
-        <select id="regEdu" class="form-control">
-          <option value="">Select…</option>
-          <option value="none">None</option>
-          <option value="primary">Primary</option>
-          <option value="secondary">Secondary / High School</option>
-          <option value="undergraduate">Undergraduate</option>
-          <option value="graduate">Graduate</option>
-          <option value="postgraduate">Postgraduate</option>
-        </select>
+      <div class="ob-field-group">
+        <label class="ob-label">Age Range</label>
+        <div class="ob-select-wrap">
+          <select id="regAge" class="ob-select">
+            <option value="">Select…</option>
+            <option value="13-17">13–17</option>
+            <option value="18-24">18–24</option>
+            <option value="25-34">25–34</option>
+            <option value="35-44">35–44</option>
+            <option value="45-54">45–54</option>
+            <option value="55+">55+</option>
+          </select>
+          <svg class="ob-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </div>
       </div>
 
-      <div class="form-group">
-        <label class="form-label">Topics you need help with (Select multiple)</label>
-        <select id="regTopicsSelect" class="form-control" multiple
-          style="max-height:180px;overflow-y:auto;background:var(--bg3);padding:8px;border-radius:var(--radius-sm)">
+      <div class="ob-field-group">
+        <label class="ob-label">Education Level</label>
+        <div class="ob-select-wrap">
+          <select id="regEdu" class="ob-select">
+            <option value="">Select…</option>
+            <option value="none">None</option>
+            <option value="primary">Primary</option>
+            <option value="secondary">Secondary / High School</option>
+            <option value="undergraduate">Undergraduate</option>
+            <option value="graduate">Graduate</option>
+            <option value="postgraduate">Postgraduate</option>
+          </select>
+          <svg class="ob-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="ob-field-group">
+        <label class="ob-label">Topics you need help with</label>
+        <p class="ob-hint">Hold Ctrl / ⌘ to select multiple</p>
+        <select id="regTopicsSelect" class="ob-select ob-select-multi" multiple>
           <!-- Dynamic topics options will be populated here -->
         </select>
       </div>
 
-      <div class="flex gap-8">
-        <button class="btn btn-ghost" onclick="showStep(0)">← Back</button>
-        <button class="btn btn-primary flex-1" onclick="showStep(2)">Continue →</button>
+      <div class="ob-btn-row">
+        <button class="ob-btn-ghost" onclick="showStep(0)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
+            <path d="M19 12H5M11 6l-6 6 6 6" />
+          </svg>
+          Back
+        </button>
+        <button class="ob-btn-primary ob-btn-flex" onclick="showStep(2)">
+          Continue
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </button>
       </div>
     </div>
 
-    <!-- Step 2: Confirm & Register -->
-    <div class="onboarding-step hidden">
-      <h2 style="font-family:var(--font-display);color:var(--gold);margin-bottom:4px">Your Identity</h2>
-      <p class="text-sm text-dim mb-16">Choose a nickname and commit to the journey</p>
-
-      <div class="form-group">
-        <label class="form-label">Anonymous Nickname</label>
-        <input id="regNickname" class="form-control" placeholder="e.g. HopeSeeker_22" maxlength="20" />
-        <p class="text-xs text-dim mt-4">3–20 chars, letters/numbers/underscores only</p>
+    <!-- ══ Step 2: Identity & Register ══ -->
+    <div class="onboarding-step ob-panel hidden">
+      <div class="ob-step-heading">
+        <svg class="ob-step-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+        <div>
+          <h2 class="ob-heading">Your Identity</h2>
+          <p class="ob-sub">Choose a nickname and commit to the journey</p>
+        </div>
       </div>
 
-      <div class="card mb-16">
-        <p class="text-sm" style="line-height:1.7;color:var(--text2)">
-          ☑ I commit to honesty in my recovery journey<br>
-          ☑ I will treat fellow members with respect and anonymity<br>
-          ☑ I understand this is a support community, not a replacement for professional help<br>
-          ☑ I agree not to share harmful or inappropriate content
-        </p>
+      <div class="ob-field-group">
+        <label class="ob-label">Anonymous Nickname</label>
+        <div class="ob-input-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"
+            style="color:var(--gold);flex-shrink:0">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <input id="regNickname" class="ob-input" placeholder="e.g. HopeSeeker_22" maxlength="20" />
+        </div>
+        <p class="ob-hint">3–20 characters · letters, numbers & underscores only</p>
       </div>
 
-      <div class="flex gap-8">
-        <button class="btn btn-ghost" onclick="showStep(1)">← Back</button>
-        <button id="regBtn" class="btn btn-primary flex-1" onclick="completeRegistration()">Join the Community
-          🙏</button>
+      <!-- Covenant card -->
+      <div class="ob-covenant">
+        <div class="ob-covenant-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+          My Commitment
+        </div>
+        <ul class="ob-covenant-list">
+          <li>I commit to honesty in my recovery journey</li>
+          <li>I will treat fellow members with respect and anonymity</li>
+          <li>I understand this is a support community, not a replacement for professional help</li>
+          <li>I agree not to share harmful or inappropriate content</li>
+        </ul>
+      </div>
+
+      <div class="ob-btn-row">
+        <button class="ob-btn-ghost" onclick="showStep(1)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14">
+            <path d="M19 12H5M11 6l-6 6 6 6" />
+          </svg>
+          Back
+        </button>
+        <button id="regBtn" class="ob-btn-primary ob-btn-flex" onclick="completeRegistration()">
+          Register &amp; Join
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </button>
       </div>
     </div>
+
   </div>
 
   <!-- ── Main App ──────────────────────────────────────────────── -->
@@ -339,13 +468,17 @@
       <div class="app-header">
         <h2 id="chatWith" data-i18n="Chat">Messages</h2>
         <div id="chatPartnerWrapper" style="display:none; position:relative;">
-          <button id="chatPartnerDropdownBtn" class="btn btn-outline btn-sm flex items-center gap-4" style="border-radius:12px;background:var(--bg3);color:var(--text);font-weight:600;padding:6px 12px;" onclick="toggleChatPartnerDropdown(event)">
+          <button id="chatPartnerDropdownBtn" class="btn btn-outline btn-sm flex items-center gap-4"
+            style="border-radius:12px;background:var(--bg3);color:var(--text);font-weight:600;padding:6px 12px;"
+            onclick="toggleChatPartnerDropdown(event)">
             <span id="chatPartnerSelectedName">Select Mentee</span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
               <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
           </button>
-          <div id="chatPartnerDropdownMenu" class="msg-context-menu" style="top: calc(100% + 4px); bottom: auto; left: 0; right: auto; min-width: 180px; transform-origin: top left;">
+          <div id="chatPartnerDropdownMenu" class="msg-context-menu"
+            style="top: calc(100% + 4px); bottom: auto; left: 0; right: auto; min-width: 180px; transform-origin: top left;">
             <!-- Rendered dynamically -->
           </div>
         </div>
@@ -612,16 +745,22 @@
       <div class="form-group">
         <label class="form-label" data-i18n="apply_q1">Which type of user you want to give mentorship :</label>
         <div style="position: relative;">
-          <button id="applySexDropdownBtn" class="form-control flex justify-between items-center" style="background:var(--bg3); text-align: left;" onclick="toggleApplySexDropdown(event)">
+          <button id="applySexDropdownBtn" class="form-control flex justify-between items-center"
+            style="background:var(--bg3); text-align: left;" onclick="toggleApplySexDropdown(event)">
             <span id="applySexSelectedText" data-i18n="Select…">Select…</span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round">
               <polyline points="6 9 12 15 18 9"></polyline>
             </svg>
           </button>
-          <div id="applySexDropdownMenu" class="msg-context-menu" style="top: 100%; bottom: auto; left: 0; right: 0; min-width: 100%; transform-origin: top left;">
-            <button class="msg-menu-item" onclick="selectApplySex('M', 'Male', event)" data-i18n="sex_male">Male</button>
-            <button class="msg-menu-item" onclick="selectApplySex('F', 'Female', event)" data-i18n="sex_female">Female</button>
-            <button class="msg-menu-item" onclick="selectApplySex('prefer_not', 'Both', event)" data-i18n="sex_both">Both</button>
+          <div id="applySexDropdownMenu" class="msg-context-menu"
+            style="top: 100%; bottom: auto; left: 0; right: 0; min-width: 100%; transform-origin: top left;">
+            <button class="msg-menu-item" onclick="selectApplySex('M', 'Male', event)"
+              data-i18n="sex_male">Male</button>
+            <button class="msg-menu-item" onclick="selectApplySex('F', 'Female', event)"
+              data-i18n="sex_female">Female</button>
+            <button class="msg-menu-item" onclick="selectApplySex('prefer_not', 'Both', event)"
+              data-i18n="sex_both">Both</button>
           </div>
           <input type="hidden" id="applySex" value="" />
         </div>
@@ -920,6 +1059,563 @@
         else location.reload();
       }
     }, { passive: true });
+  </script>
+
+  <!-- ── Premium Onboarding Styles ─────────────────────────── -->
+  <style>
+    /* ── Onboarding shell ── */
+    #onboarding {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      padding: 0 0 40px;
+    }
+
+    /* ── Ambient orbs ── */
+    .ob-bg-orb {
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(80px);
+    }
+
+    .ob-orb1 {
+      width: 340px;
+      height: 340px;
+      top: -100px;
+      right: -80px;
+      background: radial-gradient(circle, rgba(201, 168, 76, .13) 0%, transparent 70%);
+    }
+
+    .ob-orb2 {
+      width: 260px;
+      height: 260px;
+      bottom: 60px;
+      left: -60px;
+      background: radial-gradient(circle, rgba(91, 142, 255, .08) 0%, transparent 70%);
+    }
+
+    /* ── Brand / Logo block ── */
+    .ob-brand {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 24px 20px;
+      text-align: center;
+    }
+
+    .ob-logo-ring {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(201, 168, 76, .35);
+      box-shadow: 0 0 0 6px rgba(201, 168, 76, .06), 0 0 40px rgba(201, 168, 76, .18);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      background: rgba(201, 168, 76, .05);
+      animation: obHaloPulse 3.5s ease-in-out infinite;
+    }
+
+    @keyframes obHaloPulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 6px rgba(201, 168, 76, .06), 0 0 40px rgba(201, 168, 76, .18);
+      }
+
+      50% {
+        box-shadow: 0 0 0 10px rgba(201, 168, 76, .10), 0 0 60px rgba(201, 168, 76, .28);
+      }
+    }
+
+    .ob-logo-img {
+      height: 64px;
+      width: auto;
+      object-fit: contain;
+    }
+
+    .ob-tagline {
+      font-size: .8rem;
+      color: var(--text3);
+      line-height: 1.55;
+      letter-spacing: .01em;
+      max-width: 220px;
+    }
+
+    /* ── Step progress ── */
+    .ob-steps {
+      position: relative;
+      z-index: 1;
+      padding: 0 28px 28px;
+    }
+
+    .ob-step-track {
+      height: 2px;
+      background: var(--border-dim);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+
+    .ob-step-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--gold), var(--gold-light));
+      border-radius: 2px;
+      transition: width .4s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    .ob-step-labels {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .ob-step-label {
+      font-size: .62rem;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: var(--text3);
+      transition: color .3s;
+    }
+
+    .ob-step-label.active {
+      color: var(--gold);
+    }
+
+    .ob-step-label.done {
+      color: var(--success);
+    }
+
+    /* ── Panel (each step card) ── */
+    .ob-panel {
+      position: relative;
+      z-index: 1;
+      margin: 0 16px;
+      background: rgba(255, 255, 255, .025);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-dim);
+      border-radius: 20px;
+      padding: 24px 20px;
+      animation: obPanelIn .35s cubic-bezier(.4, 0, .2, 1) both;
+    }
+
+    @keyframes obPanelIn {
+      from {
+        opacity: 0;
+        transform: translateY(14px);
+      }
+
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    /* ── Bible verse panel ── */
+    .ob-verse-panel {
+      background: linear-gradient(135deg, rgba(201, 168, 76, .10) 0%, rgba(91, 142, 255, .05) 100%);
+      border: 1px solid rgba(201, 168, 76, .22);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 20px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ob-verse-panel::before {
+      content: '"';
+      position: absolute;
+      top: -18px;
+      left: 8px;
+      font-size: 7rem;
+      font-family: var(--font-display);
+      color: rgba(201, 168, 76, .08);
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    .ob-verse-icon {
+      width: 22px;
+      height: 22px;
+      stroke: var(--gold);
+      margin-bottom: 12px;
+    }
+
+    .ob-verse-text {
+      font-style: italic;
+      font-size: .9rem;
+      line-height: 1.65;
+      color: var(--text);
+      margin-bottom: 10px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .ob-verse-ref {
+      font-family: var(--font-display);
+      font-size: .7rem;
+      color: var(--gold);
+      letter-spacing: .08em;
+      font-style: normal;
+    }
+
+    /* ── Body text ── */
+    .ob-body-text {
+      font-size: .85rem;
+      color: var(--text2);
+      line-height: 1.65;
+      margin-bottom: 20px;
+    }
+
+    .ob-body-text strong {
+      color: var(--text);
+    }
+
+    /* ── Feature rows ── */
+    .ob-features {
+      background: rgba(0, 0, 0, .18);
+      border: 1px solid var(--border-dim);
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    .ob-feature-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+    }
+
+    .ob-feature-divider {
+      height: 1px;
+      background: var(--border-dim);
+      margin: 0 16px;
+    }
+
+    .ob-feat-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: rgba(201, 168, 76, .1);
+      border: 1px solid rgba(201, 168, 76, .2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .ob-feat-icon svg {
+      width: 18px;
+      height: 18px;
+      stroke: var(--gold);
+    }
+
+    .ob-feat-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .ob-feat-title {
+      font-size: .85rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .ob-feat-sub {
+      font-size: .73rem;
+      color: var(--text3);
+    }
+
+    /* ── Step heading ── */
+    .ob-step-heading {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+
+    .ob-step-icon-lg {
+      width: 36px;
+      height: 36px;
+      stroke: var(--gold);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .ob-heading {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      color: var(--gold);
+      margin-bottom: 3px;
+    }
+
+    .ob-sub {
+      font-size: .78rem;
+      color: var(--text2);
+      line-height: 1.4;
+    }
+
+    /* ── Form fields ── */
+    .ob-field-group {
+      margin-bottom: 16px;
+    }
+
+    .ob-label {
+      display: block;
+      font-size: .72rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--text3);
+      margin-bottom: 6px;
+    }
+
+    .ob-hint {
+      font-size: .68rem;
+      color: var(--text3);
+      margin-top: 5px;
+      line-height: 1.4;
+    }
+
+    .ob-select-wrap {
+      position: relative;
+    }
+
+    .ob-select {
+      width: 100%;
+      appearance: none;
+      -webkit-appearance: none;
+      background: rgba(255, 255, 255, .04);
+      border: 1px solid var(--border-dim);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: .875rem;
+      padding: 11px 40px 11px 14px;
+      transition: border-color .2s, box-shadow .2s;
+      outline: none;
+    }
+
+    .ob-select:focus {
+      border-color: rgba(201, 168, 76, .5);
+      box-shadow: 0 0 0 3px rgba(201, 168, 76, .1);
+    }
+
+    .ob-select-arrow {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
+      stroke: var(--text3);
+      pointer-events: none;
+    }
+
+    .ob-select-multi {
+      padding: 8px;
+      min-height: 130px;
+      border-radius: 10px;
+    }
+
+    .ob-select-multi option {
+      padding: 6px 8px;
+      border-radius: 6px;
+    }
+
+    .ob-select-multi option:checked {
+      background: rgba(201, 168, 76, .2);
+      color: var(--gold);
+    }
+
+    .ob-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255, 255, 255, .04);
+      border: 1px solid var(--border-dim);
+      border-radius: 10px;
+      padding: 11px 14px;
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .ob-input-wrap:focus-within {
+      border-color: rgba(201, 168, 76, .5);
+      box-shadow: 0 0 0 3px rgba(201, 168, 76, .1);
+    }
+
+    .ob-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: .875rem;
+    }
+
+    .ob-input::placeholder {
+      color: var(--text3);
+    }
+
+    /* ── Covenant card ── */
+    .ob-covenant {
+      background: linear-gradient(135deg, rgba(201, 168, 76, .06) 0%, rgba(91, 142, 255, .04) 100%);
+      border: 1px solid rgba(201, 168, 76, .15);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 22px;
+    }
+
+    .ob-covenant-title {
+      font-family: var(--font-display);
+      font-size: .72rem;
+      color: var(--gold);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ob-covenant-title svg {
+      stroke: var(--gold);
+    }
+
+    .ob-covenant-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .ob-covenant-list li {
+      font-size: .8rem;
+      color: var(--text2);
+      line-height: 1.5;
+      padding-left: 18px;
+      position: relative;
+    }
+
+    .ob-covenant-list li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 6px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--gold);
+      opacity: .6;
+    }
+
+    /* ── Buttons ── */
+    .ob-btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px 20px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, var(--gold) 0%, #A87C2A 100%);
+      color: #1A1200;
+      font-family: var(--font-display);
+      font-size: .85rem;
+      font-weight: 600;
+      letter-spacing: .06em;
+      cursor: pointer;
+      box-shadow: 0 6px 24px rgba(201, 168, 76, .35);
+      transition: transform .2s, box-shadow .2s;
+    }
+
+    .ob-btn-primary:active {
+      transform: scale(.98);
+      box-shadow: 0 3px 12px rgba(201, 168, 76, .25);
+    }
+
+    .ob-btn-flex {
+      flex: 1;
+    }
+
+    .ob-btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 13px 18px;
+      border-radius: 12px;
+      border: 1px solid var(--border-dim);
+      background: transparent;
+      color: var(--text2);
+      font-family: var(--font-body);
+      font-size: .85rem;
+      cursor: pointer;
+      transition: background .2s, color .2s;
+    }
+
+    .ob-btn-ghost:active {
+      background: var(--surface);
+    }
+
+    .ob-btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    /* Light theme overrides */
+    [data-theme="light"] .ob-select {
+      background: rgba(0, 0, 0, .04);
+    }
+
+    [data-theme="light"] .ob-input-wrap {
+      background: rgba(0, 0, 0, .04);
+    }
+
+    [data-theme="light"] .ob-features {
+      background: rgba(0, 0, 0, .04);
+    }
+
+    [data-theme="light"] .ob-panel {
+      background: rgba(255, 255, 255, .7);
+    }
+  </style>
+
+  <!-- ── Onboarding step-progress patch ─────────────────────── -->
+  <script>
+    (function () {
+      const _origShowStep = window.showStep;
+      window.showStep = function (step) {
+        if (_origShowStep) _origShowStep(step);
+        // Update progress fill
+        const fill = document.getElementById('ob-step-fill');
+        if (fill) fill.style.width = (step / 2 * 100) + '%';
+        // Update step labels
+        ['slabel-0', 'slabel-1', 'slabel-2'].forEach((id, i) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          el.classList.toggle('active', i === step);
+          el.classList.toggle('done', i < step);
+        });
+      };
+    })();
   </script>
 
   <!-- Animated typing dots CSS -->
