@@ -6,12 +6,20 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 // FIX: Added rate limiting. Run: npm install express-rate-limit
 // This protects all API endpoints — especially /broadcast and /messages —
 // from abuse. Limits each IP to 100 requests per 15-minute window by default,
 // with a tighter 20 req/min limit on auth endpoints.
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
+
+// Ensure local uploads directory exists
+const uploadsDir = path.join(__dirname, 'frontend', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 const { createClient } = require('@supabase/supabase-js');
 const { bot, notifyMessage, notifySessionInvite, notifyMentorApproved, broadcastToAll } = require('./bot');

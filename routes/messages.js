@@ -57,10 +57,70 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
   // POST /api/messages – send message
   router.post('/', requireAuth, async (req, res) => {
     const { id: from_id } = req.telegramUser;
-    const { to_id, content, parent_id } = req.body;
+    const { to_id, content, parent_id, audio } = req.body;
 
-    if (!to_id || !content?.trim()) return res.status(400).json({ error: 'to_id and content required' });
-    if (content.length > 2000) return res.status(400).json({ error: 'Message too long' });
+    if (!to_id) return res.status(400).json({ error: 'to_id required' });
+
+    let finalContent = (content || '').trim();
+
+    if (audio) {
+      // Process voice message
+      try {
+        const base64Data = audio.replace(/^data:audio\/\w+;base64,/, "");
+        const buffer = Buffer.from(base64Data, 'base64');
+        const filename = `voice_${Date.now()}_${Math.random().toString(36).substring(7)}.webm`;
+
+        let voiceUrl = '';
+
+        // 1. Try uploading to Supabase Storage bucket
+        try {
+          const { data: buckets } = await supabase.storage.listBuckets();
+          if (buckets && !buckets.some(b => b.id === 'voice-messages')) {
+            await supabase.storage.createBucket('voice-messages', { public: true });
+          }
+
+          const { data: uploadData, error: uploadErr } = await supabase.storage
+            .from('voice-messages')
+            .upload(filename, buffer, {
+              contentType: 'audio/webm',
+              duplex: 'half'
+            });
+
+          if (!uploadErr) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('voice-messages')
+              .getPublicUrl(filename);
+            voiceUrl = publicUrl;
+          } else {
+            console.error('[Supabase Storage Upload Error]', uploadErr);
+          }
+        } catch (storageErr) {
+          console.error('[Supabase Storage Catch Error]', storageErr);
+        }
+
+        // 2. Fallback to local static file storage if Supabase upload failed
+        if (!voiceUrl) {
+          const fs = require('fs');
+          const path = require('path');
+          const uploadsDir = path.join(__dirname, '..', 'frontend', 'uploads');
+          if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+          }
+          const localPath = path.join(uploadsDir, filename);
+          fs.writeFileSync(localPath, buffer);
+          voiceUrl = `/uploads/${filename}`;
+          console.log(`[Voice Storage] Saved voice message locally at ${voiceUrl}`);
+        }
+
+        finalContent = `[voice:${voiceUrl}]`;
+      } catch (err) {
+        console.error('[Voice Message Processing Error]', err);
+        return res.status(500).json({ error: 'Failed to process voice message' });
+      }
+    } else {
+      if (!finalContent) return res.status(400).json({ error: 'content required' });
+      if (finalContent.length > 2000) return res.status(400).json({ error: 'Message too long' });
+    }
 
     // FIX: Same compound .or() fix applied here for consistency and correctness.
     const { data: assign } = await supabase
@@ -72,11 +132,11 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
 
     if (!assign) return res.status(403).json({ error: 'No active mentorship with this user' });
 
-    const is_flagged = containsProfanity(content);
+    const is_flagged = audio ? false : containsProfanity(finalContent);
 
     const { data: msg, error } = await supabase
       .from('messages')
-      .insert({ from_id, to_id, content: content.trim(), is_flagged, parent_id: parent_id || null })
+      .insert({ from_id, to_id, content: finalContent, is_flagged, parent_id: parent_id || null })
       .select()
       .single();
 
@@ -91,8 +151,8 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     const { data: sender } = await supabase.from('users').select('anonymous_id').eq('telegram_id', from_id).single();
     if (sender && !onlineUsers.has(String(to_id))) {
       const { notifyMessage } = require('../bot');
-      // Pass the actual message content (clean, no prefix)
-      await notifyMessage(to_id, sender.anonymous_id, content);
+      const displayNotificationContent = finalContent.startsWith('[voice:') ? '🎙️ Voice message' : finalContent;
+      await notifyMessage(to_id, sender.anonymous_id, displayNotificationContent);
     }
 
     res.status(201).json(msg);
