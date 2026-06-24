@@ -213,7 +213,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .single();
     if (fetchErr) return res.status(404).json({ error: 'Request not found' });
 
-    if (action === 'accepted') {
+        if (action === 'accepted') {
       console.log(`[Accept] Trying to accept request ${req.params.id} by mentor ${mentor_id}`);
       // Call the new robust RPC (we'll create it in Step 2)
       const { data, error: rpcErr } = await supabase.rpc('accept_mentorship_request_v2', {
@@ -228,6 +228,14 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       if (data && data.error) {
         const status = data.error.includes('already has an active mentor') ? 409 : 400;
         return res.status(status).json({ error: data.error });
+      }
+
+      // Auto-reject other pending requests
+      try {
+        const { rejectOtherPendingRequestsForUser } = require('../bot');
+        await rejectOtherPendingRequestsForUser(reqData.user_id, mentor_id, req.params.id);
+      } catch (rejectErr) {
+        console.error('[mentors] auto-reject error (non-fatal):', rejectErr.message);
       }
     } else {
       // Reject path stays the same

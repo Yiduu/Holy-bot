@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS mentorship_requests (
   mentor_id       BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
   status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','rejected','cancelled')),
   message         TEXT,
+  admin_note      TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(user_id, mentor_id, status)

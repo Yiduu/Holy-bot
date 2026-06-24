@@ -150,5 +150,6 @@
     "operation_cancelled": "❌ Operation cancelled.",
     "application_cancelled": "❌ Application cancelled.",
     "please_use_buttons": "❌ Please select an option using the buttons provided above.",
-    "help_text": "📖 *Holy Helper — Commands*\n\n`/start` — Main menu\n`/menu` — Main menu\n`/apply` — Apply to become a mentor\n`/settopics` — Update your topics\n`/reply @nick msg` — Reply to a specific partner\n`/end` — End current mentorship\n\nJust type normally to chat with your partner."
+    "help_text": "📖 *Holy Helper — Commands*\n\n`/start` — Main menu\n`/menu` — Main menu\n`/apply` — Apply to become a mentor\n`/settopics` — Update your topics\n`/reply @nick msg` — Reply to a specific partner\n`/end` — End current mentorship\n\nJust type normally to chat with your partner.",
+    "mentorship_request_cancelled_elsewhere": "📋 The mentorship request from *{nick}* is no longer available because they have been matched with another mentor."
 }

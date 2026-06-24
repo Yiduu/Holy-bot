@@ -893,6 +893,72 @@ async function rejectMentorship(mentorId, userId) {
   await safeSend(mentorId, tSync(mentorLang, 'reject_confirmed'));
 }
 
+async function rejectOtherPendingRequestsForUser(userId, acceptedMentorId, exceptRequestId) {
+  try {
+    const { data: requests, error: fetchErr } = await supabase
+      .from('mentorship_requests')
+      .select('*, user:user_id(anonymous_id, user_settings(display_name))')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .neq('mentor_id', acceptedMentorId)
+      .neq('id', exceptRequestId);
+
+    if (fetchErr) {
+      console.error('[rejectOtherPendingRequests] Fetch error:', fetchErr.message);
+      return;
+    }
+
+    if (!requests || requests.length === 0) return;
+
+    const requestIds = requests.map(r => r.id);
+
+    const { error: updateErr } = await supabase
+      .from('mentorship_requests')
+      .update({
+        status: 'rejected',
+        admin_note: 'Mentee already matched with another mentor',
+        updated_at: new Date().toISOString()
+      })
+      .in('id', requestIds);
+
+    if (updateErr) {
+      console.error('[rejectOtherPendingRequests] Update error:', updateErr.message);
+      return;
+    }
+
+    for (const reqData of requests) {
+      const mentorId = reqData.mentor_id;
+      const menteeName = reqData.user?.user_settings?.display_name || reqData.user?.anonymous_id || 'A mentee';
+
+      try {
+        const mentorLang = await getUserLang(mentorId);
+        const notifyText = tSync(mentorLang, 'mentorship_request_cancelled_elsewhere', { nick: mdEscape(menteeName) });
+        await safeSend(mentorId, notifyText);
+      } catch (botErr) {
+        console.error(`[rejectOtherPendingRequests] Bot notify error for mentor ${mentorId}:`, botErr.message);
+      }
+
+      try {
+        if (global.io && global.onlineUsers) {
+          const socketId = global.onlineUsers.get(String(mentorId));
+          if (socketId) {
+            global.io.to(socketId).emit('mentorship_request_updated', {
+              requestId: reqData.id,
+              status: 'rejected'
+            });
+          }
+        }
+      } catch (socketErr) {
+        console.error(`[rejectOtherPendingRequests] Socket emit error for mentor ${mentorId}:`, socketErr.message);
+      }
+    }
+
+    console.log(`[rejectOtherPendingRequests] Successfully rejected ${requests.length} other pending requests for mentee=${userId}`);
+  } catch (err) {
+    console.error('[rejectOtherPendingRequests] Unexpected error:', err.message);
+  }
+}
+
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 async function notifyMentorApproved(chatId) {
@@ -1962,5 +2028,6 @@ module.exports = {
   notifyMessage,
   endMentorship,
   safeSend,
-  getUserLang
+  getUserLang,
+  rejectOtherPendingRequestsForUser
 };
