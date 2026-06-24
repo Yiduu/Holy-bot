@@ -610,13 +610,21 @@
       <p class="text-sm text-dim mb-16">Answer honestly. Admin will review your application.</p>
 
       <div class="form-group">
-        <label class="form-label" data-i18n="apply_q1">Please select your sex:</label>
-        <select id="applySex" class="form-control">
-          <option value="" data-i18n="Select…">Select…</option>
-          <option value="M" data-i18n="sex_male">Male</option>
-          <option value="F" data-i18n="sex_female">Female</option>
-          <option value="prefer_not" data-i18n="sex_prefer_not">Prefer not to say</option>
-        </select>
+        <label class="form-label" data-i18n="apply_q1">Which type of user you want to give mentorship :</label>
+        <div style="position: relative;">
+          <button id="applySexDropdownBtn" class="form-control flex justify-between items-center" style="background:var(--bg3); text-align: left;" onclick="toggleApplySexDropdown(event)">
+            <span id="applySexSelectedText" data-i18n="Select…">Select…</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          <div id="applySexDropdownMenu" class="msg-context-menu" style="top: 100%; bottom: auto; left: 0; right: 0; min-width: 100%; transform-origin: top left;">
+            <button class="msg-menu-item" onclick="selectApplySex('M', 'Male', event)" data-i18n="sex_male">Male</button>
+            <button class="msg-menu-item" onclick="selectApplySex('F', 'Female', event)" data-i18n="sex_female">Female</button>
+            <button class="msg-menu-item" onclick="selectApplySex('prefer_not', 'Both', event)" data-i18n="sex_both">Both</button>
+          </div>
+          <input type="hidden" id="applySex" value="" />
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label" data-i18n="apply_q2">What is your educational background? (e.g., Bachelor's in

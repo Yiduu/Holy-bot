@@ -705,7 +705,7 @@ async function loadMentors() {
           const name = m.user_settings?.display_name || m.anonymous_id;
           const bio = m.user_settings?.bio || 'No bio provided';
           const letter = name.charAt(0).toUpperCase();
-          const sexLabel = m.sex === 'M' ? 'Male' : m.sex === 'F' ? 'Female' : '';
+          const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : m.sex === 'prefer_not' ? t('sex_both') : '';
 
           activeMentorHtml = `
             <div class="card gold-border mb-16" style="border: 2px solid var(--gold);">
@@ -753,7 +753,7 @@ async function loadMentors() {
         const bio = m.user_settings?.bio || 'No bio provided';
         const spec = m.user_settings?.specialization || '';
         const letter = name.charAt(0).toUpperCase();
-        const sexLabel = m.sex === 'M' ? 'Male' : m.sex === 'F' ? 'Female' : '';
+        const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : m.sex === 'prefer_not' ? t('sex_both') : '';
         const mentees = m.mentee_count || 0;
         const max = m.user_settings?.max_mentees || 5;
 
@@ -1425,9 +1425,43 @@ function toggleNotif(id) {
 function openApplyModal() {
   haptic('light');
   $('applySex').value = '';
+  const selectedTextEl = $('applySexSelectedText');
+  if (selectedTextEl) selectedTextEl.textContent = t('Select…') || 'Select…';
   $('applyEdu').value = '';
   $('applyAbout').value = '';
   $('applyModal').classList.add('open');
+}
+
+/* ── Mentor Application Dropdown helpers ────────────────────── */
+function toggleApplySexDropdown(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const menu = $('applySexDropdownMenu');
+  if (!menu) return;
+  const isOpen = menu.classList.contains('open');
+  closeApplySexDropdown();
+  if (!isOpen) {
+    menu.classList.add('open');
+    setTimeout(() => document.addEventListener('click', closeApplySexDropdown, { once: true }), 0);
+  }
+}
+
+function closeApplySexDropdown() {
+  $('applySexDropdownMenu')?.classList.remove('open');
+}
+
+function selectApplySex(val, text, e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  $('applySex').value = val;
+  const btnText = $('applySexSelectedText');
+  if (btnText) {
+    const localText = t(val === 'prefer_not' ? 'sex_both' : val === 'M' ? 'sex_male' : 'sex_female');
+    btnText.textContent = localText || text;
+  }
+  closeApplySexDropdown();
 }
 function closeApplyModal() {
   haptic('light');
