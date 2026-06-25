@@ -441,7 +441,10 @@ function navigate(page) {
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
   $(`page-${page}`)?.classList.add('active');
-  $(`nav-${page}`)?.classList.add('active');
+  const navEl = $(`nav-${page}`);
+  navEl?.classList.add('active');
+  // Always scroll the active tab into view so the indicator shows correctly
+  navEl?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
 
   // Load page data
   switch (page) {
