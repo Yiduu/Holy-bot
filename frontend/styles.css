@@ -666,11 +666,6 @@ textarea.form-control {
   color: var(--gold);
 }
 
-.badge-pref {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-}
-
 /* ─── Chat ──────────────────────────────────────────────────── */
 .chat-container {
   display: flex;

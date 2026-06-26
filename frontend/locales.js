@@ -91,9 +91,6 @@ const I18N = {
     "sex_female": "Female",
     "sex_prefer_not": "Both",
     "sex_both": "Both",
-    "pref_mentors_male": "Mentors Male",
-    "pref_mentors_female": "Mentors Female",
-    "pref_mentors_both": "Mentors Both",
     // ========== ADDED MISSING ENGLISH KEYS (for completeness) ==========
     "Save": "Save",
     "Delete": "Delete",
@@ -269,9 +266,6 @@ const I18N = {
     "sex_female": "ሴት",
     "sex_prefer_not": "ሁለቱም",
     "sex_both": "ሁለቱም",
-    "pref_mentors_male": "ወንድ ተመካሪዎች",
-    "pref_mentors_female": "ሴት ተመካሪዎች",
-    "pref_mentors_both": "ሁለቱንም ጾታ",
     // ========== ADDED MISSING AMHARIC TRANSLATIONS ==========
     "Save": "አስቀምጥ",
     "Delete": "ሰርዝ",

@@ -452,7 +452,7 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
 
   // Apply preference filter (unless user chose 'prefer_not')
   if (userSex && userSex !== 'prefer_not') {
-    query = query.or(`preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.prefer_not`);
+    query = query.or(`preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.both`);
   }
 
   const { data: allMentors, error: queryError } = await query;
@@ -1642,15 +1642,15 @@ bot.on('callback_query', async (query) => {
     ]);
 
     const mSex = menteeData?.sex;
-    const prefSex = mentorData?.preferred_mentee_sex || 'prefer_not';
+    const prefSex = mentorData?.preferred_mentee_sex || 'both';
 
     let allowed = false;
     if (!mSex || mSex === 'prefer_not') {
       allowed = true;
     } else if (mSex === 'M') {
-      allowed = (prefSex === 'M' || prefSex === 'prefer_not');
+      allowed = (prefSex === 'M' || prefSex === 'both');
     } else if (mSex === 'F') {
-      allowed = (prefSex === 'F' || prefSex === 'prefer_not');
+      allowed = (prefSex === 'F' || prefSex === 'both');
     }
 
     if (!allowed) {
@@ -1668,6 +1668,7 @@ bot.on('callback_query', async (query) => {
 
     await safeSend(chatId, tSync(lang, 'mentor_req_msg_prompt'));
     return bot.answerCallbackQuery(query.id);
+  }
   } else if (data.startsWith('mentor_accept_')) {
     const parts = data.split('_'); // mentor_accept_{uid}_{tid}
     await acceptMentorship(chatId, parts[2], parts[3]);
@@ -1691,7 +1692,7 @@ bot.on('callback_query', async (query) => {
       .eq('status', 'pending')
       .single();
 
-    const preferred = app?.sex || 'prefer_not';
+    const preferred = app?.sex === 'prefer_not' ? 'both' : (app?.sex || 'both');
 
     await supabase.from('mentor_applications').update({
       status: 'approved', reviewed_at: new Date().toISOString()
