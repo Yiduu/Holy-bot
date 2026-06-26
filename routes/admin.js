@@ -173,16 +173,11 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     if (appErr) return res.status(500).json({ error: appErr.message });
 
     if (action === 'approved') {
-      const { data: currentUser } = await supabase
-        .from('users')
-        .select('sex')
-        .eq('telegram_id', app.telegram_id)
-        .single();
-
-      let updateData = { role: 'mentor' };
-      if (app.sex && currentUser?.sex !== app.sex) {
-        updateData.sex = app.sex;
-      }
+      const preferred = app.sex === 'prefer_not' ? 'both' : (app.sex || 'both');
+      let updateData = { 
+        role: 'mentor',
+        preferred_mentee_sex: preferred
+      };
 
       await supabase.from('users').update(updateData).eq('telegram_id', app.telegram_id);
       await supabase.from('mentors').upsert({ telegram_id: app.telegram_id }, { onConflict: 'telegram_id' });
