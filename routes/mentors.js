@@ -63,7 +63,18 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     const { data, error } = await query;
 
+    // ── DEBUG (remove after confirming fix) ──────────────────
+    console.log('[GET /api/mentors] mentee telegram_id:', req.telegramUser.id);
+    console.log('[GET /api/mentors] mentee sex (userSex):', userSex);
+    console.log('[GET /api/mentors] filter applied:', userSex && userSex !== 'prefer_not'
+      ? `preferred_mentee_sex IN (${userSex}, prefer_not, NULL)`
+      : 'none (show all)');
+    console.log('[GET /api/mentors] raw rows returned:', data?.length ?? 0);
+    if (error) console.error('[GET /api/mentors] Supabase error:', error.message);
+    // ── END DEBUG ────────────────────────────────────────────
+
     if (error) return res.status(500).json({ error: error.message });
+
 
     // Enrich with mentee counts and expertise topics
     const enriched = await Promise.all((data || []).map(async (mentor) => {
