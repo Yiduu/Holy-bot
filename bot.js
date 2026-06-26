@@ -1668,7 +1668,6 @@ bot.on('callback_query', async (query) => {
 
     await safeSend(chatId, tSync(lang, 'mentor_req_msg_prompt'));
     return bot.answerCallbackQuery(query.id);
-  }
   } else if (data.startsWith('mentor_accept_')) {
     const parts = data.split('_'); // mentor_accept_{uid}_{tid}
     await acceptMentorship(chatId, parts[2], parts[3]);
