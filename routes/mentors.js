@@ -10,7 +10,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     let { topic_id, topic } = req.query;
     if (topic && !topic_id) topic_id = topic;
 
-    // Get user's sex for same‑sex matching
+    // Get mentee's sex to filter which mentors they should see
     const { data: userData } = await supabase
       .from('users')
       .select('sex')
@@ -21,12 +21,16 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     let query = supabase
       .from('users')
-      .select('telegram_id, anonymous_id, sex, user_settings(bio, specialization, max_mentees, display_name)')
+      .select('telegram_id, anonymous_id, sex, preferred_mentee_sex, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
       .eq('is_banned', false);
 
+    // Filter by preferred_mentee_sex (NOT users.sex):
+    //  - Mentee is 'M' → show mentors whose preference is 'M' OR 'prefer_not'
+    //  - Mentee is 'F' → show mentors whose preference is 'F' OR 'prefer_not'
+    //  - Mentee is 'prefer_not' or unknown → show all mentors
     if (userSex && userSex !== 'prefer_not') {
-      query = query.or(`sex.eq.${userSex},sex.eq.prefer_not`);
+      query = query.or(`preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.prefer_not`);
     }
 
     // Resolve topic identifier (can be ID, slug, or name)

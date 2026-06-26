@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
   telegram_id       BIGINT PRIMARY KEY,
   anonymous_id      TEXT UNIQUE NOT NULL,
   chat_id           BIGINT,
-  sex               TEXT CHECK (sex IN ('M','F','prefer_not')),
+  sex               TEXT CHECK (sex IN ('M','F','prefer_not')),          -- mentor's own biological sex
+  preferred_mentee_sex TEXT CHECK (preferred_mentee_sex IN ('M','F','prefer_not')), -- mentor preference: which mentees they will work with
   age_range         TEXT CHECK (age_range IN ('13-17','18-24','25-34','35-44','45-54','55+')),
   education_level   TEXT CHECK (education_level IN ('none','primary','secondary','undergraduate','graduate','postgraduate')),
   role              TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','mentor','admin')),
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_active       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
 
 CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_users_anonymous_id ON users(anonymous_id);

@@ -173,15 +173,13 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     if (appErr) return res.status(500).json({ error: appErr.message });
 
     if (action === 'approved') {
-      const { data: currentUser } = await supabase
-        .from('users')
-        .select('sex')
-        .eq('telegram_id', app.telegram_id)
-        .single();
-
-      let updateData = { role: 'mentor' };
-      if (app.sex && currentUser?.sex !== app.sex) {
-        updateData.sex = app.sex;
+      // Set role to mentor and record the mentee-sex PREFERENCE from the application.
+      // NEVER update users.sex here – that is the mentor's own biological sex.
+      const updateData = { role: 'mentor' };
+      if (app.sex) {
+        // app.sex holds the preference value submitted in the application
+        // ('M', 'F', or 'prefer_not').  Store it in the dedicated column.
+        updateData.preferred_mentee_sex = app.sex;
       }
 
       await supabase.from('users').update(updateData).eq('telegram_id', app.telegram_id);
