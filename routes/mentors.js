@@ -26,12 +26,14 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .eq('is_banned', false);
 
     // Filter by preferred_mentee_sex (NOT users.sex):
-    //  - Mentee is 'M' → show mentors whose preference is 'M' OR 'prefer_not'
-    //  - Mentee is 'F' → show mentors whose preference is 'F' OR 'prefer_not'
+    //  - Mentee is 'M' → show mentors with preference 'M', 'prefer_not', or NULL
+    //  - Mentee is 'F' → show mentors with preference 'F', 'prefer_not', or NULL
+    //  - NULL means no preference was set yet; treat it as 'prefer_not' (both)
     //  - Mentee is 'prefer_not' or unknown → show all mentors
     if (userSex && userSex !== 'prefer_not') {
-      query = query.or(`preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.prefer_not`);
+      query = query.or(`preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.prefer_not,preferred_mentee_sex.is.null`);
     }
+
 
     // Resolve topic identifier (can be ID, slug, or name)
     if (topic_id) {
