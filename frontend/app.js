@@ -847,8 +847,7 @@ async function loadMentors() {
           const name = m.user_settings?.display_name || m.anonymous_id;
           const bio = m.user_settings?.bio || 'No bio provided';
           const letter = name.charAt(0).toUpperCase();
-          const prefLabel = m.preferred_mentee_sex === 'M' ? t('pref_mentors_male') : m.preferred_mentee_sex === 'F' ? t('pref_mentors_female') : m.preferred_mentee_sex === 'prefer_not' ? t('pref_mentors_both') : '';
-
+          const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : m.sex === 'prefer_not' ? t('sex_both') : '';
 
           activeMentorHtml = `
             <div class="card gold-border mb-16" style="border: 2px solid var(--gold);">
@@ -859,7 +858,7 @@ async function loadMentors() {
                 <div class="mentor-avatar">${letter}</div>
                 <div class="mentor-info">
                   <div class="mentor-id">${escapeHtml(name)}</div>
-                  ${prefLabel ? `<div class="mentor-sex">Mentors: ${prefLabel}</div>` : ''}
+                  ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
                   <div class="mentor-bio">${escapeHtml(bio)}</div>
                 </div>
               </div>
@@ -874,7 +873,7 @@ async function loadMentors() {
       }
     }
 
-    // 2. Fetch all mentors (API filters by preferred_mentee_sex vs mentee's sex)
+    // 2. Fetch all mentors (API already filters by same sex)
     let mentors = await apiFetch('/api/mentors');
 
     // Apply topic filter (mentor.expertise_topics is an array of topic names)
@@ -896,7 +895,7 @@ async function loadMentors() {
         const bio = m.user_settings?.bio || 'No bio provided';
         const spec = m.user_settings?.specialization || '';
         const letter = name.charAt(0).toUpperCase();
-        const prefLabel = m.preferred_mentee_sex === 'M' ? t('pref_mentors_male') : m.preferred_mentee_sex === 'F' ? t('pref_mentors_female') : m.preferred_mentee_sex === 'prefer_not' ? t('pref_mentors_both') : '';
+        const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : m.sex === 'prefer_not' ? t('sex_both') : '';
         const mentees = m.mentee_count || 0;
         const max = m.user_settings?.max_mentees || 5;
 
@@ -909,7 +908,7 @@ async function loadMentors() {
               <div class="mentor-avatar">${letter}</div>
               <div class="mentor-info">
                 <div class="mentor-id">${escapeHtml(name)}</div>
-                ${prefLabel ? `<div class="mentor-sex">${prefLabel}</div>` : ''}
+                ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
                 <div class="mentor-bio">${escapeHtml(bio)}</div>
               </div>
             </div>

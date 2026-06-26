@@ -10,7 +10,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     let { topic_id, topic } = req.query;
     if (topic && !topic_id) topic_id = topic;
 
-    // Get mentee's sex to filter which mentors they should see
+    // Get user's sex for same‑sex matching
     const { data: userData } = await supabase
       .from('users')
       .select('sex')
@@ -21,19 +21,13 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     let query = supabase
       .from('users')
-      .select('telegram_id, anonymous_id, sex, preferred_mentee_sex, user_settings(bio, specialization, max_mentees, display_name)')
+      .select('telegram_id, anonymous_id, sex, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
       .eq('is_banned', false);
 
-    // Filter by preferred_mentee_sex (NOT users.sex):
-    //  - Mentee is 'M' → show mentors with preference 'M', 'prefer_not', or NULL
-    //  - Mentee is 'F' → show mentors with preference 'F', 'prefer_not', or NULL
-    //  - NULL means no preference was set yet; treat it as 'prefer_not' (both)
-    //  - Mentee is 'prefer_not' or unknown → show all mentors
     if (userSex && userSex !== 'prefer_not') {
-      query = query.or(`preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.prefer_not,preferred_mentee_sex.is.null`);
+      query = query.or(`sex.eq.${userSex},sex.eq.prefer_not`);
     }
-
 
     // Resolve topic identifier (can be ID, slug, or name)
     if (topic_id) {
@@ -63,18 +57,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     const { data, error } = await query;
 
-    // ── DEBUG (remove after confirming fix) ──────────────────
-    console.log('[GET /api/mentors] mentee telegram_id:', req.telegramUser.id);
-    console.log('[GET /api/mentors] mentee sex (userSex):', userSex);
-    console.log('[GET /api/mentors] filter applied:', userSex && userSex !== 'prefer_not'
-      ? `preferred_mentee_sex IN (${userSex}, prefer_not, NULL)`
-      : 'none (show all)');
-    console.log('[GET /api/mentors] raw rows returned:', data?.length ?? 0);
-    if (error) console.error('[GET /api/mentors] Supabase error:', error.message);
-    // ── END DEBUG ────────────────────────────────────────────
-
     if (error) return res.status(500).json({ error: error.message });
-
 
     // Enrich with mentee counts and expertise topics
     const enriched = await Promise.all((data || []).map(async (mentor) => {
