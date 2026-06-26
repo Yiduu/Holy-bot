@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS users (
   anonymous_id      TEXT UNIQUE NOT NULL,
   chat_id           BIGINT,
   sex               TEXT CHECK (sex IN ('M','F','prefer_not')),
-  preferred_mentee_sex TEXT DEFAULT 'both' CHECK (preferred_mentee_sex IN ('M','F','both')),
   age_range         TEXT CHECK (age_range IN ('13-17','18-24','25-34','35-44','45-54','55+')),
   education_level   TEXT CHECK (education_level IN ('none','primary','secondary','undergraduate','graduate','postgraduate')),
   role              TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','mentor','admin')),
