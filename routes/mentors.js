@@ -10,7 +10,8 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     let { topic_id, topic } = req.query;
     if (topic && !topic_id) topic_id = topic;
 
-    // Get user's sex for same‑sex matching
+    // Get the requesting mentee's biological sex so we can match
+    // it against each mentor's preferred_mentee_sex preference.
     const { data: userData } = await supabase
       .from('users')
       .select('sex')
@@ -19,14 +20,26 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     const userSex = userData?.sex;
 
+    // Select preferred_mentee_sex so callers can inspect it; users.sex
+    // is still selected because it is displayed on the mentor profile card.
     let query = supabase
       .from('users')
-      .select('telegram_id, anonymous_id, sex, user_settings(bio, specialization, max_mentees, display_name)')
+      .select('telegram_id, anonymous_id, sex, preferred_mentee_sex, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
       .eq('is_banned', false);
 
+    // Visibility rules (applied when the mentee has a known sex):
+    //   preferred_mentee_sex = 'M'          → only male mentees see this mentor
+    //   preferred_mentee_sex = 'F'          → only female mentees see this mentor
+    //   preferred_mentee_sex = 'prefer_not' → both male AND female mentees see this mentor
+    //   preferred_mentee_sex IS NULL        → treated as 'prefer_not' (visible to all)
     if (userSex && userSex !== 'prefer_not') {
-      query = query.or(`sex.eq.${userSex},sex.eq.prefer_not`);
+      // Show this mentor if:  their preference matches the mentee's sex
+      //                    OR their preference is 'prefer_not' (both sexes welcome)
+      //                    OR they have no preference set yet (NULL → both)
+      query = query.or(
+        `preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.prefer_not,preferred_mentee_sex.is.null`
+      );
     }
 
     // Resolve topic identifier (can be ID, slug, or name)

@@ -173,15 +173,13 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     if (appErr) return res.status(500).json({ error: appErr.message });
 
     if (action === 'approved') {
-      const { data: currentUser } = await supabase
-        .from('users')
-        .select('sex')
-        .eq('telegram_id', app.telegram_id)
-        .single();
-
-      let updateData = { role: 'mentor' };
-      if (app.sex && currentUser?.sex !== app.sex) {
-        updateData.sex = app.sex;
+      // IMPORTANT: users.sex is the mentor's biological sex — never overwrite it.
+      // The sex value from the application is the mentor's MENTEE PREFERENCE
+      // (which mentees they want to serve). Store it in preferred_mentee_sex.
+      const updateData = { role: 'mentor' };
+      if (app.sex) {
+        // 'M' → only male mentees  |  'F' → only female mentees  |  'prefer_not' → both
+        updateData.preferred_mentee_sex = app.sex;
       }
 
       await supabase.from('users').update(updateData).eq('telegram_id', app.telegram_id);
