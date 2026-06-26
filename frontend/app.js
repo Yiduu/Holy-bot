@@ -899,6 +899,9 @@ async function loadMentors() {
         const mentees = m.mentee_count || 0;
         const max = m.user_settings?.max_mentees || 5;
 
+        const prefVal = m.preferred_mentee_sex || 'prefer_not';
+        const prefLabel = prefVal === 'M' ? t('pref_mentors_male') : prefVal === 'F' ? t('pref_mentors_female') : t('pref_mentors_both');
+
         // If user already has an active mentor, disable requesting other mentors
         const canRequest = !hasActiveMentor && mentees < max;
 
@@ -915,6 +918,7 @@ async function loadMentors() {
             <div class="mentor-meta">
               ${spec ? `<span class="mentor-badge badge-spec">${escapeHtml(spec)}</span>` : ''}
               <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentee')}s</span>
+              <span class="mentor-badge badge-pref">${escapeHtml(prefLabel)}</span>
             </div>
             <button class="btn btn-outline btn-sm" onclick="requestMentorship(${m.telegram_id})" ${!canRequest ? 'disabled' : ''}>
               ${mentees >= max ? t('none') : t('btn_request')}

@@ -27,8 +27,8 @@ WHERE u.role = 'mentor';
 
 -- 2. AUTOMATIC PREFERENCE BACKFILL
 -- Set the preferred_mentee_sex for all existing mentors based on their latest approved application's sex selection.
--- If they do not have a recorded application, it defaults to 'both'.
--- Note: PostgreSQL automatically sets existing users to 'both' upon column creation due to DEFAULT 'both',
+-- If they do not have a recorded application, it defaults to 'prefer_not' (Both).
+-- Note: PostgreSQL automatically sets existing users to 'prefer_not' upon column creation due to DEFAULT 'prefer_not',
 -- so we only need to update those who had an approved application.
 WITH latest_applications AS (
     SELECT DISTINCT ON (telegram_id) 
@@ -39,10 +39,7 @@ WITH latest_applications AS (
     ORDER BY telegram_id, submitted_at DESC
 )
 UPDATE users u
-SET preferred_mentee_sex = CASE 
-    WHEN la.app_sex = 'prefer_not' THEN 'both'
-    ELSE COALESCE(la.app_sex, 'both')
-END
+SET preferred_mentee_sex = COALESCE(la.app_sex, 'prefer_not')
 FROM latest_applications la
 WHERE u.telegram_id = la.telegram_id
   AND u.role = 'mentor';

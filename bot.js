@@ -452,7 +452,7 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
 
   // Apply preference filter (unless user chose 'prefer_not')
   if (userSex && userSex !== 'prefer_not') {
-    query = query.or(`preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.both`);
+    query = query.or(`preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.prefer_not`);
   }
 
   const { data: allMentors, error: queryError } = await query;
@@ -1642,15 +1642,15 @@ bot.on('callback_query', async (query) => {
     ]);
 
     const mSex = menteeData?.sex;
-    const prefSex = mentorData?.preferred_mentee_sex || 'both';
+    const prefSex = mentorData?.preferred_mentee_sex || 'prefer_not';
 
     let allowed = false;
     if (!mSex || mSex === 'prefer_not') {
       allowed = true;
     } else if (mSex === 'M') {
-      allowed = (prefSex === 'M' || prefSex === 'both');
+      allowed = (prefSex === 'M' || prefSex === 'prefer_not');
     } else if (mSex === 'F') {
-      allowed = (prefSex === 'F' || prefSex === 'both');
+      allowed = (prefSex === 'F' || prefSex === 'prefer_not');
     }
 
     if (!allowed) {
@@ -1692,7 +1692,7 @@ bot.on('callback_query', async (query) => {
       .eq('status', 'pending')
       .single();
 
-    const preferred = app?.sex === 'prefer_not' ? 'both' : (app?.sex || 'both');
+    const preferred = app?.sex || 'prefer_not';
 
     await supabase.from('mentor_applications').update({
       status: 'approved', reviewed_at: new Date().toISOString()
