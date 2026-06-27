@@ -1064,8 +1064,8 @@ function getSessionState(scheduledAt, status) {
   const elapsed = now - start; // positive = past, negative = future
 
   // Explicitly ended by host → always done
-  if (status === 'ended') {
-    return { isJoinable: false, label: '✓ Ended', labelClass: 'chip chip-muted' };
+  if (status === 'ended' || status === 'cleared') {
+    return { isJoinable: false, label: t('session_ended_status'), labelClass: 'chip chip-muted' };
   }
 
   // Grace period expired even if status is still 'scheduled' or 'active'
@@ -1224,7 +1224,7 @@ async function loadSessions() {
               <div class="session-body">
                 <div class="session-title">${escapeHtml(title)}</div>
                 <div class="session-sub">${scheduled}</div>
-                ${label ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
+                ${(label && isJoinable) ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
               </div>
               <div class="session-action">${actionHtml}</div>
             </div>`;
@@ -1255,7 +1255,7 @@ async function loadSessions() {
               <div class="session-body">
                 <div class="session-title">${escapeHtml(s.title)}</div>
                 <div class="session-sub">${formatDateTime(s.scheduled_at)}</div>
-                ${label ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
+                ${(label && isJoinable) ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
               </div>
               <div class="session-action">
                 ${isJoinable
@@ -1347,7 +1347,7 @@ async function createSession(is_group = false, mentee_id = null, scheduled_at = 
     showToast(is_group ? 'Group session created!' : 'Private session created!', 'success');
     if (new Date(finalScheduled) <= new Date()) {
       // Creator is always the host/moderator when launching immediately
-      launchJitsi(data.room_name, data.room_password, currentUser.anonymous_id, data.jitsi_token, true);
+      launchJitsi(data.room_name, data.room_password, currentUser.anonymous_id, data.jitsi_token, true, data.session.id);
     } else {
       loadSessions();
     }
@@ -1497,11 +1497,16 @@ async function openPrivateSessionFlow() {
   }
 }
 
-function launchJitsi(roomName, roomPassword, displayName, token, isModerator = false) {
+function launchJitsi(roomName, roomPassword, displayName, token, isModerator = false, sessionId = null) {
   navigate('video');
   const container = $('jitsiContainer');
   if (!container) return;
   container.innerHTML = '';
+
+  window.activeSession = {
+    sessionId,
+    isModerator
+  };
 
   const initJitsi = () => {
     const options = {
@@ -1541,7 +1546,20 @@ function launchJitsi(roomName, roomPassword, displayName, token, isModerator = f
     }
 
     window.jitsiApi = new JitsiMeetExternalAPI('meet.opensuse.org', options);
-    window.jitsiApi.addEventListener('videoConferenceLeft', () => navigate('sessions'));
+    window.jitsiApi.addEventListener('videoConferenceLeft', async () => {
+      if (isModerator && sessionId) {
+        try {
+          await apiFetch(`/api/sessions/${sessionId}/end`, { method: 'PATCH' });
+        } catch (e) {
+          console.error('Failed to end session:', e);
+        }
+      }
+      window.activeSession = null;
+      if (window.jitsiApi) {
+        try { window.jitsiApi.dispose(); window.jitsiApi = null; } catch (e) {}
+      }
+      navigate('sessions');
+    });
     window.jitsiApi.addEventListener('passwordRequired', () => {
       if (roomPassword) window.jitsiApi.executeCommand('password', roomPassword);
     });
@@ -1565,6 +1583,32 @@ function launchJitsi(roomName, roomPassword, displayName, token, isModerator = f
   }
 
   $('sessionPasswordDisplay').textContent = roomPassword ? `Password: ${roomPassword}` : '';
+}
+
+async function leaveCurrentSession() {
+  haptic('medium');
+  if (window.activeSession) {
+    const { sessionId, isModerator } = window.activeSession;
+    if (isModerator && sessionId) {
+      if (confirm('End the session for all participants?')) {
+        try {
+          await apiFetch(`/api/sessions/${sessionId}/end`, { method: 'PATCH' });
+        } catch (e) {
+          console.error('Failed to end session:', e);
+        }
+      }
+    }
+  }
+  if (window.jitsiApi) {
+    try {
+      window.jitsiApi.dispose();
+      window.jitsiApi = null;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  window.activeSession = null;
+  navigate('sessions');
 }
 
 // ─── Chat ─────────────────────────────────────────────────────

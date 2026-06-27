@@ -172,7 +172,8 @@ const I18N = {
     "My Private Sessions": "My Private Sessions",
     "Upcoming Group Sessions": "Upcoming Group Sessions",
     "Calendar": "Calendar",
-    "List": "List"
+    "List": "List",
+    "session_ended_status": "✓ Meeting Completed"
   },
   am: {
     "btn_find_mentor": "🔍 አማካሪ ፈልግ",
@@ -347,6 +348,7 @@ const I18N = {
     "My Private Sessions": "የእኔ የግል ስብሰባዎች",
     "Upcoming Group Sessions": "የሚመጡ የቡድን ስብሰባዎች",
     "Calendar": "ቀን መቁጠሪያ",
-    "List": "ዝርዝር"
+    "List": "ዝርዝር",
+    "session_ended_status": "✓ ስብሰባው ተጠናቅቋል"
   }
 };
