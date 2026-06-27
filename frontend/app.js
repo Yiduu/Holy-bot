@@ -1078,13 +1078,12 @@ function getSessionState(scheduledAt, status) {
     };
   }
 
-  // Within grace period (session has started or is active)
-  const remainingMs = SESSION_GRACE_PERIOD_MS - elapsed;
-  const remainingMin = Math.ceil(remainingMs / 60000);
+  // Scheduled time has passed and we're within the grace period —
+  // just show the Join button, no extra label text needed.
   return {
     isJoinable: true,
-    label: `🟢 In progress · ${remainingMin} min left to join`,
-    labelClass: 'session-time-label inprogress'
+    label: '',
+    labelClass: ''
   };
 }
 
@@ -1104,7 +1103,16 @@ function refreshSessionLabels() {
       const { isJoinable, label, labelClass } = getSessionState(scheduledAt, status);
       const labelEl  = item.querySelector('.session-live-label');
       const actionEl = item.querySelector('.session-action');
-      if (labelEl)  { labelEl.className = labelClass; labelEl.textContent = label; }
+      if (labelEl) {
+        if (label) {
+          labelEl.className = labelClass;
+          labelEl.textContent = label;
+          labelEl.style.display = '';
+        } else {
+          labelEl.textContent = '';
+          labelEl.style.display = 'none';
+        }
+      }
       if (actionEl) {
         if (isJoinable) {
           const sid = item.dataset.sessionId;
@@ -1181,7 +1189,7 @@ async function loadSessions() {
             <div class="session-body">
               <div class="session-title">${escapeHtml(title)}</div>
               <div class="session-sub">${scheduled}</div>
-              <div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>
+              ${label ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
             </div>
             <div class="session-action">${actionHtml}</div>
           </div>`;
@@ -1211,7 +1219,7 @@ async function loadSessions() {
           <div class="session-body">
             <div class="session-title">${escapeHtml(s.title)}</div>
             <div class="session-sub">${formatDateTime(s.scheduled_at)}</div>
-            <div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>
+            ${label ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
           </div>
           <div class="session-action">
             ${isJoinable
