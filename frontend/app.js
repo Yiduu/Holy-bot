@@ -1263,7 +1263,7 @@ async function joinSession(session_id) {
       }
     }
 
-    launchJitsi(data.room_name, data.room_password, data.display_name, data.jitsi_token);
+    launchJitsi(data.room_name, data.room_password, data.display_name, data.jitsi_token, data.is_moderator);
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
@@ -1306,7 +1306,8 @@ async function createSession(is_group = false, mentee_id = null, scheduled_at = 
     haptic('success');
     showToast(is_group ? 'Group session created!' : 'Private session created!', 'success');
     if (new Date(finalScheduled) <= new Date()) {
-      launchJitsi(data.room_name, data.room_password, currentUser.anonymous_id, data.jitsi_token);
+      // Creator is always the host/moderator when launching immediately
+      launchJitsi(data.room_name, data.room_password, currentUser.anonymous_id, data.jitsi_token, true);
     } else {
       loadSessions();
     }
@@ -1456,7 +1457,7 @@ async function openPrivateSessionFlow() {
   }
 }
 
-function launchJitsi(roomName, roomPassword, displayName, token) {
+function launchJitsi(roomName, roomPassword, displayName, token, isModerator = false) {
   navigate('video');
   const container = $('jitsiContainer');
   if (!container) return;
@@ -1470,14 +1471,25 @@ function launchJitsi(roomName, roomPassword, displayName, token) {
       parentNode: container,
       userInfo: { displayName },
       configOverwrite: {
-        startWithAudioMuted: true,
-        startWithVideoMuted: true,
+        startWithAudioMuted: !isModerator,   // mentor joins unmuted by default
+        startWithVideoMuted: !isModerator,   // mentor's video on by default
         enableClosePage: false,
         disableDeepLinking: true,
+        // Disable Jitsi's "first joiner becomes moderator" behaviour.
+        // On a self-hosted server with JWT this is enforced server-side;
+        // on the public server we rely on the password so only the
+        // mentor can start the room and naturally holds moderator status.
+        requireDisplayName: false,
+        enableUserRolesBasedOnToken: false,
+        // Prevent participants from kicking / muting others
+        disableRemoteMute: !isModerator,
+        disableKick: !isModerator,
         ...(roomPassword ? { password: roomPassword } : {}),
       },
       interfaceConfigOverwrite: {
-        TOOLBAR_BUTTONS: ['microphone', 'camera', 'desktop', 'chat', 'raisehand', 'fullscreen', 'tileview', 'hangup'],
+        TOOLBAR_BUTTONS: isModerator
+          ? ['microphone', 'camera', 'desktop', 'chat', 'raisehand', 'fullscreen', 'tileview', 'hangup', 'mute-everyone', 'security']
+          : ['microphone', 'camera', 'chat', 'raisehand', 'fullscreen', 'tileview', 'hangup'],
         SHOW_JITSI_WATERMARK: false,
         MOBILE_APP_PROMO: false,
       },
@@ -1493,6 +1505,14 @@ function launchJitsi(roomName, roomPassword, displayName, token) {
     window.jitsiApi.addEventListener('passwordRequired', () => {
       if (roomPassword) window.jitsiApi.executeCommand('password', roomPassword);
     });
+
+    // If this user is the moderator, set the password so the room is locked
+    // for anyone who doesn't already have it (extra guard on public servers).
+    if (isModerator && roomPassword) {
+      window.jitsiApi.addEventListener('videoConferenceJoined', () => {
+        window.jitsiApi.executeCommand('password', roomPassword);
+      });
+    }
   };
 
   if (window.JitsiMeetExternalAPI) {
