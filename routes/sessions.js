@@ -218,6 +218,21 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     await supabase.from('video_sessions').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', req.params.id);
     await supabase.from('session_participants').update({ left_at: new Date().toISOString() }).eq('session_id', req.params.id).is('left_at', null);
 
+    // Notify all online participants so their UI updates instantly
+    const { data: participants } = await supabase
+      .from('session_participants')
+      .select('telegram_id')
+      .eq('session_id', req.params.id);
+
+    if (participants) {
+      for (const p of participants) {
+        const sock = onlineUsers.get(String(p.telegram_id));
+        if (sock) {
+          io.to(sock).emit('session_ended', { session_id: req.params.id });
+        }
+      }
+    }
+
     res.json({ success: true });
   });
 

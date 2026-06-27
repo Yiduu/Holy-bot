@@ -432,11 +432,25 @@ function connectSocket() {
       loadMessages(window.chatState.with);
     }
   });
+
+  // Fired by the server when the host ends a session — refresh the sessions
+  // page immediately so the Join button disappears for all participants.
+  socket.on('session_ended', ({ session_id } = {}) => {
+    haptic('warning');
+    showToast('The session has ended.', 'info');
+    if (currentPage === 'sessions') {
+      loadSessions();
+    }
+  });
 }
 
 // ─── Navigation ───────────────────────────────────────────────
 function navigate(page) {
   haptic('selection');
+
+  // Stop the sessions refresh timer whenever we leave the sessions page
+  if (currentPage === 'sessions' && page !== 'sessions') stopSessionTimer();
+
   currentPage = page;
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
@@ -1012,8 +1026,17 @@ async function respondToRequest(requestId, action) {
 // How long after the scheduled time a session is still joinable
 const SESSION_GRACE_PERIOD_MS = 60 * 60 * 1000; // 60 minutes
 
-// Track the auto-refresh timer so we can cancel it when leaving the page
+// Timer that refreshes session labels every 30 s while on the sessions page
 let sessionTimerInterval = null;
+
+// Last fetched session data — used for label-only refreshes without API calls
+let _cachedSessionData = { my: [], upcoming: [] };
+
+/** Cancel the sessions auto-refresh timer (called on page navigation). */
+function stopSessionTimer() {
+  clearInterval(sessionTimerInterval);
+  sessionTimerInterval = null;
+}
 
 /**
  * Returns { isJoinable, label, labelClass } for a session based on current time.
@@ -1065,10 +1088,64 @@ function getSessionState(scheduledAt, status) {
   };
 }
 
+/**
+ * Refresh only the status labels / buttons on already-rendered session cards
+ * using the cached data — no API call. Called every 30 s by the timer.
+ */
+function refreshSessionLabels() {
+  // Private sessions
+  const privateContainer = document.getElementById('privateSessionsList');
+  if (privateContainer) {
+    const items = privateContainer.querySelectorAll('.session-item[data-session-id]');
+    items.forEach(item => {
+      const scheduledAt = item.dataset.scheduledAt;
+      const status      = item.dataset.status;
+      if (!scheduledAt) return;
+      const { isJoinable, label, labelClass } = getSessionState(scheduledAt, status);
+      const labelEl  = item.querySelector('.session-live-label');
+      const actionEl = item.querySelector('.session-action');
+      if (labelEl)  { labelEl.className = labelClass; labelEl.textContent = label; }
+      if (actionEl) {
+        if (isJoinable) {
+          const sid = item.dataset.sessionId;
+          actionEl.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${t('btn_join_session')}</button>
+              <button class="btn btn-outline btn-sm"  onclick="openSessionInBrowser('${sid}')">Browser</button>
+            </div>`;
+        } else {
+          actionEl.innerHTML = `<span class="${labelClass}">${label}</span>`;
+        }
+      }
+    });
+  }
+
+  // Group sessions
+  const groupContainer = document.getElementById('upcomingSessions');
+  if (groupContainer) {
+    const items = groupContainer.querySelectorAll('.session-item[data-session-id]');
+    items.forEach(item => {
+      const scheduledAt = item.dataset.scheduledAt;
+      const status      = item.dataset.status;
+      if (!scheduledAt) return;
+      const { isJoinable, label, labelClass } = getSessionState(scheduledAt, status);
+      const labelEl  = item.querySelector('.session-live-label');
+      const actionEl = item.querySelector('.session-action');
+      if (labelEl)  { labelEl.className = labelClass; labelEl.textContent = label; }
+      if (actionEl) {
+        const sid = item.dataset.sessionId;
+        actionEl.innerHTML = isJoinable
+          ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${t('btn_join_session')}</button>`
+          : `<span class="${labelClass}">${label}</span>`;
+      }
+    });
+  }
+}
+
 async function loadSessions() {
-  // Clear any existing auto-refresh timer and start a fresh one
-  clearInterval(sessionTimerInterval);
-  sessionTimerInterval = setInterval(() => loadSessions(), 60 * 1000);
+  // Stop any previous timer, start a fresh 30-second label refresh
+  stopSessionTimer();
+  sessionTimerInterval = setInterval(refreshSessionLabels, 30 * 1000);
 
   // ── Private / assigned sessions ──────────────────────────────
   try {
@@ -1094,15 +1171,19 @@ async function loadSessions() {
             </div>`
           : `<span class="${labelClass}">${label}</span>`;
 
+        // Embed scheduling metadata as data-* attrs so refreshSessionLabels can update in place
         return `
-          <div class="session-item">
+          <div class="session-item"
+               data-session-id="${session.id}"
+               data-scheduled-at="${session.scheduled_at}"
+               data-status="${session.status}">
             <div class="session-icon">${isGroup ? '👥' : '👤'}</div>
             <div class="session-body">
               <div class="session-title">${escapeHtml(title)}</div>
               <div class="session-sub">${scheduled}</div>
-              ${isJoinable ? `<div class="${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
+              <div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>
             </div>
-            ${actionHtml}
+            <div class="session-action">${actionHtml}</div>
           </div>`;
       }).filter(Boolean).join('');
     }
@@ -1122,16 +1203,21 @@ async function loadSessions() {
     container.innerHTML = upcoming.map(s => {
       const { isJoinable, label, labelClass } = getSessionState(s.scheduled_at, s.status);
       return `
-        <div class="session-item">
+        <div class="session-item"
+             data-session-id="${s.id}"
+             data-scheduled-at="${s.scheduled_at}"
+             data-status="${s.status}">
           <div class="session-icon">👥</div>
           <div class="session-body">
             <div class="session-title">${escapeHtml(s.title)}</div>
             <div class="session-sub">${formatDateTime(s.scheduled_at)}</div>
-            <div class="${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>
+            <div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>
           </div>
-          ${isJoinable
-            ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${t('btn_join_session')}</button>`
-            : `<span class="${labelClass}">${label}</span>`}
+          <div class="session-action">
+            ${isJoinable
+              ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${t('btn_join_session')}</button>`
+              : `<span class="${labelClass}">${label}</span>`}
+          </div>
         </div>`;
     }).join('');
   } catch (e) {
