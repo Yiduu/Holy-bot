@@ -236,24 +236,86 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     res.json({ success: true });
   });
 
-  // DELETE /api/sessions/my – remove caller from all their session participant records
+  // DELETE /api/sessions/my – clear sessions from the caller's list.
+  // For mentors: also removes ALL participants from sessions they hosted
+  // so the session disappears from every mentee's list too.
   router.delete('/my', requireAuth, async (req, res) => {
     const { id: telegram_id } = req.telegramUser;
-    console.log('[Sessions] Clearing all sessions for user:', telegram_id);
+    console.log('[Sessions] Clearing sessions for user:', telegram_id);
 
-    // Delete ALL participant records for this user regardless of time
-    const { count, error: delErr } = await supabase
+    // Check if the caller is a mentor
+    const { data: callerUser } = await supabase
+      .from('users')
+      .select('role')
+      .eq('telegram_id', telegram_id)
+      .single();
+
+    let totalCount = 0;
+
+    if (callerUser?.role === 'mentor') {
+      // ── Step 1: find all sessions this mentor hosts ──────────────
+      const { data: hostedSessions } = await supabase
+        .from('video_sessions')
+        .select('id')
+        .eq('host_id', telegram_id);
+
+      if (hostedSessions && hostedSessions.length > 0) {
+        const hostedIds = hostedSessions.map(s => s.id);
+
+        // ── Step 2: gather all affected participants (to notify) ──
+        const { data: affected } = await supabase
+          .from('session_participants')
+          .select('telegram_id')
+          .in('session_id', hostedIds)
+          .neq('telegram_id', telegram_id); // exclude the mentor themselves
+
+        // ── Step 3: delete ALL participant records for hosted sessions ─
+        const { count: hostedCount, error: hostedErr } = await supabase
+          .from('session_participants')
+          .delete({ count: 'exact' })
+          .in('session_id', hostedIds);
+
+        if (hostedErr) {
+          console.error('[Sessions] Delete hosted error:', hostedErr);
+          return res.status(500).json({ error: hostedErr.message });
+        }
+
+        totalCount += hostedCount || 0;
+
+        // ── Step 4: notify affected online participants via socket ──
+        if (affected) {
+          const notified = new Set();
+          for (const p of affected) {
+            if (notified.has(String(p.telegram_id))) continue;
+            notified.add(String(p.telegram_id));
+            const sock = onlineUsers.get(String(p.telegram_id));
+            if (sock) {
+              io.to(sock).emit('session_cleared', {
+                cleared_by: telegram_id,
+                message: 'A session was removed by your mentor.',
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // ── Always: remove any remaining participant records for the caller ──
+    // (covers sessions they joined but didn't host)
+    const { count: selfCount, error: selfErr } = await supabase
       .from('session_participants')
       .delete({ count: 'exact' })
       .eq('telegram_id', telegram_id);
 
-    if (delErr) {
-      console.error('[Sessions] Delete error:', delErr);
-      return res.status(500).json({ error: delErr.message });
+    if (selfErr) {
+      console.error('[Sessions] Delete self error:', selfErr);
+      return res.status(500).json({ error: selfErr.message });
     }
 
-    console.log(`[Sessions] Deleted ${count} participant records`);
-    res.json({ success: true, count: count || 0 });
+    totalCount += selfCount || 0;
+
+    console.log(`[Sessions] Deleted ${totalCount} participant records`);
+    res.json({ success: true, count: totalCount });
   });
 
 

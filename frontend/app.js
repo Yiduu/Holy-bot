@@ -442,6 +442,16 @@ function connectSocket() {
       loadSessions();
     }
   });
+
+  // Fired when a mentor clears their session list — mentees' lists are also
+  // cleared server-side, so refresh to reflect the removal immediately.
+  socket.on('session_cleared', ({ message } = {}) => {
+    haptic('light');
+    showToast(message || 'A session was removed by your mentor.', 'info');
+    if (currentPage === 'sessions') {
+      loadSessions();
+    }
+  });
 }
 
 // ─── Navigation ───────────────────────────────────────────────
