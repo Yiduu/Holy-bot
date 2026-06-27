@@ -236,34 +236,16 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     res.json({ success: true });
   });
 
-  // Alternative: fetch IDs first, then delete
+  // DELETE /api/sessions/my – remove caller from all their session participant records
   router.delete('/my', requireAuth, async (req, res) => {
     const { id: telegram_id } = req.telegramUser;
-    console.log('[Sessions] Clearing history for user:', telegram_id);
+    console.log('[Sessions] Clearing all sessions for user:', telegram_id);
 
-    // 1. Get IDs of ended/past sessions
-    const { data: sessions, error: fetchErr } = await supabase
-      .from('video_sessions')
-      .select('id')
-      .lt('scheduled_at', new Date().toISOString());
-
-    if (fetchErr) {
-      console.error('[Sessions] Fetch error:', fetchErr);
-      return res.status(500).json({ error: fetchErr.message });
-    }
-
-    if (!sessions || sessions.length === 0) {
-      return res.json({ success: true, count: 0 });
-    }
-
-    const sessionIds = sessions.map(s => s.id);
-
-    // 2. Delete participant records for those sessions
+    // Delete ALL participant records for this user regardless of time
     const { count, error: delErr } = await supabase
       .from('session_participants')
       .delete({ count: 'exact' })
-      .eq('telegram_id', telegram_id)
-      .in('session_id', sessionIds);
+      .eq('telegram_id', telegram_id);
 
     if (delErr) {
       console.error('[Sessions] Delete error:', delErr);

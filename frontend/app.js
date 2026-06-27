@@ -1235,7 +1235,7 @@ async function loadSessions() {
 }
 
 async function clearSessionHistory() {
-  if (!confirm('Clear history of ended sessions?')) return;
+  if (!confirm('Clear all sessions from your list?')) return;
   haptic('medium');
   try {
     const res = await apiFetch('/api/sessions/my', { method: 'DELETE' });
