@@ -141,7 +141,12 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       .order('session(scheduled_at)', { ascending: true });
 
     if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    // Exclude sessions that have been ended (optional: keep recent ended if desired)
+    const filtered = (data || []).filter(item => {
+      const sess = item.session;
+      return sess && sess.status !== 'ended';
+    });
+    res.json(filtered);
   });
 
   // GET /api/sessions/upcoming – upcoming group sessions (public)

@@ -1273,7 +1273,13 @@ async function joinSession(session_id) {
       }
     }
 
-    launchJitsi(data.room_name, data.room_password, data.display_name, data.jitsi_token, data.is_moderator);
+
+    // Update session card status to active so UI reflects immediately
+    const card = document.querySelector(`.session-item[data-session-id="${session_id}"]`);
+    if (card) {
+      card.dataset.status = 'active';
+    }
+  
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
