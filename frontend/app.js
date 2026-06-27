@@ -390,6 +390,7 @@ function connectSocket() {
   socket.on('session_invite', (session) => {
     haptic('success');
     showToast(`📹 Session invite: ${session.title}`, 'info');
+    updateSessionsBadge();
     if (confirm('A new session has been scheduled. Go to Sessions page to join?')) {
       navigate('sessions');
     }
@@ -438,6 +439,7 @@ function connectSocket() {
   socket.on('session_ended', ({ session_id } = {}) => {
     haptic('warning');
     showToast('The session has ended.', 'info');
+    updateSessionsBadge();
     if (currentPage === 'sessions') {
       loadSessions();
     }
@@ -448,6 +450,7 @@ function connectSocket() {
   socket.on('session_cleared', ({ message } = {}) => {
     haptic('light');
     showToast(message || 'A session was removed by your mentor.', 'info');
+    updateSessionsBadge();
     if (currentPage === 'sessions') {
       loadSessions();
     }
@@ -488,6 +491,7 @@ function navigate(page) {
       $('journalViewToggle').innerHTML = '📅 ' + t('Calendar');
       break;
   }
+  updateSessionsBadge();
 }
 
 function toggleChatInput(visible) {
@@ -734,6 +738,7 @@ function startApp() {
   navigate('dashboard');
   updateMessageBadge();
   updateRequestsBadge();
+  updateSessionsBadge();
 
 
   if (String(currentUser?.telegram_id) === String(window.ADMIN_ID)) {
@@ -773,6 +778,7 @@ window.loadDashboard = async function loadDashboard() {
   if (String(currentUser?.telegram_id) === String(window.ADMIN_ID)) {
     $('adminBtn')?.classList.remove('hidden');
   }
+  updateSessionsBadge();
 }
 
 // ─── Streaks ──────────────────────────────────────────────────
@@ -1102,6 +1108,8 @@ function getSessionState(scheduledAt, status) {
  * using the cached data — no API call. Called every 30 s by the timer.
  */
 function refreshSessionLabels() {
+  let activeSessionCount = 0;
+
   // Private sessions
   const privateContainer = document.getElementById('privateSessionsList');
   if (privateContainer) {
@@ -1111,6 +1119,11 @@ function refreshSessionLabels() {
       const status      = item.dataset.status;
       if (!scheduledAt) return;
       const { isJoinable, label, labelClass } = getSessionState(scheduledAt, status);
+      
+      if (isJoinable) {
+        activeSessionCount++;
+      }
+
       const labelEl  = item.querySelector('.session-live-label');
       const actionEl = item.querySelector('.session-action');
       if (labelEl) {
@@ -1147,6 +1160,11 @@ function refreshSessionLabels() {
       const status      = item.dataset.status;
       if (!scheduledAt) return;
       const { isJoinable, label, labelClass } = getSessionState(scheduledAt, status);
+
+      if (isJoinable) {
+        activeSessionCount++;
+      }
+
       const labelEl  = item.querySelector('.session-live-label');
       const actionEl = item.querySelector('.session-action');
       if (labelEl)  { labelEl.className = labelClass; labelEl.textContent = label; }
@@ -1158,6 +1176,8 @@ function refreshSessionLabels() {
       }
     });
   }
+
+  updateSessionsBadge(activeSessionCount);
 }
 
 async function loadSessions() {
@@ -1165,45 +1185,51 @@ async function loadSessions() {
   stopSessionTimer();
   sessionTimerInterval = setInterval(refreshSessionLabels, 30 * 1000);
 
+  let activeSessionCount = 0;
+
   // ── Private / assigned sessions ──────────────────────────────
   try {
     const mySessions = await apiFetch('/api/sessions/my');
     const privateContainer = document.getElementById('privateSessionsList');
-    if (!privateContainer) return;
+    if (privateContainer) {
+      if (mySessions.length === 0) {
+        privateContainer.innerHTML = '<div class="empty-state">No active or upcoming private sessions.</div>';
+      } else {
+        privateContainer.innerHTML = mySessions.map(s => {
+          const session = s.session;
+          if (!session) return '';
+          const isGroup = session.is_group;
+          const title = session.title || (isGroup ? 'Group Session' : 'Private Session');
+          const scheduled = formatDateTime(session.scheduled_at);
+          const { isJoinable, label, labelClass } = getSessionState(session.scheduled_at, session.status);
 
-    if (mySessions.length === 0) {
-      privateContainer.innerHTML = '<div class="empty-state">No active or upcoming private sessions.</div>';
-    } else {
-      privateContainer.innerHTML = mySessions.map(s => {
-        const session = s.session;
-        if (!session) return '';
-        const isGroup = session.is_group;
-        const title = session.title || (isGroup ? 'Group Session' : 'Private Session');
-        const scheduled = formatDateTime(session.scheduled_at);
-        const { isJoinable, label, labelClass } = getSessionState(session.scheduled_at, session.status);
+          if (isJoinable) {
+            activeSessionCount++;
+          }
 
-        const actionHtml = isJoinable
-          ? `<div style="display:flex; flex-direction:column; gap:6px;">
-              <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>
-              <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">Browser</button>
-            </div>`
-          : `<span class="${labelClass}">${label}</span>`;
+          const actionHtml = isJoinable
+            ? `<div style="display:flex; flex-direction:column; gap:6px;">
+                <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>
+                <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">Browser</button>
+              </div>`
+            : `<span class="${labelClass}">${label}</span>`;
 
-        // Embed scheduling metadata as data-* attrs so refreshSessionLabels can update in place
-        return `
-          <div class="session-item"
-               data-session-id="${session.id}"
-               data-scheduled-at="${session.scheduled_at}"
-               data-status="${session.status}">
-            <div class="session-icon">${isGroup ? '👥' : '👤'}</div>
-            <div class="session-body">
-              <div class="session-title">${escapeHtml(title)}</div>
-              <div class="session-sub">${scheduled}</div>
-              ${label ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
-            </div>
-            <div class="session-action">${actionHtml}</div>
-          </div>`;
-      }).filter(Boolean).join('');
+          // Embed scheduling metadata as data-* attrs so refreshSessionLabels can update in place
+          return `
+            <div class="session-item"
+                 data-session-id="${session.id}"
+                 data-scheduled-at="${session.scheduled_at}"
+                 data-status="${session.status}">
+              <div class="session-icon">${isGroup ? '👥' : '👤'}</div>
+              <div class="session-body">
+                <div class="session-title">${escapeHtml(title)}</div>
+                <div class="session-sub">${scheduled}</div>
+                ${label ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
+              </div>
+              <div class="session-action">${actionHtml}</div>
+            </div>`;
+        }).filter(Boolean).join('');
+      }
     }
   } catch (e) { console.error('Error loading private sessions', e); }
 
@@ -1211,37 +1237,41 @@ async function loadSessions() {
   try {
     const upcoming = await apiFetch('/api/sessions/upcoming');
     const container = document.getElementById('upcomingSessions');
-    if (!container) return;
-
-    if (!upcoming.length) {
-      container.innerHTML = '<div class="empty-state"><span>No upcoming group sessions</span></div>';
-      return;
+    if (container) {
+      if (!upcoming.length) {
+        container.innerHTML = '<div class="empty-state"><span>No upcoming group sessions</span></div>';
+      } else {
+        container.innerHTML = upcoming.map(s => {
+          const { isJoinable, label, labelClass } = getSessionState(s.scheduled_at, s.status);
+          if (isJoinable) {
+            activeSessionCount++;
+          }
+          return `
+            <div class="session-item"
+                 data-session-id="${s.id}"
+                 data-scheduled-at="${s.scheduled_at}"
+                 data-status="${s.status}">
+              <div class="session-icon">👥</div>
+              <div class="session-body">
+                <div class="session-title">${escapeHtml(s.title)}</div>
+                <div class="session-sub">${formatDateTime(s.scheduled_at)}</div>
+                ${label ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
+              </div>
+              <div class="session-action">
+                ${isJoinable
+                  ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${t('btn_join_session')}</button>`
+                  : `<span class="${labelClass}">${label}</span>`}
+              </div>
+            </div>`;
+        }).join('');
+      }
     }
-
-    container.innerHTML = upcoming.map(s => {
-      const { isJoinable, label, labelClass } = getSessionState(s.scheduled_at, s.status);
-      return `
-        <div class="session-item"
-             data-session-id="${s.id}"
-             data-scheduled-at="${s.scheduled_at}"
-             data-status="${s.status}">
-          <div class="session-icon">👥</div>
-          <div class="session-body">
-            <div class="session-title">${escapeHtml(s.title)}</div>
-            <div class="session-sub">${formatDateTime(s.scheduled_at)}</div>
-            ${label ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
-          </div>
-          <div class="session-action">
-            ${isJoinable
-              ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${t('btn_join_session')}</button>`
-              : `<span class="${labelClass}">${label}</span>`}
-          </div>
-        </div>`;
-    }).join('');
   } catch (e) {
     const el = document.getElementById('upcomingSessions');
     if (el) el.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`;
   }
+
+  updateSessionsBadge(activeSessionCount);
 }
 
 async function clearSessionHistory() {
@@ -1732,6 +1762,48 @@ async function updateRequestsBadge() {
     }
   } catch (e) {
     console.error('Failed to load requests count:', e);
+  }
+}
+
+async function updateSessionsBadge(directCount = null) {
+  try {
+    const badge = $('sessionsBadge');
+    if (!badge) return;
+
+    if (directCount !== null) {
+      badge.textContent = directCount;
+      badge.style.display = directCount > 0 ? 'flex' : 'none';
+      return;
+    }
+
+    let count = 0;
+    try {
+      const mySessions = await apiFetch('/api/sessions/my');
+      for (const s of mySessions) {
+        const session = s.session;
+        if (session) {
+          const { isJoinable } = getSessionState(session.scheduled_at, session.status);
+          if (isJoinable) count++;
+        }
+      }
+    } catch (e) {
+      console.error('Error loading private sessions for badge:', e);
+    }
+
+    try {
+      const upcoming = await apiFetch('/api/sessions/upcoming');
+      for (const s of upcoming) {
+        const { isJoinable } = getSessionState(s.scheduled_at, s.status);
+        if (isJoinable) count++;
+      }
+    } catch (e) {
+      console.error('Error loading upcoming group sessions for badge:', e);
+    }
+
+    badge.textContent = count;
+    badge.style.display = count > 0 ? 'flex' : 'none';
+  } catch (e) {
+    console.error('Failed to update sessions badge:', e);
   }
 }
 
