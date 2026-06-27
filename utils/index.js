@@ -30,4 +30,28 @@ function generateJitsiJWT(roomName, userInfo) {
   return jwt.sign(payload, secret, { algorithm: 'HS256' });
 }
 
-module.exports = { generateJitsiJWT };
+/**
+ * Retry wrapper for Supabase queries.
+ * Automatically retries on transient errors with exponential backoff.
+ *
+ * @param {Function} fn       - A function that returns a Supabase query promise.
+ * @param {number}   retries  - Max retry attempts (default 3).
+ * @param {number}   delay    - Base delay in ms, multiplied by attempt index (default 1000).
+ * @returns {Promise<*>}      - Resolves with `data` from the Supabase response.
+ * @throws                    - Throws the last Supabase/network error after all retries.
+ */
+async function supabaseQuery(fn, retries = 3, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const result = await fn();
+      if (result.error) throw result.error;
+      return result.data;
+    } catch (e) {
+      if (i === retries - 1) throw e;
+      await new Promise(r => setTimeout(r, delay * (i + 1)));
+    }
+  }
+}
+
+module.exports = { generateJitsiJWT, supabaseQuery };
+

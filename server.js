@@ -6,12 +6,27 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
 const crypto = require('crypto');
-// FIX: Added rate limiting. Run: npm install express-rate-limit
-// This protects all API endpoints — especially /broadcast and /messages —
-// from abuse. Limits each IP to 100 requests per 15-minute window by default,
-// with a tighter 20 req/min limit on auth endpoints.
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
+
+const logger = require('./utils/logger');
+
+// ─── Sentry (optional – only active when SENTRY_DSN is set) ──────────────────
+let Sentry = null;
+if (process.env.SENTRY_DSN) {
+  try {
+    Sentry = require('@sentry/node');
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.NODE_ENV || 'production',
+      tracesSampleRate: 0.2,
+    });
+    logger.info('Sentry error tracking initialized');
+  } catch (e) {
+    logger.warn('Sentry package not installed — skipping error tracking', { error: e.message });
+    Sentry = null;
+  }
+}
 
 const { createClient } = require('@supabase/supabase-js');
 const { bot, notifyMessage, notifySessionInvite, notifyMentorApproved, broadcastToAll } = require('./bot');
@@ -28,8 +43,11 @@ const app = express();
 app.set('trust proxy', 1); // Trust Render's proxy
 const server = http.createServer(app);
 
+// Sentry request handler must be first middleware if enabled
+if (Sentry) app.use(Sentry.Handlers.requestHandler());
+
 app.use((req, res, next) => {
-  console.log(`[Server] ${req.method} ${req.url}`);
+  logger.info(`${req.method} ${req.url}`);
   next();
 });
 
@@ -180,9 +198,19 @@ app.use('/api/topics', require('./routes/topics')(supabase, requireAuth, require
 app.use('/api/streaks', require('./routes/streaks')(supabase, requireAuth));
 app.use('/api/journal', require('./routes/journal')(supabase, requireAuth));
 
-// ─── Health check ─────────────────────────────────────────────────────────────
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', ts: new Date().toISOString() });
+// ─── Health check (enhanced – probes DB connection) ──────────────────────────
+app.get('/health', async (req, res) => {
+  try {
+    const { error } = await supabase
+      .from('users')
+      .select('telegram_id', { count: 'exact', head: true })
+      .limit(1);
+    if (error) throw error;
+    res.json({ status: 'ok', db: 'connected', ts: new Date().toISOString() });
+  } catch (e) {
+    logger.error('Health check failed', { error: e.message });
+    res.status(503).json({ status: 'unhealthy', error: e.message });
+  }
 });
 
 // ─── SPA Catch-all ────────────────────────────────────────────────────────────
@@ -191,11 +219,43 @@ app.get('*', (req, res, next) => {
   res.sendFile(require('path').join(__dirname, 'frontend', 'index.html'));
 });
 
-// ─── Error handler ────────────────────────────────────────────────────────────
+// ─── Sentry error handler (must be before generic error handler) ──────────────
+if (Sentry) app.use(Sentry.Handlers.errorHandler());
+
+// ─── Generic error handler ────────────────────────────────────────────────────
 app.use((err, req, res, _next) => {
-  console.error(err);
+  logger.error('Unhandled express error', { error: err.message, stack: err.stack });
   res.status(500).json({ error: 'Internal server error' });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const httpServer = server.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
+
+// ─── Graceful shutdown ────────────────────────────────────────────────────────
+function shutdown(signal) {
+  logger.info(`${signal} received — shutting down gracefully`);
+  httpServer.close(() => {
+    logger.info('HTTP server closed');
+    process.exit(0);
+  });
+  // Force-kill if server hasn't closed within 10 s
+  setTimeout(() => {
+    logger.warn('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10_000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT',  () => shutdown('SIGINT'));
+
+// ─── Unhandled promise rejections ────────────────────────────────────────────
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled promise rejection', { reason: String(reason), promise: String(promise) });
+  if (Sentry) Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
+});
+
+// ─── Uncaught exceptions ──────────────────────────────────────────────────────
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception — exiting', { error: err.message, stack: err.stack });
+  if (Sentry) Sentry.captureException(err);
+  process.exit(1);
+});

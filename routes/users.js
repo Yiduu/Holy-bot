@@ -2,12 +2,22 @@
 
 const express = require('express');
 
+// ─── Stats cache (1 hour TTL) ─────────────────────────────────────────────────
+let statsCache = null;
+let statsCacheTime = 0;
+const STATS_TTL = 60 * 60 * 1000; // 1 hour
+
 module.exports = function userRoutes(supabase, requireAuth) {
   const router = express.Router();
 
   // GET /api/users/stats – dashboard counters
   router.get('/stats', requireAuth, async (req, res) => {
-    const today = new Date(); today.setHours(0,0,0,0);
+    // Return cached result if still fresh
+    if (statsCache && Date.now() - statsCacheTime < STATS_TTL) {
+      return res.json(statsCache);
+    }
+
+    const today = new Date(); today.setHours(0, 0, 0, 0);
 
     const [usersRes, mentorsRes, sessionsRes] = await Promise.all([
       supabase.from('users').select('telegram_id', { count: 'exact', head: true }).eq('is_banned', false),
@@ -15,12 +25,16 @@ module.exports = function userRoutes(supabase, requireAuth) {
       supabase.from('video_sessions').select('id', { count: 'exact', head: true }).eq('status', 'ended').gte('ended_at', today.toISOString()),
     ]);
 
-    res.json({
+    statsCache = {
       total_users: usersRes.count || 0,
       active_mentors: mentorsRes.count || 0,
       sessions_today: sessionsRes.count || 0,
-    });
+    };
+    statsCacheTime = Date.now();
+
+    res.json(statsCache);
   });
+
 
   // GET /api/users/settings
   router.get('/settings', requireAuth, async (req, res) => {
