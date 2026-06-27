@@ -1281,18 +1281,12 @@ async function openSessionInBrowser(session_id) {
 async function createSession(is_group = false, mentee_id = null, scheduled_at = null, customTitle = null, participant_ids = []) {
   haptic('light');
   try {
+    // mentee_id is always resolved before createSession is called for 1-on-1 sessions.
+    // If somehow still missing (e.g. called programmatically), just show an error.
     if (!is_group && !mentee_id && currentUser?.role === 'mentor') {
-      const res = await apiFetch('/api/users/chat-partner');
-      if (res.type === 'single') {
-        mentee_id = res.partner.telegram_id;
-      } else if (res.type === 'multiple') {
-        openMenteeSelectModal();
-        return;
-      } else {
-        haptic('error');
-        showToast('No active mentees to start a session with.', 'error');
-        return;
-      }
+      haptic('error');
+      showToast('Please select a mentee first.', 'error');
+      return;
     }
 
     const title = customTitle || (is_group ? prompt('Session title (or leave blank):') : 'Private session');
@@ -1434,6 +1428,32 @@ function closeMenteeSelectModal() {
 function startPrivateSession(menteeId) {
   closeMenteeSelectModal();
   showScheduleModal(false, menteeId);
+}
+
+/**
+ * Entry point for the 1-on-1 schedule button.
+ * Checks how many mentees the mentor has FIRST so the user always picks
+ * a mentee before seeing the date/time picker — not after.
+ */
+async function openPrivateSessionFlow() {
+  haptic('light');
+  try {
+    const res = await apiFetch('/api/users/chat-partner');
+    if (res.type === 'none') {
+      haptic('error');
+      showToast('No active mentees to start a session with.', 'error');
+    } else if (res.type === 'single') {
+      // Only one mentee — go straight to the schedule picker with them pre-selected
+      showScheduleModal(false, res.partner.telegram_id);
+    } else {
+      // Multiple mentees — show the mentee picker first; selecting one
+      // will call startPrivateSession() → showScheduleModal(false, menteeId)
+      openMenteeSelectModal();
+    }
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
 }
 
 function launchJitsi(roomName, roomPassword, displayName, token) {
