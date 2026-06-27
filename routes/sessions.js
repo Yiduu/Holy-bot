@@ -145,13 +145,18 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
   });
 
   // GET /api/sessions/upcoming – upcoming group sessions (public)
+  // Sessions remain visible for GRACE_PERIOD_MS after their scheduled time,
+  // so participants can still join a session that started a few minutes ago.
   router.get('/upcoming', requireAuth, async (req, res) => {
+    const GRACE_PERIOD_MS = 60 * 60 * 1000; // 60 minutes
+    const windowStart = new Date(Date.now() - GRACE_PERIOD_MS).toISOString();
+
     const { data, error } = await supabase
       .from('video_sessions')
       .select('*, host:host_id(anonymous_id, user_settings(display_name))')
       .eq('is_group', true)
-      .in('status', ['scheduled'])
-      .gte('scheduled_at', new Date().toISOString())
+      .in('status', ['scheduled', 'active']) // include in-progress sessions
+      .gte('scheduled_at', windowStart)      // include sessions started up to 60 min ago
       .order('scheduled_at', { ascending: true })
       .limit(20);
 

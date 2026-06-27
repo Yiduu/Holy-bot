@@ -1317,6 +1317,33 @@ textarea.form-control {
   color: var(--danger);
 }
 
+.chip-muted {
+  background: rgba(150, 150, 150, 0.1);
+  color: var(--text3);
+}
+
+/* ─── Session time labels ────────────────────────────────────── */
+.session-time-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.session-time-label.upcoming {
+  background: rgba(255, 190, 60, 0.1);
+  color: #f5a623;
+}
+
+.session-time-label.inprogress {
+  background: rgba(91, 173, 122, 0.13);
+  color: var(--success);
+}
+
 /* ─── Modal ─────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;

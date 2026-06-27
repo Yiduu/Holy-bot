@@ -1008,11 +1008,74 @@ async function respondToRequest(requestId, action) {
 }
 
 // ─── Sessions ─────────────────────────────────────────────────
+
+// How long after the scheduled time a session is still joinable
+const SESSION_GRACE_PERIOD_MS = 60 * 60 * 1000; // 60 minutes
+
+// Track the auto-refresh timer so we can cancel it when leaving the page
+let sessionTimerInterval = null;
+
+/**
+ * Returns { isJoinable, label, labelClass } for a session based on current time.
+ * Works for both private (from /my) and group (from /upcoming) sessions.
+ */
+function getSessionState(scheduledAt, status) {
+  const now = Date.now();
+  const start = new Date(scheduledAt).getTime();
+  const elapsed = now - start; // positive = past, negative = future
+
+  // Explicitly ended by host → always done
+  if (status === 'ended') {
+    return { isJoinable: false, label: '✓ Ended', labelClass: 'chip chip-muted' };
+  }
+
+  // Grace period expired even if status is still 'scheduled' or 'active'
+  if (elapsed > SESSION_GRACE_PERIOD_MS) {
+    return { isJoinable: false, label: '✓ Done', labelClass: 'chip chip-muted' };
+  }
+
+  // Future session
+  if (elapsed < 0) {
+    const diffMs = -elapsed;
+    const diffMin = Math.ceil(diffMs / 60000);
+    if (diffMin <= 60) {
+      return {
+        isJoinable: true,
+        label: `⏰ Starts in ${diffMin} min`,
+        labelClass: 'session-time-label upcoming'
+      };
+    }
+    const diffH = Math.floor(diffMin / 60);
+    const remMin = diffMin % 60;
+    const hLabel = remMin > 0 ? `${diffH}h ${remMin}m` : `${diffH}h`;
+    return {
+      isJoinable: true,
+      label: `⏰ Starts in ${hLabel}`,
+      labelClass: 'session-time-label upcoming'
+    };
+  }
+
+  // Within grace period (session has started or is active)
+  const remainingMs = SESSION_GRACE_PERIOD_MS - elapsed;
+  const remainingMin = Math.ceil(remainingMs / 60000);
+  return {
+    isJoinable: true,
+    label: `🟢 In progress · ${remainingMin} min left to join`,
+    labelClass: 'session-time-label inprogress'
+  };
+}
+
 async function loadSessions() {
+  // Clear any existing auto-refresh timer and start a fresh one
+  clearInterval(sessionTimerInterval);
+  sessionTimerInterval = setInterval(() => loadSessions(), 60 * 1000);
+
+  // ── Private / assigned sessions ──────────────────────────────
   try {
     const mySessions = await apiFetch('/api/sessions/my');
     const privateContainer = document.getElementById('privateSessionsList');
     if (!privateContainer) return;
+
     if (mySessions.length === 0) {
       privateContainer.innerHTML = '<div class="empty-state">No active or upcoming private sessions.</div>';
     } else {
@@ -1022,43 +1085,58 @@ async function loadSessions() {
         const isGroup = session.is_group;
         const title = session.title || (isGroup ? 'Group Session' : 'Private Session');
         const scheduled = formatDateTime(session.scheduled_at);
+        const { isJoinable, label, labelClass } = getSessionState(session.scheduled_at, session.status);
+
+        const actionHtml = isJoinable
+          ? `<div style="display:flex; flex-direction:column; gap:6px;">
+              <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>
+              <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">Browser</button>
+            </div>`
+          : `<span class="${labelClass}">${label}</span>`;
+
         return `
           <div class="session-item">
             <div class="session-icon">${isGroup ? '👥' : '👤'}</div>
             <div class="session-body">
               <div class="session-title">${escapeHtml(title)}</div>
-              <div class="session-sub">${scheduled} • ${session.status}</div>
+              <div class="session-sub">${scheduled}</div>
+              ${isJoinable ? `<div class="${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
             </div>
-            ${session.status === 'scheduled' ? `<div style="display:flex; flex-direction:column; gap:6px;">
-              <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>
-              <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">Browser</button>
-            </div>` : `<span class="chip chip-green">${t('btn_done')}</span>`}
+            ${actionHtml}
           </div>`;
       }).filter(Boolean).join('');
     }
   } catch (e) { console.error('Error loading private sessions', e); }
 
+  // ── Public / group sessions ────────────────────────────────────
   try {
     const upcoming = await apiFetch('/api/sessions/upcoming');
     const container = document.getElementById('upcomingSessions');
     if (!container) return;
+
     if (!upcoming.length) {
       container.innerHTML = '<div class="empty-state"><span>No upcoming group sessions</span></div>';
       return;
     }
-    container.innerHTML = upcoming.map(s => `
-      <div class="session-item">
-        <div class="session-icon">👥</div>
-        <div class="session-body">
-          <div class="session-title">${escapeHtml(s.title)}</div>
-          <div class="session-sub">${formatDateTime(s.scheduled_at)}</div>
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">Join</button>
-      </div>`).join('');
+
+    container.innerHTML = upcoming.map(s => {
+      const { isJoinable, label, labelClass } = getSessionState(s.scheduled_at, s.status);
+      return `
+        <div class="session-item">
+          <div class="session-icon">👥</div>
+          <div class="session-body">
+            <div class="session-title">${escapeHtml(s.title)}</div>
+            <div class="session-sub">${formatDateTime(s.scheduled_at)}</div>
+            <div class="${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>
+          </div>
+          ${isJoinable
+            ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${t('btn_join_session')}</button>`
+            : `<span class="${labelClass}">${label}</span>`}
+        </div>`;
+    }).join('');
   } catch (e) {
-    if (document.getElementById('upcomingSessions')) {
-      document.getElementById('upcomingSessions').innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`;
-    }
+    const el = document.getElementById('upcomingSessions');
+    if (el) el.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`;
   }
 }
 
