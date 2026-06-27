@@ -1000,6 +1000,15 @@ async function notifySessionInvite(chatId, sessionInfo) {
   let recipientTimezone = settings?.timezone || 'Africa/Addis_Ababa';
   if (!recipientTimezone || recipientTimezone === 'UTC') recipientTimezone = 'Africa/Addis_Ababa';
 
+  const scheduledAt = sessionInfo.scheduled_at || sessionInfo.scheduledAt;
+  const timeStr = scheduledAt
+    ? new Intl.DateTimeFormat('en-US', {
+        timeZone: recipientTimezone,
+        weekday: 'short', year: 'numeric', month: 'short',
+        day: 'numeric', hour: '2-digit', minute: '2-digit'
+      }).format(new Date(scheduledAt))
+    : 'TBD';
+
   const text = lang === 'am'
     ? `🙏 አዲስ ስብሰባ ታቅዷል!\n\nአስተናጋጅ: ${sessionInfo.host}\nርዕስ: ${sessionInfo.title}\nሰዓት: ${timeStr}`
     : `🙏 New Session Scheduled!\n\nHost: ${sessionInfo.host}\nTitle: ${sessionInfo.title}\nTime: ${timeStr}`;

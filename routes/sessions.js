@@ -282,6 +282,13 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
 
         totalCount += hostedCount || 0;
 
+        // ── Step 3b: mark all hosted sessions as cleared so they
+        //    disappear from the /upcoming group sessions list ───────
+        await supabase
+          .from('video_sessions')
+          .update({ status: 'cleared', ended_at: new Date().toISOString() })
+          .in('id', hostedIds);
+
         // ── Step 4: notify affected online participants via socket ──
         if (affected) {
           const notified = new Set();
