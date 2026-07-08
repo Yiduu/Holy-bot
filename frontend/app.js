@@ -946,9 +946,15 @@ async function loadMentors() {
               ${spec ? `<span class="mentor-badge badge-spec">${escapeHtml(spec)}</span>` : ''}
               <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentee')}s</span>
             </div>
-            <button class="btn btn-outline btn-sm" onclick="requestMentorship(${m.telegram_id})" ${!canRequest ? 'disabled' : ''}>
-              ${mentees >= max ? t('none') : t('btn_request')}
-            </button>
+            ${mentees >= max ? `
+              <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed;background:var(--bg3);color:var(--text3);" title="${t('capacity_full_tooltip')}">
+                ${t('capacity_full')}
+              </button>
+            ` : `
+              <button class="btn btn-outline btn-sm" onclick="requestMentorship(${m.telegram_id})" ${!canRequest ? 'disabled' : ''}>
+                ${t('btn_request')}
+              </button>
+            `}
           </div>`;
       }).join('');
     }
@@ -1116,15 +1122,15 @@ function refreshSessionLabels() {
     const items = privateContainer.querySelectorAll('.session-item[data-session-id]');
     items.forEach(item => {
       const scheduledAt = item.dataset.scheduledAt;
-      const status      = item.dataset.status;
+      const status = item.dataset.status;
       if (!scheduledAt) return;
       const { isJoinable, label, labelClass } = getSessionState(scheduledAt, status);
-      
+
       if (isJoinable) {
         activeSessionCount++;
       }
 
-      const labelEl  = item.querySelector('.session-live-label');
+      const labelEl = item.querySelector('.session-live-label');
       const actionEl = item.querySelector('.session-action');
       if (labelEl) {
         if (label) {
@@ -1157,7 +1163,7 @@ function refreshSessionLabels() {
     const items = groupContainer.querySelectorAll('.session-item[data-session-id]');
     items.forEach(item => {
       const scheduledAt = item.dataset.scheduledAt;
-      const status      = item.dataset.status;
+      const status = item.dataset.status;
       if (!scheduledAt) return;
       const { isJoinable, label, labelClass } = getSessionState(scheduledAt, status);
 
@@ -1165,9 +1171,9 @@ function refreshSessionLabels() {
         activeSessionCount++;
       }
 
-      const labelEl  = item.querySelector('.session-live-label');
+      const labelEl = item.querySelector('.session-live-label');
       const actionEl = item.querySelector('.session-action');
-      if (labelEl)  { labelEl.className = labelClass; labelEl.textContent = label; }
+      if (labelEl) { labelEl.className = labelClass; labelEl.textContent = label; }
       if (actionEl) {
         const sid = item.dataset.sessionId;
         actionEl.innerHTML = isJoinable
@@ -1259,8 +1265,8 @@ async function loadSessions() {
               </div>
               <div class="session-action">
                 ${isJoinable
-                  ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${t('btn_join_session')}</button>`
-                  : `<span class="${labelClass}">${label}</span>`}
+              ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${t('btn_join_session')}</button>`
+              : `<span class="${labelClass}">${label}</span>`}
               </div>
             </div>`;
         }).join('');
@@ -1556,7 +1562,7 @@ function launchJitsi(roomName, roomPassword, displayName, token, isModerator = f
       }
       window.activeSession = null;
       if (window.jitsiApi) {
-        try { window.jitsiApi.dispose(); window.jitsiApi = null; } catch (e) {}
+        try { window.jitsiApi.dispose(); window.jitsiApi = null; } catch (e) { }
       }
       navigate('sessions');
     });
