@@ -17,6 +17,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .select('sex')
       .eq('telegram_id', req.telegramUser.id)
       .single();
+    const DEFAULT_MAX_MENTEES = parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
 
     const userSex = userData?.sex;
 
@@ -117,6 +118,26 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .eq('is_active', true)
       .single();
     if (activeAssign) return res.status(409).json({ error: 'You already have an active mentor' });
+    // Get mentor's current mentee count and max_mentees
+    const { data: mentor, error: mentorErr } = await supabase
+      .from('users')
+      .select('max_mentees')
+      .eq('telegram_id', mentor_id)
+      .single();
+
+    if (mentorErr || !mentor) {
+      return res.status(404).json({ error: 'Mentor not found' });
+    }
+
+    const { count: currentMentees } = await supabase
+      .from('mentorship_assignments')
+      .select('id', { count: 'exact', head: true })
+      .eq('mentor_id', mentor_id)
+      .eq('is_active', true);
+
+    if (currentMentees >= (mentor.max_mentees || DEFAULT_MAX_MENTEES)) {
+      return res.status(409).json({ error: 'Mentor is at full capacity. Please try another mentor.' });
+    }
 
     // Check for existing pending request
     const { data: existingPending } = await supabase
@@ -226,7 +247,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .single();
     if (fetchErr) return res.status(404).json({ error: 'Request not found' });
 
-        if (action === 'accepted') {
+    if (action === 'accepted') {
       console.log(`[Accept] Trying to accept request ${req.params.id} by mentor ${mentor_id}`);
       // Call the new robust RPC (we'll create it in Step 2)
       const { data, error: rpcErr } = await supabase.rpc('accept_mentorship_request_v2', {
