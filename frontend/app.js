@@ -500,7 +500,7 @@ function connectSocket() {
     $('reconnectBanner')?.classList.add('show');
   });
   socket.on('new_message', (msg) => {
-    if (currentPage === 'chat' && window.chatState?.with === msg.from_id) {
+    if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(msg.from_id)) {
       appendMessageToChat(msg);
       // Emit read confirmation back via socket if we receive it while looking at their chat
       socket.emit('messages_read', { to_id: msg.from_id });
@@ -511,6 +511,11 @@ function connectSocket() {
     }
   });
   socket.on('messages_read', ({ by_id }) => {
+    if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(by_id)) {
+      loadMessages(window.chatState.with);
+    }
+  });
+  socket.on('chat_cleared', ({ by_id }) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(by_id)) {
       loadMessages(window.chatState.with);
     }

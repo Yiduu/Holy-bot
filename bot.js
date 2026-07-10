@@ -1068,11 +1068,9 @@ async function notifyMessage(recipientId, senderName, messageContent, fromId = n
 
   let inlineKeyboard = [];
   if (fromId) {
-    const botUsername = (process.env.BOT_USERNAME || '@holynessforchristbot').replace('@', '');
-    const link = `https://t.me/${botUsername}?start=chat_${fromId}`;
     inlineKeyboard = [[{
       text: lang === 'am' ? 'ቻት ክፈት 💬' : 'Open Chat 💬',
-      url: link
+      web_app: { url: `${APP_URL}?start=chat_${fromId}` }
     }]];
   }
 

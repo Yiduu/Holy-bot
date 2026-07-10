@@ -158,10 +158,37 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     res.json(data);
   });
 
-  // DELETE /api/messages/:id – soft delete
+  // DELETE /api/messages/:id – soft delete / clear conversation
   router.delete('/:id', requireAuth, async (req, res) => {
     const { id: user_id } = req.telegramUser;
     const messageId = req.params.id;
+
+    // Check if messageId is a UUID
+    const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(messageId);
+
+    if (!isUuid) {
+      // It's a conversation clear request!
+      const partner_id = parseInt(messageId);
+      if (isNaN(partner_id)) {
+        return res.status(400).json({ error: 'Invalid partner ID' });
+      }
+
+      // Soft delete all messages between user_id and partner_id
+      const { error } = await supabase
+        .from('messages')
+        .update({ is_deleted: true })
+        .or(`and(from_id.eq.${user_id},to_id.eq.${partner_id}),and(from_id.eq.${partner_id},to_id.eq.${user_id})`);
+
+      if (error) return res.status(500).json({ error: error.message });
+
+      // Notify the partner via socket if online
+      const recipientSocket = onlineUsers.get(String(partner_id));
+      if (recipientSocket) {
+        io.to(recipientSocket).emit('chat_cleared', { by_id: user_id });
+      }
+
+      return res.json({ success: true, message: 'Conversation cleared' });
+    }
 
     const { data: msg, error: fetchErr } = await supabase
       .from('messages')
