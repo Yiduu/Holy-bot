@@ -493,7 +493,8 @@ function handleDeepLink() {
 function connectSocket() {
   socket = io(API);
   socket.on('connect', () => {
-    socket.emit('auth', getTelegramData().user?.id);
+    const authId = currentUser?.telegram_id || getTelegramData().user?.id;
+    socket.emit('auth', authId);
     $('reconnectBanner')?.classList.remove('show');
   });
   socket.on('disconnect', () => {
