@@ -56,12 +56,6 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
         .eq('to_id', my_id)
         .eq('from_id', other_id)
         .is('read_at', null);
-
-      // Emit Socket.IO messages_read event to the sender
-      const senderSocket = onlineUsers.get(String(other_id));
-      if (senderSocket) {
-        io.to(senderSocket).emit('messages_read', { by_id: my_id });
-      }
     } catch (e) {
       console.error('Error marking messages as read:', e);
     }
