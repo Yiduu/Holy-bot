@@ -512,7 +512,11 @@ function connectSocket() {
   });
   socket.on('messages_read', ({ by_id }) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(by_id)) {
-      loadMessages(window.chatState.with);
+      $$('.msg-status.unread').forEach(span => {
+        span.textContent = '✓✓';
+        span.classList.remove('unread');
+        span.classList.add('read');
+      });
     }
   });
   socket.on('chat_cleared', ({ by_id }) => {
