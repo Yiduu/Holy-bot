@@ -229,6 +229,41 @@ function renderThread(messages, isRoot = true) {
   return html;
 }
 
+function appendMessageToChat(msg) {
+  const container = $('chatMessages');
+  if (!container) return;
+
+  const html = renderThread([msg], false);
+
+  if (msg.parent_id) {
+    const parentThread = container.querySelector(`.message-thread[data-msg-id="${msg.parent_id}"]`);
+    if (parentThread) {
+      let repliesContainer = parentThread.querySelector('.replies-container');
+      if (!repliesContainer) {
+        repliesContainer = document.createElement('div');
+        repliesContainer.className = 'replies-container';
+        parentThread.appendChild(repliesContainer);
+      }
+      repliesContainer.insertAdjacentHTML('beforeend', html);
+      container.scrollTop = container.scrollHeight;
+      return;
+    }
+  }
+
+  const groupHeader = getDateGroupHeader(msg.created_at);
+  const dividers = container.querySelectorAll('.chat-date-divider span');
+  const lastDividerText = dividers.length > 0 ? dividers[dividers.length - 1].textContent.trim() : '';
+
+  let finalHtml = '';
+  if (groupHeader !== lastDividerText) {
+    finalHtml += `<div class="chat-date-divider"><span>${escapeHtml(groupHeader)}</span></div>`;
+  }
+  finalHtml += html;
+
+  container.insertAdjacentHTML('beforeend', finalHtml);
+  container.scrollTop = container.scrollHeight;
+}
+
 /* ── Inline context-menu helpers ────────────────────────────── */
 function toggleMsgMenu(msgId, e) {
   e.stopPropagation();
@@ -301,7 +336,7 @@ async function sendReply(parentId) {
   hideReplyForm(parentId);
 
   try {
-    await apiFetch('/api/messages', {
+    const msg = await apiFetch('/api/messages', {
       method: 'POST',
       body: {
         to_id: window.chatState.with,
@@ -309,7 +344,7 @@ async function sendReply(parentId) {
         parent_id: parentId
       }
     });
-    loadMessages(window.chatState.with);
+    appendMessageToChat(msg);
     haptic('light');
   } catch (e) {
     haptic('error');
@@ -466,7 +501,7 @@ function connectSocket() {
   });
   socket.on('new_message', (msg) => {
     if (currentPage === 'chat' && window.chatState?.with === msg.from_id) {
-      loadMessages(window.chatState.with);
+      appendMessageToChat(msg);
       // Emit read confirmation back via socket if we receive it while looking at their chat
       socket.emit('messages_read', { to_id: msg.from_id });
     } else {
@@ -1854,8 +1889,8 @@ async function sendMessage() {
         method: 'POST',
         body: { to_id: window.chatState.with, content: originalContent }
       });
-      // Success! Reload messages to show the new message
-      await loadMessages(window.chatState.with);
+      // Success! Append message directly to chat
+      appendMessageToChat(msg);
       // Exit the loop – we're done
       lastError = null;
       break;
