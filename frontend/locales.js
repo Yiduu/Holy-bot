@@ -176,7 +176,10 @@ const I18N = {
     "Calendar": "Calendar",
     "List": "List",
     "session_ended_status": "✓ Meeting Completed",
-    "msg_send_failed": "Failed to send message. Please check your connection and try again."
+    "msg_send_failed": "Failed to send message. Please check your connection and try again.",
+    "Yesterday": "Yesterday",
+    "typing_indicator": "{name} is typing…",
+    "msg_chat_invite": "You have a new message! Open the chat to read it."
   },
   am: {
     "btn_find_mentor": "🔍 አማካሪ ፈልግ",
@@ -355,6 +358,9 @@ const I18N = {
     "Calendar": "ቀን መቁጠሪያ",
     "List": "ዝርዝር",
     "session_ended_status": "✓ ስብሰባው ተጠናቅቋል",
-    "msg_send_failed": "መልዕክቱ መላክ አልተቻለም። እባክዎ ግንኙነትዎን ይፈትሹ እና እንደገና ይሞክሩ።"
+    "msg_send_failed": "መልዕክቱ መላክ አልተቻለም። እባክዎ ግንኙነትዎን ይፈትሹ እና እንደገና ይሞክሩ።",
+    "Yesterday": "ትላንት",
+    "typing_indicator": "{name} እየጻፈ ነው…",
+    "msg_chat_invite": "አዲስ መልዕክት አለዎት! ለማንበብ ቻቱን ይክፈቱ።"
   }
 };

@@ -115,50 +115,118 @@ function buildMessageTree(messages) {
 const ICON_REPLY = `<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>`;
 const ICON_MORE = `<svg class="msg-icon" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>`;
 
-function renderThread(messages) {
+function getLocalDateParts(date, timezone) {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric'
+    });
+    const formatted = formatter.format(date); // "M/D/YYYY"
+    const [m, d, y] = formatted.split('/');
+    return { year: parseInt(y), month: parseInt(m) - 1, day: parseInt(d) };
+  } catch (e) {
+    return { year: date.getFullYear(), month: date.getMonth(), day: date.getDate() };
+  }
+}
+
+function getDateGroupHeader(dateStr) {
+  const tz = currentUser?.user_settings?.timezone || 'Africa/Addis_Ababa';
+  const msgDate = new Date(dateStr);
+  const now = new Date();
+
+  const msgParts = getLocalDateParts(msgDate, tz);
+  const nowParts = getLocalDateParts(now, tz);
+
+  const msgLocalMidnight = new Date(msgParts.year, msgParts.month, msgParts.day).getTime();
+  const nowLocalMidnight = new Date(nowParts.year, nowParts.month, nowParts.day).getTime();
+
+  const diffDays = Math.round((nowLocalMidnight - msgLocalMidnight) / (24 * 60 * 60 * 1000));
+
+  if (diffDays === 0) {
+    return t('Today') || 'Today';
+  } else if (diffDays === 1) {
+    return t('Yesterday') || 'Yesterday';
+  } else if (diffDays > 1 && diffDays < 7) {
+    try {
+      return msgDate.toLocaleDateString([], { weekday: 'long', timeZone: tz });
+    } catch (e) {
+      return msgDate.toLocaleDateString([], { weekday: 'long' });
+    }
+  } else {
+    try {
+      return msgDate.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric', timeZone: tz });
+    } catch (e) {
+      return msgDate.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+  }
+}
+
+function renderThread(messages, isRoot = true) {
   if (!messages || !messages.length) return '';
-  return messages
-    .filter(msg => !msg.is_deleted)
-    .map(msg => {
-      const isSent = msg.from_id === currentUser?.telegram_id;
-      const replyFormId = `reply-form-${msg.id}`;
-      const editedMark = msg.edited_at
-        ? '<span class="msg-edited">edited</span>'
-        : '';
-      const hasReplies = msg.replies && msg.replies.filter(r => !r.is_deleted).length > 0;
-      return `
-        <div class="message-thread ${isSent ? 'thread-sent' : 'thread-received'}" data-msg-id="${msg.id}">
-          <div class="message-bubble ${isSent ? 'sent' : 'received'}">
-            <div class="message-text">${escapeHtml(msg.content)}${editedMark}</div>
-            <div class="message-footer">
-              <span class="message-time">${formatTime(msg.created_at)}</span>
-              <span class="msg-footer-actions">
-                ${isSent ? `
-                  <button class="msg-action-btn" onclick="toggleMsgMenu('${msg.id}', event)" aria-label="Options">${ICON_MORE}</button>
-                  <div class="msg-context-menu" id="msg-menu-${msg.id}">
-                    <button class="msg-menu-item" onclick="editMessageInline('${msg.id}');closeMsgMenu()">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                      Edit
-                    </button>
-                    <button class="msg-menu-item danger" onclick="deleteMessageInline('${msg.id}');closeMsgMenu()">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-                      Delete
-                    </button>
-                  </div>
-                ` : ''}
-                <button class="msg-action-btn" onclick="showReplyForm('${msg.id}')" aria-label="Reply">${ICON_REPLY}</button>
-              </span>
-            </div>
+  
+  let html = '';
+  let lastGroupHeader = '';
+  
+  for (const msg of messages) {
+    if (msg.is_deleted) continue;
+    
+    if (isRoot) {
+      const groupHeader = getDateGroupHeader(msg.created_at);
+      if (groupHeader !== lastGroupHeader) {
+        html += `<div class="chat-date-divider"><span>${escapeHtml(groupHeader)}</span></div>`;
+        lastGroupHeader = groupHeader;
+      }
+    }
+    
+    const isSent = msg.from_id === currentUser?.telegram_id;
+    const replyFormId = `reply-form-${msg.id}`;
+    const editedMark = msg.edited_at
+      ? '<span class="msg-edited">edited</span>'
+      : '';
+    const hasReplies = msg.replies && msg.replies.filter(r => !r.is_deleted).length > 0;
+    
+    const statusIndicator = isSent 
+      ? `<span class="msg-status ${msg.read_at ? 'read' : 'unread'}">${msg.read_at ? '✓✓' : '✓'}</span>` 
+      : '';
+
+    html += `
+      <div class="message-thread ${isSent ? 'thread-sent' : 'thread-received'}" data-msg-id="${msg.id}">
+        <div class="message-bubble ${isSent ? 'sent' : 'received'}">
+          <div class="message-text">${escapeHtml(msg.content)}${editedMark}</div>
+          <div class="message-footer">
+            <span class="message-time">${formatTime(msg.created_at)}</span>
+            ${statusIndicator}
+            <span class="msg-footer-actions">
+              ${isSent ? `
+                <button class="msg-action-btn" onclick="toggleMsgMenu('${msg.id}', event)" aria-label="Options">${ICON_MORE}</button>
+                <div class="msg-context-menu" id="msg-menu-${msg.id}">
+                  <button class="msg-menu-item" onclick="editMessageInline('${msg.id}');closeMsgMenu()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    Edit
+                  </button>
+                  <button class="msg-menu-item danger" onclick="deleteMessageInline('${msg.id}');closeMsgMenu()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    Delete
+                  </button>
+                </div>
+              ` : ''}
+              <button class="msg-action-btn" onclick="showReplyForm('${msg.id}')" aria-label="Reply">${ICON_REPLY}</button>
+            </span>
           </div>
-          <div id="${replyFormId}" class="reply-form">
-            <input type="text" id="reply-input-${msg.id}" class="reply-input" placeholder="Write a reply…" autocomplete="off" />
-            <button class="reply-send" onclick="sendReply('${msg.id}')">Send</button>
-            <button class="cancel-reply" onclick="hideReplyForm('${msg.id}')">✕</button>
-          </div>
-          ${hasReplies ? `<div class="replies-container">${renderThread(msg.replies)}</div>` : ''}
         </div>
-      `;
-    }).join('');
+        <div id="${replyFormId}" class="reply-form">
+          <input type="text" id="reply-input-${msg.id}" class="reply-input" placeholder="Write a reply…" autocomplete="off" />
+          <button class="reply-send" onclick="sendReply('${msg.id}')">Send</button>
+          <button class="cancel-reply" onclick="hideReplyForm('${msg.id}')">✕</button>
+        </div>
+        ${hasReplies ? `<div class="replies-container">${renderThread(msg.replies, false)}</div>` : ''}
+      </div>
+    `;
+  }
+  
+  return html;
 }
 
 /* ── Inline context-menu helpers ────────────────────────────── */
@@ -353,18 +421,36 @@ function handleDeepLink() {
   const tg = window.Telegram?.WebApp;
   const startParam = tg?.initDataUnsafe?.start_param;
 
-  if (startParam && startParam.startsWith('session_')) {
-    const sessionId = startParam.replace('session_', '');
-    setTimeout(() => joinSession(sessionId), 100);
-    return;
+  if (startParam) {
+    if (startParam.startsWith('session_')) {
+      const sessionId = startParam.replace('session_', '');
+      setTimeout(() => joinSession(sessionId), 100);
+      return;
+    }
+    if (startParam.startsWith('chat_')) {
+      const partnerId = startParam.replace('chat_', '');
+      setTimeout(() => {
+        window.pendingChatPartner = partnerId;
+        navigate('chat');
+      }, 100);
+      return;
+    }
   }
 
   // Fallback for direct browser testing
   const urlParams = new URLSearchParams(window.location.search);
   const browserStart = urlParams.get('start');
-  if (browserStart && browserStart.startsWith('session_')) {
-    const sessionId = browserStart.replace('session_', '');
-    setTimeout(() => joinSession(sessionId), 100);
+  if (browserStart) {
+    if (browserStart.startsWith('session_')) {
+      const sessionId = browserStart.replace('session_', '');
+      setTimeout(() => joinSession(sessionId), 100);
+    } else if (browserStart.startsWith('chat_')) {
+      const partnerId = browserStart.replace('chat_', '');
+      setTimeout(() => {
+        window.pendingChatPartner = partnerId;
+        navigate('chat');
+      }, 100);
+    }
   }
 }
 
@@ -381,10 +467,17 @@ function connectSocket() {
   socket.on('new_message', (msg) => {
     if (currentPage === 'chat' && window.chatState?.with === msg.from_id) {
       loadMessages(window.chatState.with);
+      // Emit read confirmation back via socket if we receive it while looking at their chat
+      socket.emit('messages_read', { to_id: msg.from_id });
     } else {
       updateMessageBadge();
       showToast('New message received');
       haptic('medium');
+    }
+  });
+  socket.on('messages_read', ({ by_id }) => {
+    if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(by_id)) {
+      loadMessages(window.chatState.with);
     }
   });
   socket.on('session_invite', (session) => {
@@ -399,10 +492,12 @@ function connectSocket() {
     showToast(`📢 ${message}`);
   });
   socket.on('typing', ({ from_id }) => {
-    if (window.chatState?.with === from_id) {
-      $('typingIndicator').innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>';
+    if (window.chatState?.with && String(window.chatState.with) === String(from_id)) {
+      const partnerName = window.chatState.name || 'Partner';
+      const indicatorText = t('typing_indicator', { name: partnerName });
+      $('typingIndicator').innerHTML = `${escapeHtml(indicatorText)} <span class="typing-dots"><span></span><span></span><span></span></span>`;
       clearTimeout(window.typingTimeout);
-      window.typingTimeout = setTimeout(() => { $('typingIndicator').innerHTML = ''; }, 2000);
+      window.typingTimeout = setTimeout(() => { $('typingIndicator').innerHTML = ''; }, 3000);
     }
   });
   socket.on('new_mentorship_request', () => {
@@ -1641,7 +1736,7 @@ async function loadChat() {
       if (partnerWrapper) partnerWrapper.style.display = 'none';
       $('chatWith').style.display = 'block';
       $('chatWith').textContent = res.partner.display_name;
-      window.chatState = { with: res.partner.telegram_id, name: res.partner.anonymous_id };
+      window.chatState = { with: res.partner.telegram_id, name: res.partner.display_name || res.partner.anonymous_id };
       loadMessages(res.partner.telegram_id);
     } else {
       $('chatWith').style.display = 'none';
@@ -1675,7 +1770,7 @@ async function loadChat() {
         }).join('');
       }
 
-      window.chatState = { with: partner.telegram_id, name: partner.anonymous_id };
+      window.chatState = { with: partner.telegram_id, name: partner.display_name || partner.anonymous_id };
       loadMessages(partner.telegram_id);
     }
 

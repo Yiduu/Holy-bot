@@ -2511,3 +2511,46 @@ textarea.form-control {
 .chat-send-btn.sending svg {
   animation: spin 0.8s linear infinite;
 }
+
+/* ─── Date Divider in Chat ────────────────────────────────────── */
+.chat-date-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 16px 0;
+  position: relative;
+}
+.chat-date-divider::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border-dim);
+  z-index: 1;
+}
+.chat-date-divider span {
+  background: var(--bg);
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text3);
+  border-radius: 12px;
+  border: 1px solid var(--border-dim);
+  z-index: 2;
+}
+
+/* ─── Message Seen Status Indicator ──────────────────────────── */
+.msg-status {
+  font-size: 0.72rem;
+  margin-left: 5px;
+  display: inline-block;
+  vertical-align: middle;
+}
+.msg-status.unread {
+  color: var(--text3);
+  opacity: 0.5;
+}
+.msg-status.read {
+  color: #3897f0; /* Telegram-like seen blue color */
+}

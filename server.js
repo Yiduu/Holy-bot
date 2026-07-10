@@ -109,6 +109,13 @@ io.on('connection', (socket) => {
     if (targetSocket) io.to(targetSocket).emit('typing', { from_id: socket.data.telegram_id });
   });
 
+  socket.on('messages_read', ({ to_id }) => {
+    const targetSocket = onlineUsers.get(String(to_id));
+    if (targetSocket && socket.data.telegram_id) {
+      io.to(targetSocket).emit('messages_read', { by_id: socket.data.telegram_id });
+    }
+  });
+
   socket.on('disconnect', () => {
     if (socket.data.telegram_id) {
       onlineUsers.delete(socket.data.telegram_id);

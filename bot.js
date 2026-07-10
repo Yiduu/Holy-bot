@@ -1062,12 +1062,28 @@ async function notifyMentorshipRejected(userId, mentorName) {
 
   await safeSend(userId, text);
 }
-// Plain text offline message notification – no formatting, no buttons
-async function notifyMessage(recipientId, senderName, messageContent) {
-  // Send only the message content (clean, no prefix)
-  await bot.sendMessage(recipientId, messageContent);
-  // Optional: include sender name (uncomment next line, comment above)
-  // await bot.sendMessage(recipientId, `${senderName}: ${messageContent}`);
+// Plain text offline message notification with optional deep link
+async function notifyMessage(recipientId, senderName, messageContent, fromId = null) {
+  const lang = await getUserLang(recipientId);
+
+  let inlineKeyboard = [];
+  if (fromId) {
+    const botUsername = (process.env.BOT_USERNAME || '@holynessforchristbot').replace('@', '');
+    const link = `https://t.me/${botUsername}?start=chat_${fromId}`;
+    inlineKeyboard = [[{
+      text: lang === 'am' ? 'ቻት ክፈት 💬' : 'Open Chat 💬',
+      url: link
+    }]];
+  }
+
+  const text = lang === 'am'
+    ? `💬 *አዲስ መልዕክት ከ ${mdEscape(senderName)}*\n\n${mdEscape(messageContent)}`
+    : `💬 *New message from ${mdEscape(senderName)}*\n\n${mdEscape(messageContent)}`;
+
+  await bot.sendMessage(recipientId, text, {
+    parse_mode: 'Markdown',
+    reply_markup: inlineKeyboard.length > 0 ? { inline_keyboard: inlineKeyboard } : undefined
+  });
 }
 
 // ─── Message Handler ──────────────────────────────────────────────────────────
@@ -1090,6 +1106,31 @@ bot.on('message', async (msg) => {
       if (command === '/start') {
         const args = text.split(' ');
         const { data: user } = await supabase.from('users').select('*').eq('telegram_id', chatId).single();
+
+        if (args.length > 1 && args[1].startsWith('chat_')) {
+          const partnerId = args[1].replace('chat_', '');
+          if (!user) {
+            const lang = await getUserLang(chatId);
+            return safeSend(chatId, 'Welcome to Holy Counseling Bot – a dedicated space for mentorship and guidance. Please register using the Holy app.', {
+              reply_markup: {
+                inline_keyboard: [[{
+                  text: 'Register',
+                  web_app: { url: `${APP_URL}?start=register` }
+                }]]
+              }
+            });
+          } else {
+            const lang = await getUserLang(chatId);
+            return safeSend(chatId, tSync(lang, 'msg_chat_invite') || 'You have a message! Open your chat to read it.', {
+              reply_markup: {
+                inline_keyboard: [[{
+                  text: tSync(lang, 'btn_my_chat') || 'Open Chat',
+                  web_app: { url: `${APP_URL}?start=chat_${partnerId}` }
+                }]]
+              }
+            });
+          }
+        }
 
         if (args.length > 1 && args[1].startsWith('session_')) {
           const sessionId = args[1].replace('session_', '');

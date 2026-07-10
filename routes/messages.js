@@ -48,8 +48,23 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
 
     if (error) return res.status(500).json({ error: error.message });
 
-    // Mark as read
-    await supabase.from('messages').update({ is_read: true }).eq('to_id', my_id).eq('from_id', other_id).eq('is_read', false);
+    // Mark as read and update read_at
+    try {
+      await supabase
+        .from('messages')
+        .update({ is_read: true, read_at: new Date().toISOString() })
+        .eq('to_id', my_id)
+        .eq('from_id', other_id)
+        .is('read_at', null);
+
+      // Emit Socket.IO messages_read event to the sender
+      const senderSocket = onlineUsers.get(String(other_id));
+      if (senderSocket) {
+        io.to(senderSocket).emit('messages_read', { by_id: my_id });
+      }
+    } catch (e) {
+      console.error('Error marking messages as read:', e);
+    }
 
     res.json(data || []);
   });
@@ -91,8 +106,8 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     const { data: sender } = await supabase.from('users').select('anonymous_id').eq('telegram_id', from_id).single();
     if (sender && !onlineUsers.has(String(to_id))) {
       const { notifyMessage } = require('../bot');
-      // Pass the actual message content (clean, no prefix)
-      await notifyMessage(to_id, sender.anonymous_id, content);
+      // Pass the actual message content (clean, no prefix) and the sender's id
+      await notifyMessage(to_id, sender.anonymous_id, content, from_id);
     }
 
     res.status(201).json(msg);
