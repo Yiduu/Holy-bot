@@ -2578,6 +2578,7 @@ textarea.form-control {
   margin-left: 5px;
   display: inline-block;
   vertical-align: middle;
+  transition: color 0.3s ease, opacity 0.3s ease;
 }
 .msg-status.unread {
   color: var(--text3);
@@ -2585,4 +2586,5 @@ textarea.form-control {
 }
 .msg-status.read {
   color: #3897f0; /* Telegram-like seen blue color */
+  opacity: 1;
 }

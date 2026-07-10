@@ -264,6 +264,19 @@ function appendMessageToChat(msg) {
   container.scrollTop = container.scrollHeight;
 }
 
+/* ── In-place read-tick updater ─────────────────────────────── */
+// Called when the partner has read our messages. Upgrades ✓ → ✓✓
+// by touching only the .msg-status spans, with no full DOM re-render.
+function updateReadTicks() {
+  const container = $('chatMessages');
+  if (!container) return;
+  container.querySelectorAll('.msg-status.unread').forEach(el => {
+    el.classList.remove('unread');
+    el.classList.add('read');
+    el.textContent = '✓✓';
+  });
+}
+
 /* ── Inline context-menu helpers ────────────────────────────── */
 function toggleMsgMenu(msgId, e) {
   e.stopPropagation();
@@ -502,18 +515,27 @@ function connectSocket() {
   socket.on('new_message', (msg) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(msg.from_id)) {
       appendMessageToChat(msg);
-      // Emit read confirmation back via socket if we receive it while looking at their chat
-      socket.emit('messages_read', { to_id: msg.from_id });
+      // Tell the server to mark messages as read — server handles the DB update and
+      // notifies the sender; we do NOT emit a socket 'messages_read' here to avoid
+      // triggering a loadMessages() loop on the other side.
+      apiFetch(`/api/messages/${msg.from_id}`).catch(() => {});
     } else {
       updateMessageBadge();
       showToast('New message received');
       haptic('medium');
     }
   });
+
+  // Debounce guard — prevents rapid-fire events triggering multiple DOM rebuilds
+  let _readReceiptTimeout = null;
   socket.on('messages_read', ({ by_id }) => {
-    if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(by_id)) {
-      loadMessages(window.chatState.with);
-    }
+    if (currentPage !== 'chat') return;
+    if (!window.chatState?.with || String(window.chatState.with) !== String(by_id)) return;
+    // Update tick marks in-place instead of wiping the whole DOM
+    clearTimeout(_readReceiptTimeout);
+    _readReceiptTimeout = setTimeout(() => {
+      updateReadTicks();
+    }, 300);
   });
   socket.on('chat_cleared', ({ by_id }) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(by_id)) {
@@ -558,13 +580,28 @@ function connectSocket() {
     }
   });
   socket.on('message_edited', (editedMsg) => {
-    if (currentPage === 'chat' && window.chatState?.with) {
+    if (currentPage !== 'chat' || !window.chatState?.with) return;
+    // Update the message text in-place instead of rebuilding the whole chat
+    const thread = document.querySelector(`.message-thread[data-msg-id="${editedMsg.id}"]`);
+    if (thread) {
+      const textEl = thread.querySelector('.message-text');
+      if (textEl) {
+        const editedMark = '<span class="msg-edited">edited</span>';
+        textEl.innerHTML = escapeHtml(editedMsg.content) + editedMark;
+      }
+    } else {
+      // Fallback: message not in DOM yet, do a full reload
       loadMessages(window.chatState.with);
     }
   });
 
   socket.on('message_deleted', ({ id }) => {
-    if (currentPage === 'chat' && window.chatState?.with) {
+    if (currentPage !== 'chat' || !window.chatState?.with) return;
+    // Remove the message thread element directly from the DOM
+    const thread = document.querySelector(`.message-thread[data-msg-id="${id}"]`);
+    if (thread) {
+      thread.remove();
+    } else {
       loadMessages(window.chatState.with);
     }
   });
