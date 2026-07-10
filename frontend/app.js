@@ -1739,17 +1739,55 @@ async function sendMessage() {
   const content = input.value.trim();
   if (!content || !window.chatState.with) return;
 
+  // Save the input to restore on failure
+  const originalContent = content;
   input.value = '';
   $('emojiPicker')?.classList.add('hidden');
-  try {
-    await apiFetch('/api/messages', {
-      method: 'POST',
-      body: { to_id: window.chatState.with, content }
-    });
-    await loadMessages(window.chatState.with);
-  } catch (e) {
+
+  // Disable send button to prevent double-click
+  const sendBtn = document.querySelector('.chat-send-btn');
+  if (sendBtn) sendBtn.disabled = true;
+  if (sendBtn) sendBtn.classList.add('sending');
+
+  let attempts = 0;
+  const maxAttempts = 3;
+  let lastError = null;
+
+  while (attempts < maxAttempts) {
+    try {
+      const msg = await apiFetch('/api/messages', {
+        method: 'POST',
+        body: { to_id: window.chatState.with, content: originalContent }
+      });
+      // Success! Reload messages to show the new message
+      await loadMessages(window.chatState.with);
+      // Exit the loop – we're done
+      lastError = null;
+      break;
+    } catch (e) {
+      lastError = e;
+      attempts++;
+      if (attempts < maxAttempts) {
+        // Wait before retry: 500ms, 1000ms, 1500ms
+        const delay = attempts * 500;
+        await new Promise(r => setTimeout(r, delay));
+        // Optional: show a subtle "Retrying..." indicator (we can skip for simplicity)
+        continue;
+      }
+    }
+  }
+
+  // Re-enable send button
+  if (sendBtn) sendBtn.disabled = false;
+  if (sendBtn) sendBtn.classList.remove('sending');
+
+  // If all attempts failed, show error and restore the message
+  if (lastError && attempts === maxAttempts) {
     haptic('error');
-    showToast(e.message, 'error');
+    showToast(t('msg_send_failed'), 'error');
+    // Put the message back in the input so user can try again manually
+    input.value = originalContent;
+    input.focus();
   }
 }
 

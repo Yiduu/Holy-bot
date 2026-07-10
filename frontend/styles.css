@@ -2503,3 +2503,11 @@ textarea.form-control {
 [data-theme="light"] .onboarding-features-list {
   background: rgba(0, 0, 0, 0.04);
 }
+
+.chat-send-btn.sending {
+  opacity: 0.6;
+  pointer-events: none;
+}
+.chat-send-btn.sending svg {
+  animation: spin 0.8s linear infinite;
+}

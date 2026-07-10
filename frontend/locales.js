@@ -175,7 +175,8 @@ const I18N = {
     "Upcoming Group Sessions": "Upcoming Group Sessions",
     "Calendar": "Calendar",
     "List": "List",
-    "session_ended_status": "✓ Meeting Completed"
+    "session_ended_status": "✓ Meeting Completed",
+    "msg_send_failed": "Failed to send message. Please check your connection and try again."
   },
   am: {
     "btn_find_mentor": "🔍 አማካሪ ፈልግ",
@@ -353,6 +354,7 @@ const I18N = {
     "Upcoming Group Sessions": "የሚመጡ የቡድን ስብሰባዎች",
     "Calendar": "ቀን መቁጠሪያ",
     "List": "ዝርዝር",
-    "session_ended_status": "✓ ስብሰባው ተጠናቅቋል"
+    "session_ended_status": "✓ ስብሰባው ተጠናቅቋል",
+    "msg_send_failed": "መልዕክቱ መላክ አልተቻለም። እባክዎ ግንኙነትዎን ይፈትሹ እና እንደገና ይሞክሩ።"
   }
 };
