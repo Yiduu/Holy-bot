@@ -99,20 +99,14 @@ global.onlineUsers = onlineUsers;
 
 io.on('connection', (socket) => {
   socket.on('auth', (telegram_id) => {
-    console.log(`[Socket] Auth received: telegram_id=${telegram_id}, socket_id=${socket.id}`);
     onlineUsers.set(String(telegram_id), socket.id);
     socket.data.telegram_id = String(telegram_id);
     io.emit('presence', { telegram_id, online: true });
   });
 
   socket.on('typing', ({ to_id }) => {
-    console.log(`[Socket] Typing event: from=${socket.data.telegram_id} to=${to_id}`);
     const targetSocket = onlineUsers.get(String(to_id));
-    if (targetSocket) {
-      io.to(targetSocket).emit('typing', { from_id: socket.data.telegram_id });
-    } else {
-      console.log(`[Socket] Typing recipient offline: to=${to_id}`);
-    }
+    if (targetSocket) io.to(targetSocket).emit('typing', { from_id: socket.data.telegram_id });
   });
 
   socket.on('messages_read', ({ to_id }) => {
@@ -124,7 +118,6 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     if (socket.data.telegram_id) {
-      console.log(`[Socket] Disconnect: telegram_id=${socket.data.telegram_id}, socket_id=${socket.id}`);
       onlineUsers.delete(socket.data.telegram_id);
       io.emit('presence', { telegram_id: socket.data.telegram_id, online: false });
     }
