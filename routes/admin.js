@@ -236,6 +236,161 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.json({ success: true });
   });
 
+  // ==================== CONVERSATIONS ====================
+  router.get('/conversations', async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 25);
+    const offset = (page - 1) * limit;
+
+    const { mentor_id, mentee_id, mentor_search, mentee_search } = req.query;
+
+    let query = supabase
+      .from('mentorship_assignments')
+      .select('*, mentor:mentor_id(telegram_id, anonymous_id), mentee:user_id(telegram_id, anonymous_id)', { count: 'exact' });
+
+    if (mentor_id) {
+      query = query.eq('mentor_id', mentor_id);
+    }
+    if (mentee_id) {
+      query = query.eq('user_id', mentee_id);
+    }
+
+    if (mentor_search) {
+      const { data: mentors, error: mErr } = await supabase
+        .from('users')
+        .select('telegram_id')
+        .ilike('anonymous_id', `%${mentor_search}%`);
+      if (!mErr && mentors) {
+        query = query.in('mentor_id', mentors.map(m => m.telegram_id));
+      }
+    }
+
+    if (mentee_search) {
+      const { data: mentees, error: meErr } = await supabase
+        .from('users')
+        .select('telegram_id')
+        .ilike('anonymous_id', `%${mentee_search}%`);
+      if (!meErr && mentees) {
+        query = query.in('user_id', mentees.map(m => m.telegram_id));
+      }
+    }
+
+    const { data: assignments, count, error } = await query
+      .order('assigned_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+    if (!assignments || assignments.length === 0) {
+      return res.json({ conversations: [], total: 0, page, pages: 0 });
+    }
+
+    // Fetch stats and last message details in parallel
+    const conversations = await Promise.all(assignments.map(async (a) => {
+      const { data: msgs } = await supabase
+        .from('messages')
+        .select('content, created_at, is_read, from_id, to_id')
+        .or(`and(from_id.eq.${a.mentor_id},to_id.eq.${a.user_id}),and(from_id.eq.${a.user_id},to_id.eq.${a.mentor_id})`)
+        .order('created_at', { ascending: false })
+        .limit(1000);
+
+      const last_msg = msgs && msgs[0];
+      const total_msgs = msgs ? msgs.length : 0;
+      const total_unread = msgs ? msgs.filter(m => !m.is_read).length : 0;
+
+      return {
+        mentor_id: a.mentor_id,
+        mentor_anonymous_id: a.mentor?.anonymous_id || `Mentor_${a.mentor_id}`,
+        mentee_id: a.user_id,
+        mentee_anonymous_id: a.mentee?.anonymous_id || `Mentee_${a.user_id}`,
+        last_message: last_msg ? last_msg.content : null,
+        last_message_time: last_msg ? last_msg.created_at : null,
+        message_count: total_msgs,
+        unread_count: total_unread
+      };
+    }));
+
+    // Sort by activity time descending (most recent first)
+    conversations.sort((x, y) => {
+      const timeX = x.last_message_time ? new Date(x.last_message_time).getTime() : 0;
+      const timeY = y.last_message_time ? new Date(y.last_message_time).getTime() : 0;
+      return timeY - timeX;
+    });
+
+    // Paginate in memory
+    const paginatedConvs = conversations.slice(offset, offset + limit);
+
+    res.json({
+      conversations: paginatedConvs,
+      total: count || conversations.length,
+      page,
+      pages: Math.ceil((count || conversations.length) / limit)
+    });
+  });
+
+  router.get('/conversations/:mentor_id/:mentee_id/messages', async (req, res) => {
+    const { mentor_id, mentee_id } = req.params;
+    const limit = Math.min(100, parseInt(req.query.limit) || 100);
+    const before = req.query.before;
+
+    const { data: users } = await supabase
+      .from('users')
+      .select('telegram_id, anonymous_id')
+      .in('telegram_id', [mentor_id, mentee_id]);
+
+    const userMap = {};
+    users?.forEach(u => {
+      userMap[u.telegram_id] = u.anonymous_id;
+    });
+
+    let query = supabase
+      .from('messages')
+      .select('*')
+      .or(`and(from_id.eq.${mentor_id},to_id.eq.${mentee_id}),and(from_id.eq.${mentee_id},to_id.eq.${mentor_id})`);
+
+    if (before) {
+      query = query.lt('created_at', before);
+    }
+
+    const { data: messages, error } = await query
+      .order('created_at', { ascending: false })
+      .limit(limit + 1);
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    const has_more = messages.length > limit;
+    const sliced = messages.slice(0, limit);
+
+    const responseMessages = sliced.map(m => ({
+      id: m.id,
+      from_id: m.from_id,
+      to_id: m.to_id,
+      from_anonymous_id: userMap[m.from_id] || `User_${m.from_id}`,
+      to_anonymous_id: userMap[m.to_id] || `User_${m.to_id}`,
+      content: m.content,
+      created_at: m.created_at,
+      is_read: m.is_read,
+      is_flagged: m.is_flagged,
+      edited_at: m.edited_at,
+      is_deleted: m.is_deleted
+    }));
+
+    res.json({
+      messages: responseMessages,
+      has_more
+    });
+  });
+
+  router.get('/search/users', async (req, res) => {
+    const q = req.query.q;
+    if (!q) return res.json([]);
+    const { data, error } = await supabase
+      .from('users')
+      .select('telegram_id, anonymous_id, role')
+      .ilike('anonymous_id', `%${q}%`)
+      .limit(10);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  });
+
   // ==================== SUPPORT TICKETS ====================
   router.get('/tickets', async (req, res) => {
     const { data, error } = await supabase
