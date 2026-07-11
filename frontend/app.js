@@ -1186,11 +1186,15 @@ function stopSessionTimer() {
 /**
  * Returns { isJoinable, label, labelClass } for a session based on current time.
  * Works for both private (from /my) and group (from /upcoming) sessions.
+ *
+ * Join buttons are disabled until 5 minutes before the scheduled start time.
+ * No countdown is shown — just a static "Starts at [time]" message.
  */
 function getSessionState(scheduledAt, status) {
   const now = Date.now();
   const start = new Date(scheduledAt).getTime();
   const elapsed = now - start; // positive = past, negative = future
+  const EARLY_JOIN_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
   // Explicitly ended by host → always done
   if (status === 'ended' || status === 'cleared') {
@@ -1202,29 +1206,23 @@ function getSessionState(scheduledAt, status) {
     return { isJoinable: false, label: '✓ Done', labelClass: 'chip chip-muted' };
   }
 
-  // Future session
+  // Future session: only allow joining within the 5-minute window
   if (elapsed < 0) {
-    const diffMs = -elapsed;
-    const diffMin = Math.ceil(diffMs / 60000);
-    if (diffMin <= 60) {
+    const msUntilStart = -elapsed;
+    if (msUntilStart > EARLY_JOIN_WINDOW_MS) {
+      // Too early — show a static "Starts at" message; buttons will be disabled
+      const formattedTime = formatDateTime(scheduledAt);
+      const startsAtText = t('starts_at').replace('{time}', formattedTime);
       return {
-        isJoinable: true,
-        label: `⏰ Starts in ${diffMin} min`,
-        labelClass: 'session-time-label upcoming'
+        isJoinable: false,
+        label: startsAtText,
+        labelClass: 'chip chip-muted session-not-yet',
       };
     }
-    const diffH = Math.floor(diffMin / 60);
-    const remMin = diffMin % 60;
-    const hLabel = remMin > 0 ? `${diffH}h ${remMin}m` : `${diffH}h`;
-    return {
-      isJoinable: true,
-      label: `⏰ Starts in ${hLabel}`,
-      labelClass: 'session-time-label upcoming'
-    };
   }
 
-  // Scheduled time has passed and we're within the grace period —
-  // just show the Join button, no extra label text needed.
+  // Within the 5-minute window or the scheduled time has passed (within grace period) —
+  // show the Join button with no extra label text.
   return {
     isJoinable: true,
     label: '',
@@ -1266,12 +1264,21 @@ function refreshSessionLabels() {
         }
       }
       if (actionEl) {
+        const sid = item.dataset.sessionId;
+        const status = item.dataset.status;
         if (isJoinable) {
-          const sid = item.dataset.sessionId;
           actionEl.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:6px;">
               <button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${t('btn_join_session')}</button>
               <button class="btn btn-outline btn-sm"  onclick="openSessionInBrowser('${sid}')">Browser</button>
+            </div>`;
+        } else if (labelClass === 'chip chip-muted session-not-yet') {
+          // Scheduled but too early — show disabled buttons + "Starts at" text
+          actionEl.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
+              <button class="btn btn-outline btn-sm"  disabled style="opacity:.45;cursor:not-allowed;">Browser</button>
+              <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
             </div>`;
         } else {
           actionEl.innerHTML = `<span class="${labelClass}">${label}</span>`;
@@ -1299,9 +1306,18 @@ function refreshSessionLabels() {
       if (labelEl) { labelEl.className = labelClass; labelEl.textContent = label; }
       if (actionEl) {
         const sid = item.dataset.sessionId;
-        actionEl.innerHTML = isJoinable
-          ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${t('btn_join_session')}</button>`
-          : `<span class="${labelClass}">${label}</span>`;
+        if (isJoinable) {
+          actionEl.innerHTML = `<button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${t('btn_join_session')}</button>`;
+        } else if (labelClass === 'chip chip-muted session-not-yet') {
+          // Scheduled but too early — show disabled button + "Starts at" text
+          actionEl.innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
+              <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
+            </div>`;
+        } else {
+          actionEl.innerHTML = `<span class="${labelClass}">${label}</span>`;
+        }
       }
     });
   }
@@ -1336,12 +1352,20 @@ async function loadSessions() {
             activeSessionCount++;
           }
 
+          // If the session is scheduled but not yet joinable, show disabled buttons + "Starts at" text
+          const isScheduledNotYet = !isJoinable && session.status === 'scheduled' && labelClass === 'chip chip-muted session-not-yet';
           const actionHtml = isJoinable
             ? `<div style="display:flex; flex-direction:column; gap:6px;">
                 <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>
                 <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">Browser</button>
               </div>`
-            : `<span class="${labelClass}">${label}</span>`;
+            : isScheduledNotYet
+              ? `<div style="display:flex; flex-direction:column; gap:6px;">
+                  <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
+                  <button class="btn btn-outline btn-sm" disabled style="opacity:.45;cursor:not-allowed;">Browser</button>
+                  <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
+                </div>`
+              : `<span class="${labelClass}">${label}</span>`;
 
           // Embed scheduling metadata as data-* attrs so refreshSessionLabels can update in place
           return `
@@ -1389,7 +1413,12 @@ async function loadSessions() {
               <div class="session-action">
                 ${isJoinable
               ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${t('btn_join_session')}</button>`
-              : `<span class="${labelClass}">${label}</span>`}
+              : (labelClass === 'chip chip-muted session-not-yet'
+                  ? `<div style="display:flex;flex-direction:column;gap:6px;">
+                      <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
+                      <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
+                    </div>`
+                  : `<span class="${labelClass}">${label}</span>`)}
               </div>
             </div>`;
         }).join('');

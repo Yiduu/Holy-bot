@@ -179,7 +179,9 @@ const I18N = {
     "msg_send_failed": "Failed to send message. Please check your connection and try again.",
     "Yesterday": "Yesterday",
     "typing_indicator": "{name} is typing…",
-    "msg_chat_invite": "You have a new message! Open the chat to read it."
+    "msg_chat_invite": "You have a new message! Open the chat to read it.",
+    // Session time-gate: shown when a session hasn't started yet (no countdown, just a static time)
+    "starts_at": "Starts at {time}"
   },
   am: {
     "btn_find_mentor": "🔍 አማካሪ ፈልግ",
@@ -361,6 +363,8 @@ const I18N = {
     "msg_send_failed": "መልዕክቱ መላክ አልተቻለም። እባክዎ ግንኙነትዎን ይፈትሹ እና እንደገና ይሞክሩ።",
     "Yesterday": "ትላንት",
     "typing_indicator": "{name} እየጻፈ ነው…",
-    "msg_chat_invite": "አዲስ መልዕክት አለዎት! ለማንበብ ቻቱን ይክፈቱ።"
+    "msg_chat_invite": "አዲስ መልዕክት አለዎት! ለማንበብ ቻቱን ይክፈቱ።",
+    // Session time-gate: shown when a session hasn't started yet
+    "starts_at": "የሚጀምረው በ {time}"
   }
 };
