@@ -1265,14 +1265,14 @@ function refreshSessionLabels() {
           actionEl.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:6px;">
               <button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${t('btn_join_session')}</button>
-              <button class="btn btn-outline btn-sm"  onclick="openSessionInBrowser('${sid}')">Browser</button>
+              <button class="btn btn-outline btn-sm"  onclick="openSessionInBrowser('${sid}')">Join via Browser</button>
             </div>`;
         } else if (labelClass === 'chip chip-muted session-not-yet') {
           // Scheduled but too early — show disabled buttons + "Starts at" text
           actionEl.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:6px;">
               <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
-              <button class="btn btn-outline btn-sm"  disabled style="opacity:.45;cursor:not-allowed;">Browser</button>
+              <button class="btn btn-outline btn-sm"  disabled style="opacity:.45;cursor:not-allowed;">Join via Browser</button>
               <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
             </div>`;
         } else {
@@ -1352,12 +1352,12 @@ async function loadSessions() {
           const actionHtml = isJoinable
             ? `<div style="display:flex; flex-direction:column; gap:6px;">
                 <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>
-                <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">Browser</button>
+                <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">Join via Browser</button>
               </div>`
             : isScheduledNotYet
               ? `<div style="display:flex; flex-direction:column; gap:6px;">
                   <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
-                  <button class="btn btn-outline btn-sm" disabled style="opacity:.45;cursor:not-allowed;">Browser</button>
+                  <button class="btn btn-outline btn-sm" disabled style="opacity:.45;cursor:not-allowed;">Join via Browser</button>
                   <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
                 </div>`
               : `<span class="${labelClass}">${label}</span>`;
