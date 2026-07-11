@@ -1866,6 +1866,9 @@ async function sendMessage() {
   const originalContent = content;
   input.value = '';
   $('emojiPicker')?.classList.add('hidden');
+  // Reset character counter after send
+  const counter = $('charCounter');
+  if (counter) { counter.textContent = '0 / 2000'; counter.classList.remove('danger'); }
 
   // Disable send button to prevent double-click
   const sendBtn = document.querySelector('.chat-send-btn');
@@ -1911,12 +1914,27 @@ async function sendMessage() {
     // Put the message back in the input so user can try again manually
     input.value = originalContent;
     input.focus();
+    // Re-sync counter when message is restored on failure
+    handleChatTyping();
   }
 }
 
 function handleChatTyping() {
   if (socket && window.chatState.with) {
     socket.emit('typing', { to_id: window.chatState.with });
+  }
+  // Update live character counter
+  const input = $('chatInput');
+  const counter = $('charCounter');
+  if (input && counter) {
+    const len = input.value.length;
+    const MAX = 2000;
+    counter.textContent = `${len} / ${MAX}`;
+    if (len > MAX) {
+      counter.classList.add('danger');
+    } else {
+      counter.classList.remove('danger');
+    }
   }
 }
 

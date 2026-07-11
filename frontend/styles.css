@@ -2586,3 +2586,15 @@ textarea.form-control {
 .msg-status.read {
   color: #3897f0; /* Telegram-like seen blue color */
 }
+
+/* ─── Chat Character Counter ──────────────────────────────────── */
+.char-counter {
+  font-size: 0.7rem;
+  color: var(--text3);
+  text-align: right;
+  padding: 2px 4px;
+  transition: color var(--transition);
+}
+.char-counter.danger {
+  color: var(--danger);
+}
