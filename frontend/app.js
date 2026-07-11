@@ -1187,14 +1187,13 @@ function stopSessionTimer() {
  * Returns { isJoinable, label, labelClass } for a session based on current time.
  * Works for both private (from /my) and group (from /upcoming) sessions.
  *
- * Join buttons are disabled until 5 minutes before the scheduled start time.
+ * Join buttons are disabled until the exact scheduled start time.
  * No countdown is shown — just a static "Starts at [time]" message.
  */
 function getSessionState(scheduledAt, status) {
   const now = Date.now();
   const start = new Date(scheduledAt).getTime();
   const elapsed = now - start; // positive = past, negative = future
-  const EARLY_JOIN_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
   // Explicitly ended by host → always done
   if (status === 'ended' || status === 'cleared') {
@@ -1206,23 +1205,19 @@ function getSessionState(scheduledAt, status) {
     return { isJoinable: false, label: '✓ Done', labelClass: 'chip chip-muted' };
   }
 
-  // Future session: only allow joining within the 5-minute window
+  // Future session: not joinable until the exact scheduled time arrives
   if (elapsed < 0) {
-    const msUntilStart = -elapsed;
-    if (msUntilStart > EARLY_JOIN_WINDOW_MS) {
-      // Too early — show a static "Starts at" message; buttons will be disabled
-      const formattedTime = formatDateTime(scheduledAt);
-      const startsAtText = t('starts_at').replace('{time}', formattedTime);
-      return {
-        isJoinable: false,
-        label: startsAtText,
-        labelClass: 'chip chip-muted session-not-yet',
-      };
-    }
+    // Show a static "Starts at [time]" message; buttons will be disabled
+    const formattedTime = formatDateTime(scheduledAt);
+    const startsAtText = t('starts_at').replace('{time}', formattedTime);
+    return {
+      isJoinable: false,
+      label: startsAtText,
+      labelClass: 'chip chip-muted session-not-yet',
+    };
   }
 
-  // Within the 5-minute window or the scheduled time has passed (within grace period) —
-  // show the Join button with no extra label text.
+  // Scheduled time has passed (within grace period) — show the Join button.
   return {
     isJoinable: true,
     label: '',

@@ -175,12 +175,11 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
 
     if (error) return res.status(404).json({ error: 'Session not found' });
 
-    // ── Time-gate: block joining more than 5 minutes before the scheduled start ──
-    // Allow if the session is already 'active', or if scheduled_at is within 5 min / already passed.
-    const EARLY_JOIN_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+    // ── Time-gate: block joining before the exact scheduled start time ──
+    // Only allow if status is already 'active', or current time >= scheduled_at.
     if (session.status === 'scheduled') {
       const msUntilStart = new Date(session.scheduled_at).getTime() - Date.now();
-      if (msUntilStart > EARLY_JOIN_WINDOW_MS) {
+      if (msUntilStart > 0) {
         return res.status(403).json({
           error: 'Session has not started yet.',
           starts_at: session.scheduled_at,
