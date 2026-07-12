@@ -111,7 +111,7 @@
     "settings_verse_time": "የጥቅስ ሰዓት",
     "settings_language": "ቋንቋ",
     "settings_my_topics": "ርዕሶቼ",
-    "settings_expertise_topics": "የሙያ ዘርፎቼ",
+    "settings_expertise_topics": "ለማስተማር ዝግጁ ያሉ ርዕሶች",
     "enter_verse_hour": "የዕለቱ ጥቅስ የሚደርስበትን ሰዓት ያስገቡ (0–23 UTC):",
     "invalid_hour": "❌ እባክዎ ከ0 እስከ 23 ያለ ሰዓት ያስገቡ።",
     "verse_time_set": "✅ የጥቅስ ሰዓት {hour}:00 UTC ሆኗል።",

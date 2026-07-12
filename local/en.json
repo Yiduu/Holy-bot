@@ -111,7 +111,7 @@
     "settings_verse_time": "Verse Time",
     "settings_language": "Language",
     "settings_my_topics": "My Topics",
-    "settings_expertise_topics": "My Expertise Topics",
+    "settings_expertise_topics": "Topics to Mentor",
     "enter_verse_hour": "Enter the hour to receive your daily verse (0–23, UTC):",
     "invalid_hour": "❌ Please enter a valid hour between 0 and 23.",
     "verse_time_set": "✅ Verse time set to {hour}:00 UTC.",
