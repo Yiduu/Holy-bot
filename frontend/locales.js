@@ -231,7 +231,7 @@ const I18N = {
     "settings_verse_time": "የጥቅስ ሰዓት",
     "settings_language": "ቋንቋ",
     "settings_my_topics": "ርዕሶቼ",
-    "settings_expertise_topics": "ለማስተማር ዝግጁ ያሉ ርዕሶች",
+    "settings_expertise_topics": "ምክር የሚሰጡባቸው ርዕሶች",
     "journal_title": "ማስታወሻዬ",
     "journal_empty": "ማስታወሻዎ ባዶ ነው። መጻፍ ይጀምሩ!",
     "journal_saved": "✅ ማስታወሻ ተቀምጧል።",
