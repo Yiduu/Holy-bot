@@ -110,6 +110,17 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     const { mentor_id, message } = req.body;
     if (!mentor_id) return res.status(400).json({ error: 'mentor_id required' });
 
+    // Check if the requester is already a mentor (they shouldn't be able to request)
+    const { data: requester } = await supabase
+      .from('users')
+      .select('role')
+      .eq('telegram_id', user_id)
+      .single();
+
+    if (requester?.role === 'mentor') {
+      return res.status(403).json({ error: 'Mentors cannot send mentorship requests.' });
+    }
+
     // Check user has no active mentor
     const { data: activeAssign } = await supabase
       .from('mentorship_assignments')

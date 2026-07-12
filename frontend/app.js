@@ -871,6 +871,7 @@ function startApp() {
   if (currentUser?.role === 'mentor') {
     $('nav-requests')?.classList.remove('hidden');
     $('nav-my-mentees')?.style.setProperty('display', 'flex');
+    document.querySelectorAll('.mentor-hidden').forEach(el => el.style.display = 'none');
   }
 
   applyLanguage();
@@ -1069,7 +1070,7 @@ async function loadMentors() {
               ${spec ? `<span class="mentor-badge badge-spec">${escapeHtml(spec)}</span>` : ''}
               <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentee')}s</span>
             </div>
-            ${mentees >= max ? `
+            ${currentUser?.role === 'mentor' ? '' : (mentees >= max ? `
               <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed;background:var(--bg3);color:var(--text3);" title="${t('capacity_full_tooltip')}">
                 ${t('capacity_full')}
               </button>
@@ -1077,7 +1078,7 @@ async function loadMentors() {
               <button class="btn btn-outline btn-sm" onclick="requestMentorship(${m.telegram_id})" ${!canRequest ? 'disabled' : ''}>
                 ${t('btn_request')}
               </button>
-            `}
+            `)}
           </div>`;
       }).join('');
     }

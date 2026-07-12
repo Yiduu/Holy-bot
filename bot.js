@@ -653,19 +653,33 @@ async function submitRating(chatId, mentorId, stars) {
 // ─── End Mentorship ───────────────────────────────────────────────────────────
 
 async function endMentorship(chatId, partnerId, initiatorRole) {
-  const lang = await getUserLang(chatId);
+  // Get initiator and partner details
+  const [{ data: initiator }, { data: partner }] = await Promise.all([
+    supabase.from('users').select('anonymous_id').eq('telegram_id', chatId).single(),
+    supabase.from('users').select('anonymous_id').eq('telegram_id', partnerId).single()
+  ]);
+
+  const initiatorName = initiator?.anonymous_id || 'Someone';
+  const partnerName = partner?.anonymous_id || 'the other user';
+
+  // Update assignment
   await supabase.from('mentorship_assignments')
     .update({ is_active: false, ended_at: new Date().toISOString() })
     .or(`and(mentor_id.eq.${chatId},user_id.eq.${partnerId}),and(mentor_id.eq.${partnerId},user_id.eq.${chatId})`);
 
-  await safeSend(chatId, tSync(lang, 'mentorship_ended'));
+  // Custom messages based on who ended
+  const initiatorLang = await getUserLang(chatId);
   const partnerLang = await getUserLang(partnerId);
-  await safeSend(partnerId, tSync(partnerLang, 'mentorship_ended'));
 
-  // If initiator was mentor, ask mentee to rate
   if (initiatorRole === 'mentor') {
+    // Mentor ended it → notify mentee
+    await safeSend(chatId, tSync(initiatorLang, 'mentorship_ended'));
+    await safeSend(partnerId, tSync(partnerLang, 'mentorship_ended_by_mentor', { mentor: initiatorName }));
     await promptRating(partnerId, chatId);
   } else {
+    // Mentee ended it → notify mentor
+    await safeSend(chatId, tSync(initiatorLang, 'mentorship_ended'));
+    await safeSend(partnerId, tSync(partnerLang, 'mentorship_ended_by_mentee', { mentee: initiatorName }));
     await promptRating(chatId, partnerId);
   }
 

@@ -81,6 +81,8 @@
     "reject_confirmed": "✅ ጥያቄ ውድቅ ተደርጓል።",
     "mentor_at_capacity": "❌ ተመካሪዎ ሙሉ ናቸው። አስቀድሞ አንዱን ይዝጉ።",
     "mentorship_ended": "አማካሪነቱ ተጠናቋል። ለጊዜዎ እናመሰግናለን።",
+    "mentorship_ended_by_mentor": "📋 አማካሪዎ *{mentor}* የምክር አገልግሎቱን አቋርጠዋል።",
+    "mentorship_ended_by_mentee": "📋 ተመካሪዎ *{mentee}* የምክር አገልግሎቱን አቋርጠዋል።",
     "no_active_mentorship": "ንቁ አማካሪነት የለዎትም።",
     "no_active_partners": "ንቁ ጓደኛ የለዎትም።",
     "partner_not_found": "ጓደኛ አልተገኘም ወይም ንቁ አይደለም።",

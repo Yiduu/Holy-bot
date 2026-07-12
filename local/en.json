@@ -81,6 +81,8 @@
     "reject_confirmed": "✅ Request rejected.",
     "mentor_at_capacity": "❌ You are at mentee capacity. Please end an existing mentorship first.",
     "mentorship_ended": "Mentorship has ended. Thank you for your time.",
+    "mentorship_ended_by_mentor": "📋 Your mentor *{mentor}* has ended the mentorship.",
+    "mentorship_ended_by_mentee": "📋 Your mentee *{mentee}* has ended the mentorship.",
     "no_active_mentorship": "You have no active mentorship to end.",
     "no_active_partners": "You have no active partners.",
     "partner_not_found": "Partner not found or not active.",
