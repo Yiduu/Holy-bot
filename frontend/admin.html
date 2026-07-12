@@ -1384,6 +1384,181 @@
             font-style: italic;
             color: var(--text3);
         }
+
+        /* ── Mentorship Tab Styles ─────────────────────────────────── */
+        .mentorship-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 16px;
+            margin-top: 14px;
+        }
+
+        .mentor-card {
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius);
+            padding: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: transform var(--transition), border-color var(--transition);
+        }
+
+        .mentor-card:hover {
+            border-color: var(--border);
+            transform: translateY(-2px);
+        }
+
+        .mentor-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-dim);
+            padding-bottom: 10px;
+        }
+
+        .mentor-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .mentor-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--gold);
+        }
+
+        .mentor-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: var(--gold-dim);
+            color: var(--gold);
+            border: 1px solid rgba(201, 168, 76, 0.25);
+        }
+
+        .mentor-bio {
+            font-size: 12.5px;
+            color: var(--text2);
+            line-height: 1.4;
+            font-style: italic;
+        }
+
+        .mentor-bio.none {
+            color: var(--text3);
+        }
+
+        .mentees-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .mentees-toggle-btn {
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        .mentees-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border-top: 1px dashed var(--border-dim);
+            padding-top: 10px;
+            animation: fadeIn var(--transition) ease;
+        }
+
+        .mentee-row {
+            background: var(--surface2);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-sm);
+            padding: 10px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 6px;
+        }
+
+        .mentee-row:nth-child(even) {
+            background: var(--bg3);
+        }
+
+        .mentee-row-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+        }
+
+        .mentee-name {
+            color: var(--text);
+        }
+
+        .mentee-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px 12px;
+            font-size: 11.5px;
+            color: var(--text2);
+        }
+
+        .mentee-detail-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .mentee-detail-label {
+            font-size: 9.5px;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .mentee-detail-value {
+            font-weight: 500;
+        }
+
+        /* Skeleton loading style */
+        .skeleton-card {
+            background: var(--surface);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius);
+            padding: 16px;
+            height: 180px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .skeleton-card::after {
+            content: "";
+            position: absolute;
+            top: 0; right: 0; bottom: 0; left: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
+            animation: skeleton-pulse 1.5s infinite;
+        }
+
+        @keyframes skeleton-pulse {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .skeleton-line {
+            height: 12px;
+            background: var(--surface2);
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+        .skeleton-line.title { width: 50%; height: 16px; }
+        .skeleton-line.badge { width: 25%; height: 18px; margin-bottom: 20px; }
+        .skeleton-line.text { width: 85%; }
+        .skeleton-line.button { width: 100%; height: 32px; margin-top: 15px; }
     </style>
 </head>
 
@@ -1431,6 +1606,15 @@
                         <path d="M15 4H5a2 2 0 0 0-2 2v12l4-4h8a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
                     </svg>
                     Conversations
+                </div>
+                <div class="nav-item" onclick="showTab('mentorship')" id="nav-mentorship">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    Mentorship
                 </div>
                 <div class="nav-item" onclick="showTab('applications')" id="nav-applications">
                     <svg viewBox="0 0 24 24">
@@ -1712,6 +1896,19 @@
                         </table>
                     </div>
                     <div class="pagination" id="conversationsPager"></div>
+                </div>
+
+                <!-- ── Mentorship ────────────────────────────────────── -->
+                <div class="pane" id="pane-mentorship">
+                    <div class="toolbar">
+                        <input class="search-box" id="mentorSearch" placeholder="Search mentors by anonymous ID…"
+                            oninput="debounceMentorship()" />
+                        <button class="btn btn-ghost" onclick="clearMentorshipFilter()">Clear</button>
+                    </div>
+                    <div id="mentorshipContainer" class="mentorship-grid">
+                        <div class="loading">Loading…</div>
+                    </div>
+                    <div class="pagination" id="mentorshipPager"></div>
                 </div>
 
                 <!-- ── Applications ──────────────────────────────────── -->
@@ -2049,7 +2246,7 @@
 
         /* ── Tab nav ────────────────────────────────────────────────── */
         const TITLES = {
-            overview: 'Overview', users: 'Users', conversations: 'Conversations', applications: 'Mentor Applications',
+            overview: 'Overview', users: 'Users', conversations: 'Conversations', mentorship: 'Mentorship', applications: 'Mentor Applications',
             messages: 'Message Moderation', tickets: 'Support Tickets', topics: 'Counseling Topics',
             broadcast: 'Broadcast', audit: 'Audit Log'
         };
@@ -2062,7 +2259,7 @@
             document.getElementById('topbarTitle').textContent = TITLES[tab] || tab;
             activeTab = tab; closeSidebar();
             const loaders = {
-                overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), applications: () => loadApps(1),
+                overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), mentorship: () => loadMentorship(1), applications: () => loadApps(1),
                 messages: () => loadMessages(1), tickets: loadTickets, topics: loadTopics,
                 broadcast: () => { }, audit: () => loadAudit(1)
             };
@@ -2676,6 +2873,133 @@
 
         async function loadMoreMessages() {
             loadChatMessages(false);
+        }
+
+        /* ── Mentorship ──────────────────────────────────────────────── */
+        let mentorshipTimer = null;
+        let mentorshipPage = 1;
+        let expandedMentors = new Set();
+
+        function debounceMentorship() {
+            clearTimeout(mentorshipTimer);
+            mentorshipTimer = setTimeout(() => loadMentorship(1), 400);
+        }
+
+        function clearMentorshipFilter() {
+            document.getElementById('mentorSearch').value = '';
+            loadMentorship(1);
+        }
+
+        function toggleMentees(mentorId) {
+            const listEl = document.getElementById(`mentees-list-${mentorId}`);
+            const btnEl = document.getElementById(`mentees-btn-${mentorId}`);
+            if (!listEl || !btnEl) return;
+
+            if (expandedMentors.has(mentorId)) {
+                expandedMentors.delete(mentorId);
+                listEl.style.display = 'none';
+                btnEl.innerHTML = `<span>Show Mentees</span> <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+            } else {
+                expandedMentors.add(mentorId);
+                listEl.style.display = 'flex';
+                btnEl.innerHTML = `<span>Hide Mentees</span> <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2"><polyline points="18 15 12 9 6 15"></polyline></svg>`;
+            }
+        }
+
+        async function loadMentorship(page = 1) {
+            mentorshipPage = page;
+            const search = document.getElementById('mentorSearch').value;
+            const container = document.getElementById('mentorshipContainer');
+
+            // Render skeleton loader
+            container.innerHTML = Array.from({ length: 6 }).map(() => `
+                <div class="skeleton-card">
+                    <div class="skeleton-line title"></div>
+                    <div class="skeleton-line badge"></div>
+                    <div class="skeleton-line text"></div>
+                    <div class="skeleton-line text" style="width: 60%"></div>
+                    <div class="skeleton-line button"></div>
+                </div>
+            `).join('');
+
+            try {
+                let url = `/api/admin/mentorship?page=${page}`;
+                if (search) url += `&search=${encodeURIComponent(search)}`;
+                const d = await api(url);
+
+                if (!d.mentors?.length) {
+                    container.innerHTML = `<div class="empty">No mentors found</div>`;
+                    document.getElementById('mentorshipPager').innerHTML = '';
+                    return;
+                }
+
+                container.innerHTML = d.mentors.map(m => {
+                    const menteeCount = m.mentees?.length || 0;
+                    const isExpanded = expandedMentors.has(m.mentor_id);
+                    const listDisplay = isExpanded ? 'flex' : 'none';
+                    const btnLabel = isExpanded ? 'Hide Mentees' : 'Show Mentees';
+                    const btnIconPoints = isExpanded ? '18 15 12 9 6 15' : '6 9 12 15 18 9';
+
+                    let menteesHtml = '';
+                    if (menteeCount === 0) {
+                        menteesHtml = `<div class="empty" style="padding: 10px 0;">No active mentees</div>`;
+                    } else {
+                        menteesHtml = m.mentees.map(me => `
+                            <div class="mentee-row">
+                                <div class="mentee-row-header">
+                                    <span class="mentee-name" style="font-family:var(--font-mono);font-size:11.5px;color:var(--accent);">${esc(me.mentee_anonymous_id)}</span>
+                                </div>
+                                <div class="mentee-details">
+                                    <div class="mentee-detail-item">
+                                        <span class="mentee-detail-label">Assigned</span>
+                                        <span class="mentee-detail-value">${ago(me.assigned_at)}</span>
+                                    </div>
+                                    <div class="mentee-detail-item">
+                                        <span class="mentee-detail-label">Last Active</span>
+                                        <span class="mentee-detail-value">${me.last_active ? ago(me.last_active) : 'Never'}</span>
+                                    </div>
+                                    <div class="mentee-detail-item" style="grid-column: span 2;">
+                                        <span class="mentee-detail-label">Sessions Held</span>
+                                        <span class="mentee-detail-value">${me.session_count}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+
+                    return `
+                        <div class="mentor-card">
+                            <div class="mentor-header">
+                                <div class="mentor-info">
+                                    <span class="mentor-name">${esc(m.mentor_anonymous_id)}</span>
+                                </div>
+                                <span class="mentor-badge">
+                                    👥 ${menteeCount} Mentee${menteeCount === 1 ? '' : 's'}
+                                </span>
+                            </div>
+                            <div class="mentor-bio ${m.mentor_bio ? '' : 'none'}">
+                                ${m.mentor_bio ? esc(m.mentor_bio) : 'No bio available'}
+                            </div>
+                            <div class="mentees-section">
+                                <button class="btn btn-ghost btn-sm mentees-toggle-btn" id="mentees-btn-${m.mentor_id}" onclick="toggleMentees(${m.mentor_id})">
+                                    <span>${btnLabel}</span>
+                                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2">
+                                        <polyline points="${btnIconPoints}"></polyline>
+                                    </svg>
+                                </button>
+                                <div class="mentees-list" id="mentees-list-${m.mentor_id}" style="display: ${listDisplay};">
+                                    ${menteesHtml}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                pager('mentorshipPager', page, d.pages, 'loadMentorship');
+            } catch (e) {
+                container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${e.message}</div>`;
+                document.getElementById('mentorshipPager').innerHTML = '';
+            }
         }
 
         /* ── Init ───────────────────────────────────────────────────── */

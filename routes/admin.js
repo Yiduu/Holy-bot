@@ -469,6 +469,70 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.send(csv);
   });
 
+  // ==================== MENTORSHIP ====================
+  router.get('/mentorship', async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = 20;
+      const offset = (page - 1) * limit;
+      const search = req.query.search || '';
+
+      let query = supabase
+        .from('users')
+        .select(`
+          telegram_id,
+          anonymous_id,
+          user_settings(bio),
+          mentorship_assignments!mentor_id(
+            assigned_at,
+            is_active,
+            mentee:user_id(
+              telegram_id,
+              anonymous_id,
+              last_active,
+              session_participants(session_id)
+            )
+          )
+        `, { count: 'exact' })
+        .eq('role', 'mentor');
+
+      if (search) {
+        query = query.ilike('anonymous_id', `%${search}%`);
+      }
+
+      const { data: mentors, count, error } = await query
+        .order('anonymous_id', { ascending: true })
+        .range(offset, offset + limit - 1);
+
+      if (error) return res.status(500).json({ error: error.message });
+
+      const formattedMentors = (mentors || []).map(m => {
+        const activeAssignments = (m.mentorship_assignments || []).filter(a => a.is_active && a.mentee);
+        return {
+          mentor_id: m.telegram_id,
+          mentor_anonymous_id: m.anonymous_id,
+          mentor_bio: m.user_settings?.bio || null,
+          mentees: activeAssignments.map(a => ({
+            mentee_id: a.mentee.telegram_id,
+            mentee_anonymous_id: a.mentee.anonymous_id,
+            assigned_at: a.assigned_at,
+            last_active: a.mentee.last_active,
+            session_count: a.mentee.session_participants ? a.mentee.session_participants.length : 0
+          }))
+        };
+      });
+
+      res.json({
+        mentors: formattedMentors,
+        total: count || 0,
+        page,
+        pages: Math.ceil((count || 0) / limit)
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ==================== DISQUALIFY MENTOR ====================
   router.patch('/mentors/:id/disqualify', async (req, res) => {
     const admin_id = req.telegramUser.id;
