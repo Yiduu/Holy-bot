@@ -662,10 +662,18 @@ async function endMentorship(chatId, partnerId, initiatorRole) {
   const initiatorName = initiator?.anonymous_id || 'Someone';
   const partnerName = partner?.anonymous_id || 'the other user';
 
-  // Update assignment
+  // Update assignment: mark it inactive
   await supabase.from('mentorship_assignments')
     .update({ is_active: false, ended_at: new Date().toISOString() })
     .or(`and(mentor_id.eq.${chatId},user_id.eq.${partnerId}),and(mentor_id.eq.${partnerId},user_id.eq.${chatId})`);
+
+  // Mark all unread messages between these two users as read so the badge
+  // clears immediately for both parties without requiring a page reload.
+  await supabase
+    .from('messages')
+    .update({ is_read: true })
+    .or(`and(from_id.eq.${chatId},to_id.eq.${partnerId}),and(from_id.eq.${partnerId},to_id.eq.${chatId})`)
+    .eq('is_read', false);
 
   // Custom messages based on who ended
   const initiatorLang = await getUserLang(chatId);

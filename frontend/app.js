@@ -1862,6 +1862,9 @@ async function loadMessages(with_id) {
     const container = $('chatMessages');
     container.innerHTML = renderThread(messageTree);
     container.scrollTop = container.scrollHeight;
+    // The GET endpoint marks messages as read on the backend, so refresh the
+    // badge immediately — no page reload required.
+    updateMessageBadge();
   } catch (e) { console.error(e); }
 }
 
@@ -2309,6 +2312,8 @@ async function endMentorship(assignId) {
       await apiFetch(`/api/mentors/end-mentorship/${assignId}`, { method: 'DELETE' });
       haptic('success');
       showToast(t('mentorship_ended'), 'success');
+      // Refresh the badge — messages from this ended pairing no longer count.
+      updateMessageBadge();
       loadMyMentees();
     } catch (e) { haptic('error'); showToast(e.message, 'error'); }
   } else {
@@ -2319,6 +2324,8 @@ async function endMentorship(assignId) {
       await apiFetch('/api/users/end-mentorship', { method: 'POST' });
       haptic('success');
       showToast(t('mentorship_ended'), 'success');
+      // Refresh the badge — messages from this ended pairing no longer count.
+      updateMessageBadge();
       navigate('dashboard');
     } catch (e) {
       haptic('error');

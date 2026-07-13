@@ -15,9 +15,37 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
   // GET /api/messages/unread/count
   // NOTE: This route must be defined BEFORE /:with to avoid "unread" being
   // captured as a :with param.
+  //
+  // Only count unread messages from currently ACTIVE mentorship partners.
+  // The user may appear as a mentee (user_id column) or as a mentor
+  // (mentor_id column), so we look at both sides of every active assignment.
   router.get('/unread/count', requireAuth, async (req, res) => {
     const { id } = req.telegramUser;
-    const { count } = await supabase.from('messages').select('id', { count: 'exact', head: true }).eq('to_id', id).eq('is_read', false);
+
+    // Fetch all active assignments where this user is involved (either role).
+    const { data: assignments } = await supabase
+      .from('mentorship_assignments')
+      .select('user_id, mentor_id')
+      .eq('is_active', true)
+      .or(`user_id.eq.${id},mentor_id.eq.${id}`);
+
+    if (!assignments || assignments.length === 0) {
+      return res.json({ count: 0 });
+    }
+
+    // Build the list of partner IDs (the other person in each assignment).
+    const partnerIds = assignments.map(a =>
+      a.user_id === id ? a.mentor_id : a.user_id
+    );
+
+    // Count unread messages sent TO this user FROM one of the active partners.
+    const { count } = await supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('to_id', id)
+      .eq('is_read', false)
+      .in('from_id', partnerIds);
+
     res.json({ count: count || 0 });
   });
 
