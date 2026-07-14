@@ -1767,7 +1767,7 @@ bot.on('callback_query', async (query) => {
   else if (data.startsWith('mentor_req_')) {
     const parts = data.split('_'); // mentor_req_{mentorId}_{topicId}
     const mentorId = parts[2];
-    const topicId = parts[3];
+    const topicId = parseInt(parts[3], 10); // ensure integer
 
     // Fetch mentee details
     const { data: menteeData } = await supabase
@@ -1776,9 +1776,19 @@ bot.on('callback_query', async (query) => {
       .eq('telegram_id', chatId)
       .single();
 
+    // Fetch the exact topic name
+    const { data: topicData } = await supabase
+      .from('topics')
+      .select('name')
+      .eq('id', topicId)
+      .single();
+
+    const topicName = topicData?.name || 'Unknown Topic';
+
     setState(chatId, 'mentor_req_msg', null, {
       mentorId: mentorId,
       topicId: topicId,
+      topicName: topicName,           // store the name directly
       menteeName: menteeData?.anonymous_id,
       menteeSex: menteeData?.sex,
       menteeAge: menteeData?.age_range
@@ -1786,12 +1796,11 @@ bot.on('callback_query', async (query) => {
 
     await safeSend(chatId, tSync(lang, 'mentor_req_msg_prompt'));
 
-    // Prevent opposite‑sex requests
+    // Same‑sex check remains unchanged
     const [{ data: mentee }, { data: mentor }] = await Promise.all([
       supabase.from('users').select('sex').eq('telegram_id', chatId).single(),
       supabase.from('users').select('sex').eq('telegram_id', mentorId).single()
     ]);
-
     if (mentee?.sex !== 'prefer_not' && mentor?.sex !== 'prefer_not' && mentee?.sex !== mentor?.sex) {
       await safeSend(chatId, "❌ You can only request mentorship from a mentor of the same sex.");
       return bot.answerCallbackQuery(query.id);
