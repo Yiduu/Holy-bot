@@ -1435,27 +1435,30 @@ async function loadSessions() {
             activeSessionCount++;
           }
 
-          // If the session is scheduled but not yet joinable, show disabled buttons + "Starts at" text
-          const isScheduledNotYet = !isJoinable && session.status === 'scheduled' && labelClass === 'chip chip-muted session-not-yet';
+          // Check if the current user is the host and the session is not already ended/cleared
+          const isHost = String(session.host_id) === String(currentUser?.telegram_id);
+          const canEnd = isHost && session.status !== 'ended' && session.status !== 'cleared';
+
           const actionHtml = isJoinable
             ? `<div style="display:flex; flex-direction:column; gap:6px;">
                 <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>
                 <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">Join via Browser</button>
+                ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${session.id}')">End Session</button>` : ''}
               </div>`
-            : isScheduledNotYet
+            : (labelClass === 'chip chip-muted session-not-yet'
               ? `<div style="display:flex; flex-direction:column; gap:6px;">
                   <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
                   <button class="btn btn-outline btn-sm" disabled style="opacity:.45;cursor:not-allowed;">Join via Browser</button>
+                  ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${session.id}')">End Session</button>` : ''}
                   <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
                 </div>`
-              : `<span class="${labelClass}">${label}</span>`;
+              : `<span class="${labelClass}">${label}</span>`);
 
-          // Embed scheduling metadata as data-* attrs so refreshSessionLabels can update in place
           return `
             <div class="session-item"
-                 data-session-id="${session.id}"
-                 data-scheduled-at="${session.scheduled_at}"
-                 data-status="${session.status}">
+                data-session-id="${session.id}"
+                data-scheduled-at="${session.scheduled_at}"
+                data-status="${session.status}">
               <div class="session-icon">${isGroup ? '👥' : '👤'}</div>
               <div class="session-body">
                 <div class="session-title">${escapeHtml(title)}</div>
@@ -1482,27 +1485,45 @@ async function loadSessions() {
           if (isJoinable) {
             activeSessionCount++;
           }
+
+          // Check if the current user is the host and the session is not already ended/cleared
+          const isHost = String(s.host_id) === String(currentUser?.telegram_id);
+          const canEnd = isHost && s.status !== 'ended' && s.status !== 'cleared';
+
+          // Build action buttons
+          let actionHtml;
+          if (isJoinable) {
+            actionHtml = `<div style="display:flex; flex-direction:column; gap:6px;">
+                <button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${t('btn_join_session')}</button>
+                ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')">End Session</button>` : ''}
+              </div>`;
+          } else if (labelClass === 'chip chip-muted session-not-yet') {
+            actionHtml = `<div style="display:flex; flex-direction:column; gap:6px;">
+                <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
+                ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')">End Session</button>` : ''}
+                <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
+              </div>`;
+          } else {
+            actionHtml = `<span class="${labelClass}">${label}</span>`;
+            // Even if the session is already done, host can still end it? Actually, if it's done, the button is not needed.
+            // But we keep it simple: only show if canEnd is true.
+            if (canEnd) {
+              actionHtml += `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')" style="margin-top:4px;">End Session</button>`;
+            }
+          }
+
           return `
             <div class="session-item"
-                 data-session-id="${s.id}"
-                 data-scheduled-at="${s.scheduled_at}"
-                 data-status="${s.status}">
+                data-session-id="${s.id}"
+                data-scheduled-at="${s.scheduled_at}"
+                data-status="${s.status}">
               <div class="session-icon">👥</div>
               <div class="session-body">
                 <div class="session-title">${escapeHtml(s.title)}</div>
                 <div class="session-sub">${formatDateTime(s.scheduled_at)}</div>
                 ${(label && isJoinable) ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
               </div>
-              <div class="session-action">
-                ${isJoinable
-              ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${t('btn_join_session')}</button>`
-              : (labelClass === 'chip chip-muted session-not-yet'
-                ? `<div style="display:flex;flex-direction:column;gap:6px;">
-                      <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
-                      <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
-                    </div>`
-                : `<span class="${labelClass}">${label}</span>`)}
-              </div>
+              <div class="session-action">${actionHtml}</div>
             </div>`;
         }).join('');
       }
@@ -1597,7 +1618,21 @@ async function createSession(is_group = false, mentee_id = null, scheduled_at = 
     showToast(e.message, 'error');
   }
 }
-
+// ─── End a session (mentor/host only) ─────────────────────────────
+async function endSession(session_id) {
+  if (!confirm('End this session for all participants? This action cannot be undone.')) return;
+  haptic('medium');
+  try {
+    await apiFetch(`/api/sessions/${session_id}/end`, { method: 'PATCH' });
+    haptic('success');
+    showToast('Session ended.', 'success');
+    // Reload the sessions list so the status updates immediately
+    loadSessions();
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
+}
 function showScheduleModal(is_group, mentee_id = null) {
   haptic('light');
   const modal = document.getElementById('scheduleModal');

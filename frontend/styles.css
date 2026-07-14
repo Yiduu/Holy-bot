@@ -951,9 +951,14 @@ textarea.form-control {
 }
 
 @keyframes typingBounce {
-  0%, 80%, 100% { 
+
+  0%,
+  80%,
+  100% {
     transform: scale(0);
-  } 40% { 
+  }
+
+  40% {
     transform: scale(1);
   }
 }
@@ -1922,10 +1927,13 @@ textarea.form-control {
 }
 
 @keyframes obLogoPulse {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: var(--shadow-gold), 0 0 30px rgba(201, 168, 76, 0.12);
     transform: scale(1);
   }
+
   50% {
     box-shadow: 0 0 30px rgba(201, 168, 76, 0.25), 0 0 50px rgba(201, 168, 76, 0.2);
     transform: scale(1.03);
@@ -2085,6 +2093,7 @@ textarea.form-control {
     opacity: 0;
     transform: translateY(24px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -2099,6 +2108,7 @@ textarea.form-control {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -2315,6 +2325,7 @@ textarea.form-control {
     opacity: 0;
     transform: translateY(-4px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -2346,7 +2357,7 @@ textarea.form-control {
   transition: transform var(--transition);
 }
 
-.select-wrapper-ob select:focus + .select-arrow-ob {
+.select-wrapper-ob select:focus+.select-arrow-ob {
   transform: translateY(-50%) rotate(180deg);
   filter: sepia(100%) saturate(200%) hue-rotate(5deg);
 }
@@ -2540,6 +2551,7 @@ textarea.form-control {
   opacity: 0.6;
   pointer-events: none;
 }
+
 .chat-send-btn.sending svg {
   animation: spin 0.8s linear infinite;
 }
@@ -2552,6 +2564,7 @@ textarea.form-control {
   margin: 16px 0;
   position: relative;
 }
+
 .chat-date-divider::before {
   content: "";
   position: absolute;
@@ -2561,6 +2574,7 @@ textarea.form-control {
   background: var(--border-dim);
   z-index: 1;
 }
+
 .chat-date-divider span {
   background: var(--bg);
   padding: 4px 12px;
@@ -2579,12 +2593,15 @@ textarea.form-control {
   display: inline-block;
   vertical-align: middle;
 }
+
 .msg-status.unread {
   color: var(--text3);
   opacity: 0.5;
 }
+
 .msg-status.read {
-  color: #3897f0; /* Telegram-like seen blue color */
+  color: #3897f0;
+  /* Telegram-like seen blue color */
 }
 
 /* ─── Chat Character Counter ──────────────────────────────────── */
@@ -2595,6 +2612,7 @@ textarea.form-control {
   padding: 2px 4px;
   transition: color var(--transition);
 }
+
 .char-counter.danger {
   color: var(--danger);
 }
