@@ -1025,10 +1025,10 @@ async function notifySessionInvite(chatId, sessionInfo) {
   const scheduledAt = sessionInfo.scheduled_at || sessionInfo.scheduledAt;
   const timeStr = scheduledAt
     ? new Intl.DateTimeFormat('en-US', {
-        timeZone: recipientTimezone,
-        weekday: 'short', year: 'numeric', month: 'short',
-        day: 'numeric', hour: '2-digit', minute: '2-digit'
-      }).format(new Date(scheduledAt))
+      timeZone: recipientTimezone,
+      weekday: 'short', year: 'numeric', month: 'short',
+      day: 'numeric', hour: '2-digit', minute: '2-digit'
+    }).format(new Date(scheduledAt))
     : 'TBD';
 
   const text = lang === 'am'
@@ -1472,9 +1472,74 @@ bot.on('message', async (msg) => {
     if (state.step === 'mentor_req_msg') {
       const { mentorId, topicId } = state.tempData;
       const msgStr = text === '/skip' ? '' : text.trim();
-      const { error } = await supabase.from('mentorship_requests').insert({ user_id: chatId, mentor_id: mentorId, topic_id: topicId, message: msgStr });
-      if (error) await safeSend(chatId, await t(chatId, 'request_failed'));
-      else {
+
+      // ── 1. Validate topic match ──────────────────────────────
+      const [userTopic, mentorTopic] = await Promise.all([
+        supabase.from('user_topics').select('id').eq('telegram_id', chatId).eq('topic_id', topicId).single(),
+        supabase.from('mentor_topics').select('id').eq('telegram_id', mentorId).eq('topic_id', topicId).single()
+      ]);
+      if (!userTopic.data || !mentorTopic.data) {
+        await safeSend(chatId, '❌ You do not share this topic with the mentor. Please select a matching topic.');
+        clearState(chatId);
+        return showMainMenu(chatId);
+      }
+
+      // ── 2. Check user does not have an active mentor ──────────
+      const { data: activeAssign } = await supabase
+        .from('mentorship_assignments')
+        .select('id')
+        .eq('user_id', chatId)
+        .eq('is_active', true)
+        .single();
+      if (activeAssign) {
+        await safeSend(chatId, '❌ You already have an active mentor. End your current mentorship first.');
+        clearState(chatId);
+        return showMainMenu(chatId);
+      }
+
+      // ── 3. Check mentor capacity ─────────────────────────────
+      const { data: mentor } = await supabase
+        .from('users')
+        .select('max_mentees')
+        .eq('telegram_id', mentorId)
+        .single();
+      const { count: currentMentees } = await supabase
+        .from('mentorship_assignments')
+        .select('id', { count: 'exact', head: true })
+        .eq('mentor_id', mentorId)
+        .eq('is_active', true);
+      if (currentMentees >= (mentor?.max_mentees || DEFAULT_MAX_MENTEES)) {
+        await safeSend(chatId, '❌ This mentor has reached their capacity. Please try another.');
+        clearState(chatId);
+        return showMainMenu(chatId);
+      }
+
+      // ── 4. Check for existing pending request ────────────────
+      const { data: pending } = await supabase
+        .from('mentorship_requests')
+        .select('id')
+        .eq('user_id', chatId)
+        .eq('mentor_id', mentorId)
+        .eq('status', 'pending')
+        .single();
+      if (pending) {
+        await safeSend(chatId, '⏳ You already have a pending request with this mentor.');
+        clearState(chatId);
+        return showMainMenu(chatId);
+      }
+
+      // ── All checks passed – insert the request ───────────────
+      const { error } = await supabase.from('mentorship_requests').insert({
+        user_id: chatId,
+        mentor_id: mentorId,
+        topic_id: topicId,
+        message: msgStr
+      });
+
+      if (error) {
+        await safeSend(chatId, await t(chatId, 'request_failed'));
+      } else {
+        // Notify the mentor (existing logic)
         const [{ data: u }, { data: topic }] = await Promise.all([
           supabase.from('users').select('anonymous_id, sex, age_range').eq('telegram_id', chatId).single(),
           supabase.from('topics').select('name').eq('id', topicId).single()
@@ -1496,7 +1561,9 @@ bot.on('message', async (msg) => {
         });
         await safeSend(chatId, await t(chatId, 'request_sent'));
       }
-      clearState(chatId); return showMainMenu(chatId);
+
+      clearState(chatId);
+      return showMainMenu(chatId);
     }
 
     if (state.step === 'set_verse_time') {
