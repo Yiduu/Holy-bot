@@ -165,13 +165,13 @@ function getDateGroupHeader(dateStr) {
 
 function renderThread(messages, isRoot = true) {
   if (!messages || !messages.length) return '';
-  
+
   let html = '';
   let lastGroupHeader = '';
-  
+
   for (const msg of messages) {
     if (msg.is_deleted) continue;
-    
+
     if (isRoot) {
       const groupHeader = getDateGroupHeader(msg.created_at);
       if (groupHeader !== lastGroupHeader) {
@@ -179,14 +179,14 @@ function renderThread(messages, isRoot = true) {
         lastGroupHeader = groupHeader;
       }
     }
-    
+
     const isSent = msg.from_id === currentUser?.telegram_id;
     const replyFormId = `reply-form-${msg.id}`;
     const editedMark = msg.edited_at
       ? '<span class="msg-edited">edited</span>'
       : '';
     const hasReplies = msg.replies && msg.replies.filter(r => !r.is_deleted).length > 0;
-    
+
     html += `
       <div class="message-thread ${isSent ? 'thread-sent' : 'thread-received'}" data-msg-id="${msg.id}">
         <div class="message-bubble ${isSent ? 'sent' : 'received'}">
@@ -220,7 +220,7 @@ function renderThread(messages, isRoot = true) {
       </div>
     `;
   }
-  
+
   return html;
 }
 
@@ -543,7 +543,7 @@ function connectSocket() {
       // We're in the right conversation — append and mark as read
       appendMessageToChat(msg);
       // Mark received messages as read (the GET endpoint does this, trigger it silently)
-      apiFetch(`/api/messages/${msg.from_id}`).then(() => updateMessageBadge()).catch(() => {});
+      apiFetch(`/api/messages/${msg.from_id}`).then(() => updateMessageBadge()).catch(() => { });
     } else {
       // On a different page or different conversation — just update badge + toast
       updateMessageBadge();
@@ -1049,10 +1049,9 @@ async function loadMentors() {
   container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
 
   try {
-    // 1. Fetch active mentor if the user is a mentee ('user')
+    // 1. Fetch active mentor for the user (if any) – keep as is
     let activeMentorHtml = '';
     let hasActiveMentor = false;
-
     if (currentUser?.role === 'user') {
       try {
         const activeAssignment = await apiFetch('/api/users/my-mentor');
@@ -1062,8 +1061,7 @@ async function loadMentors() {
           const name = m.user_settings?.display_name || m.anonymous_id;
           const bio = m.user_settings?.bio || 'No bio provided';
           const letter = name.charAt(0).toUpperCase();
-          const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : m.sex === 'prefer_not' ? t('sex_both') : '';
-
+          const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
           activeMentorHtml = `
             <div class="card gold-border mb-16" style="border: 2px solid var(--gold);">
               <div class="text-xs font-bold uppercase tracking-wider mb-8" style="color:var(--gold)" data-i18n="your_active_mentor">
@@ -1088,34 +1086,36 @@ async function loadMentors() {
       }
     }
 
-    // 2. Fetch all mentors (API already filters by same sex)
-    let mentors = await apiFetch('/api/mentors');
-
-    // Apply topic filter (mentor.expertise_topics is an array of topic names)
+    // 2. Fetch mentors from API, optionally filtered by topic_id
+    let url = '/api/mentors';
     if (selectedTopic && selectedTopic !== '') {
-      mentors = mentors.filter(m => m.expertise_topics && m.expertise_topics.includes(selectedTopic));
+      url += `?topic_id=${selectedTopic}`;
     }
+    let mentors = await apiFetch(url);
+    // No client‑side filtering needed – API already filtered.
 
+    // 3. Render mentor cards – store selectedTopic for the request button
     let mentorsListHtml = '';
     if (!mentors.length) {
       let message = 'No mentors available';
       if (selectedTopic && selectedTopic !== '') {
-        message = `No mentors available for "${selectedTopic}"`;
+        const topicName = filterSelect?.options[filterSelect.selectedIndex]?.text || selectedTopic;
+        message = `No mentors available for "${topicName}"`;
       }
       mentorsListHtml = `<div class="empty-state"><span>${message}</span></div>`;
     } else {
-      // Render mentor cards
       mentorsListHtml = mentors.map(m => {
         const name = m.user_settings?.display_name || m.anonymous_id;
         const bio = m.user_settings?.bio || 'No bio provided';
         const spec = m.user_settings?.specialization || '';
         const letter = name.charAt(0).toUpperCase();
-        const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : m.sex === 'prefer_not' ? t('sex_both') : '';
+        const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
         const mentees = m.mentee_count || 0;
         const max = m.user_settings?.max_mentees || 5;
-
-        // If user already has an active mentor, disable requesting other mentors
         const canRequest = !hasActiveMentor && mentees < max;
+
+        // Pass selectedTopic (topic ID) to the request function
+        const topicIdParam = selectedTopic && selectedTopic !== '' ? `, ${selectedTopic}` : '';
 
         return `
           <div class="mentor-card">
@@ -1136,7 +1136,7 @@ async function loadMentors() {
                 ${t('capacity_full')}
               </button>
             ` : `
-              <button class="btn btn-outline btn-sm" onclick="requestMentorship(${m.telegram_id})" ${!canRequest ? 'disabled' : ''}>
+              <button class="btn btn-outline btn-sm" onclick="requestMentorship(${m.telegram_id}${topicIdParam})" ${!canRequest ? 'disabled' : ''}>
                 ${t('btn_request')}
               </button>
             `)}
@@ -1145,7 +1145,6 @@ async function loadMentors() {
     }
 
     container.innerHTML = activeMentorHtml + mentorsListHtml;
-    // Apply localizations to any newly rendered elements
     applyLanguage();
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`;
@@ -1157,16 +1156,20 @@ async function loadMentorTopics() {
     const select = $('mentorTopicSelect');
     if (select) {
       select.innerHTML = '<option value="">All Topics</option>' +
-        topics.map(t => `<option value="${escapeHtml(t.name)}">${escapeHtml(t.name)}</option>`).join('');
+        topics.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
     }
   } catch (e) {
     console.error('Failed to load topics for filter:', e);
   }
 }
-async function requestMentorship(mentor_id) {
+async function requestMentorship(mentor_id, topic_id = null) {
   haptic('medium');
   try {
-    await apiFetch('/api/mentors/request', { method: 'POST', body: { mentor_id, message: 'I would like your mentorship.' } });
+    const body = { mentor_id, message: 'I would like your mentorship.' };
+    if (topic_id) {
+      body.topic_id = parseInt(topic_id, 10);
+    }
+    await apiFetch('/api/mentors/request', { method: 'POST', body });
     haptic('success');
     showToast('Mentorship request sent! 🙏', 'success');
     loadMentors();
@@ -1471,11 +1474,11 @@ async function loadSessions() {
                 ${isJoinable
               ? `<button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${t('btn_join_session')}</button>`
               : (labelClass === 'chip chip-muted session-not-yet'
-                  ? `<div style="display:flex;flex-direction:column;gap:6px;">
+                ? `<div style="display:flex;flex-direction:column;gap:6px;">
                       <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
                       <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
                     </div>`
-                  : `<span class="${labelClass}">${label}</span>`)}
+                : `<span class="${labelClass}">${label}</span>`)}
               </div>
             </div>`;
         }).join('');
