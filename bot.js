@@ -418,11 +418,7 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
   const loadMsg = await safeSendLoading(chatId, tSync(lang, 'loading_mentors'));
 
   const numericTopicId = Number(topicId);
-  // [DEBUG] Log the topicId received so we can trace where it comes from
-  console.log(`[listMentors] chatId=${chatId} topicId=${topicId} numericTopicId=${numericTopicId} page=${page} sort=${sort}`);
-
   if (isNaN(numericTopicId)) {
-    console.warn(`[listMentors] Invalid topicId: "${topicId}" — aborting mentor list for chatId=${chatId}`);
     if (loadMsg) await deleteMessage(chatId, loadMsg.message_id);
     return safeSend(chatId, tSync(lang, 'no_mentors_topic'));
   }
@@ -1475,54 +1471,25 @@ bot.on('message', async (msg) => {
 
     if (state.step === 'mentor_req_msg') {
       const { mentorId, topicId } = state.tempData;
-
-      // [DEBUG] Log state values before inserting request — confirms topicId is the one the mentee selected
-      console.log(`[mentor_req_msg] Sending request: chatId(mentee)=${chatId} mentorId=${mentorId} topicId=${topicId}`);
-
-      // Guard: topicId must be valid before inserting
-      if (!topicId || isNaN(Number(topicId))) {
-        console.error(`[mentor_req_msg] topicId is missing or invalid in state: "${topicId}" — aborting request for chatId=${chatId}`);
-        await safeSend(chatId, '❌ Something went wrong with your topic selection. Please search again.');
-        clearState(chatId); return showMainMenu(chatId);
-      }
-
       const msgStr = text === '/skip' ? '' : text.trim();
-      const { error } = await supabase.from('mentorship_requests').insert({
-        user_id: chatId,
-        mentor_id: mentorId,
-        topic_id: Number(topicId),  // ensure it is stored as a number
-        message: msgStr
-      });
-
+      const { error } = await supabase.from('mentorship_requests').insert({ user_id: chatId, mentor_id: mentorId, topic_id: topicId, message: msgStr });
       if (error) await safeSend(chatId, await t(chatId, 'request_failed'));
       else {
-        // [DEBUG] Log topicId used to fetch topic name for the notification
-        console.log(`[mentor_req_msg] Fetching topic name for topicId=${topicId} to build mentor notification`);
-
         const [{ data: u }, { data: topic }] = await Promise.all([
           supabase.from('users').select('anonymous_id, sex, age_range').eq('telegram_id', chatId).single(),
-          supabase.from('topics').select('name').eq('id', Number(topicId)).single()
+          supabase.from('topics').select('name').eq('id', topicId).single()
         ]);
-
-        // [DEBUG] Confirm the fetched topic name matches what was selected
-        console.log(`[mentor_req_msg] Topic resolved: topicId=${topicId} → name="${topic?.name}"`);
-
-        if (!topic) {
-          console.error(`[mentor_req_msg] Topic not found for topicId=${topicId} — notifying mentor without topic name`);
-        }
-
         const mentorLang = await getUserLang(mentorId);
         const menteeSex = u.sex === 'M' ? 'Male' : u.sex === 'F' ? 'Female' : 'Not specified';
         const menteeAge = u.age_range || 'Not specified';
-        const topicDisplay = topic?.name ? mdEscape(topic.name) : 'Unknown';
         const requestText = mentorLang === 'am'
-          ? `🙏 አዲስ የምክር ጥያቄ!\n\nከ: *${mdEscape(u.anonymous_id)}*\nጾታ: ${menteeSex}\nዕድሜ: ${menteeAge}\nርዕስ: *${topicDisplay}*\nመልዕክት: ${mdEscape(msgStr || '')}\n\nይቀበላሉ?`
-          : `🙏 *New Mentorship Request!*\n\nFrom: *${mdEscape(u.anonymous_id)}*\nSex: ${menteeSex}\nAge: ${menteeAge}\nTopic: *${topicDisplay}*\nMessage: ${mdEscape(msgStr || 'None')}\n\nDo you accept?`;
+          ? `🙏 አዲስ የምክር ጥያቄ!\n\nከ: *${mdEscape(u.anonymous_id)}*\nጾታ: ${menteeSex}\nዕድሜ: ${menteeAge}\nርዕስ: *${mdEscape(topic.name)}*\nመልዕክት: ${mdEscape(msgStr || '')}\n\nይቀበላሉ?`
+          : `🙏 *New Mentorship Request!*\n\nFrom: *${mdEscape(u.anonymous_id)}*\nSex: ${menteeSex}\nAge: ${menteeAge}\nTopic: *${mdEscape(topic.name)}*\nMessage: ${mdEscape(msgStr || 'None')}\n\nDo you accept?`;
 
         await safeSend(mentorId, requestText, {
           reply_markup: {
             inline_keyboard: [[
-              { text: tSync(mentorLang, 'btn_accept'), callback_data: `mentor_accept_${chatId}_${Number(topicId)}` },
+              { text: tSync(mentorLang, 'btn_accept'), callback_data: `mentor_accept_${chatId}_${topicId}` },
               { text: tSync(mentorLang, 'btn_reject'), callback_data: `mentor_reject_${chatId}` }
             ]]
           }
@@ -1731,27 +1698,30 @@ bot.on('callback_query', async (query) => {
 
   // Mentor Requests
   else if (data.startsWith('mentor_req_')) {
-    // Safely extract mentorId and topicId.
-    // Format: "mentor_req_{mentorId}_{topicId}"
-    // Use lastIndexOf('_') so that topicId is always the LAST segment,
-    // making parsing robust regardless of mentorId content.
-    const lastUnderscore = data.lastIndexOf('_');
-    const topicId = data.substring(lastUnderscore + 1);             // everything after the last '_'
-    const mentorId = data.substring('mentor_req_'.length, lastUnderscore); // between prefix and last '_'
+    const parts = data.split('_'); // mentor_req_{mentorId}_{topicId}
+    const mentorId = parts[2];
+    const topicId = parts[3];
 
-    // [DEBUG] Log extracted values to confirm they match the selected topic
-    console.log(`[mentor_req callback] chatId=${chatId} raw_data="${data}" extracted mentorId=${mentorId} topicId=${topicId}`);
+    // Fetch mentee details
+    const { data: menteeData } = await supabase
+      .from('users')
+      .select('anonymous_id, sex, age_range')
+      .eq('telegram_id', chatId)
+      .single();
 
-    // Guard: topicId must be a valid number
-    if (!topicId || isNaN(Number(topicId))) {
-      console.error(`[mentor_req callback] Invalid topicId extracted: "${topicId}" from data="${data}"`);
-      await safeSend(chatId, '❌ Invalid request. Please search again and select a topic.');
-      return bot.answerCallbackQuery(query.id);
-    }
+    setState(chatId, 'mentor_req_msg', null, {
+      mentorId: mentorId,
+      topicId: topicId,
+      menteeName: menteeData?.anonymous_id,
+      menteeSex: menteeData?.sex,
+      menteeAge: menteeData?.age_range
+    });
 
-    // Prevent opposite‑sex requests — check BEFORE setting state
+    await safeSend(chatId, tSync(lang, 'mentor_req_msg_prompt'));
+
+    // Prevent opposite‑sex requests
     const [{ data: mentee }, { data: mentor }] = await Promise.all([
-      supabase.from('users').select('sex, anonymous_id, age_range').eq('telegram_id', chatId).single(),
+      supabase.from('users').select('sex').eq('telegram_id', chatId).single(),
       supabase.from('users').select('sex').eq('telegram_id', mentorId).single()
     ]);
 
@@ -1759,20 +1729,6 @@ bot.on('callback_query', async (query) => {
       await safeSend(chatId, "❌ You can only request mentorship from a mentor of the same sex.");
       return bot.answerCallbackQuery(query.id);
     }
-
-    // Set state with the verified topicId (store as number for consistency)
-    setState(chatId, 'mentor_req_msg', null, {
-      mentorId: mentorId,
-      topicId: Number(topicId),   // store as number to avoid string/int mismatch
-      menteeName: mentee?.anonymous_id,
-      menteeSex: mentee?.sex,
-      menteeAge: mentee?.age_range
-    });
-
-    // [DEBUG] Confirm state was set with correct topicId
-    console.log(`[mentor_req callback] State set for chatId=${chatId}: mentorId=${mentorId} topicId=${Number(topicId)}`);
-
-    await safeSend(chatId, tSync(lang, 'mentor_req_msg_prompt'));
   } else if (data.startsWith('mentor_accept_')) {
     const parts = data.split('_'); // mentor_accept_{uid}_{tid}
     await acceptMentorship(chatId, parts[2], parts[3]);
