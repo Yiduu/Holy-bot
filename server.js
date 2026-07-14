@@ -92,7 +92,11 @@ app.use('/api/auth/register', authLimiter);
 app.use('/api/admin/broadcast', broadcastLimiter);
 
 // ─── Socket.IO (presence + typing) ────────────────────────────────────────────
-const io = new Server(server, { cors: { origin: '*' } });
+const io = new Server(server, {
+  cors: { origin: '*' },
+  pingTimeout: 60000,   // 60 seconds
+  pingInterval: 25000,  // 25 seconds
+});
 const onlineUsers = new Map(); // telegram_id → socket_id
 global.io = io;
 global.onlineUsers = onlineUsers;
@@ -245,7 +249,7 @@ function shutdown(signal) {
   }, 10_000).unref();
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT',  () => shutdown('SIGINT'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // ─── Unhandled promise rejections ────────────────────────────────────────────
 process.on('unhandledRejection', (reason, promise) => {

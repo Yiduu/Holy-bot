@@ -502,6 +502,26 @@ function stopChatPolling() {
     chatPollingInterval = null;
   }
 }
+// ─── Global refresh for requests & sessions (fallback when socket is down) ──
+let refreshTimer = null;
+
+function startGlobalRefresh() {
+  if (refreshTimer) return;
+  refreshTimer = setInterval(() => {
+    if (currentPage === 'requests') loadRequests();
+    if (currentPage === 'sessions') loadSessions();
+    updateRequestsBadge();
+    updateSessionsBadge();
+    updateMessageBadge();
+  }, 30000); // every 30 seconds
+}
+
+function stopGlobalRefresh() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+}
 
 function connectSocket() {
   socket = io(API, { transports: ['websocket', 'polling'] });
@@ -516,17 +536,20 @@ function connectSocket() {
     console.log('[Socket] Connected, authed as', userId);
   });
 
-  socket.on('connect_error', (err) => {
-    console.warn('[Socket] Connection error:', err.message);
-    // Start polling fallback so chats don't go dark
-    startChatPolling();
-  });
-
   socket.on('disconnect', (reason) => {
     console.warn('[Socket] Disconnected:', reason);
     $('reconnectBanner')?.classList.add('show');
-    // Start polling fallback while socket is down
-    startChatPolling();
+    startChatPolling();      // keep message polling
+    startGlobalRefresh();    // 👈 new: refresh requests & sessions
+  });
+
+  socket.on('connect', () => {
+    const userId = String(currentUser?.telegram_id || getTelegramData().user?.id || '');
+    socket.emit('auth', userId);
+    $('reconnectBanner')?.classList.remove('show');
+    stopChatPolling();
+    stopGlobalRefresh();     // 👈 new: stop fallback when connected
+    console.log('[Socket] Connected, authed as', userId);
   });
 
   socket.on('reconnect', () => {

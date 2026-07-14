@@ -913,6 +913,10 @@ async function rejectMentorship(mentorId, userId) {
   await supabase.from('mentorship_requests').update({ status: 'rejected' }).eq('mentor_id', mentorId).eq('user_id', userId);
   await safeSend(userId, tSync(userLang, 'mentor_rejected'));
   await safeSend(mentorId, tSync(mentorLang, 'reject_confirmed'));
+  const io = global._io;
+  if (io) {
+    io.to(String(mentorId)).emit('mentorship_request_updated', { status: 'rejected' });
+  }
 }
 
 async function rejectOtherPendingRequestsForUser(userId, acceptedMentorId, exceptRequestId) {
