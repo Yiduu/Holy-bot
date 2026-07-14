@@ -485,29 +485,79 @@ function handleDeepLink() {
 }
 
 // ─── Socket Setup ─────────────────────────────────────────────
+let chatPollingInterval = null;
+
+function startChatPolling() {
+  if (chatPollingInterval) return;
+  chatPollingInterval = setInterval(() => {
+    if (currentPage === 'chat' && window.chatState?.with) {
+      loadMessages(window.chatState.with);
+    }
+  }, 15000);
+}
+
+function stopChatPolling() {
+  if (chatPollingInterval) {
+    clearInterval(chatPollingInterval);
+    chatPollingInterval = null;
+  }
+}
+
 function connectSocket() {
-  socket = io(API);
+  socket = io(API, { transports: ['websocket', 'polling'] });
+
   socket.on('connect', () => {
-    socket.emit('auth', currentUser?.telegram_id || getTelegramData().user?.id);
+    // Always send auth as a string to match server-side Map key type
+    const userId = String(currentUser?.telegram_id || getTelegramData().user?.id || '');
+    socket.emit('auth', userId);
     $('reconnectBanner')?.classList.remove('show');
+    // Stop polling fallback — socket is live
+    stopChatPolling();
+    console.log('[Socket] Connected, authed as', userId);
   });
-  socket.on('disconnect', () => {
+
+  socket.on('connect_error', (err) => {
+    console.warn('[Socket] Connection error:', err.message);
+    // Start polling fallback so chats don't go dark
+    startChatPolling();
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.warn('[Socket] Disconnected:', reason);
     $('reconnectBanner')?.classList.add('show');
+    // Start polling fallback while socket is down
+    startChatPolling();
   });
+
+  socket.on('reconnect', () => {
+    console.log('[Socket] Reconnected');
+    stopChatPolling();
+    $('reconnectBanner')?.classList.remove('show');
+    // Re-auth on reconnect
+    const userId = String(currentUser?.telegram_id || getTelegramData().user?.id || '');
+    socket.emit('auth', userId);
+  });
+
   socket.on('new_message', (msg) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(msg.from_id)) {
+      // We're in the right conversation — append and mark as read
       appendMessageToChat(msg);
+      // Mark received messages as read (the GET endpoint does this, trigger it silently)
+      apiFetch(`/api/messages/${msg.from_id}`).then(() => updateMessageBadge()).catch(() => {});
     } else {
+      // On a different page or different conversation — just update badge + toast
       updateMessageBadge();
-      showToast('New message received');
+      showToast('💬 New message received');
       haptic('medium');
     }
   });
+
   socket.on('chat_cleared', ({ by_id }) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(by_id)) {
       loadMessages(window.chatState.with);
     }
   });
+
   socket.on('session_invite', (session) => {
     haptic('success');
     showToast(`📹 Session invite: ${session.title}`, 'info');
@@ -516,9 +566,11 @@ function connectSocket() {
       navigate('sessions');
     }
   });
+
   socket.on('broadcast', ({ message }) => {
     showToast(`📢 ${message}`);
   });
+
   socket.on('typing', ({ from_id }) => {
     if (window.chatState?.with && String(window.chatState.with) === String(from_id)) {
       const partnerName = window.chatState.name || 'Partner';
@@ -528,10 +580,11 @@ function connectSocket() {
       window.typingTimeout = setTimeout(() => { $('typingIndicator').innerHTML = ''; }, 3000);
     }
   });
+
   socket.on('new_mentorship_request', () => {
     haptic('success');
     showToast('New mentorship request received! 🙏', 'success');
-    updateRequestsBadge();  // update the badge count
+    updateRequestsBadge();
     if (currentPage === 'requests') loadRequests();
   });
 
@@ -545,6 +598,7 @@ function connectSocket() {
       showToast('A mentorship request was accepted \u2713', 'success');
     }
   });
+
   socket.on('message_edited', (editedMsg) => {
     if (currentPage === 'chat' && window.chatState?.with) {
       loadMessages(window.chatState.with);
@@ -576,6 +630,13 @@ function connectSocket() {
     updateSessionsBadge();
     if (currentPage === 'sessions') {
       loadSessions();
+    }
+  });
+
+  // Multi-device sync: fired on the sender's OTHER devices/tabs when they send
+  socket.on('message_sent', (msg) => {
+    if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(msg.to_id)) {
+      appendMessageToChat(msg);
     }
   });
 }

@@ -125,6 +125,12 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
       io.to(recipientSocket).emit('new_message', msg);
     }
 
+    // Also push to sender's other devices/tabs
+    const senderSocket = onlineUsers.get(String(from_id));
+    if (senderSocket && senderSocket !== recipientSocket) {
+      io.to(senderSocket).emit('message_sent', msg);
+    }
+
     const { data: sender } = await supabase.from('users').select('anonymous_id').eq('telegram_id', from_id).single();
     if (sender && !onlineUsers.has(String(to_id))) {
       const { notifyMessage } = require('../bot');
