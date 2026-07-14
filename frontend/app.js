@@ -563,12 +563,13 @@ function connectSocket() {
 
   socket.on('new_message', (msg) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(msg.from_id)) {
-      // We're in the right conversation — append and mark as read
-      appendMessageToChat(msg);
-      // Mark received messages as read (the GET endpoint does this, trigger it silently)
-      apiFetch(`/api/messages/${msg.from_id}`).then(() => updateMessageBadge()).catch(() => { });
+      const existing = document.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
+      if (!existing) {
+        appendMessageToChat(msg);
+        // Mark as read silently
+        apiFetch(`/api/messages/${msg.from_id}`).then(() => updateMessageBadge()).catch(() => { });
+      }
     } else {
-      // On a different page or different conversation — just update badge + toast
       updateMessageBadge();
       showToast('💬 New message received');
       haptic('medium');
@@ -659,7 +660,10 @@ function connectSocket() {
   // Multi-device sync: fired on the sender's OTHER devices/tabs when they send
   socket.on('message_sent', (msg) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(msg.to_id)) {
-      appendMessageToChat(msg);
+      const existing = document.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
+      if (!existing) {
+        appendMessageToChat(msg);
+      }
     }
   });
 }
@@ -2012,15 +2016,12 @@ async function sendMessage() {
   const content = input.value.trim();
   if (!content || !window.chatState.with) return;
 
-  // Save the input to restore on failure
   const originalContent = content;
   input.value = '';
   $('emojiPicker')?.classList.add('hidden');
-  // Reset character counter after send
   const counter = $('charCounter');
   if (counter) { counter.textContent = '0 / 2000'; counter.classList.remove('danger'); }
 
-  // Disable send button to prevent double-click
   const sendBtn = document.querySelector('.chat-send-btn');
   if (sendBtn) sendBtn.disabled = true;
   if (sendBtn) sendBtn.classList.add('sending');
@@ -2035,36 +2036,26 @@ async function sendMessage() {
         method: 'POST',
         body: { to_id: window.chatState.with, content: originalContent }
       });
-      // Success! Append message directly to chat
-      appendMessageToChat(msg);
-      // Exit the loop – we're done
+      // ✅ Do NOT append locally – wait for socket 'message_sent' (or polling)
       lastError = null;
       break;
     } catch (e) {
       lastError = e;
       attempts++;
       if (attempts < maxAttempts) {
-        // Wait before retry: 500ms, 1000ms, 1500ms
         const delay = attempts * 500;
         await new Promise(r => setTimeout(r, delay));
-        // Optional: show a subtle "Retrying..." indicator (we can skip for simplicity)
-        continue;
       }
     }
   }
 
-  // Re-enable send button
-  if (sendBtn) sendBtn.disabled = false;
-  if (sendBtn) sendBtn.classList.remove('sending');
+  if (sendBtn) { sendBtn.disabled = false; sendBtn.classList.remove('sending'); }
 
-  // If all attempts failed, show error and restore the message
   if (lastError && attempts === maxAttempts) {
     haptic('error');
     showToast(t('msg_send_failed'), 'error');
-    // Put the message back in the input so user can try again manually
     input.value = originalContent;
     input.focus();
-    // Re-sync counter when message is restored on failure
     handleChatTyping();
   }
 }
