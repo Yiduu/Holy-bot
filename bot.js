@@ -1478,12 +1478,33 @@ bot.on('message', async (msg) => {
       const msgStr = text === '/skip' ? '' : text.trim();
 
       // ── 1. Validate topic match ──────────────────────────────
-      const [userTopic, mentorTopic] = await Promise.all([
-        supabase.from('user_topics').select('id').eq('telegram_id', chatId).eq('topic_id', topicId).single(),
-        supabase.from('mentor_topics').select('id').eq('telegram_id', mentorId).eq('topic_id', topicId).single()
+      const topicIdNum = parseInt(topicId, 10); // ensure number
+
+      // Fetch user's topics and mentor's topics
+      const [userTopics, mentorTopics] = await Promise.all([
+        supabase.from('user_topics').select('topic_id').eq('telegram_id', chatId),
+        supabase.from('mentor_topics').select('topic_id').eq('telegram_id', mentorId)
       ]);
-      if (!userTopic.data || !mentorTopic.data) {
-        await safeSend(chatId, '❌ You do not share this topic with the mentor. Please select a matching topic.');
+
+      const userTopicIds = (userTopics.data || []).map(t => t.topic_id);
+      const mentorTopicIds = (mentorTopics.data || []).map(t => t.topic_id);
+
+      // Check if the selected topic is in both lists
+      const commonTopicIds = userTopicIds.filter(id => mentorTopicIds.includes(id));
+
+      if (!commonTopicIds.includes(topicIdNum)) {
+        // If not, check if there is any other common topic to suggest
+        if (commonTopicIds.length === 0) {
+          await safeSend(chatId, '❌ You and the mentor have no topics in common. Please update your topics in Settings.');
+        } else {
+          // Fetch topic names for the common IDs to give a helpful message
+          const { data: commonTopics } = await supabase
+            .from('topics')
+            .select('name')
+            .in('id', commonTopicIds);
+          const topicNames = (commonTopics || []).map(t => t.name).join(', ');
+          await safeSend(chatId, `❌ You do not share the selected topic with the mentor. You share these topics: ${topicNames}. Please select a matching topic.`);
+        }
         clearState(chatId);
         return showMainMenu(chatId);
       }
@@ -1771,7 +1792,7 @@ bot.on('callback_query', async (query) => {
   else if (data.startsWith('mentor_req_')) {
     const parts = data.split('_'); // mentor_req_{mentorId}_{topicId}
     const mentorId = parts[2];
-    const topicId = parseInt(parts[3], 10); // ensure integer
+    const topicId = parseInt(parts[3], 10); // ✅ Ensure integer
 
     // Fetch mentee details
     const { data: menteeData } = await supabase
@@ -1780,19 +1801,9 @@ bot.on('callback_query', async (query) => {
       .eq('telegram_id', chatId)
       .single();
 
-    // Fetch the exact topic name
-    const { data: topicData } = await supabase
-      .from('topics')
-      .select('name')
-      .eq('id', topicId)
-      .single();
-
-    const topicName = topicData?.name || 'Unknown Topic';
-
     setState(chatId, 'mentor_req_msg', null, {
       mentorId: mentorId,
       topicId: topicId,
-      topicName: topicName,           // store the name directly
       menteeName: menteeData?.anonymous_id,
       menteeSex: menteeData?.sex,
       menteeAge: menteeData?.age_range
@@ -1800,11 +1811,12 @@ bot.on('callback_query', async (query) => {
 
     await safeSend(chatId, tSync(lang, 'mentor_req_msg_prompt'));
 
-    // Same‑sex check remains unchanged
+    // Prevent opposite‑sex requests
     const [{ data: mentee }, { data: mentor }] = await Promise.all([
       supabase.from('users').select('sex').eq('telegram_id', chatId).single(),
       supabase.from('users').select('sex').eq('telegram_id', mentorId).single()
     ]);
+
     if (mentee?.sex !== 'prefer_not' && mentor?.sex !== 'prefer_not' && mentee?.sex !== mentor?.sex) {
       await safeSend(chatId, "❌ You can only request mentorship from a mentor of the same sex.");
       return bot.answerCallbackQuery(query.id);
