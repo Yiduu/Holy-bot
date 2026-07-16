@@ -2,6 +2,13 @@
 
 const express = require('express');
 
+// Prefix shown above an admin's custom message, localized by the applicant's
+// preferred language (user_settings.language). Falls back to English.
+const CONTACT_PREFIX = {
+  en: '📋 *Message from the Mentorship Team*\nRegarding your mentor application:',
+  am: '📋 *መልእክት ከአማካሪ ቡድን*\nስለ አማካሪነት ማመልከቻዎ:',
+};
+
 module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
   const router = express.Router();
   router.use(requireAuth, requireAdmin);
@@ -193,6 +200,38 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
 
     await logAudit(admin_id, `application_${action}`, app.telegram_id, 'mentor_application', { app_id: app.id });
     res.json({ success: true, application: app });
+  });
+
+  router.post('/applications/:id/contact', async (req, res) => {
+    const admin_id = req.telegramUser.id;
+    const { message } = req.body;
+    if (!message || !message.trim()) return res.status(400).json({ error: 'message required' });
+
+    const { data: app, error: appErr } = await supabase
+      .from('mentor_applications')
+      .select('telegram_id')
+      .eq('id', req.params.id)
+      .single();
+
+    if (appErr || !app) return res.status(404).json({ error: 'Application not found' });
+
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('language')
+      .eq('telegram_id', app.telegram_id)
+      .single();
+    const lang = settings?.language || 'en';
+    const prefix = CONTACT_PREFIX[lang] || CONTACT_PREFIX.en;
+
+    const { safeSend } = require('../bot');
+    await safeSend(app.telegram_id, `${prefix}\n\n${message.trim()}`);
+
+    await logAudit(admin_id, 'application_contact', app.telegram_id, 'mentor_application', {
+      app_id: req.params.id,
+      message: message.trim().substring(0, 300),
+    });
+
+    res.json({ success: true });
   });
 
   // ==================== MESSAGES ====================

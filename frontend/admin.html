@@ -2135,6 +2135,24 @@
         </div>
     </div>
 
+    <!-- ── Contact Applicant Modal ──────────────────────────────── -->
+    <div class="modal-overlay" id="contactModal">
+        <div class="modal">
+            <div class="modal-title">✉️ Contact Applicant</div>
+            <input type="hidden" id="contactAppId" />
+            <div class="form-group">
+                <label class="form-label">Message</label>
+                <textarea id="contactMessage" class="form-control" rows="5"
+                    placeholder="Type a message to send to the applicant on Telegram…"></textarea>
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-primary btn-full" id="contactSendBtn"
+                    onclick="sendContactMessage()">Send</button>
+                <button class="btn btn-ghost btn-full" onclick="closeContactModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ── User Detail Modal ─────────────────────────────────── -->
     <div class="modal-overlay" id="userDetailModal">
         <div class="modal" style="max-width:520px">
@@ -2577,6 +2595,7 @@
           <div class="app-actions">
             <button class="btn btn-success btn-sm" onclick="reviewApp('${a.id}','approved')">✓ Approve</button>
             <button class="btn btn-danger btn-sm" onclick="reviewApp('${a.id}','rejected')">✗ Reject</button>
+            <button class="btn btn-ghost btn-sm" onclick="openContactModal('${a.id}')">✉️ Contact</button>
           </div>`: ''}
       </div>`).join('');
                 pager('appsPager', page, d.pages, 'loadApps');
@@ -2586,6 +2605,32 @@
             const note = document.getElementById(`note-${id}`)?.value || '';
             try { await api(`/api/admin/applications/${id}`, { method: 'PATCH', body: { action, admin_note: note } }); toast(`Application ${action}`, 'success'); loadApps(appsPage); loadStats(); }
             catch (e) { toast(e.message, 'error'); }
+        }
+
+        /* ── Contact Applicant ─────────────────────────────────────── */
+        function openContactModal(appId) {
+            document.getElementById('contactAppId').value = appId;
+            document.getElementById('contactMessage').value = '';
+            document.getElementById('contactModal').classList.add('open');
+        }
+        function closeContactModal() {
+            document.getElementById('contactModal').classList.remove('open');
+        }
+        async function sendContactMessage() {
+            const id = document.getElementById('contactAppId').value;
+            const message = document.getElementById('contactMessage').value.trim();
+            if (!message) { toast('Please enter a message', 'error'); return; }
+            const btn = document.getElementById('contactSendBtn');
+            btn.disabled = true; btn.textContent = 'Sending…';
+            try {
+                await api(`/api/admin/applications/${id}/contact`, { method: 'POST', body: { message } });
+                toast('Message sent', 'success');
+                closeContactModal();
+            } catch (e) {
+                toast(e.message, 'error');
+            } finally {
+                btn.disabled = false; btn.textContent = 'Send';
+            }
         }
 
         /* ── Messages ───────────────────────────────────────────────── */
