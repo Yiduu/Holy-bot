@@ -1686,6 +1686,15 @@
                     </svg>
                     Topics
                 </div>
+                <div class="nav-item" onclick="showTab('mentorship-requests')" id="nav-mentorship-requests">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="9" y1="13" x2="15" y2="13" />
+                        <line x1="9" y1="17" x2="15" y2="17" />
+                    </svg>
+                    Request Log
+                </div>
 
                 <div class="nav-section">Tools</div>
                 <div class="nav-item" onclick="showTab('broadcast')" id="nav-broadcast">
@@ -2034,6 +2043,58 @@
                     </div>
                 </div>
 
+                <!-- ── Mentorship Request Log ────────────────────────── -->
+                <div class="pane" id="pane-mentorship-requests">
+                    <div class="toolbar">
+                        <select class="filter-select" id="reqStatusFilter" onchange="loadMentorshipRequests(1)">
+                            <option value="all">All</option>
+                            <option value="pending">Pending</option>
+                            <option value="accepted">Accepted</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                    <div class="stats-grid" id="reqStatsGrid">
+                        <div class="stat-card">
+                            <div class="stat-num" id="req-st-pending" style="color:var(--gold)">–</div>
+                            <div class="stat-label">Pending</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-num" id="req-st-accepted" style="color:var(--success)">–</div>
+                            <div class="stat-label">Accepted</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-num" id="req-st-rejected" style="color:var(--danger)">–</div>
+                            <div class="stat-label">Rejected</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-num" id="req-st-cancelled" style="color:var(--text3)">–</div>
+                            <div class="stat-label">Cancelled</div>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Mentor</th>
+                                    <th>Mentee</th>
+                                    <th>Topic</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Updated</th>
+                                    <th>Message</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mentorshipRequestsBody">
+                                <tr>
+                                    <td colspan="7" class="loading">Loading…</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pagination" id="mentorshipRequestsPager"></div>
+                </div>
+
                 <!-- ── Broadcast ─────────────────────────────────────── -->
                 <div class="pane" id="pane-broadcast">
                     <div class="broadcast-wrap">
@@ -2309,6 +2370,7 @@
         const TITLES = {
             overview: 'Overview', users: 'Users', conversations: 'Conversations', mentorship: 'Mentorship', applications: 'Mentor Applications',
             messages: 'Message Moderation', tickets: 'Support Tickets', topics: 'Counseling Topics',
+            'mentorship-requests': 'Request Log',
             broadcast: 'Broadcast', audit: 'Audit Log'
         };
 
@@ -2322,6 +2384,7 @@
             const loaders = {
                 overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), mentorship: () => loadMentorship(1), applications: () => loadApps(1),
                 messages: () => loadMessages(1), tickets: loadTickets, topics: loadTopics,
+                'mentorship-requests': () => loadMentorshipRequests(1),
                 broadcast: () => { }, audit: () => loadAudit(1)
             };
             loaders[tab]?.();
@@ -2805,6 +2868,44 @@
     </tr>`).join('');
                 pager('auditPager', page, Math.ceil((d.total || 0) / 50), 'loadAudit');
             } catch (e) { body.innerHTML = `<tr><td colspan="5" class="loading">${e.message}</td></tr>`; }
+        }
+
+        /* ── Mentorship Request Log ────────────────────────────────── */
+        let mentorshipRequestsPage = 1;
+        async function loadMentorshipRequests(page = 1) {
+            mentorshipRequestsPage = page;
+            const status = document.getElementById('reqStatusFilter').value;
+            const body = document.getElementById('mentorshipRequestsBody');
+            body.innerHTML = '<tr><td colspan="7" class="loading">Loading…</td></tr>';
+            try {
+                const d = await api(`/api/admin/mentorship-requests?status=${status}&page=${page}`);
+
+                const s = d.stats || {};
+                document.getElementById('req-st-pending').textContent = s.pending ?? 0;
+                document.getElementById('req-st-accepted').textContent = s.accepted ?? 0;
+                document.getElementById('req-st-rejected').textContent = s.rejected ?? 0;
+                document.getElementById('req-st-cancelled').textContent = s.cancelled ?? 0;
+
+                if (!d.requests?.length) { body.innerHTML = '<tr><td colspan="7" class="loading">No requests found</td></tr>'; document.getElementById('mentorshipRequestsPager').innerHTML = ''; return; }
+
+                const chipClass = { pending: 'chip-gold', accepted: 'chip-green', rejected: 'chip-red', cancelled: 'chip-gray' };
+
+                body.innerHTML = d.requests.map(r => {
+                    const mentorName = r.mentor?.user_settings?.display_name || r.mentor?.anonymous_id || 'Unknown';
+                    const menteeName = r.mentee?.user_settings?.display_name || r.mentee?.anonymous_id || 'Unknown';
+                    return `<tr>
+      <td style="color:var(--gold)">${esc(mentorName)}</td>
+      <td style="color:var(--accent)">${esc(menteeName)}</td>
+      <td>${esc(r.topic?.name || '–')}</td>
+      <td><span class="chip ${chipClass[r.status] || 'chip-gray'}">${esc(r.status)}</span></td>
+      <td style="white-space:nowrap;font-size:11px">${ago(r.created_at)}</td>
+      <td style="white-space:nowrap;font-size:11px">${r.updated_at ? ago(r.updated_at) : '–'}</td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.message || '')}">${esc(r.message || '–')}</td>
+    </tr>`;
+                }).join('');
+
+                pager('mentorshipRequestsPager', page, d.pages, 'loadMentorshipRequests');
+            } catch (e) { body.innerHTML = `<tr><td colspan="7" class="loading">${e.message}</td></tr>`; }
         }
 
         /* ── Export ─────────────────────────────────────────────────── */

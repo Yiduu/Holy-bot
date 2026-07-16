@@ -588,5 +588,61 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.json({ success: true });
   });
 
+  // ==================== MENTORSHIP REQUEST LOG ====================
+  router.get('/mentorship-requests', async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = Math.max(1, parseInt(req.query.limit) || 20);
+      const offset = (page - 1) * limit;
+      const status = (req.query.status && req.query.status !== 'all') ? req.query.status : null;
+
+      let query = supabase
+        .from('mentorship_requests')
+        .select(`
+          id,
+          status,
+          message,
+          created_at,
+          updated_at,
+          mentor:mentor_id(telegram_id, anonymous_id, user_settings(display_name)),
+          mentee:user_id(telegram_id, anonymous_id, user_settings(display_name)),
+          topic:topic_id(name)
+        `, { count: 'exact' });
+
+      if (status) query = query.eq('status', status);
+
+      const [
+        { data, count, error },
+        pendingCount,
+        acceptedCount,
+        rejectedCount,
+        cancelledCount,
+      ] = await Promise.all([
+        query.order('created_at', { ascending: false }).range(offset, offset + limit - 1),
+        supabase.from('mentorship_requests').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('mentorship_requests').select('id', { count: 'exact', head: true }).eq('status', 'accepted'),
+        supabase.from('mentorship_requests').select('id', { count: 'exact', head: true }).eq('status', 'rejected'),
+        supabase.from('mentorship_requests').select('id', { count: 'exact', head: true }).eq('status', 'cancelled'),
+      ]);
+
+      if (error) return res.status(500).json({ error: error.message });
+
+      res.json({
+        requests: data || [],
+        total: count || 0,
+        page,
+        pages: Math.ceil((count || 0) / limit),
+        stats: {
+          pending: pendingCount.count || 0,
+          accepted: acceptedCount.count || 0,
+          rejected: rejectedCount.count || 0,
+          cancelled: cancelledCount.count || 0,
+        },
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return router;
 };
