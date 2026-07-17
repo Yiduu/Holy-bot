@@ -25,9 +25,10 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     // is still selected because it is displayed on the mentor profile card.
     let query = supabase
       .from('users')
-      .select('telegram_id, anonymous_id, sex, preferred_mentee_sex, user_settings(bio, specialization, max_mentees, display_name)')
+      .select('telegram_id, anonymous_id, sex, preferred_mentee_sex, accepting_requests, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
-      .eq('is_banned', false);
+      .eq('is_banned', false)
+      .eq('accepting_requests', true);
 
     // Visibility rules (applied when the mentee has a known sex):
     //   preferred_mentee_sex = 'M'          → only male mentees see this mentor
@@ -132,12 +133,16 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     // Get mentor's current mentee count and max_mentees
     const { data: mentor, error: mentorErr } = await supabase
       .from('users')
-      .select('max_mentees')
+      .select('max_mentees, accepting_requests')
       .eq('telegram_id', mentor_id)
       .single();
 
     if (mentorErr || !mentor) {
       return res.status(404).json({ error: 'Mentor not found' });
+    }
+
+    if (mentor.accepting_requests === false) {
+      return res.status(409).json({ error: 'This mentor is not accepting new requests at this time.' });
     }
 
     const { count: currentMentees } = await supabase

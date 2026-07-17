@@ -689,6 +689,11 @@
               <input id="settingMaxMentees" type="number" class="form-control" min="1" max="20" value="5" />
             </div>
             <div class="divider"></div>
+            <div class="toggle-wrap">
+              <span>Accept New Requests</span>
+              <div id="toggleAcceptingRequests" class="toggle on" onclick="toggleAcceptingRequests()"></div>
+            </div>
+            <div class="divider"></div>
             <button class="btn btn-outline btn-sm btn-full" onclick="openTopicModal(true)"
               data-i18n="settings_expertise_topics">Topics to Mentor</button>
           </div>

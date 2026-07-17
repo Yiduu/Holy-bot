@@ -1522,12 +1522,19 @@ bot.on('message', async (msg) => {
         return showMainMenu(chatId);
       }
 
-      // ── 3. Check mentor capacity ─────────────────────────────
+      // ── 3. Check mentor capacity & availability ──────────────
       const { data: mentor } = await supabase
         .from('users')
-        .select('max_mentees')
+        .select('max_mentees, accepting_requests')
         .eq('telegram_id', mentorId)
         .single();
+
+      if (mentor && mentor.accepting_requests === false) {
+        await safeSend(chatId, 'This mentor is not accepting new requests at this time.');
+        clearState(chatId);
+        return showMainMenu(chatId);
+      }
+
       const { count: currentMentees } = await supabase
         .from('mentorship_assignments')
         .select('id', { count: 'exact', head: true })

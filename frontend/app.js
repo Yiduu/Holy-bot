@@ -2192,6 +2192,11 @@ async function loadSettings() {
       $('settingBio').value = s.bio || '';
       $('settingSpecialization').value = s.specialization || '';
       $('settingMaxMentees').value = s.max_mentees || 5;
+      
+      const acceptToggle = $('toggleAcceptingRequests');
+      if (acceptToggle) {
+        acceptToggle.classList.toggle('on', s.accepting_requests !== false);
+      }
     }
 
     $('userAnonId').textContent = currentUser?.anonymous_id || '';
@@ -2211,12 +2216,37 @@ async function saveSettings() {
     specialization: $('settingSpecialization')?.value,
     max_mentees: parseInt($('settingMaxMentees')?.value) || 5,
   };
+  if (currentUser?.role === 'mentor') {
+    body.accepting_requests = $('toggleAcceptingRequests')?.classList.contains('on');
+  }
   try {
     await apiFetch('/api/users/settings', { method: 'PATCH', body });
     haptic('success');
     showToast('Settings saved', 'success');
   } catch (e) {
     haptic('error');
+    showToast(e.message, 'error');
+  }
+}
+
+async function toggleAcceptingRequests() {
+  haptic('light');
+  const el = $('toggleAcceptingRequests');
+  if (!el) return;
+  const isCurrentlyOn = el.classList.contains('on');
+  const nextValue = !isCurrentlyOn;
+  el.classList.toggle('on', nextValue);
+
+  try {
+    await apiFetch('/api/users/settings', {
+      method: 'PATCH',
+      body: { accepting_requests: nextValue }
+    });
+    haptic('success');
+    showToast('Request availability updated.', 'success');
+  } catch (e) {
+    haptic('error');
+    el.classList.toggle('on', isCurrentlyOn); // revert on error
     showToast(e.message, 'error');
   }
 }

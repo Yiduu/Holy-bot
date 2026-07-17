@@ -39,9 +39,16 @@ module.exports = function userRoutes(supabase, requireAuth) {
   // GET /api/users/settings
   router.get('/settings', requireAuth, async (req, res) => {
     const { id } = req.telegramUser;
-    const { data, error } = await supabase.from('user_settings').select('*').eq('telegram_id', id).single();
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
+    const [settingsRes, userRes] = await Promise.all([
+      supabase.from('user_settings').select('*').eq('telegram_id', id).single(),
+      supabase.from('users').select('accepting_requests').eq('telegram_id', id).single()
+    ]);
+    if (settingsRes.error) return res.status(500).json({ error: settingsRes.error.message });
+    const merged = {
+      ...settingsRes.data,
+      accepting_requests: userRes.data ? userRes.data.accepting_requests !== false : true
+    };
+    res.json(merged);
   });
 
   // PATCH /api/users/settings
@@ -55,9 +62,27 @@ module.exports = function userRoutes(supabase, requireAuth) {
     }
     updates.updated_at = new Date().toISOString();
 
-    const { data, error } = await supabase.from('user_settings').update(updates).eq('telegram_id', id).select().single();
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
+    const promises = [
+      supabase.from('user_settings').update(updates).eq('telegram_id', id).select().single()
+    ];
+
+    if (req.body.accepting_requests !== undefined) {
+      promises.push(
+        supabase.from('users').update({ accepting_requests: req.body.accepting_requests }).eq('telegram_id', id)
+      );
+    }
+
+    const results = await Promise.all(promises);
+    const settingsResult = results[0];
+    if (settingsResult.error) return res.status(500).json({ error: settingsResult.error.message });
+
+    const merged = {
+      ...settingsResult.data,
+      accepting_requests: req.body.accepting_requests !== undefined 
+        ? req.body.accepting_requests 
+        : (await supabase.from('users').select('accepting_requests').eq('telegram_id', id).single()).data?.accepting_requests !== false
+    };
+    res.json(merged);
   });
 
   // POST /api/users/apply-mentor
