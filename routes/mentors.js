@@ -471,6 +471,33 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
         if (fetchErr || !assignment) return res.status(404).json({ error: 'Active assignment not found' });
 
+        // Count active assignments for target mentor
+        const { count: currentCount, error: countErr } = await supabase
+          .from('mentorship_assignments')
+          .select('id', { count: 'exact', head: true })
+          .eq('mentor_id', targetTid)
+          .eq('is_active', true);
+
+        if (countErr) return res.status(500).json({ error: countErr.message });
+
+        // Get target mentor's max_mentees
+        const { data: targetMentor, error: mentorErr } = await supabase
+          .from('users')
+          .select('max_mentees')
+          .eq('telegram_id', targetTid)
+          .single();
+
+        if (mentorErr || !targetMentor) {
+          return res.status(404).json({ error: 'Target mentor not found' });
+        }
+
+        const DEFAULT_MAX_MENTEES = parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
+        const maxMentees = targetMentor.max_mentees || DEFAULT_MAX_MENTEES;
+
+        if ((currentCount || 0) >= maxMentees) {
+          return res.status(400).json({ error: 'Target mentor has reached their maximum capacity.' });
+        }
+
         const { error: updateErr } = await supabase
           .from('mentorship_assignments')
           .update({ mentor_id: targetTid })

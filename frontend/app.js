@@ -2521,9 +2521,29 @@ async function loadTransferMentors(topicId = '') {
       return;
     }
 
+    // Check if any mentor has available capacity
+    const hasAvailableCapacity = others.some(m => {
+      const mentees = m.mentee_count || 0;
+      const max = m.user_settings?.max_mentees || 5;
+      return mentees < max;
+    });
+
+    if (topicId && !hasAvailableCapacity) {
+      select.innerHTML = '<option value="">No mentors with available capacity for this topic.</option>';
+      return;
+    }
+
     select.innerHTML = others.map(m => {
       const name = m.user_settings?.display_name || m.anonymous_id || `Mentor ${m.telegram_id}`;
-      return `<option value="${m.telegram_id}">${escapeHtml(name)}</option>`;
+      const mentees = m.mentee_count || 0;
+      const max = m.user_settings?.max_mentees || 5;
+      const isFull = mentees >= max;
+      
+      const disabledAttr = isFull ? 'disabled' : '';
+      const tooltipText = isFull ? ' - At capacity' : '';
+      const statusText = isFull ? ' <span style="color:var(--danger);font-size:0.7rem;">full</span>' : '';
+      
+      return `<option value="${m.telegram_id}" ${disabledAttr}>${escapeHtml(name)} <sup>${mentees}/${max}</sup>${statusText}${tooltipText}</option>`;
     }).join('');
   } catch (e) {
     if (select) select.innerHTML = '<option value="">Failed to load mentors</option>';
