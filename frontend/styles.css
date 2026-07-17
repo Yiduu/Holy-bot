@@ -2616,3 +2616,13 @@ textarea.form-control {
 .char-counter.danger {
   color: var(--danger);
 }
+
+.mentor-capacity {
+  font-size: 0.7rem;
+  color: var(--text3);
+  margin-left: 4px;
+}
+
+.mentor-capacity.full {
+  color: var(--danger);
+}
