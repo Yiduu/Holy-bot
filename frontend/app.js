@@ -2395,7 +2395,7 @@ async function loadMyMentees() {
             <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${user.telegram_id}')">${t('btn_message')}</button>
             <button class="btn btn-outline btn-sm flex-1" onclick="createSession(false, '${user.telegram_id}')">${t('btn_session')}</button>
             <!-- Transfer button: opens the Transfer Mentee modal -->
-            <button class="btn btn-outline btn-sm" style="flex:0 0 auto;" onclick="openTransferModal('${assignId}', '${user.telegram_id}', '${escapeHtml(displayName)}')">🔀 Transfer</button>
+            <button class="btn btn-outline btn-sm" style="flex:0 0 auto;" onclick="openTransferModal('${assignId}', '${user.telegram_id}', '${escapeHtml(displayName)}')">Transfer</button>
           </div>
           <div class="form-group mb-0">
             <textarea id="note-${user.telegram_id}" class="form-control text-sm" data-i18n="Private note about this mentee..." placeholder="${t('Private note about this mentee...')}" rows="2" onblur="saveMentorNote('${user.telegram_id}')"></textarea>
@@ -2422,7 +2422,7 @@ async function saveMentorNote(menteeId) {
 // ─── Transfer Mentee ──────────────────────────────────────────
 // Module-level state for the transfer modal
 let _transferAssignmentId = null;
-let _transferMenteeId     = null;
+let _transferMenteeId = null;
 
 /**
  * Opens the Transfer Mentee modal for the given assignment.
@@ -2435,7 +2435,7 @@ function openTransferModal(assignmentId, menteeId, menteeName) {
 
   // Store state so confirmTransfer() can read it
   _transferAssignmentId = assignmentId;
-  _transferMenteeId     = menteeId;
+  _transferMenteeId = menteeId;
 
   // Update the sub-label with the mentee's name
   const nameEl = $('transferMenteeName');
@@ -2455,7 +2455,7 @@ function closeTransferModal() {
   haptic('light');
   $('transferModal')?.classList.remove('open');
   _transferAssignmentId = null;
-  _transferMenteeId     = null;
+  _transferMenteeId = null;
 }
 
 /**
