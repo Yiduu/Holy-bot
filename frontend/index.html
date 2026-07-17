@@ -883,6 +883,32 @@
     </div>
   </div>
 
+  <!-- ── Modal: Transfer Mentee ────────────────────────────── -->
+  <div id="transferModal" class="modal-overlay" onclick="if(event.target===this)closeTransferModal()">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Transfer Mentee</div>
+
+      <!-- Mentee name sub-label -->
+      <p id="transferMenteeName" class="text-sm text-dim mb-16"
+        style="text-align:center; margin-bottom:16px;"></p>
+
+      <!-- Mentor dropdown -->
+      <div class="form-group">
+        <label class="form-label">Transfer to Mentor</label>
+        <select id="transferMentorSelect" class="form-control">
+          <option value="">Loading mentors…</option>
+        </select>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="flex gap-8 mt-16">
+        <button class="btn btn-ghost flex-1" onclick="closeTransferModal()">Cancel</button>
+        <button class="btn btn-primary flex-1" onclick="confirmTransfer()">Transfer</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Modal: Schedule Session ───────────────────────────── -->
   <div id="scheduleModal" class="modal-overlay">
     <div class="modal">

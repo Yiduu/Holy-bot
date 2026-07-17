@@ -2379,12 +2379,13 @@ async function loadMyMentees() {
     for (const m of mentees) {
       const { user, assigned_at, id: assignId } = m;
       const sessionCount = stats[user.telegram_id] || 0;
+      const displayName = user.user_settings?.display_name || user.anonymous_id;
 
       html += `
         <div class="card mb-12">
           <div class="flex justify-between items-start mb-8">
             <div>
-              <div class="font-bold" style="color:var(--gold)">${escapeHtml(user.anonymous_id)}</div>
+              <div class="font-bold" style="color:var(--gold)">${escapeHtml(displayName)}</div>
               <div class="text-xs text-dim">${t('Joined')} ${new Date(assigned_at).toLocaleDateString()}</div>
               <div class="text-xs text-dim">${t('Sessions:')} ${sessionCount}</div>
             </div>
@@ -2393,6 +2394,8 @@ async function loadMyMentees() {
           <div class="flex gap-8 mb-8">
             <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${user.telegram_id}')">${t('btn_message')}</button>
             <button class="btn btn-outline btn-sm flex-1" onclick="createSession(false, '${user.telegram_id}')">${t('btn_session')}</button>
+            <!-- Transfer button: opens the Transfer Mentee modal -->
+            <button class="btn btn-outline btn-sm" style="flex:0 0 auto;" onclick="openTransferModal('${assignId}', '${user.telegram_id}', '${escapeHtml(displayName)}')">🔀 Transfer</button>
           </div>
           <div class="form-group mb-0">
             <textarea id="note-${user.telegram_id}" class="form-control text-sm" data-i18n="Private note about this mentee..." placeholder="${t('Private note about this mentee...')}" rows="2" onblur="saveMentorNote('${user.telegram_id}')"></textarea>
@@ -2414,6 +2417,119 @@ async function saveMentorNote(menteeId) {
     await apiFetch('/api/mentors/notes', { method: 'POST', body: { mentee_id: menteeId, content } });
     haptic('light');
   } catch (e) { showToast(e.message, 'error'); }
+}
+
+// ─── Transfer Mentee ──────────────────────────────────────────
+// Module-level state for the transfer modal
+let _transferAssignmentId = null;
+let _transferMenteeId     = null;
+
+/**
+ * Opens the Transfer Mentee modal for the given assignment.
+ * @param {string} assignmentId  – the mentorship_assignments.id
+ * @param {string} menteeId      – the mentee's telegram_id (unused by the API, kept for future use)
+ * @param {string} menteeName    – the mentee's display name (shown in the modal)
+ */
+function openTransferModal(assignmentId, menteeId, menteeName) {
+  haptic('light');
+
+  // Store state so confirmTransfer() can read it
+  _transferAssignmentId = assignmentId;
+  _transferMenteeId     = menteeId;
+
+  // Update the sub-label with the mentee's name
+  const nameEl = $('transferMenteeName');
+  if (nameEl) nameEl.textContent = `Transferring: ${escapeHtml(menteeName)}`;
+
+  // Reset the dropdown while we load mentors
+  const select = $('transferMentorSelect');
+  if (select) select.innerHTML = '<option value="">Loading mentors…</option>';
+
+  // Show modal then load the mentor list
+  $('transferModal').classList.add('open');
+  loadTransferMentors();
+}
+
+/** Closes the Transfer Mentee modal and resets its state. */
+function closeTransferModal() {
+  haptic('light');
+  $('transferModal')?.classList.remove('open');
+  _transferAssignmentId = null;
+  _transferMenteeId     = null;
+}
+
+/**
+ * Fetches all mentors from GET /api/mentors and populates the dropdown,
+ * excluding the currently logged-in mentor (current user).
+ */
+async function loadTransferMentors() {
+  const select = $('transferMentorSelect');
+  if (!select) return;
+
+  try {
+    const mentors = await apiFetch('/api/mentors');
+    const currentId = String(currentUser?.telegram_id || '');
+
+    // Filter out the current mentor from the list
+    const others = (mentors || []).filter(
+      m => String(m.telegram_id) !== currentId
+    );
+
+    if (!others.length) {
+      select.innerHTML = '<option value="">No other mentors available</option>';
+      return;
+    }
+
+    select.innerHTML = others.map(m => {
+      const name = m.user_settings?.display_name || m.anonymous_id || `Mentor ${m.telegram_id}`;
+      return `<option value="${m.telegram_id}">${escapeHtml(name)}</option>`;
+    }).join('');
+  } catch (e) {
+    if (select) select.innerHTML = '<option value="">Failed to load mentors</option>';
+    showToast(e.message, 'error');
+  }
+}
+
+/**
+ * Confirms the transfer by calling POST /api/mentors/transfer with
+ * type='assignment', then refreshes the My Mentees list.
+ */
+async function confirmTransfer() {
+  haptic('medium');
+
+  const select = $('transferMentorSelect');
+  const target_mentor_id = select?.value;
+
+  if (!target_mentor_id) {
+    haptic('error');
+    showToast('Please select a mentor to transfer to.', 'error');
+    return;
+  }
+
+  if (!_transferAssignmentId) {
+    haptic('error');
+    showToast('Transfer failed: missing assignment ID.', 'error');
+    return;
+  }
+
+  try {
+    await apiFetch('/api/mentors/transfer', {
+      method: 'POST',
+      body: {
+        type: 'assignment',
+        id: _transferAssignmentId,
+        target_mentor_id
+      }
+    });
+
+    haptic('success');
+    showToast('Mentee transferred successfully! 🔀', 'success');
+    closeTransferModal();
+    loadMyMentees(); // Refresh the My Mentees list
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
 }
 
 async function endMentorship(assignId) {
