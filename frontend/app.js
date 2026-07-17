@@ -1157,16 +1157,21 @@ async function loadMentors() {
             <div class="mentor-meta">
               ${spec ? `<span class="mentor-badge badge-spec">${escapeHtml(spec)}</span>` : ''}
               <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentee')}s</span>
+              ${m.accepting_requests === false ? `<span class="mentor-badge" style="background:rgba(224,92,92,0.1);color:var(--danger);border:1px solid rgba(224,92,92,0.2);">Not Accepting</span>` : ''}
             </div>
             ${currentUser?.role === 'mentor' ? '' : (mentees >= max ? `
               <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed;background:var(--bg3);color:var(--text3);" title="${t('capacity_full_tooltip')}">
                 ${t('capacity_full')}
               </button>
+            ` : (m.accepting_requests === false ? `
+              <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed;background:var(--bg3);color:var(--text3);" title="This mentor is not accepting new requests at this time.">
+                ${t('btn_request')}
+              </button>
             ` : `
               <button class="btn btn-outline btn-sm" onclick="requestMentorship(${m.telegram_id}${topicIdParam})" ${!canRequest ? 'disabled' : ''}>
                 ${t('btn_request')}
               </button>
-            `)}
+            `))}
           </div>`;
       }).join('');
     }
@@ -2551,15 +2556,15 @@ async function loadTransferMentors(topicId = '') {
       return;
     }
 
-    // Check if any mentor has available capacity
-    const hasAvailableCapacity = others.some(m => {
+    // Check if any mentor is both accepting requests AND has available capacity
+    const hasAcceptingAvailable = others.some(m => {
       const mentees = m.mentee_count || 0;
       const max = m.user_settings?.max_mentees || 5;
-      return mentees < max;
+      return m.accepting_requests !== false && mentees < max;
     });
 
-    if (topicId && !hasAvailableCapacity) {
-      select.innerHTML = '<option value="">No mentors with available capacity for this topic.</option>';
+    if (topicId && !hasAcceptingAvailable) {
+      select.innerHTML = '<option value="">No accepting mentors available for this topic.</option>';
       return;
     }
 
@@ -2568,12 +2573,17 @@ async function loadTransferMentors(topicId = '') {
       const mentees = m.mentee_count || 0;
       const max = m.user_settings?.max_mentees || 5;
       const isFull = mentees >= max;
-      
-      const disabledAttr = isFull ? 'disabled' : '';
-      const tooltipText = isFull ? ' - At capacity' : '';
+      const isNotAccepting = m.accepting_requests === false;
+
+      const disabledAttr = (isFull || isNotAccepting) ? 'disabled' : '';
+
+      let suffixText = '';
+      if (isNotAccepting) suffixText += ' (Not Accepting)';
+      if (isFull)         suffixText += ' - At capacity';
+
       const statusText = isFull ? ' <span style="color:var(--danger);font-size:0.7rem;">full</span>' : '';
-      
-      return `<option value="${m.telegram_id}" ${disabledAttr}>${escapeHtml(name)} <sup>${mentees}/${max}</sup>${statusText}${tooltipText}</option>`;
+
+      return `<option value="${m.telegram_id}" ${disabledAttr}>${escapeHtml(name)}${suffixText} <sup>${mentees}/${max}</sup>${statusText}</option>`;
     }).join('');
   } catch (e) {
     if (select) select.innerHTML = '<option value="">Failed to load mentors</option>';

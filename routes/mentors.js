@@ -27,8 +27,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .from('users')
       .select('telegram_id, anonymous_id, sex, preferred_mentee_sex, accepting_requests, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
-      .eq('is_banned', false)
-      .eq('accepting_requests', true);
+      .eq('is_banned', false);
 
     // Visibility rules (applied when the mentee has a known sex):
     //   preferred_mentee_sex = 'M'          → only male mentees see this mentor
