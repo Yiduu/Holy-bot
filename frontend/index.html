@@ -890,10 +890,20 @@
       <div class="modal-title">Transfer Mentee</div>
 
       <!-- Mentee name sub-label -->
-      <p id="transferMenteeName" class="text-sm text-dim mb-16"
+      <p id="transferMenteeName" class="text-sm text-dim"
         style="text-align:center; margin-bottom:16px;"></p>
 
-      <!-- Mentor dropdown -->
+      <!-- Topic filter (shown only when the mentee has struggle topics) -->
+      <div id="transferTopicFilterGroup" class="form-group" style="display:none;">
+        <label class="form-label">Filter by Topic</label>
+        <select id="transferTopicSelect" class="form-control"
+          onchange="onTransferTopicChange(this.value)">
+          <option value="">All Topics (show all mentors)</option>
+        </select>
+        <div style="height:1px;background:var(--border-dim);margin:14px 0;"></div>
+      </div>
+
+      <!-- Target mentor dropdown -->
       <div class="form-group">
         <label class="form-label">Transfer to Mentor</label>
         <select id="transferMentorSelect" class="form-control">

@@ -383,6 +383,36 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     res.json(data || { content: '' });
   });
 
+  // GET /api/mentors/mentee-topics/:mentee_id
+  // Returns the struggle topics (user_topics) for one of the calling mentor's active mentees.
+  // Secured: only succeeds if an active assignment between this mentor and the mentee exists.
+  router.get('/mentee-topics/:mentee_id', requireAuth, async (req, res) => {
+    const { id: mentor_id } = req.telegramUser;
+    const mentee_id = req.params.mentee_id;
+
+    // Verify the mentee belongs to this mentor
+    const { data: assignment } = await supabase
+      .from('mentorship_assignments')
+      .select('id')
+      .eq('mentor_id', mentor_id)
+      .eq('user_id', mentee_id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (!assignment) {
+      return res.status(403).json({ error: 'No active assignment found for this mentee.' });
+    }
+
+    // Fetch the mentee's struggle topics
+    const { data, error } = await supabase
+      .from('user_topics')
+      .select('topic_id, topics(id, name)')
+      .eq('telegram_id', mentee_id);
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  });
+
   // POST /api/mentors/transfer – transfer mentorship request or active assignment
   router.post('/transfer', requireAuth, async (req, res) => {
     const { id: current_mentor_id } = req.telegramUser;

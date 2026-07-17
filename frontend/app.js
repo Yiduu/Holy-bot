@@ -2430,7 +2430,7 @@ let _transferMenteeId = null;
  * @param {string} menteeId      – the mentee's telegram_id (unused by the API, kept for future use)
  * @param {string} menteeName    – the mentee's display name (shown in the modal)
  */
-function openTransferModal(assignmentId, menteeId, menteeName) {
+async function openTransferModal(assignmentId, menteeId, menteeName) {
   haptic('light');
 
   // Store state so confirmTransfer() can read it
@@ -2441,12 +2441,45 @@ function openTransferModal(assignmentId, menteeId, menteeName) {
   const nameEl = $('transferMenteeName');
   if (nameEl) nameEl.textContent = `Transferring: ${escapeHtml(menteeName)}`;
 
-  // Reset the dropdown while we load mentors
+  // Reset filter dropdown
+  const topicSelect = $('transferTopicSelect');
+  if (topicSelect) {
+    topicSelect.innerHTML = '<option value="">All Topics (show all mentors)</option>';
+  }
+
+  // Hide the filter group until topics are loaded
+  const filterGroup = $('transferTopicFilterGroup');
+  if (filterGroup) {
+    filterGroup.style.display = 'none';
+  }
+
+  // Reset target mentor list
   const select = $('transferMentorSelect');
   if (select) select.innerHTML = '<option value="">Loading mentors…</option>';
 
-  // Show modal then load the mentor list
+  // Show modal
   $('transferModal').classList.add('open');
+
+  // Fetch mentee's struggle topics to populate the filter dropdown
+  try {
+    const topics = await apiFetch(`/api/mentors/mentee-topics/${menteeId}`);
+    if (topics && topics.length > 0) {
+      if (topicSelect) {
+        topicSelect.innerHTML = '<option value="">All Topics (show all mentors)</option>' +
+          topics.map(t => {
+            const topic = t.topics;
+            return `<option value="${topic.id}">${escapeHtml(topic.name)}</option>`;
+          }).join('');
+      }
+      if (filterGroup) {
+        filterGroup.style.display = 'block';
+      }
+    }
+  } catch (e) {
+    console.error('Failed to fetch mentee topics:', e);
+  }
+
+  // Initially load all mentors (no topic filter selected)
   loadTransferMentors();
 }
 
@@ -2456,18 +2489,26 @@ function closeTransferModal() {
   $('transferModal')?.classList.remove('open');
   _transferAssignmentId = null;
   _transferMenteeId = null;
+  const topicSelect = $('transferTopicSelect');
+  if (topicSelect) topicSelect.value = '';
 }
 
 /**
  * Fetches all mentors from GET /api/mentors and populates the dropdown,
  * excluding the currently logged-in mentor (current user).
+ * Supports filtering by topic_id.
+ * @param {string} topicId - Optional topic ID to filter mentors by.
  */
-async function loadTransferMentors() {
+async function loadTransferMentors(topicId = '') {
   const select = $('transferMentorSelect');
   if (!select) return;
 
   try {
-    const mentors = await apiFetch('/api/mentors');
+    let url = '/api/mentors';
+    if (topicId) {
+      url += `?topic_id=${topicId}`;
+    }
+    const mentors = await apiFetch(url);
     const currentId = String(currentUser?.telegram_id || '');
 
     // Filter out the current mentor from the list
@@ -2476,7 +2517,7 @@ async function loadTransferMentors() {
     );
 
     if (!others.length) {
-      select.innerHTML = '<option value="">No other mentors available</option>';
+      select.innerHTML = `<option value="">${topicId ? 'No mentors available for this topic' : 'No other mentors available'}</option>`;
       return;
     }
 
@@ -2488,6 +2529,17 @@ async function loadTransferMentors() {
     if (select) select.innerHTML = '<option value="">Failed to load mentors</option>';
     showToast(e.message, 'error');
   }
+}
+
+/**
+ * Event handler triggered when the topic filter dropdown value changes.
+ * @param {string} topicId - The selected topic ID or empty string.
+ */
+async function onTransferTopicChange(topicId) {
+  haptic('light');
+  const select = $('transferMentorSelect');
+  if (select) select.innerHTML = '<option value="">Loading mentors…</option>';
+  await loadTransferMentors(topicId);
 }
 
 /**
