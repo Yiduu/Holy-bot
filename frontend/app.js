@@ -99,10 +99,16 @@ function buildMessageTree(messages) {
     map.set(msg.id, { ...msg, replies: [] });
   });
   messages.forEach(msg => {
-    if (msg.parent_id && map.has(msg.parent_id)) {
-      map.get(msg.parent_id).replies.push(map.get(msg.id));
+    const parentMsg = msg.parent_id ? map.get(msg.parent_id) : null;
+    if (parentMsg && !parentMsg.is_deleted) {
+      parentMsg.replies.push(map.get(msg.id));
     } else {
-      roots.push(map.get(msg.id));
+      const mappedMsg = map.get(msg.id);
+      if (mappedMsg) {
+        // Fallback for missing/deleted parent messages: treat as root
+        mappedMsg.parent_id = null;
+        roots.push(mappedMsg);
+      }
     }
   });
   roots.forEach(root => {
@@ -1922,6 +1928,7 @@ async function leaveCurrentSession() {
 
 // ─── Chat ─────────────────────────────────────────────────────
 window.chatState = {};
+window.replyToId = null;
 
 async function loadChat() {
   try {
@@ -2015,7 +2022,45 @@ async function loadMessages(with_id) {
     const messages = await apiFetch(`/api/messages/${with_id}`);
     const messageTree = buildMessageTree(messages);
     const container = $('chatMessages');
-    container.innerHTML = renderThread(messageTree);
+
+    let html = '';
+    try {
+      html = renderThread(messageTree);
+    } catch (renderError) {
+      console.error('[loadMessages] Render Thread error, falling back to flat list:', renderError);
+      
+      // Fallback: render simple list view in chronological order (no parent/child replies)
+      const sortedMessages = [...messages].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      let lastGroupHeader = '';
+      
+      html = sortedMessages.map(msg => {
+        if (msg.is_deleted) return '';
+        
+        const groupHeader = getDateGroupHeader(msg.created_at);
+        let headerHtml = '';
+        if (groupHeader !== lastGroupHeader) {
+          headerHtml = `<div class="chat-date-divider"><span>${escapeHtml(groupHeader)}</span></div>`;
+          lastGroupHeader = groupHeader;
+        }
+
+        const isSent = msg.from_id === currentUser?.telegram_id;
+        const editedMark = msg.edited_at ? '<span class="msg-edited">edited</span>' : '';
+        
+        return `
+          ${headerHtml}
+          <div class="message-thread ${isSent ? 'thread-sent' : 'thread-received'}" data-msg-id="${msg.id}">
+            <div class="message-bubble ${isSent ? 'sent' : 'received'}">
+              <div class="message-text">${escapeHtml(msg.content)}${editedMark}</div>
+              <div class="message-footer">
+                <span class="message-time">${formatTime(msg.created_at)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    container.innerHTML = html;
     container.scrollTop = container.scrollHeight;
     // The GET endpoint marks messages as read on the backend, so refresh the
     // badge immediately — no page reload required.
@@ -2120,6 +2165,7 @@ async function sendMessage() {
     created_at: new Date().toISOString(),
     is_sending: true,
     is_deleted: false,
+    parent_id: window.replyToId || null,
     replies: []
   };
 
@@ -2134,11 +2180,18 @@ async function sendMessage() {
   let lastError = null;
   let msg = null;
 
+  // Capture replyToId in case it changes before async operations finish
+  const replyParentId = window.replyToId;
+
   while (attempts < maxAttempts) {
     try {
       msg = await apiFetch('/api/messages', {
         method: 'POST',
-        body: { to_id: window.chatState.with, content: originalContent }
+        body: { 
+          to_id: window.chatState.with, 
+          content: originalContent,
+          parent_id: replyParentId || undefined
+        }
       });
       lastError = null;
       break;
@@ -2168,6 +2221,8 @@ async function sendMessage() {
         tempEl.outerHTML = renderThread([msg], false);
       }
     }
+    // Clear reply state
+    cancelReply();
   } else {
     // On failure, mark the temp message as failed (add a "Retry" button)
     haptic('error');
@@ -2213,6 +2268,21 @@ function retrySendMessage(tempId) {
   if (input) {
     input.value = content;
     sendMessage();
+  }
+}
+
+function cancelReply() {
+  window.replyToId = null;
+  const indicator = document.getElementById('replyIndicator');
+  if (indicator) indicator.classList.add('hidden');
+  const replyText = document.getElementById('replyText');
+  if (replyText) replyText.textContent = 'Replying to...';
+}
+
+function resetChatView() {
+  cancelReply();
+  if (window.chatState?.with) {
+    loadMessages(window.chatState.with);
   }
 }
 
