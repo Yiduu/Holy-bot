@@ -2020,47 +2020,22 @@ function openChat(partnerId) {
 async function loadMessages(with_id) {
   try {
     const messages = await apiFetch(`/api/messages/${with_id}`);
-    const messageTree = buildMessageTree(messages);
     const container = $('chatMessages');
 
-    let html = '';
     try {
-      html = renderThread(messageTree);
+      const messageTree = buildMessageTree(messages);
+      container.innerHTML = renderThread(messageTree);
     } catch (renderError) {
-      console.error('[loadMessages] Render Thread error, falling back to flat list:', renderError);
-      
-      // Fallback: render simple list view in chronological order (no parent/child replies)
-      const sortedMessages = [...messages].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-      let lastGroupHeader = '';
-      
-      html = sortedMessages.map(msg => {
-        if (msg.is_deleted) return '';
-        
-        const groupHeader = getDateGroupHeader(msg.created_at);
-        let headerHtml = '';
-        if (groupHeader !== lastGroupHeader) {
-          headerHtml = `<div class="chat-date-divider"><span>${escapeHtml(groupHeader)}</span></div>`;
-          lastGroupHeader = groupHeader;
-        }
-
-        const isSent = msg.from_id === currentUser?.telegram_id;
-        const editedMark = msg.edited_at ? '<span class="msg-edited">edited</span>' : '';
-        
-        return `
-          ${headerHtml}
-          <div class="message-thread ${isSent ? 'thread-sent' : 'thread-received'}" data-msg-id="${msg.id}">
-            <div class="message-bubble ${isSent ? 'sent' : 'received'}">
-              <div class="message-text">${escapeHtml(msg.content)}${editedMark}</div>
-              <div class="message-footer">
-                <span class="message-time">${formatTime(msg.created_at)}</span>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
+      console.error('[loadMessages] Render error:', renderError);
+      // Fallback: show messages as a simple list without threading
+      container.innerHTML = messages.map(m => `
+        <div class="message-bubble ${m.from_id === currentUser?.telegram_id ? 'sent' : 'received'}">
+          <div class="message-text">${escapeHtml(m.content)}</div>
+          <div class="message-time">${formatTime(m.created_at)}</div>
+        </div>
+      `).join('');
     }
 
-    container.innerHTML = html;
     container.scrollTop = container.scrollHeight;
     // The GET endpoint marks messages as read on the backend, so refresh the
     // badge immediately — no page reload required.
@@ -2273,17 +2248,19 @@ function retrySendMessage(tempId) {
 
 function cancelReply() {
   window.replyToId = null;
-  const indicator = document.getElementById('replyIndicator');
-  if (indicator) indicator.classList.add('hidden');
+  document.getElementById('replyIndicator')?.classList.add('hidden');
   const replyText = document.getElementById('replyText');
-  if (replyText) replyText.textContent = 'Replying to...';
+  if (replyText) replyText.textContent = '';
 }
 
 function resetChatView() {
-  cancelReply();
-  if (window.chatState?.with) {
-    loadMessages(window.chatState.with);
-  }
+  if (!window.chatState?.with) return;
+  window.replyToId = null;
+  document.getElementById('replyIndicator')?.classList.add('hidden');
+  const replyText = document.getElementById('replyText');
+  if (replyText) replyText.textContent = '';
+  loadMessages(window.chatState.with);
+  showToast('Chat view reset', 'info');
 }
 
 function handleChatTyping() {
