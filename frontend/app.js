@@ -491,7 +491,10 @@ function startChatPolling() {
   if (chatPollingInterval) return;
   chatPollingInterval = setInterval(() => {
     if (currentPage === 'chat' && window.chatState?.with) {
-      loadMessages(window.chatState.with);
+      // Only poll if socket is not connected
+      if (!socket?.connected) {
+        loadMessages(window.chatState.with);
+      }
     }
   }, 15000);
 }
@@ -559,6 +562,9 @@ function connectSocket() {
     // Re-auth on reconnect
     const userId = String(currentUser?.telegram_id || getTelegramData().user?.id || '');
     socket.emit('auth', userId);
+    if (currentPage === 'chat' && window.chatState?.with) {
+      loadMessages(window.chatState.with);
+    }
   });
 
   socket.on('new_message', (msg) => {
@@ -1996,7 +2002,60 @@ async function loadMessages(with_id) {
     // The GET endpoint marks messages as read on the backend, so refresh the
     // badge immediately — no page reload required.
     updateMessageBadge();
-  } catch (e) { console.error(e); }
+  } catch (e) {
+    console.error(e);
+    throw e;
+  }
+}
+
+// ─── Load messages with retry (new function, does not replace loadMessages) ──
+async function loadMessagesWithRetry(with_id, retryCount = 0) {
+  const container = document.getElementById('chatMessages');
+  if (!container) return;
+
+  try {
+    // Call the existing loadMessages function
+    await loadMessages(with_id);
+    window._chatRetryCount = 0; // reset on success
+  } catch (e) {
+    console.error('[loadMessages] Error:', e);
+
+    // If it's a 403 (no active mentorship), show a friendly message
+    if (e.message.includes('403') || e.message.includes('No active mentorship')) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <span>No active mentorship with this user.</span>
+          <button class="btn btn-outline btn-sm mt-8" onclick="navigate('mentors')">Find a Mentor</button>
+        </div>
+      `;
+      return;
+    }
+
+    // Retry up to 3 times with exponential backoff
+    if (retryCount < 3) {
+      const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+      container.innerHTML = `<div class="loading-spinner" style="margin:40px auto"></div><p style="text-align:center;color:var(--text3);">Retrying (${retryCount + 1}/3)...</p>`;
+      setTimeout(() => loadMessagesWithRetry(with_id, retryCount + 1), delay);
+      return;
+    }
+
+    // After retries, show error
+    container.innerHTML = `
+      <div class="empty-state">
+        <span>Failed to load messages. Please try again.</span>
+        <button class="btn btn-outline btn-sm mt-8" onclick="loadMessagesWithRetry('${with_id}')">Retry</button>
+      </div>
+    `;
+  }
+}
+
+function refreshChat() {
+  haptic('light');
+  if (window.chatState?.with) {
+    loadMessagesWithRetry(window.chatState.with);
+  } else {
+    loadChat();
+  }
 }
 
 
