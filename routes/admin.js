@@ -314,10 +314,22 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       }
     }
 
-    const { data: assignments, count, error } = await query
+    const { data: assignmentsRaw, count, error } = await query
       .order('assigned_at', { ascending: false });
 
     if (error) return res.status(500).json({ error: error.message });
+
+    // Dedupe: a mentor/mentee pair can have multiple assignment rows
+    // (e.g. ended + re-matched), but they share the same message thread,
+    // so only keep the most recent assignment per pair.
+    const seen = new Set();
+    const assignments = (assignmentsRaw || []).filter(a => {
+      const key = `${a.mentor_id}_${a.user_id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     if (!assignments || assignments.length === 0) {
       return res.json({ conversations: [], total: 0, page, pages: 0 });
     }
