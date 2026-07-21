@@ -41,12 +41,13 @@ module.exports = function userRoutes(supabase, requireAuth) {
     const { id } = req.telegramUser;
     const [settingsRes, userRes] = await Promise.all([
       supabase.from('user_settings').select('*').eq('telegram_id', id).single(),
-      supabase.from('users').select('accepting_requests').eq('telegram_id', id).single()
+      supabase.from('users').select('accepting_requests, preferred_mentee_sex').eq('telegram_id', id).single()
     ]);
     if (settingsRes.error) return res.status(500).json({ error: settingsRes.error.message });
     const merged = {
       ...settingsRes.data,
-      accepting_requests: userRes.data ? userRes.data.accepting_requests !== false : true
+      accepting_requests: userRes.data ? userRes.data.accepting_requests !== false : true,
+      preferred_mentee_sex: userRes.data?.preferred_mentee_sex || 'prefer_not'
     };
     res.json(merged);
   });
@@ -54,7 +55,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
   // PATCH /api/users/settings
   router.patch('/settings', requireAuth, async (req, res) => {
     const { id } = req.telegramUser;
-    const allowed = ['display_name','timezone','notify_messages','notify_sessions','notify_daily_verse',
+    const allowed = ['display_name','notify_messages','notify_sessions','notify_daily_verse',
       'availability_start','availability_end','max_mentees','bio','specialization'];
     const updates = {};
     for (const key of allowed) {
@@ -72,6 +73,16 @@ module.exports = function userRoutes(supabase, requireAuth) {
       );
     }
 
+    if (req.body.preferred_mentee_sex !== undefined) {
+      const valid = ['M', 'F', 'prefer_not'];
+      if (!valid.includes(req.body.preferred_mentee_sex)) {
+        return res.status(400).json({ error: 'Invalid preferred_mentee_sex value' });
+      }
+      promises.push(
+        supabase.from('users').update({ preferred_mentee_sex: req.body.preferred_mentee_sex }).eq('telegram_id', id)
+      );
+    }
+
     const results = await Promise.all(promises);
     const settingsResult = results[0];
     if (settingsResult.error) return res.status(500).json({ error: settingsResult.error.message });
@@ -80,7 +91,10 @@ module.exports = function userRoutes(supabase, requireAuth) {
       ...settingsResult.data,
       accepting_requests: req.body.accepting_requests !== undefined 
         ? req.body.accepting_requests 
-        : (await supabase.from('users').select('accepting_requests').eq('telegram_id', id).single()).data?.accepting_requests !== false
+        : (await supabase.from('users').select('accepting_requests').eq('telegram_id', id).single()).data?.accepting_requests !== false,
+      preferred_mentee_sex: req.body.preferred_mentee_sex !== undefined
+        ? req.body.preferred_mentee_sex
+        : (await supabase.from('users').select('preferred_mentee_sex').eq('telegram_id', id).single()).data?.preferred_mentee_sex || 'prefer_not'
     };
     res.json(merged);
   });

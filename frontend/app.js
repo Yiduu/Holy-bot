@@ -69,7 +69,7 @@ function timeAgo(dateStr) {
 }
 
 function formatTime(dateStr) {
-  const tz = currentUser?.user_settings?.timezone || 'UTC';
+  const tz = 'Africa/Addis_Ababa';
   try {
     return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: tz });
   } catch (e) {
@@ -78,8 +78,7 @@ function formatTime(dateStr) {
 }
 
 function formatDateTime(dateStr) {
-  let tz = currentUser?.user_settings?.timezone || 'Africa/Addis_Ababa';
-  if (!tz || tz === 'UTC') tz = 'Africa/Addis_Ababa';
+  const tz = 'Africa/Addis_Ababa';
   try {
     return new Date(dateStr).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', timeZone: tz });
   } catch (e) {
@@ -2385,7 +2384,6 @@ async function loadSettings() {
   try {
     const s = await apiFetch('/api/users/settings');
     $('settingDisplayName').value = s.display_name || '';
-    $('settingTimezone').value = s.timezone || 'UTC';
     $('toggleMessages').classList.toggle('on', s.notify_messages !== false);
     $('toggleSessions').classList.toggle('on', s.notify_sessions !== false);
     $('toggleVerse').classList.toggle('on', s.notify_daily_verse !== false);
@@ -2395,7 +2393,8 @@ async function loadSettings() {
       $('settingBio').value = s.bio || '';
       $('settingSpecialization').value = s.specialization || '';
       $('settingMaxMentees').value = s.max_mentees || 5;
-      
+      $('settingMenteeSex').value = s.preferred_mentee_sex || 'prefer_not';
+
       const acceptToggle = $('toggleAcceptingRequests');
       if (acceptToggle) {
         acceptToggle.classList.toggle('on', s.accepting_requests !== false);
@@ -2411,7 +2410,6 @@ async function saveSettings() {
   haptic('medium');
   const body = {
     display_name: $('settingDisplayName').value,
-    timezone: $('settingTimezone').value,
     notify_messages: $('toggleMessages').classList.contains('on'),
     notify_sessions: $('toggleSessions').classList.contains('on'),
     notify_daily_verse: $('toggleVerse').classList.contains('on'),
@@ -2421,6 +2419,7 @@ async function saveSettings() {
   };
   if (currentUser?.role === 'mentor') {
     body.accepting_requests = $('toggleAcceptingRequests')?.classList.contains('on');
+    body.preferred_mentee_sex = $('settingMenteeSex')?.value;
   }
   try {
     await apiFetch('/api/users/settings', { method: 'PATCH', body });
