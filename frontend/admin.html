@@ -3007,7 +3007,17 @@
                     return;
                 }
 
-                const msgsHTML = d.messages.map(m => {
+                // ✅ Deduplicate messages by ID (keep only the first occurrence)
+                const uniqueMessages = [];
+                const seenIds = new Set();
+                for (const m of d.messages) {
+                    if (!seenIds.has(m.id)) {
+                        seenIds.add(m.id);
+                        uniqueMessages.push(m);
+                    }
+                }
+
+                const msgsHTML = uniqueMessages.map(m => {
                     const isMentor = String(m.from_id) === String(currentChatMentorId);
                     const senderRole = isMentor ? 'Mentor' : 'Mentee';
                     const roleClass = isMentor ? 'mentor' : 'mentee';
