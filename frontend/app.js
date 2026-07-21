@@ -224,9 +224,13 @@ function renderThread(messages, isRoot = true) {
   return html;
 }
 
-function appendMessageToChat(msg) {
+function addMessageToChat(msg) {
   const container = $('chatMessages');
   if (!container) return;
+
+  // Check if already exists (by ID)
+  const existing = container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
+  if (existing) return;
 
   const html = renderThread([msg], false);
 
@@ -240,6 +244,16 @@ function appendMessageToChat(msg) {
         parentThread.appendChild(repliesContainer);
       }
       repliesContainer.insertAdjacentHTML('beforeend', html);
+
+      // If temporary sending message, style the bubble
+      if (msg.is_sending) {
+        const tempEl = repliesContainer.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
+        if (tempEl) {
+          const bubble = tempEl.querySelector('.message-bubble');
+          if (bubble) bubble.classList.add('sending');
+        }
+      }
+
       container.scrollTop = container.scrollHeight;
       return;
     }
@@ -256,6 +270,16 @@ function appendMessageToChat(msg) {
   finalHtml += html;
 
   container.insertAdjacentHTML('beforeend', finalHtml);
+
+  // If temporary sending message, style the bubble
+  if (msg.is_sending) {
+    const tempEl = container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
+    if (tempEl) {
+      const bubble = tempEl.querySelector('.message-bubble');
+      if (bubble) bubble.classList.add('sending');
+    }
+  }
+
   container.scrollTop = container.scrollHeight;
 }
 
@@ -339,7 +363,7 @@ async function sendReply(parentId) {
         parent_id: parentId
       }
     });
-    appendMessageToChat(msg);
+    addMessageToChat(msg);
     haptic('light');
   } catch (e) {
     haptic('error');
@@ -569,12 +593,9 @@ function connectSocket() {
 
   socket.on('new_message', (msg) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(msg.from_id)) {
-      const existing = document.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
-      if (!existing) {
-        appendMessageToChat(msg);
-        // Mark as read silently
-        apiFetch(`/api/messages/${msg.from_id}`).then(() => updateMessageBadge()).catch(() => { });
-      }
+      addMessageToChat(msg);
+      // Mark as read silently
+      apiFetch(`/api/messages/${msg.from_id}`).then(() => updateMessageBadge()).catch(() => { });
     } else {
       updateMessageBadge();
       showToast('💬 New message received');
@@ -666,10 +687,7 @@ function connectSocket() {
   // Multi-device sync: fired on the sender's OTHER devices/tabs when they send
   socket.on('message_sent', (msg) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(msg.to_id)) {
-      const existing = document.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
-      if (!existing) {
-        appendMessageToChat(msg);
-      }
+      addMessageToChat(msg);
     }
   });
 }
@@ -2052,7 +2070,7 @@ async function loadMessagesWithRetry(with_id, retryCount = 0) {
 function refreshChat() {
   haptic('light');
   if (window.chatState?.with) {
-    loadMessagesWithRetry(window.chatState.with);
+    loadMessages(window.chatState.with);
   } else {
     loadChat();
   }
@@ -2090,17 +2108,38 @@ async function sendMessage() {
   if (sendBtn) sendBtn.disabled = true;
   if (sendBtn) sendBtn.classList.add('sending');
 
+  // Generate temporary ID
+  const tempId = 'temp_' + Date.now();
+
+  // Create temporary message object
+  const tempMsg = {
+    id: tempId,
+    from_id: currentUser?.telegram_id,
+    to_id: window.chatState.with,
+    content: originalContent,
+    created_at: new Date().toISOString(),
+    is_sending: true,
+    is_deleted: false,
+    replies: []
+  };
+
+  // Call addMessageToChat(tempMsg)
+  addMessageToChat(tempMsg);
+
+  // Disable the input field
+  if (input) input.disabled = true;
+
   let attempts = 0;
   const maxAttempts = 3;
   let lastError = null;
+  let msg = null;
 
   while (attempts < maxAttempts) {
     try {
-      const msg = await apiFetch('/api/messages', {
+      msg = await apiFetch('/api/messages', {
         method: 'POST',
         body: { to_id: window.chatState.with, content: originalContent }
       });
-      // ✅ Do NOT append locally – wait for socket 'message_sent' (or polling)
       lastError = null;
       break;
     } catch (e) {
@@ -2113,14 +2152,67 @@ async function sendMessage() {
     }
   }
 
+  // Re-enable input and button
+  if (input) input.disabled = false;
   if (sendBtn) { sendBtn.disabled = false; sendBtn.classList.remove('sending'); }
 
-  if (lastError && attempts === maxAttempts) {
+  if (!lastError && msg) {
+    // On success, replace the temp element with the real message
+    const container = document.getElementById('chatMessages');
+    if (container) {
+      const existingReal = container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
+      const tempEl = container.querySelector(`.message-thread[data-msg-id="${tempId}"]`);
+      if (existingReal) {
+        tempEl?.remove();
+      } else if (tempEl) {
+        tempEl.outerHTML = renderThread([msg], false);
+      }
+    }
+  } else {
+    // On failure, mark the temp message as failed (add a "Retry" button)
     haptic('error');
     showToast(t('msg_send_failed'), 'error');
-    input.value = originalContent;
-    input.focus();
-    handleChatTyping();
+
+    const container = document.getElementById('chatMessages');
+    if (container) {
+      const tempEl = container.querySelector(`.message-thread[data-msg-id="${tempId}"]`);
+      if (tempEl) {
+        const bubble = tempEl.querySelector('.message-bubble');
+        if (bubble) {
+          bubble.classList.remove('sending');
+          bubble.classList.add('failed');
+          // Add retry button if not already present
+          if (!bubble.querySelector('.retry-btn')) {
+            bubble.insertAdjacentHTML('beforeend', `
+              <div class="failed-status" style="margin-top: 4px; display: flex; align-items: center; justify-content: flex-end; gap: 4px;">
+                <span style="font-size: 0.75rem; color: var(--danger);">Failed</span>
+                <button class="btn btn-danger btn-xs btn-outline retry-btn" onclick="retrySendMessage('${tempId}')" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--danger);">Retry</button>
+              </div>
+            `);
+          }
+        }
+      }
+    }
+  }
+}
+
+function retrySendMessage(tempId) {
+  const container = document.getElementById('chatMessages');
+  if (!container) return;
+
+  const tempEl = container.querySelector(`.message-thread[data-msg-id="${tempId}"]`);
+  if (!tempEl) return;
+
+  const textEl = tempEl.querySelector('.message-text');
+  if (!textEl) return;
+
+  const content = textEl.textContent.trim();
+  tempEl.remove();
+
+  const input = document.getElementById('chatInput');
+  if (input) {
+    input.value = content;
+    sendMessage();
   }
 }
 

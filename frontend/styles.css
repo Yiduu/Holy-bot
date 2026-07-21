@@ -2626,3 +2626,60 @@ textarea.form-control {
 .mentor-capacity.full {
   color: var(--danger);
 }
+
+/* ─── Optimistic Sending & Failed Message Styles ────────────────── */
+.message-bubble.sending {
+  opacity: 0.7;
+  position: relative;
+}
+
+.message-bubble.sending::after {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  border-top-color: var(--text);
+  border-radius: 50%;
+  animation: spin-sending 0.6s linear infinite;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+@keyframes spin-sending {
+  to { transform: rotate(360deg); }
+}
+
+.message-bubble.failed {
+  border: 1.5px solid var(--danger) !important;
+  background: rgba(220, 38, 38, 0.1) !important;
+}
+
+.failed-status {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.failed-status span {
+  font-size: 0.75rem;
+  color: var(--danger);
+}
+
+.retry-btn {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.retry-btn:hover {
+  background: var(--danger);
+  color: #fff;
+}
