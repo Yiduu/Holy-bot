@@ -71,10 +71,12 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
       .from('messages')
       .select('*')
       .or(`and(from_id.eq.${my_id},to_id.eq.${other_id}),and(from_id.eq.${other_id},to_id.eq.${my_id})`)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(100);
 
     if (error) return res.status(500).json({ error: error.message });
+
+    const ordered = (data || []).slice().reverse();
 
     // Mark as read and update read_at
     try {
@@ -88,7 +90,7 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
       console.error('Error marking messages as read:', e);
     }
 
-    res.json(data || []);
+    res.json(ordered);
   });
 
   // POST /api/messages – send message
