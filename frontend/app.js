@@ -2561,37 +2561,38 @@ async function loadUserTickets() {
 
     if (!tickets || tickets.length === 0) {
       container.innerHTML = `
-        <div class="empty-state card" style="text-align:center;padding:30px 15px">
-          <div style="font-size:2.2rem;margin-bottom:8px">🎫</div>
-          <div class="font-bold text-sm mb-4">${t('No tickets found')}</div>
-          <p class="text-xs text-dim mb-12">You have not submitted any support tickets yet.</p>
-          <button class="btn btn-primary btn-sm" onclick="toggleNewTicketModal(true)">Create Ticket</button>
+        <div class="empty-state card" style="text-align:center;padding:40px 20px;border-radius:18px;background:linear-gradient(135deg, rgba(28,32,48,0.5), rgba(20,23,32,0.7));border:1px dashed var(--border)">
+          <div style="font-size:2.6rem;margin-bottom:10px">🎫</div>
+          <div class="font-bold text-base mb-4" style="color:var(--text)">${t('No tickets found')}</div>
+          <p class="text-xs text-dim mb-16" style="max-width:260px;margin-left:auto;margin-right:auto">You have not submitted any support tickets yet. Need help? Create a ticket anytime.</p>
+          <button class="ticket-submit-btn" style="max-width:180px;margin:0 auto" onclick="toggleNewTicketModal(true)">
+            <span>+ Create Ticket</span>
+          </button>
         </div>`;
       return;
     }
 
     container.innerHTML = tickets.map(t => {
-      let statusChipClass = 'chip-gold';
-      if (t.status === 'in_progress') statusChipClass = 'chip-blue';
-      else if (t.status === 'resolved') statusChipClass = 'chip-green';
-      else if (t.status === 'closed') statusChipClass = 'chip-gray';
-
+      const status = t.status || 'open';
       const replyCount = t.reply_count || 0;
       const previewText = t.last_reply_preview ? escapeHtml(t.last_reply_preview) : escapeHtml(t.description);
       const lastSenderLabel = t.last_reply_sender === 'admin' ? '🛡️ Admin:' : (t.last_reply_sender === 'user' ? ' You:' : '');
 
       return `
-        <div class="card clickable-card" onclick="openTicketDetail('${t.id}')" style="cursor:pointer;position:relative">
+        <div class="ticket-card-premium status-${status}" onclick="openTicketDetail('${t.id}')">
           <div class="flex justify-between items-center mb-8">
-            <h4 class="font-bold text-sm" style="margin:0;color:var(--text)">${escapeHtml(t.subject)}</h4>
-            <span class="chip ${statusChipClass}">${t.status}</span>
+            <h4 class="font-bold text-sm" style="margin:0;color:var(--text);font-size:0.95rem">${escapeHtml(t.subject)}</h4>
+            <span class="status-pill status-pill-${status}">
+              <span class="status-dot"></span>
+              ${status.replace('_', ' ')}
+            </span>
           </div>
-          <p class="text-xs text-dim mb-8" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">
-            <strong>${lastSenderLabel}</strong> ${previewText}
+          <p class="text-xs text-dim mb-12" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45">
+            <strong style="color:var(--text2)">${lastSenderLabel}</strong> ${previewText}
           </p>
-          <div class="flex justify-between items-center text-xs text-dim mt-8" style="border-top:1px solid var(--border);padding-top:8px">
-            <span>Submitted ${timeAgo(t.created_at)}</span>
-            <span>💬 ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
+          <div class="flex justify-between items-center text-xs text-dim pt-8" style="border-top:1px solid rgba(255,255,255,0.06)">
+            <span style="font-size:0.75rem">📅 Submitted ${timeAgo(t.created_at)}</span>
+            <span class="chip" style="background:rgba(201,168,76,0.1);color:var(--gold-light);font-size:0.72rem;padding:2px 8px;border-radius:12px;border:1px solid rgba(201,168,76,0.2)">💬 ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
           </div>
         </div>`;
     }).join('');
@@ -2645,14 +2646,10 @@ async function loadTicketDetail(ticketId) {
     $('ticketDetailDate').textContent = `Submitted: ${formatDateTime(ticket.created_at)}`;
     $('ticketDetailDesc').textContent = ticket.description;
 
-    let statusChipClass = 'chip-gold';
-    if (ticket.status === 'in_progress') statusChipClass = 'chip-blue';
-    else if (ticket.status === 'resolved') statusChipClass = 'chip-green';
-    else if (ticket.status === 'closed') statusChipClass = 'chip-gray';
-
+    const status = ticket.status || 'open';
     const statusEl = $('ticketDetailStatus');
-    statusEl.className = `chip ${statusChipClass}`;
-    statusEl.textContent = ticket.status;
+    statusEl.className = `status-pill status-pill-${status}`;
+    statusEl.innerHTML = `<span class="status-dot"></span>${status.replace('_', ' ')}`;
 
     // Handle closed state input locking
     const replyTextarea = $('userTicketReplyText');
@@ -2660,53 +2657,49 @@ async function loadTicketDetail(ticketId) {
 
     if (ticket.status === 'closed') {
       replyTextarea.disabled = true;
-      replyTextarea.placeholder = 'This ticket is closed.';
+      replyTextarea.placeholder = 'This ticket has been marked as closed.';
       replyBtn.disabled = true;
       replyBtn.style.opacity = '0.5';
     } else {
       replyTextarea.disabled = false;
-      replyTextarea.placeholder = 'Write a follow-up reply...';
+      replyTextarea.placeholder = 'Write a follow-up message...';
       replyBtn.disabled = false;
       replyBtn.style.opacity = '1';
     }
 
     // Render original ticket message + reply thread
     let html = `
-      <div class="msg-bubble msg-user" style="background:var(--bg3);border-radius:12px;padding:12px;margin-bottom:8px;border-left:3px solid var(--gold)">
-        <div class="flex justify-between items-center mb-4 text-xs font-bold" style="color:var(--gold)">
-          <span>👤 You (Original Request)</span>
-          <span>${formatDateTime(ticket.created_at)}</span>
+      <div class="ticket-bubble ticket-bubble-user" style="align-self:flex-start;width:100%;max-width:100%;margin-bottom:12px;background:linear-gradient(135deg, rgba(201,168,76,0.12) 0%, rgba(20,23,32,0.85) 100%);border:1px solid rgba(201,168,76,0.25)">
+        <div class="ticket-bubble-hdr">
+          <span style="display:flex;align-items:center;gap:4px;color:var(--gold-light)">👤 <strong>You</strong> (Original Issue)</span>
+          <span style="font-weight:normal;color:var(--text3);font-size:0.7rem">${formatDateTime(ticket.created_at)}</span>
         </div>
-        <div class="text-sm" style="white-space:pre-wrap;color:var(--text)">${escapeHtml(ticket.description)}</div>
+        <div class="ticket-bubble-body">${escapeHtml(ticket.description)}</div>
       </div>`;
 
     if (replies.length === 0 && ticket.admin_reply) {
-      // Fallback for legacy admin_reply column if no ticket_replies records
       html += `
-        <div class="msg-bubble msg-admin" style="background:var(--bg2);border-radius:12px;padding:12px;margin-bottom:8px;border-left:3px solid var(--primary)">
-          <div class="flex justify-between items-center mb-4 text-xs font-bold" style="color:var(--primary)">
-            <span>🛡️ Support Admin</span>
-            <span>${formatDateTime(ticket.updated_at || ticket.created_at)}</span>
+        <div class="ticket-bubble ticket-bubble-admin" style="align-self:flex-start;width:100%;max-width:100%;margin-bottom:12px">
+          <div class="ticket-bubble-hdr">
+            <span style="display:flex;align-items:center;gap:4px;color:#7AA5FF">🛡️ <strong>Support Admin</strong></span>
+            <span style="font-weight:normal;color:var(--text3);font-size:0.7rem">${formatDateTime(ticket.updated_at || ticket.created_at)}</span>
           </div>
-          <div class="text-sm" style="white-space:pre-wrap;color:var(--text)">${escapeHtml(ticket.admin_reply)}</div>
+          <div class="ticket-bubble-body">${escapeHtml(ticket.admin_reply)}</div>
         </div>`;
     }
 
     replies.forEach(r => {
       const isAdmin = r.sender_type === 'admin';
-      const bubbleStyle = isAdmin
-        ? 'background:var(--bg2);border-radius:12px;padding:12px;margin-bottom:8px;border-left:3px solid var(--primary);align-self:flex-start;width:100%'
-        : 'background:var(--bg3);border-radius:12px;padding:12px;margin-bottom:8px;border-right:3px solid var(--gold);align-self:flex-end;width:100%';
-      const titleColor = isAdmin ? 'color:var(--primary)' : 'color:var(--gold)';
+      const bubbleClass = isAdmin ? 'ticket-bubble-admin' : 'ticket-bubble-user';
       const titleText = isAdmin ? '🛡️ Support Admin' : '👤 You';
 
       html += `
-        <div class="msg-bubble ${isAdmin ? 'msg-admin' : 'msg-user'}" style="${bubbleStyle}">
-          <div class="flex justify-between items-center mb-4 text-xs font-bold" style="${titleColor}">
+        <div class="ticket-bubble ${bubbleClass}" style="margin-bottom:8px">
+          <div class="ticket-bubble-hdr">
             <span>${titleText}</span>
-            <span>${formatDateTime(r.created_at)}</span>
+            <span style="font-weight:normal;color:var(--text3);font-size:0.7rem">${formatDateTime(r.created_at)}</span>
           </div>
-          <div class="text-sm" style="white-space:pre-wrap;color:var(--text)">${escapeHtml(r.content)}</div>
+          <div class="ticket-bubble-body">${escapeHtml(r.content)}</div>
         </div>`;
     });
 

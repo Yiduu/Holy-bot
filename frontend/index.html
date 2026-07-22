@@ -737,26 +737,29 @@
       <div class="app-header">
         <div class="flex items-center gap-8">
           <button class="btn btn-ghost btn-sm" onclick="navigate('support')">← Back</button>
-          <h3 id="ticketDetailSubject" style="margin:0;font-size:1.05rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">Ticket Detail</h3>
+          <h3 id="ticketDetailSubject" style="margin:0;font-size:1rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px;color:var(--text)">Ticket Detail</h3>
         </div>
-        <span id="ticketDetailStatus" class="chip chip-gold">open</span>
+        <span id="ticketDetailStatus" class="status-pill status-pill-open"><span class="status-dot"></span>open</span>
       </div>
       <div class="page-content" style="display:flex;flex-direction:column;min-height:calc(100vh - 140px);padding-bottom:20px">
-        <div id="ticketDetailMeta" class="card mb-12" style="background:var(--bg2);border-radius:12px">
-          <div class="text-xs text-dim mb-4" id="ticketDetailDate">Submitted: --</div>
-          <div class="text-sm font-semibold" style="color:var(--text)" id="ticketDetailDesc">--</div>
+        <div id="ticketDetailMeta" class="card mb-12" style="background:linear-gradient(135deg, rgba(28,32,48,0.5), rgba(20,23,32,0.8));border-radius:14px;border:1px solid rgba(201,168,76,0.18)">
+          <div class="text-xs text-dim mb-4" id="ticketDetailDate" style="color:var(--gold-light);font-weight:600">Submitted: --</div>
+          <div class="text-sm font-semibold" style="color:var(--text);line-height:1.45" id="ticketDetailDesc">--</div>
         </div>
 
         <div class="section-title">Message History</div>
-        <div id="ticketThreadList" class="ticket-thread-container mb-16" style="display:flex;flex-direction:column;gap:12px;flex:1">
+        <div id="ticketThreadList" class="ticket-thread-box mb-16" style="flex:1">
           <div class="loading-spinner" style="margin:20px auto"></div>
         </div>
 
-        <div id="ticketReplyBox" class="card" style="margin-top:auto">
-          <div class="form-group mb-8">
-            <textarea id="userTicketReplyText" class="form-control" rows="3" placeholder="Write a follow-up reply..."></textarea>
+        <div id="ticketReplyBox" class="ticket-reply-panel">
+          <div class="form-group mb-4">
+            <textarea id="userTicketReplyText" class="ticket-reply-textarea" rows="3" placeholder="Write a follow-up message..."></textarea>
           </div>
-          <button id="sendTicketReplyBtn" class="btn btn-primary btn-sm flex-1 btn-full" onclick="submitTicketReply()">Send Reply</button>
+          <button id="sendTicketReplyBtn" class="ticket-submit-btn" onclick="submitTicketReply()">
+            <span>Send Reply</span>
+            <span>💬</span>
+          </button>
         </div>
       </div>
     </div>
@@ -855,9 +858,12 @@
         <textarea id="modalTicketDesc" class="form-control" rows="4" placeholder="Describe your issue in detail..."></textarea>
       </div>
 
-      <div class="flex gap-8">
+      <div class="flex gap-8 mt-12">
         <button class="btn btn-ghost flex-1" onclick="toggleNewTicketModal(false)">Cancel</button>
-        <button class="btn btn-primary flex-1" onclick="submitModalTicket()">Submit Ticket</button>
+        <button class="ticket-submit-btn flex-1" style="margin-top:0" onclick="submitModalTicket()">
+          <span>Submit Ticket</span>
+          <span>🙏</span>
+        </button>
       </div>
     </div>
   </div>

@@ -820,37 +820,60 @@
 
         /* ── Ticket cards ────────────────────────────────────────── */
         .ticket-card {
-            background: var(--surface);
-            border: 1px solid var(--border-dim);
-            border-radius: var(--radius);
-            padding: 16px;
-            margin-bottom: 10px;
+            background: linear-gradient(135deg, rgba(28, 32, 48, 0.7) 0%, rgba(20, 23, 32, 0.8) 100%);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(201, 168, 76, 0.16);
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 14px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+            transition: all 0.25s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .ticket-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--gold);
+            opacity: 0.8;
+        }
+
+        .ticket-card:hover {
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4), 0 0 15px rgba(201, 168, 76, 0.1);
+            border-color: rgba(201, 168, 76, 0.3);
         }
 
         .ticket-hdr {
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
-            gap: 8px;
-            margin-bottom: 8px
+            gap: 10px;
+            margin-bottom: 10px;
         }
 
         .ticket-subject {
-            font-size: 13px;
-            font-weight: 600
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
         }
 
         .ticket-meta {
-            font-size: 11px;
+            font-size: 11.5px;
             color: var(--text3);
-            margin-top: 2px
+            margin-top: 3px;
         }
 
         .ticket-body {
-            font-size: 12.5px;
+            font-size: 13px;
             color: var(--text2);
             line-height: 1.6;
-            margin-bottom: 12px
+            margin-bottom: 12px;
+            white-space: pre-wrap;
         }
 
         .admin-reply-preview {
