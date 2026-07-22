@@ -718,6 +718,49 @@
       </div>
     </div>
 
+    <!-- ── Page: Support / My Tickets ────────────────────────────── -->
+    <div id="page-support" class="page">
+      <div class="app-header">
+        <h2 data-i18n="My Tickets">My Tickets</h2>
+        <button class="btn btn-sm btn-primary" onclick="toggleNewTicketModal(true)" data-i18n="New Ticket">+ New Ticket</button>
+      </div>
+      <div class="page-content">
+        <p class="text-sm text-dim mb-12">Track your support requests, view responses, and reply to our support team.</p>
+        <div id="userTicketsList" style="display:flex;flex-direction:column;gap:12px">
+          <div class="loading-spinner" style="margin:40px auto"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Page: Ticket Detail ────────────────────────────────────── -->
+    <div id="page-ticket-detail" class="page">
+      <div class="app-header">
+        <div class="flex items-center gap-8">
+          <button class="btn btn-ghost btn-sm" onclick="navigate('support')">← Back</button>
+          <h3 id="ticketDetailSubject" style="margin:0;font-size:1.05rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">Ticket Detail</h3>
+        </div>
+        <span id="ticketDetailStatus" class="chip chip-gold">open</span>
+      </div>
+      <div class="page-content" style="display:flex;flex-direction:column;min-height:calc(100vh - 140px);padding-bottom:20px">
+        <div id="ticketDetailMeta" class="card mb-12" style="background:var(--bg2);border-radius:12px">
+          <div class="text-xs text-dim mb-4" id="ticketDetailDate">Submitted: --</div>
+          <div class="text-sm font-semibold" style="color:var(--text)" id="ticketDetailDesc">--</div>
+        </div>
+
+        <div class="section-title">Message History</div>
+        <div id="ticketThreadList" class="ticket-thread-container mb-16" style="display:flex;flex-direction:column;gap:12px;flex:1">
+          <div class="loading-spinner" style="margin:20px auto"></div>
+        </div>
+
+        <div id="ticketReplyBox" class="card" style="margin-top:auto">
+          <div class="form-group mb-8">
+            <textarea id="userTicketReplyText" class="form-control" rows="3" placeholder="Write a follow-up reply..."></textarea>
+          </div>
+          <button id="sendTicketReplyBtn" class="btn btn-primary btn-sm flex-1 btn-full" onclick="submitTicketReply()">Send Reply</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ─── Bottom Navigation ─────────────────────────────────────── -->
 
     <nav class="bottom-nav">
@@ -751,6 +794,13 @@
         </svg>
         <span id="chatBadge" class="nav-badge" style="display:none">0</span>
         <span data-i18n="Chat">Chat</span>
+      </div>
+      <div id="nav-support" class="nav-item" onclick="navigate('support')" style="position:relative">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+        </svg>
+        <span id="supportBadge" class="nav-badge" style="display:none">0</span>
+        <span data-i18n="Support">Support</span>
       </div>
       <div id="nav-journal" class="nav-item" onclick="navigate('journal')">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -788,6 +838,29 @@
     </nav>
 
   </div><!-- /#app -->
+
+  <!-- ─── New Support Ticket Modal ──────────────────────────────── -->
+  <div id="newTicketModal" class="modal-overlay" onclick="if(event.target===this)toggleNewTicketModal(false)" style="display:none">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title" data-i18n="New Support Ticket">New Support Ticket</div>
+      <p class="text-sm text-dim mb-16">Describe your issue or question. Our admin team will respond shortly.</p>
+
+      <div class="form-group">
+        <label class="form-label" data-i18n="Subject">Subject</label>
+        <input id="modalTicketSubject" class="form-control" placeholder="What do you need help with?" />
+      </div>
+      <div class="form-group mb-16">
+        <label class="form-label" data-i18n="Description">Description</label>
+        <textarea id="modalTicketDesc" class="form-control" rows="4" placeholder="Describe your issue in detail..."></textarea>
+      </div>
+
+      <div class="flex gap-8">
+        <button class="btn btn-ghost flex-1" onclick="toggleNewTicketModal(false)">Cancel</button>
+        <button class="btn btn-primary flex-1" onclick="submitModalTicket()">Submit Ticket</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ─── Apply to be Mentor Modal ──────────────────────────────── -->
   <div id="applyModal" class="modal-overlay" onclick="if(event.target===this)closeApplyModal()">

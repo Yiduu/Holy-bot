@@ -444,26 +444,142 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
 
   // ==================== SUPPORT TICKETS ====================
   router.get('/tickets', async (req, res) => {
-    const { data, error } = await supabase
+    const { status } = req.query;
+    let query = supabase
       .from('support_tickets')
-      .select('*, user:telegram_id(anonymous_id)')
-      .in('status', ['open', 'in_progress'])
-      .order('created_at', { ascending: false });
+      .select('*, user:telegram_id(anonymous_id)');
+
+    if (status) {
+      query = query.eq('status', status);
+    } else {
+      query = query.in('status', ['open', 'in_progress', 'resolved', 'closed']);
+    }
+
+    const { data: tickets, error } = await query.order('created_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+    if (!tickets || tickets.length === 0) return res.json([]);
+
+    // Fetch reply threads metadata for counts and preview
+    const ticketIds = tickets.map(t => t.id);
+    const { data: replies } = await supabase
+      .from('ticket_replies')
+      .select('*')
+      .in('ticket_id', ticketIds)
+      .order('created_at', { ascending: true });
+
+    const replyMap = {};
+    if (replies) {
+      for (const r of replies) {
+        if (!replyMap[r.ticket_id]) replyMap[r.ticket_id] = [];
+        replyMap[r.ticket_id].push(r);
+      }
+    }
+
+    const result = tickets.map(t => {
+      const thread = replyMap[t.id] || [];
+      const lastReply = thread.length > 0 ? thread[thread.length - 1] : null;
+      return {
+        ...t,
+        reply_count: thread.length || t.reply_count || 0,
+        last_reply_at: lastReply ? lastReply.created_at : (t.last_reply_at || t.created_at),
+        last_reply_sender: lastReply ? lastReply.sender_type : (t.admin_reply ? 'admin' : null),
+        last_reply_preview: lastReply ? lastReply.content : (t.admin_reply || null)
+      };
+    });
+
+    res.json(result);
+  });
+
+  // GET /api/admin/tickets/:id/replies – get all replies for a ticket
+  router.get('/tickets/:id/replies', async (req, res) => {
+    const { data, error } = await supabase
+      .from('ticket_replies')
+      .select('*')
+      .eq('ticket_id', req.params.id)
+      .order('created_at', { ascending: true });
+
     if (error) return res.status(500).json({ error: error.message });
     res.json(data || []);
   });
 
   router.patch('/tickets/:id', async (req, res) => {
     const admin_id = req.telegramUser.id;
-    const { admin_reply, status } = req.body;
+    const { admin_reply, reply, status } = req.body;
+    const replyText = (reply || admin_reply || '').trim();
+
+    // Fetch target ticket first
+    const { data: ticket, error: fetchErr } = await supabase
+      .from('support_tickets')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+
+    if (fetchErr || !ticket) return res.status(404).json({ error: 'Ticket not found' });
+
+    const now = new Date().toISOString();
+    const updatedStatus = status || (replyText ? 'resolved' : ticket.status);
+    let newReplyCount = ticket.reply_count || 0;
+
+    if (replyText) {
+      // Save in ticket_replies
+      const { error: replyErr } = await supabase
+        .from('ticket_replies')
+        .insert({
+          ticket_id: req.params.id,
+          sender_type: 'admin',
+          sender_id: admin_id,
+          content: replyText,
+          created_at: now
+        });
+      if (replyErr) console.error('[admin] Failed to insert ticket_reply:', replyErr.message);
+
+      newReplyCount += 1;
+    }
+
     const { data, error } = await supabase
       .from('support_tickets')
-      .update({ admin_reply, status: status || 'resolved', updated_at: new Date().toISOString() })
+      .update({
+        admin_reply: replyText || ticket.admin_reply,
+        status: updatedStatus,
+        last_reply_at: replyText ? now : (ticket.last_reply_at || now),
+        reply_count: newReplyCount,
+        updated_at: now
+      })
       .eq('id', req.params.id)
-      .select()
+      .select('*, user:telegram_id(anonymous_id)')
       .single();
+
     if (error) return res.status(500).json({ error: error.message });
-    await logAudit(admin_id, 'ticket_reply', null, 'support_ticket', { ticket_id: req.params.id });
+
+    await logAudit(admin_id, 'ticket_reply', null, 'support_ticket', { ticket_id: req.params.id, status: updatedStatus });
+
+    // Send notifications if admin replied
+    if (replyText) {
+      // 1. Socket.IO notification to online user
+      const onlineUsers = global.onlineUsers || req.app.get('onlineUsers');
+      const targetSocketId = onlineUsers?.get(String(ticket.telegram_id));
+      if (io && targetSocketId) {
+        io.to(targetSocketId).emit('ticket_reply', {
+          ticket_id: ticket.id,
+          subject: ticket.subject,
+          reply: replyText,
+          status: updatedStatus,
+          created_at: now
+        });
+      }
+
+      // 2. Telegram Bot notification via safeSend
+      try {
+        const { safeSend } = require('../bot');
+        const preview = replyText.length > 250 ? replyText.substring(0, 250) + '…' : replyText;
+        const msgText = `📩 *Admin replied to your support ticket*\n\n*Subject:* ${ticket.subject}\n*Status:* ${updatedStatus.toUpperCase()}\n\n💬 "${preview}"\n\n_Open the app to view the full conversation or send a follow-up reply._`;
+        await safeSend(ticket.telegram_id, msgText);
+      } catch (botErr) {
+        console.error('[admin] Failed to send Telegram notification for ticket reply:', botErr.message);
+      }
+    }
+
     res.json(data);
   });
 

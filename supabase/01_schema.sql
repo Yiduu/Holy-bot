@@ -174,12 +174,28 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   description   TEXT NOT NULL,
   status        TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','in_progress','resolved','closed')),
   admin_reply   TEXT,
+  last_reply_at TIMESTAMPTZ DEFAULT NOW(),
+  reply_count   INT DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_tickets_status ON support_tickets(status);
 CREATE INDEX idx_tickets_user ON support_tickets(telegram_id);
+CREATE INDEX idx_tickets_last_reply ON support_tickets(last_reply_at DESC);
+
+-- Ticket replies
+CREATE TABLE IF NOT EXISTS ticket_replies (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  ticket_id   UUID NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+  sender_type TEXT NOT NULL CHECK (sender_type IN ('user', 'admin')),
+  sender_id   BIGINT NOT NULL,
+  content     TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_ticket_replies_ticket ON ticket_replies(ticket_id);
+CREATE INDEX idx_ticket_replies_created ON ticket_replies(created_at ASC);
 
 -- Audit logs
 CREATE TABLE IF NOT EXISTS audit_logs (

@@ -644,6 +644,17 @@ function connectSocket() {
     if (currentPage === 'requests') loadRequests();
   });
 
+  socket.on('ticket_reply', (data) => {
+    haptic('success');
+    showToast(`📩 Admin replied to your ticket: "${data.subject || 'Support'}"`, 'info');
+    updateSupportBadge();
+    if (currentPage === 'support') {
+      loadUserTickets();
+    } else if (currentPage === 'ticket-detail' && window.activeTicketId === data.ticket_id) {
+      loadTicketDetail(data.ticket_id);
+    }
+  });
+
   // Fired when a request is accepted or rejected — from the mini app OR the bot
   socket.on('mentorship_request_updated', ({ requestId, status } = {}) => {
     updateRequestsBadge();
@@ -722,6 +733,7 @@ function navigate(page) {
       break;
     case 'sessions': loadSessions(); break;
     case 'chat': loadChat(); break;
+    case 'support': loadUserTickets(); break;
     case 'requests': loadRequests(); break;
     case 'settings': loadSettings(); break;
     case 'my-mentees': loadMyMentees(); break;
@@ -2535,7 +2547,238 @@ async function submitApplication() {
   } catch (e) { haptic('error'); showToast(e.message, 'error'); }
 }
 
-// ─── Support Ticket ───────────────────────────────────────────
+// ─── Support Tickets ──────────────────────────────────────────
+window.activeTicketId = null;
+
+async function loadUserTickets() {
+  const container = $('userTicketsList');
+  if (!container) return;
+  container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
+
+  try {
+    const tickets = await apiFetch('/api/support');
+    updateSupportBadge(tickets);
+
+    if (!tickets || tickets.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state card" style="text-align:center;padding:30px 15px">
+          <div style="font-size:2.2rem;margin-bottom:8px">🎫</div>
+          <div class="font-bold text-sm mb-4">${t('No tickets found')}</div>
+          <p class="text-xs text-dim mb-12">You have not submitted any support tickets yet.</p>
+          <button class="btn btn-primary btn-sm" onclick="toggleNewTicketModal(true)">Create Ticket</button>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = tickets.map(t => {
+      let statusChipClass = 'chip-gold';
+      if (t.status === 'in_progress') statusChipClass = 'chip-blue';
+      else if (t.status === 'resolved') statusChipClass = 'chip-green';
+      else if (t.status === 'closed') statusChipClass = 'chip-gray';
+
+      const replyCount = t.reply_count || 0;
+      const previewText = t.last_reply_preview ? escapeHtml(t.last_reply_preview) : escapeHtml(t.description);
+      const lastSenderLabel = t.last_reply_sender === 'admin' ? '🛡️ Admin:' : (t.last_reply_sender === 'user' ? ' You:' : '');
+
+      return `
+        <div class="card clickable-card" onclick="openTicketDetail('${t.id}')" style="cursor:pointer;position:relative">
+          <div class="flex justify-between items-center mb-8">
+            <h4 class="font-bold text-sm" style="margin:0;color:var(--text)">${escapeHtml(t.subject)}</h4>
+            <span class="chip ${statusChipClass}">${t.status}</span>
+          </div>
+          <p class="text-xs text-dim mb-8" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">
+            <strong>${lastSenderLabel}</strong> ${previewText}
+          </p>
+          <div class="flex justify-between items-center text-xs text-dim mt-8" style="border-top:1px solid var(--border);padding-top:8px">
+            <span>Submitted ${timeAgo(t.created_at)}</span>
+            <span>💬 ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = `<div class="card text-center text-sm" style="color:var(--danger)">Error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function updateSupportBadge(ticketsData) {
+  const badge = $('supportBadge');
+  if (!badge) return;
+
+  if (Array.isArray(ticketsData)) {
+    const activeCount = ticketsData.filter(t => t.status === 'open' || t.status === 'in_progress').length;
+    if (activeCount > 0) {
+      badge.textContent = activeCount;
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+  } else {
+    apiFetch('/api/support').then(tickets => {
+      const activeCount = (tickets || []).filter(t => t.status === 'open' || t.status === 'in_progress').length;
+      if (activeCount > 0) {
+        badge.textContent = activeCount;
+        badge.style.display = 'inline-block';
+      } else {
+        badge.style.display = 'none';
+      }
+    }).catch(() => {});
+  }
+}
+
+function openTicketDetail(ticketId) {
+  window.activeTicketId = ticketId;
+  navigate('ticket-detail');
+  loadTicketDetail(ticketId);
+}
+
+async function loadTicketDetail(ticketId) {
+  const threadContainer = $('ticketThreadList');
+  if (!threadContainer) return;
+  threadContainer.innerHTML = '<div class="loading-spinner" style="margin:20px auto"></div>';
+
+  try {
+    const data = await apiFetch(`/api/support/${ticketId}`);
+    const ticket = data.ticket;
+    const replies = data.replies || [];
+
+    $('ticketDetailSubject').textContent = ticket.subject;
+    $('ticketDetailDate').textContent = `Submitted: ${formatDateTime(ticket.created_at)}`;
+    $('ticketDetailDesc').textContent = ticket.description;
+
+    let statusChipClass = 'chip-gold';
+    if (ticket.status === 'in_progress') statusChipClass = 'chip-blue';
+    else if (ticket.status === 'resolved') statusChipClass = 'chip-green';
+    else if (ticket.status === 'closed') statusChipClass = 'chip-gray';
+
+    const statusEl = $('ticketDetailStatus');
+    statusEl.className = `chip ${statusChipClass}`;
+    statusEl.textContent = ticket.status;
+
+    // Handle closed state input locking
+    const replyTextarea = $('userTicketReplyText');
+    const replyBtn = $('sendTicketReplyBtn');
+
+    if (ticket.status === 'closed') {
+      replyTextarea.disabled = true;
+      replyTextarea.placeholder = 'This ticket is closed.';
+      replyBtn.disabled = true;
+      replyBtn.style.opacity = '0.5';
+    } else {
+      replyTextarea.disabled = false;
+      replyTextarea.placeholder = 'Write a follow-up reply...';
+      replyBtn.disabled = false;
+      replyBtn.style.opacity = '1';
+    }
+
+    // Render original ticket message + reply thread
+    let html = `
+      <div class="msg-bubble msg-user" style="background:var(--bg3);border-radius:12px;padding:12px;margin-bottom:8px;border-left:3px solid var(--gold)">
+        <div class="flex justify-between items-center mb-4 text-xs font-bold" style="color:var(--gold)">
+          <span>👤 You (Original Request)</span>
+          <span>${formatDateTime(ticket.created_at)}</span>
+        </div>
+        <div class="text-sm" style="white-space:pre-wrap;color:var(--text)">${escapeHtml(ticket.description)}</div>
+      </div>`;
+
+    if (replies.length === 0 && ticket.admin_reply) {
+      // Fallback for legacy admin_reply column if no ticket_replies records
+      html += `
+        <div class="msg-bubble msg-admin" style="background:var(--bg2);border-radius:12px;padding:12px;margin-bottom:8px;border-left:3px solid var(--primary)">
+          <div class="flex justify-between items-center mb-4 text-xs font-bold" style="color:var(--primary)">
+            <span>🛡️ Support Admin</span>
+            <span>${formatDateTime(ticket.updated_at || ticket.created_at)}</span>
+          </div>
+          <div class="text-sm" style="white-space:pre-wrap;color:var(--text)">${escapeHtml(ticket.admin_reply)}</div>
+        </div>`;
+    }
+
+    replies.forEach(r => {
+      const isAdmin = r.sender_type === 'admin';
+      const bubbleStyle = isAdmin
+        ? 'background:var(--bg2);border-radius:12px;padding:12px;margin-bottom:8px;border-left:3px solid var(--primary);align-self:flex-start;width:100%'
+        : 'background:var(--bg3);border-radius:12px;padding:12px;margin-bottom:8px;border-right:3px solid var(--gold);align-self:flex-end;width:100%';
+      const titleColor = isAdmin ? 'color:var(--primary)' : 'color:var(--gold)';
+      const titleText = isAdmin ? '🛡️ Support Admin' : '👤 You';
+
+      html += `
+        <div class="msg-bubble ${isAdmin ? 'msg-admin' : 'msg-user'}" style="${bubbleStyle}">
+          <div class="flex justify-between items-center mb-4 text-xs font-bold" style="${titleColor}">
+            <span>${titleText}</span>
+            <span>${formatDateTime(r.created_at)}</span>
+          </div>
+          <div class="text-sm" style="white-space:pre-wrap;color:var(--text)">${escapeHtml(r.content)}</div>
+        </div>`;
+    });
+
+    threadContainer.innerHTML = html;
+    threadContainer.scrollTop = threadContainer.scrollHeight;
+  } catch (e) {
+    threadContainer.innerHTML = `<div class="card text-center text-sm" style="color:var(--danger)">Error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function submitTicketReply() {
+  if (!window.activeTicketId) return;
+  const replyInput = $('userTicketReplyText');
+  const content = replyInput.value.trim();
+  if (!content) {
+    haptic('error');
+    showToast('Please type a reply message', 'error');
+    return;
+  }
+
+  haptic('medium');
+  try {
+    await apiFetch(`/api/support/${window.activeTicketId}/reply`, {
+      method: 'POST',
+      body: { content }
+    });
+    haptic('success');
+    showToast('Reply sent', 'success');
+    replyInput.value = '';
+    loadTicketDetail(window.activeTicketId);
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
+}
+
+function toggleNewTicketModal(show) {
+  haptic('selection');
+  const modal = $('newTicketModal');
+  if (modal) {
+    modal.style.display = show ? 'flex' : 'none';
+  }
+}
+
+async function submitModalTicket() {
+  haptic('medium');
+  const subject = $('modalTicketSubject').value.trim();
+  const description = $('modalTicketDesc').value.trim();
+  if (!subject || !description) {
+    haptic('error');
+    showToast('Fill in all fields', 'error');
+    return;
+  }
+
+  try {
+    await apiFetch('/api/support', { method: 'POST', body: { subject, description } });
+    haptic('success');
+    showToast('Support ticket submitted 🙏', 'success');
+    $('modalTicketSubject').value = '';
+    $('modalTicketDesc').value = '';
+    toggleNewTicketModal(false);
+    if (currentPage === 'support') {
+      loadUserTickets();
+    } else {
+      navigate('support');
+    }
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
+}
+
 async function submitTicket() {
   haptic('medium');
   const subject = $('ticketSubject').value.trim();
@@ -2547,6 +2790,7 @@ async function submitTicket() {
     haptic('success');
     showToast('Ticket submitted', 'success');
     $('ticketSubject').value = ''; $('ticketDesc').value = '';
+    if (currentPage === 'support') loadUserTickets();
   } catch (e) { haptic('error'); showToast(e.message, 'error'); }
 }
 

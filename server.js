@@ -197,7 +197,7 @@ app.use('/api/mentors', require('./routes/mentors')(supabase, requireAuth));
 app.use('/api/sessions', require('./routes/sessions')(supabase, requireAuth, io, onlineUsers));
 app.use('/api/messages', require('./routes/messages')(supabase, requireAuth, io, onlineUsers));
 app.use('/api/admin', require('./routes/admin')(supabase, requireAuth, requireAdmin, io));
-app.use('/api/support', require('./routes/support')(supabase, requireAuth));
+app.use('/api/support', require('./routes/support')(supabase, requireAuth, io, onlineUsers));
 app.use('/api/topics', require('./routes/topics')(supabase, requireAuth, requireAdmin));
 app.use('/api/streaks', require('./routes/streaks')(supabase, requireAuth));
 app.use('/api/journal', require('./routes/journal')(supabase, requireAuth));

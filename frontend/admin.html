@@ -2737,33 +2737,111 @@
             c.innerHTML = '<div class="loading">Loading…</div>';
             try {
                 const tickets = await api('/api/admin/tickets');
-                if (!tickets?.length) { c.innerHTML = '<div class="empty">🎉 No open tickets</div>'; return; }
-                c.innerHTML = tickets.map(t => `
+                if (!tickets?.length) { c.innerHTML = '<div class="empty">🎉 No support tickets</div>'; return; }
+                c.innerHTML = tickets.map(t => {
+                    const statusClass = t.status === 'open' ? 'chip-gold' : t.status === 'in_progress' ? 'chip-blue' : t.status === 'resolved' ? 'chip-green' : 'chip-gray';
+                    const replyCount = t.reply_count || 0;
+                    const lastReplyTime = t.last_reply_at ? ago(t.last_reply_at) : ago(t.created_at);
+
+                    return `
       <div class="ticket-card" id="ticket-${t.id}">
         <div class="ticket-hdr">
           <div>
             <div class="ticket-subject">${esc(t.subject)}</div>
-            <div class="ticket-meta">From ${esc(t.user?.anonymous_id || String(t.telegram_id))} · ${ago(t.created_at)}</div>
+            <div class="ticket-meta">From ${esc(t.user?.anonymous_id || String(t.telegram_id))} · Submitted ${ago(t.created_at)} · Last active ${lastReplyTime}</div>
           </div>
-          <span class="chip ${t.status === 'open' ? 'chip-gold' : t.status === 'in_progress' ? 'chip-blue' : 'chip-green'}">${t.status}</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="chip" style="background:var(--bg3);font-size:11px">💬 ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
+            <span class="chip ${statusClass}">${t.status}</span>
+          </div>
         </div>
         <div class="ticket-body">${esc(t.description)}</div>
-        ${t.admin_reply ? `<div class="admin-reply-preview"><strong>Admin replied:</strong>${esc(t.admin_reply)}</div>` : ''}
-        <div class="ticket-reply">
-          <textarea class="inline-area" id="reply-${t.id}" placeholder="Write a reply…" rows="2">${esc(t.admin_reply || '')}</textarea>
-          <div style="display:flex;gap:7px;flex-wrap:wrap">
-            <button class="btn btn-ghost btn-sm" onclick="replyTicket('${t.id}','in_progress')">Reply & Keep Open</button>
-            <button class="btn btn-success btn-sm" onclick="replyTicket('${t.id}','resolved')">✓ Resolve</button>
+        
+        <!-- Toggleable Reply Thread -->
+        <div id="thread-container-${t.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+          <div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--text-dim)">Reply Thread:</div>
+          <div id="thread-list-${t.id}">
+            <div style="font-size:11px;color:var(--text-dim)">Loading thread…</div>
           </div>
         </div>
-      </div>`).join('');
+
+        <div style="margin-top:8px">
+          <button class="btn btn-ghost btn-sm" style="font-size:11.5px;padding:3px 8px" onclick="toggleTicketThread('${t.id}')" id="btn-thread-${t.id}">📜 View Thread (${replyCount})</button>
+        </div>
+
+        <div class="ticket-reply" style="margin-top:10px">
+          <textarea class="inline-area" id="reply-${t.id}" placeholder="Write an admin reply…" rows="2"></textarea>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="replyTicket('${t.id}','in_progress')">Reply & In Progress</button>
+            <button class="btn btn-success btn-sm" onclick="replyTicket('${t.id}','resolved')">✓ Resolve</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--text-dim)" onclick="replyTicket('${t.id}','closed')">Close</button>
+          </div>
+        </div>
+      </div>`;
+                }).join('');
             } catch (e) { c.innerHTML = `<div class="loading">${e.message}</div>`; }
         }
+
+        async function toggleTicketThread(id) {
+            const container = document.getElementById(`thread-container-${id}`);
+            const list = document.getElementById(`thread-list-${id}`);
+            const btn = document.getElementById(`btn-thread-${id}`);
+            if (!container || !list) return;
+
+            if (container.style.display !== 'none') {
+                container.style.display = 'none';
+                if (btn) btn.textContent = '📜 View Thread';
+                return;
+            }
+
+            container.style.display = 'block';
+            if (btn) btn.textContent = '🙈 Hide Thread';
+            list.innerHTML = '<div style="font-size:11px;color:var(--text-dim)">Loading thread…</div>';
+
+            try {
+                const replies = await api(`/api/admin/tickets/${id}/replies`);
+                if (!replies || replies.length === 0) {
+                    list.innerHTML = '<div style="font-size:11px;color:var(--text-dim);font-style:italic">No replies yet.</div>';
+                    return;
+                }
+                list.innerHTML = replies.map(r => {
+                    const isAdmin = r.sender_type === 'admin';
+                    return `
+                    <div style="padding:6px 9px;border-radius:6px;margin-bottom:6px;background:${isAdmin ? 'var(--bg3)' : 'var(--bg2)'};border-left:3px solid ${isAdmin ? 'var(--accent)' : 'var(--gold)'}">
+                      <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:bold;margin-bottom:3px">
+                        <span style="color:${isAdmin ? 'var(--accent)' : 'var(--gold)'}">${isAdmin ? '🛡️ Admin' : '👤 User'}</span>
+                        <span style="color:var(--text-dim);font-weight:normal">${ago(r.created_at)}</span>
+                      </div>
+                      <div style="font-size:12px;white-space:pre-wrap;color:var(--text)">${esc(r.content)}</div>
+                    </div>`;
+                }).join('');
+            } catch (e) {
+                list.innerHTML = `<div style="font-size:11px;color:var(--danger)">Error: ${esc(e.message)}</div>`;
+            }
+        }
+
         async function replyTicket(id, status) {
-            const reply = document.getElementById(`reply-${id}`).value.trim();
-            if (!reply) { toast('Write a reply first', 'error'); return; }
-            try { await api(`/api/admin/tickets/${id}`, { method: 'PATCH', body: { admin_reply: reply, status } }); toast('Ticket updated', 'success'); loadTickets(); loadStats(); }
-            catch (e) { toast(e.message, 'error'); }
+            const replyInput = document.getElementById(`reply-${id}`);
+            const reply = replyInput ? replyInput.value.trim() : '';
+
+            if (!reply && status !== 'resolved' && status !== 'closed') {
+                toast('Write a reply first', 'error');
+                return;
+            }
+
+            try {
+                await api(`/api/admin/tickets/${id}`, { method: 'PATCH', body: { reply, admin_reply: reply, status } });
+                toast('Ticket updated', 'success');
+                if (replyInput) replyInput.value = '';
+                
+                const threadContainer = document.getElementById(`thread-container-${id}`);
+                if (threadContainer && threadContainer.style.display !== 'none') {
+                    toggleTicketThread(id);
+                    toggleTicketThread(id);
+                }
+                loadTickets();
+                loadStats();
+            } catch (e) { toast(e.message, 'error'); }
         }
 
         /* ── Topics ─────────────────────────────────────────────────── */
