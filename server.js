@@ -10,7 +10,7 @@ const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const logger = require('./utils/logger');
-const { bot } = require('./bot');   // Import the bot instance
+
 
 // ─── Sentry (optional – only active when SENTRY_DSN is set) ──────────────────
 let Sentry = null;
