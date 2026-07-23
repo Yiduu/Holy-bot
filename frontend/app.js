@@ -166,7 +166,7 @@ function renderFileAttachment(msg) {
             <div class="msg-file-name">${escapeHtml(msg.file_name || 'File')}</div>
             <div class="msg-file-size">${formatFileSize(msg.file_size)}</div>
           </div>
-          <button class="msg-file-download" data-file-id="${fileId}" data-file-name="${escapeHtml(msg.file_name || 'file')}" onclick="downloadChatFile(this)" aria-label="Download file">⬇️</button>
+          <button class="msg-file-download" data-state="download" data-file-id="${fileId}" data-file-name="${escapeHtml(msg.file_name || 'file')}" onclick="handleFileAction(this)" aria-label="Download file">⬇️</button>
         </div>`;
   }
 }
@@ -244,29 +244,42 @@ async function playChatVideo(btn) {
   }
 }
 
-async function downloadChatFile(btn) {
+// Document attachments start as a "⬇️ Download" button. First tap fetches
+// the file and flips the button into "📂 Open" (mirroring Telegram's own
+// download-then-open flow); a second tap opens the file in a new tab, where
+// the browser renders it inline when it can (PDFs, images, text) or falls
+// back to its own native download prompt when it can't (e.g. .docx, .zip).
+async function handleFileAction(btn) {
+  const state = btn.dataset.state || 'download';
+
+  if (state === 'open') {
+    haptic('light');
+    if (btn.dataset.blobUrl) window.open(btn.dataset.blobUrl, '_blank');
+    return;
+  }
+
   const fileId = btn.dataset.fileId;
-  const fileName = btn.dataset.fileName || 'file';
   haptic('light');
-  const originalHtml = btn.innerHTML;
   btn.disabled = true;
-  btn.textContent = '⏳';
+  const originalHtml = btn.innerHTML;
+  btn.innerHTML = '⏳';
+
   try {
     const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    btn.dataset.blobUrl = url;
+    btn.dataset.state = 'open';
+    btn.classList.remove('msg-file-download');
+    btn.classList.add('msg-file-open');
+    btn.innerHTML = '📂';
+    btn.setAttribute('aria-label', 'Open file');
+    haptic('success');
   } catch (e) {
+    btn.innerHTML = originalHtml;
     haptic('error');
     showToast('Failed to download file', 'error');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = originalHtml;
   }
 }
 
