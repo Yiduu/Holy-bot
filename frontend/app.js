@@ -2555,7 +2555,7 @@ async function loadUserTickets() {
           </p>
           <div class="flex justify-between items-center text-xs text-dim pt-8" style="border-top:1px solid rgba(255,255,255,0.06)">
             <span style="font-size:0.75rem">📅 Submitted ${timeAgo(t.created_at)}</span>
-            <span class="chip" style="background:rgba(13,15,20,0.08);color:var(--gold-light);font-size:0.72rem;padding:2px 8px;border-radius:12px;border:1px solid rgba(13,15,20,0.2)">💬 ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
+            <span class="chip" style="background:rgba(201,168,76,0.1);color:var(--gold-light);font-size:0.72rem;padding:2px 8px;border-radius:12px;border:1px solid rgba(201,168,76,0.2)">💬 ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
           </div>
         </div>`;
     }).join('');
@@ -2632,7 +2632,7 @@ async function loadTicketDetail(ticketId) {
 
     // Render original ticket message + reply thread
     let html = `
-      <div class="ticket-bubble ticket-bubble-user" style="align-self:flex-start;width:100%;max-width:100%;margin-bottom:12px;background:linear-gradient(135deg, rgba(13,15,20,0.12) 0%, rgba(20,23,32,0.85) 100%);border:1px solid rgba(13,15,20,0.25)">
+      <div class="ticket-bubble ticket-bubble-user" style="align-self:flex-start;width:100%;max-width:100%;margin-bottom:12px;background:linear-gradient(135deg, rgba(201,168,76,0.12) 0%, rgba(20,23,32,0.85) 100%);border:1px solid rgba(201,168,76,0.25)">
         <div class="ticket-bubble-hdr">
           <span style="display:flex;align-items:center;gap:4px;color:var(--gold-light)">👤 <strong>You</strong> (Original Issue)</span>
           <span style="font-weight:normal;color:var(--text3);font-size:0.7rem">${formatDateTime(ticket.created_at)}</span>
