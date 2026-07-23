@@ -22,7 +22,7 @@ const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN); // No polling optio
 //if (error.code === 'EFATAL' && error.message.includes('ECONNRESET')) {
 //console.warn('[Bot] Polling connection reset (ECONNRESET). Telegram or network closed the connection. Retrying...');
 //} else {
-console.warn('[Bot] Polling warning:', error.message || error);
+//console.warn('[Bot] Polling warning:', error.message || error);
 //}
 //});
 
