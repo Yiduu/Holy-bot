@@ -618,6 +618,188 @@ async function forwardMessage(fromId, toId, text) {
   }
 }
 
+// ─── Voice / File Attachment Forwarding ───────────────────────────────────────
+// Shared logic for resolving which active mentorship partner a message should
+// go to. Used by both plain-text forwarding (above) and file/voice forwarding
+// (below) so the "which partner" behavior stays identical for every message
+// type.
+async function resolveChatTarget(chatId, state) {
+  const partnersInfo = await getActiveChatPartners(chatId);
+  if (!partnersInfo) {
+    const lang = await getUserLang(chatId);
+    await safeSend(chatId, tSync(lang, 'no_active_mentor'), {
+      reply_markup: { inline_keyboard: [[{ text: tSync(lang, 'btn_find_mentor'), callback_data: 'menu_mentors' }]] }
+    });
+    return null;
+  }
+
+  if (partnersInfo.partners.length === 1) {
+    return partnersInfo.partners[0];
+  }
+
+  if (state?.step === 'chat_active' && state.targetId) {
+    return state.targetId;
+  }
+
+  const lang = await getUserLang(chatId);
+  const { data: mentees } = await supabase.from('users').select('telegram_id, anonymous_id').in('telegram_id', partnersInfo.partners);
+  let listStr = tSync(lang, 'multiple_partners') + '\n\n';
+  mentees.forEach((m, i) => listStr += `${i + 1}. @${m.anonymous_id}\n`);
+  listStr += `\n${tSync(lang, 'use_reply_cmd')}`;
+  await safeSend(chatId, listStr);
+  return null;
+}
+
+// Detect which kind of attachment (if any) a Telegram message object carries.
+// Returns null for ordinary text messages.
+function detectFileType(msg) {
+  if (msg.voice) return 'voice';
+  if (msg.audio) return 'audio';
+  if (msg.video) return 'video';
+  if (msg.document) return 'document';
+  if (msg.photo && msg.photo.length) return 'photo';
+  return null;
+}
+
+// Pull the metadata Telegram gives us for each attachment type into a common
+// shape: { file_id, file_size, mime_type, duration, file_name }.
+function extractFileMeta(msg, fileType) {
+  switch (fileType) {
+    case 'voice':
+      return {
+        file_id: msg.voice.file_id,
+        file_size: msg.voice.file_size || null,
+        mime_type: msg.voice.mime_type || 'audio/ogg',
+        duration: msg.voice.duration || null,
+        file_name: null
+      };
+    case 'audio':
+      return {
+        file_id: msg.audio.file_id,
+        file_size: msg.audio.file_size || null,
+        mime_type: msg.audio.mime_type || null,
+        duration: msg.audio.duration || null,
+        file_name: msg.audio.file_name || msg.audio.title || null
+      };
+    case 'video':
+      return {
+        file_id: msg.video.file_id,
+        file_size: msg.video.file_size || null,
+        mime_type: msg.video.mime_type || 'video/mp4',
+        duration: msg.video.duration || null,
+        file_name: msg.video.file_name || null
+      };
+    case 'document':
+      return {
+        file_id: msg.document.file_id,
+        file_size: msg.document.file_size || null,
+        mime_type: msg.document.mime_type || null,
+        duration: null,
+        file_name: msg.document.file_name || null
+      };
+    case 'photo': {
+      // Telegram sends the same photo at several resolutions; the last
+      // entry in the array is always the largest.
+      const largest = msg.photo[msg.photo.length - 1];
+      return {
+        file_id: largest.file_id,
+        file_size: largest.file_size || null,
+        mime_type: 'image/jpeg',
+        duration: null,
+        file_name: null
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+// Insert a voice/audio/video/document/photo message into Supabase, forward
+// the actual file to the recipient on Telegram (using the persistent
+// file_id, so we never re-upload the bytes ourselves), and push a real-time
+// socket update to the mini app — mirroring forwardMessage() above.
+async function forwardFileMessage(fromId, toId, fileType, meta, caption = '') {
+  const { data: msg, error } = await supabase
+    .from('messages')
+    .insert({
+      from_id: fromId,
+      to_id: toId,
+      content: caption, // caption doubles as the text content; may be ''
+      file_id: meta.file_id,
+      file_type: fileType,
+      file_size: meta.file_size,
+      mime_type: meta.mime_type,
+      duration: meta.duration,
+      file_name: meta.file_name
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[forwardFileMessage] DB error:', error);
+    return;
+  }
+
+  const [{ data: sender }, { data: recipient }] = await Promise.all([
+    supabase.from('users').select('anonymous_id, role').eq('telegram_id', fromId).single(),
+    supabase.from('users').select('chat_id').eq('telegram_id', toId).single()
+  ]);
+
+  if (recipient?.chat_id) {
+    const lang = await getUserLang(toId);
+    const roleLabel = sender?.role === 'mentor' ? tSync(lang, 'role_mentor') : tSync(lang, 'role_mentee');
+    const fileLabels = { voice: '🎙️ voice message', audio: '🎵 audio', video: '🎬 video', photo: '🖼️ photo', document: '📎 file' };
+    // tSync falls back to returning the key itself when the locale string is
+    // missing, so we detect that and fall back to a plain English label.
+    const translated = tSync(lang, 'msg_from_partner_file', { role: roleLabel, nick: mdEscape(sender?.anonymous_id), type: fileLabels[fileType] || 'file' });
+    const label = translated === 'msg_from_partner_file'
+      ? `📎 New ${fileLabels[fileType] || 'file'} from ${roleLabel} @${mdEscape(sender?.anonymous_id)}`
+      : translated;
+    await safeSend(recipient.chat_id, label);
+
+    // Forward the actual file using its file_id — Telegram re-serves the
+    // same stored bytes, so this costs no extra bandwidth or storage on our side.
+    try {
+      const sendOpts = caption ? { caption } : {};
+      switch (fileType) {
+        case 'voice': await bot.sendVoice(recipient.chat_id, meta.file_id, sendOpts); break;
+        case 'audio': await bot.sendAudio(recipient.chat_id, meta.file_id, sendOpts); break;
+        case 'video': await bot.sendVideo(recipient.chat_id, meta.file_id, sendOpts); break;
+        case 'photo': await bot.sendPhoto(recipient.chat_id, meta.file_id, sendOpts); break;
+        case 'document': await bot.sendDocument(recipient.chat_id, meta.file_id, sendOpts); break;
+      }
+    } catch (err) {
+      console.error(`[forwardFileMessage] Failed to forward ${fileType} to ${toId}:`, err.message);
+    }
+
+    setState(toId, 'chat_active', fromId);
+  }
+
+  // ✨ Emit socket event for mini app real-time update (same event name as
+  // text messages — the mini app inspects msg.file_type to decide how to render it).
+  if (global.io && global.onlineUsers) {
+    const recipientSocket = global.onlineUsers.get(String(toId));
+    if (recipientSocket) {
+      global.io.to(recipientSocket).emit('new_message', msg);
+      console.log(`[Socket] Real-time ${fileType} message sent to ${toId}`);
+    }
+  }
+}
+
+// Entry point called from the message handler once we know msg carries an
+// attachment. Resolves the active chat partner (same rule as text messages)
+// then forwards.
+async function handleFileMessage(chatId, msg, fileType, state) {
+  const targetId = await resolveChatTarget(chatId, state);
+  if (!targetId) return;
+
+  const meta = extractFileMeta(msg, fileType);
+  if (!meta || !meta.file_id) return;
+
+  const caption = (msg.caption || '').trim();
+  await forwardFileMessage(chatId, targetId, fileType, meta, caption);
+}
+
 // ─── Rating System ────────────────────────────────────────────────────────────
 
 async function promptRating(userId, mentorId) {
@@ -1117,6 +1299,19 @@ bot.on('message', async (msg) => {
   const text = msg.text;
   const state = getState(chatId);
   const lang = await getUserLang(chatId);
+
+  // ─── Voice / File Attachment Handling ─────────────────────────────────────
+  // Telegram delivers attachments as msg.voice / msg.audio / msg.document /
+  // msg.photo / msg.video instead of msg.text, so this must be handled
+  // before the `if (!text) return;` guard below, or attachments would be
+  // silently dropped.
+  const fileType = detectFileType(msg);
+  if (fileType) {
+    await touchActivity(chatId);
+    await handleFileMessage(chatId, msg, fileType, state);
+    return;
+  }
+
   if (!text) return;
 
   await touchActivity(chatId);
@@ -1619,30 +1814,7 @@ bot.on('message', async (msg) => {
 
   // 🛡️ CHAT SHIELD: Only allow forwarding if NOT in a flow state
   if (!state || state.step === 'chat_active') {
-    const partnersInfo = await getActiveChatPartners(chatId);
-    if (!partnersInfo) {
-      const lang = await getUserLang(chatId);
-      return safeSend(chatId, tSync(lang, 'no_active_mentor'), {
-        reply_markup: { inline_keyboard: [[{ text: tSync(lang, 'btn_find_mentor'), callback_data: 'menu_mentors' }]] }
-      });
-    }
-
-    let targetId = null;
-    if (partnersInfo.partners.length === 1) {
-      targetId = partnersInfo.partners[0];
-    } else {
-      if (state?.step === 'chat_active' && state.targetId) {
-        targetId = state.targetId;
-      } else {
-        const lang = await getUserLang(chatId);
-        const { data: mentees } = await supabase.from('users').select('telegram_id, anonymous_id').in('telegram_id', partnersInfo.partners);
-        let listStr = tSync(lang, 'multiple_partners') + '\n\n';
-        mentees.forEach((m, i) => listStr += `${i + 1}. @${m.anonymous_id}\n`);
-        listStr += `\n${tSync(lang, 'use_reply_cmd')}`;
-        return safeSend(chatId, listStr);
-      }
-    }
-
+    const targetId = await resolveChatTarget(chatId, state);
     if (targetId) await forwardMessage(chatId, targetId, text.trim());
   }
 });

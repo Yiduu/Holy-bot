@@ -59,6 +59,23 @@ async function apiFetch(path, opts = {}) {
   return res.json();
 }
 
+// Fetch a binary attachment (voice/audio/video/photo/document) through our
+// own authenticated proxy route. Used instead of apiFetch because the result
+// is a Blob, not JSON, and because <audio>/<img>/<a> elements can't carry
+// custom auth headers themselves — we fetch the bytes ourselves and hand the
+// element a local blob: URL instead.
+async function fetchAuthedBlob(path) {
+  const { initData } = getTelegramData();
+  const res = await fetch(`${API}${path}`, {
+    headers: {
+      'x-telegram-init-data': initData,
+      'x-telegram-id': getTelegramData().user?.id || '',
+    }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}
+
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
   if (diff < 60000) return 'just now';
@@ -90,6 +107,169 @@ function escapeHtml(str) {
   d.textContent = str || '';
   return d.innerHTML;
 }
+// ─── Voice / File Attachment Rendering ─────────────────────────────────────
+
+function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined || isNaN(seconds)) return '';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function formatFileSize(bytes) {
+  if (bytes === null || bytes === undefined || isNaN(bytes)) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const FILE_TYPE_ICONS = { document: '📄', audio: '🎵', video: '🎬', photo: '🖼️', voice: '🎙️' };
+
+// Builds the markup for a single attachment based on msg.file_type. Text
+// messages (file_type === null/undefined) never call this — renderThread()
+// only invokes it when msg.file_type is set, so plain text rendering is
+// completely unaffected.
+function renderFileAttachment(msg) {
+  const fileId = escapeHtml(msg.file_id || '');
+
+  switch (msg.file_type) {
+    case 'voice':
+    case 'audio':
+      return `
+        <div class="msg-voice">
+          <button class="msg-voice-play" data-file-id="${fileId}" onclick="playVoiceMessage(this)" aria-label="Play ${msg.file_type === 'voice' ? 'voice message' : 'audio'}">▶️</button>
+          <div class="msg-voice-info">
+            <div class="msg-voice-wave">${FILE_TYPE_ICONS[msg.file_type]} ${msg.file_type === 'voice' ? 'Voice message' : escapeHtml(msg.file_name || 'Audio')}</div>
+            <div class="msg-voice-duration">${formatDuration(msg.duration)}</div>
+          </div>
+          <audio class="msg-voice-audio" style="display:none" preload="none"></audio>
+        </div>`;
+
+    case 'video':
+      return `
+        <div class="msg-video" data-file-id="${fileId}">
+          <button class="msg-video-play" onclick="playChatVideo(this)">▶️ Play video${msg.duration ? ` (${formatDuration(msg.duration)})` : ''}</button>
+        </div>`;
+
+    case 'photo':
+      return `
+        <div class="msg-photo" data-file-id="${fileId}">
+          <div class="msg-photo-placeholder">🖼️ Loading photo…</div>
+        </div>`;
+
+    case 'document':
+    default:
+      return `
+        <div class="msg-file">
+          <div class="msg-file-icon">${FILE_TYPE_ICONS[msg.file_type] || '📎'}</div>
+          <div class="msg-file-meta">
+            <div class="msg-file-name">${escapeHtml(msg.file_name || 'File')}</div>
+            <div class="msg-file-size">${formatFileSize(msg.file_size)}</div>
+          </div>
+          <button class="msg-file-download" data-file-id="${fileId}" data-file-name="${escapeHtml(msg.file_name || 'file')}" onclick="downloadChatFile(this)" aria-label="Download file">⬇️</button>
+        </div>`;
+  }
+}
+
+// Fetches the actual image bytes for every not-yet-loaded photo bubble in
+// `container` and swaps the placeholder for a real <img>. Called after any
+// HTML containing message bubbles is inserted into the DOM. Voice/video/
+// document attachments are intentionally NOT auto-fetched here — those stay
+// lazy (fetched on tap) to avoid burning bandwidth on media the person may
+// never open.
+function hydratePhotoMessages(container) {
+  if (!container) return;
+  const els = container.querySelectorAll('.msg-photo[data-file-id]:not(.msg-photo-loaded)');
+  els.forEach(async el => {
+    el.classList.add('msg-photo-loaded'); // mark immediately so we never double-fetch
+    const fileId = el.dataset.fileId;
+    try {
+      const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
+      const url = URL.createObjectURL(blob);
+      el.innerHTML = `<img src="${url}" class="msg-photo-img" alt="Photo attachment" onclick="window.open('${url}', '_blank')" />`;
+    } catch (e) {
+      el.innerHTML = '<div class="msg-photo-error">⚠️ Failed to load photo</div>';
+    }
+  });
+}
+
+async function playVoiceMessage(btn) {
+  const fileId = btn.dataset.fileId;
+  const container = btn.closest('.msg-voice');
+  const audioEl = container.querySelector('audio');
+
+  if (!audioEl.src) {
+    btn.disabled = true;
+    const originalLabel = btn.textContent;
+    btn.textContent = '⏳';
+    try {
+      const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
+      audioEl.src = URL.createObjectURL(blob);
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+      haptic('error');
+      showToast('Failed to load voice message', 'error');
+      return;
+    }
+    btn.disabled = false;
+    audioEl.onended = () => { btn.textContent = '▶️'; };
+  }
+
+  if (audioEl.paused) {
+    audioEl.play();
+    btn.textContent = '⏸️';
+    haptic('light');
+  } else {
+    audioEl.pause();
+    btn.textContent = '▶️';
+  }
+}
+
+async function playChatVideo(btn) {
+  const container = btn.closest('.msg-video');
+  const fileId = container.dataset.fileId;
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = '⏳ Loading…';
+  try {
+    const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
+    const url = URL.createObjectURL(blob);
+    container.innerHTML = `<video class="msg-video-player" src="${url}" controls autoplay playsinline></video>`;
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+    haptic('error');
+    showToast('Failed to load video', 'error');
+  }
+}
+
+async function downloadChatFile(btn) {
+  const fileId = btn.dataset.fileId;
+  const fileName = btn.dataset.fileName || 'file';
+  haptic('light');
+  const originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  try {
+    const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (e) {
+    haptic('error');
+    showToast('Failed to download file', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  }
+}
+
 function buildMessageTree(messages) {
   const map = new Map();
   const roots = [];
@@ -194,7 +374,7 @@ function renderThread(messages, isRoot = true) {
     html += `
       <div class="message-thread ${isSent ? 'thread-sent' : 'thread-received'}" data-msg-id="${msg.id}">
         <div class="message-bubble ${isSent ? 'sent' : 'received'}">
-          <div class="message-text">${escapeHtml(msg.content)}${editedMark}</div>
+          <div class="message-text">${msg.file_type ? renderFileAttachment(msg) : ''}${msg.content ? `<div class="${msg.file_type ? 'message-caption' : ''}">${escapeHtml(msg.content)}</div>` : ''}${editedMark}</div>
           <div class="message-footer">
             <span class="message-time">${formatTime(msg.created_at)}</span>
             <span class="msg-footer-actions">
@@ -258,6 +438,7 @@ function addMessageToChat(msg) {
         }
       }
 
+      hydratePhotoMessages(repliesContainer);
       container.scrollTop = container.scrollHeight;
       return;
     }
@@ -284,6 +465,7 @@ function addMessageToChat(msg) {
     }
   }
 
+  hydratePhotoMessages(container);
   container.scrollTop = container.scrollHeight;
 }
 
@@ -1999,6 +2181,7 @@ async function loadMessages(with_id) {
     try {
       const messageTree = buildMessageTree(messages);
       container.innerHTML = renderThread(messageTree);
+      hydratePhotoMessages(container);
     } catch (renderError) {
       console.error('[loadMessages] Render error:', renderError);
       // Fallback: show messages as a simple list without threading
@@ -2136,8 +2319,8 @@ async function sendMessage() {
     try {
       msg = await apiFetch('/api/messages', {
         method: 'POST',
-        body: { 
-          to_id: window.chatState.with, 
+        body: {
+          to_id: window.chatState.with,
           content: originalContent,
           parent_id: replyParentId || undefined
         }
@@ -2585,7 +2768,7 @@ function updateSupportBadge(ticketsData) {
       } else {
         badge.style.display = 'none';
       }
-    }).catch(() => {});
+    }).catch(() => { });
   }
 }
 
@@ -2976,7 +3159,7 @@ async function loadTransferMentors(topicId = '') {
 
       let suffixText = '';
       if (isNotAccepting) suffixText += ' (Not Accepting)';
-      if (isFull)         suffixText += ' - At capacity';
+      if (isFull) suffixText += ' - At capacity';
 
       const statusText = isFull ? ' <span style="color:var(--danger);font-size:0.7rem;">full</span>' : '';
 

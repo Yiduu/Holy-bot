@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const axios = require('axios');
 
 const PROFANITY_LIST = ['fuck', 'shit', 'ass', 'bitch', 'damn', 'crap', 'bastard', 'hell', 'piss'];
 
@@ -49,6 +50,46 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     res.json({ count: count || 0 });
   });
 
+  // GET /api/messages/file/:file_id – stream a voice/file attachment
+  // NOTE: This route must be defined BEFORE /:with for the same reason as
+  // /unread/count above — but since it has two path segments ("file" + the
+  // id) it can never actually collide with the single-segment /:with route.
+  // It's placed here anyway to keep all the "must come first" routes together.
+  //
+  // The mini app can't call Telegram's file API directly because that would
+  // require exposing our bot token to the client (Telegram's file URLs are
+  // literally https://api.telegram.org/file/bot<TOKEN>/<path>). Instead we
+  // resolve the file_path server-side and stream the bytes back through our
+  // own authenticated endpoint, so the token never leaves the server.
+  router.get('/file/:file_id', requireAuth, async (req, res) => {
+    const { file_id } = req.params;
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+
+    try {
+      const { data } = await axios.get(`https://api.telegram.org/bot${token}/getFile`, {
+        params: { file_id }
+      });
+
+      if (!data.ok || !data.result?.file_path) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+
+      const fileUrl = `https://api.telegram.org/file/bot${token}/${data.result.file_path}`;
+      const fileRes = await axios.get(fileUrl, { responseType: 'stream' });
+
+      if (fileRes.headers['content-type']) res.setHeader('Content-Type', fileRes.headers['content-type']);
+      if (fileRes.headers['content-length']) res.setHeader('Content-Length', fileRes.headers['content-length']);
+      // Attachments are static once uploaded to Telegram, so it's safe to let
+      // the mini app cache them for a while.
+      res.setHeader('Cache-Control', 'private, max-age=86400');
+
+      fileRes.data.pipe(res);
+    } catch (err) {
+      console.error('[GET /messages/file/:file_id] Error:', err.message);
+      res.status(500).json({ error: 'Failed to fetch file' });
+    }
+  });
+
   // GET /api/messages/:with – conversation with a user
   router.get('/:with', requireAuth, async (req, res) => {
     const { id: my_id } = req.telegramUser;
@@ -67,6 +108,10 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
 
     if (!assign) return res.status(403).json({ error: 'No active mentorship with this user' });
 
+    // select('*') already returns file_id, file_type, file_size, mime_type,
+    // duration and file_name once those columns exist on the table (see the
+    // migration script), so no changes are needed here for the mini app to
+    // receive attachment metadata alongside regular text messages.
     const { data, error } = await supabase
       .from('messages')
       .select('*')

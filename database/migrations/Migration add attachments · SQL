@@ -1,0 +1,41 @@
+-- ============================================================================
+-- Migration: add voice message / file attachment support to `messages`
+-- ============================================================================
+-- Safe to run multiple times: every column uses IF NOT EXISTS, so re-running
+-- this script on a database that already has some (or all) of these columns
+-- is a no-op for the columns that exist and only adds the ones that are missing.
+-- ============================================================================
+
+ALTER TABLE messages
+  ADD COLUMN IF NOT EXISTS file_id   text,
+  ADD COLUMN IF NOT EXISTS file_type text,       -- 'voice' | 'audio' | 'document' | 'photo' | 'video'
+  ADD COLUMN IF NOT EXISTS file_size integer,     -- bytes
+  ADD COLUMN IF NOT EXISTS mime_type text,        -- e.g. 'audio/ogg', 'image/jpeg'
+  ADD COLUMN IF NOT EXISTS duration  integer,     -- seconds, for voice/audio/video
+  ADD COLUMN IF NOT EXISTS file_name text;        -- original filename, for documents
+
+-- Optional but recommended: restrict file_type to the known set once any
+-- existing rows (which will have file_type = NULL) are accounted for.
+-- Postgres/Supabase allows NULL to satisfy a CHECK constraint, so this is
+-- safe to add even though older rows have no file_type.
+ALTER TABLE messages
+  DROP CONSTRAINT IF EXISTS messages_file_type_check;
+
+ALTER TABLE messages
+  ADD CONSTRAINT messages_file_type_check
+  CHECK (file_type IS NULL OR file_type IN ('voice', 'audio', 'document', 'photo', 'video'));
+
+-- Speeds up any future querying/filtering by attachment type (e.g. "show me
+-- all photos in this conversation"). Not required, but cheap and useful.
+CREATE INDEX IF NOT EXISTS idx_messages_file_type ON messages (file_type) WHERE file_type IS NOT NULL;
+
+-- ============================================================================
+-- Verify
+-- ============================================================================
+-- Run this after applying the migration to confirm the columns exist:
+--
+--   SELECT column_name, data_type
+--   FROM information_schema.columns
+--   WHERE table_name = 'messages'
+--   ORDER BY ordinal_position;
+-- ============================================================================
