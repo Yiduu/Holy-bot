@@ -11,7 +11,6 @@ require('dotenv').config();
 
 const logger = require('./utils/logger');
 
-
 // ─── Sentry (optional – only active when SENTRY_DSN is set) ──────────────────
 let Sentry = null;
 if (process.env.SENTRY_DSN) {
@@ -231,22 +230,6 @@ if (Sentry) app.use(Sentry.Handlers.errorHandler());
 app.use((err, req, res, _next) => {
   logger.error('Unhandled express error', { error: err.message, stack: err.stack });
   res.status(500).json({ error: 'Internal server error' });
-});
-// ─── Set Telegram Webhook ──────────────────────────────────────
-const WEBHOOK_URL = process.env.APP_URL + '/webhook';
-bot.setWebHook(WEBHOOK_URL)
-  .then(() => console.log(`✅ Webhook set to ${WEBHOOK_URL}`))
-  .catch(err => console.error('❌ Webhook set failed:', err.message));
-
-// ─── Webhook endpoint ──────────────────────────────────────────
-app.post('/webhook', (req, res) => {
-  try {
-    bot.processUpdate(req.body);
-    res.sendStatus(200);
-  } catch (err) {
-    console.error('Webhook error:', err);
-    res.sendStatus(500);
-  }
 });
 
 const PORT = process.env.PORT || 3000;
