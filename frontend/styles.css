@@ -8,20 +8,24 @@
 
 /* ─── CSS Variables ─────────────────────────────────────────── */
 :root {
-  --gold: #C9A84C;
-  --gold-light: #E8C96B;
-  --gold-dim: rgba(201, 168, 76, 0.25);
+  /* NOTE: --gold/--gold-light/--gold-dim are repurposed as the "ink" accent
+     used for contrast on top of the new gold page background (headings,
+     icons, CTA buttons, borders) — the page background itself is now gold,
+     so gold text/backgrounds on gold would be invisible. */
+  --gold: #0D0F14;
+  --gold-light: #1C2030;
+  --gold-dim: rgba(13, 15, 20, 0.14);
 
-  --bg: #0D0F14;
-  --bg2: #141720;
-  --bg3: #1C2030;
-  --surface: rgba(255, 255, 255, 0.04);
-  --border: rgba(201, 168, 76, 0.18);
-  --border-dim: rgba(255, 255, 255, 0.06);
+  --bg: #C9A84C;
+  --bg2: #BA9640;
+  --bg3: #A9853A;
+  --surface: rgba(13, 15, 20, 0.05);
+  --border: rgba(13, 15, 20, 0.2);
+  --border-dim: rgba(13, 15, 20, 0.1);
 
-  --text: #F0EDE4;
-  --text2: #A8A49A;
-  --text3: #6B6760;
+  --text: #ECEAE0;
+  --text2: rgba(236, 234, 224, 0.72);
+  --text3: rgba(236, 234, 224, 0.48);
 
   --accent: #5B8EFF;
   --danger: #E05C5C;
@@ -31,7 +35,7 @@
   --radius: 14px;
   --radius-sm: 8px;
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  --shadow-gold: 0 0 20px rgba(201, 168, 76, 0.15);
+  --shadow-gold: 0 0 20px rgba(13, 15, 20, 0.18);
 
   --nav-h: 68px;
   --font-display: 'Cinzel', serif;
@@ -330,7 +334,7 @@ h3 {
 
 /* ─── Verse Card ────────────────────────────────────────────── */
 .verse-card {
-  background: linear-gradient(135deg, rgba(201, 168, 76, 0.12) 0%, rgba(91, 142, 255, 0.06) 100%);
+  background: linear-gradient(135deg, rgba(13, 15, 20, 0.12) 0%, rgba(91, 142, 255, 0.06) 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px;
@@ -414,14 +418,14 @@ h3 {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--gold) 0%, #A87C2A 100%);
-  color: #1A1200;
-  box-shadow: 0 4px 16px rgba(201, 168, 76, 0.3);
+  background: linear-gradient(135deg, var(--gold) 0%, #1C2030 100%);
+  color: #ECEAE0;
+  box-shadow: 0 4px 16px rgba(13, 15, 20, 0.3);
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(201, 168, 76, 0.4);
+  box-shadow: 0 6px 20px rgba(13, 15, 20, 0.4);
 }
 
 .btn-primary:active {
@@ -662,7 +666,7 @@ textarea.form-control {
 }
 
 .badge-spec {
-  background: rgba(201, 168, 76, 0.1);
+  background: rgba(13, 15, 20, 0.1);
   color: var(--gold);
 }
 
@@ -819,7 +823,7 @@ textarea.form-control {
 
 .msg-action-btn:hover {
   color: var(--gold);
-  background: rgba(201, 168, 76, 0.12);
+  background: rgba(13, 15, 20, 0.12);
 }
 
 .message-bubble.sent .msg-action-btn:hover {
@@ -970,14 +974,14 @@ textarea.form-control {
   gap: 10px;
   margin-top: 4px;
   padding-left: 14px;
-  border-left: 2px solid rgba(201, 168, 76, 0.22);
+  border-left: 2px solid rgba(13, 15, 20, 0.22);
 }
 
 .thread-sent>.replies-container {
   padding-left: 0;
   padding-right: 14px;
   border-left: none;
-  border-right: 2px solid rgba(201, 168, 76, 0.22);
+  border-right: 2px solid rgba(13, 15, 20, 0.22);
 }
 
 /* Nested bubbles slightly narrower */
@@ -1116,18 +1120,18 @@ textarea.form-control {
   justify-content: center;
   flex-shrink: 0;
   cursor: pointer;
-  box-shadow: 0 3px 12px rgba(201, 168, 76, 0.35);
+  box-shadow: 0 3px 12px rgba(13, 15, 20, 0.35);
   transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.15s;
 }
 
 .chat-send-btn:hover {
   transform: scale(1.08);
-  box-shadow: 0 5px 18px rgba(201, 168, 76, 0.45);
+  box-shadow: 0 5px 18px rgba(13, 15, 20, 0.45);
 }
 
 .chat-send-btn:active {
   transform: scale(0.93);
-  box-shadow: 0 2px 8px rgba(201, 168, 76, 0.25);
+  box-shadow: 0 2px 8px rgba(13, 15, 20, 0.25);
 }
 
 .chat-send-btn svg {
@@ -1623,9 +1627,9 @@ textarea.form-control {
 
 /* ─── Streak Card: large hero variant ──────────────────────────── */
 .streak-card-hero {
-  background: linear-gradient(160deg, rgba(201, 168, 76, 0.16) 0%, rgba(13, 15, 20, 0.6) 65%);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-gold);
+  background: linear-gradient(160deg, var(--bg2) 0%, var(--bg3) 100%);
+  border: 1px solid rgba(13, 15, 20, 0.22);
+  box-shadow: 0 8px 28px rgba(13, 15, 20, 0.25);
   padding: 24px 20px;
   text-align: center;
   display: flex;
@@ -1642,7 +1646,7 @@ textarea.form-control {
   font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: var(--gold-light);
+  color: #ECEAE0;
   text-transform: uppercase;
 }
 
@@ -1666,19 +1670,19 @@ textarea.form-control {
   font-size: 4.2rem;
   line-height: 1;
   font-weight: 700;
-  color: var(--gold);
-  text-shadow: 0 0 24px rgba(201, 168, 76, 0.35);
+  color: #ECEAE0;
+  text-shadow: none;
 }
 
 .streak-hero-unit {
   font-size: 1.25rem;
   font-weight: 600;
-  color: var(--text2);
+  color: #ECEAE0;
 }
 
 .streak-hero-sub {
   font-size: 0.85rem;
-  color: var(--text3);
+  color: rgba(236, 234, 224, 0.75);
   margin-bottom: 16px;
 }
 
@@ -1687,6 +1691,11 @@ textarea.form-control {
   max-width: 260px;
   padding: 13px 20px;
   font-size: 0.95rem;
+}
+
+.streak-hero-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
 }
 
 @media (max-width: 360px) {
@@ -1952,7 +1961,7 @@ textarea.form-control {
   height: 400px;
   top: -10%;
   right: -10%;
-  background: radial-gradient(circle, rgba(201, 168, 76, 0.15) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(13, 15, 20, 0.15) 0%, transparent 70%);
 }
 
 .ob-orb2 {
@@ -1995,8 +2004,8 @@ textarea.form-control {
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
-  background: rgba(201, 168, 76, 0.04);
-  box-shadow: var(--shadow-gold), 0 0 30px rgba(201, 168, 76, 0.12);
+  background: rgba(13, 15, 20, 0.04);
+  box-shadow: var(--shadow-gold), 0 0 30px rgba(13, 15, 20, 0.12);
   animation: obLogoPulse 4s ease-in-out infinite;
 }
 
@@ -2004,12 +2013,12 @@ textarea.form-control {
 
   0%,
   100% {
-    box-shadow: var(--shadow-gold), 0 0 30px rgba(201, 168, 76, 0.12);
+    box-shadow: var(--shadow-gold), 0 0 30px rgba(13, 15, 20, 0.12);
     transform: scale(1);
   }
 
   50% {
-    box-shadow: 0 0 30px rgba(201, 168, 76, 0.25), 0 0 50px rgba(201, 168, 76, 0.2);
+    box-shadow: 0 0 30px rgba(13, 15, 20, 0.25), 0 0 50px rgba(13, 15, 20, 0.2);
     transform: scale(1.03);
   }
 }
@@ -2129,7 +2138,7 @@ textarea.form-control {
 .stepper-step.active .step-num {
   border-color: var(--gold);
   color: var(--gold);
-  box-shadow: var(--shadow-gold), 0 0 16px rgba(201, 168, 76, 0.25);
+  box-shadow: var(--shadow-gold), 0 0 16px rgba(13, 15, 20, 0.25);
   background: var(--bg3);
   transform: scale(1.08);
 }
@@ -2190,8 +2199,8 @@ textarea.form-control {
 
 /* Verse Panel (Step 0) */
 .verse-panel {
-  background: linear-gradient(135deg, rgba(201, 168, 76, 0.1) 0%, rgba(91, 142, 255, 0.04) 100%);
-  border: 1px solid rgba(201, 168, 76, 0.2);
+  background: linear-gradient(135deg, rgba(13, 15, 20, 0.1) 0%, rgba(91, 142, 255, 0.04) 100%);
+  border: 1px solid rgba(13, 15, 20, 0.2);
   border-radius: 16px;
   padding: 24px 20px;
   margin-bottom: 24px;
@@ -2206,7 +2215,7 @@ textarea.form-control {
   left: 10px;
   font-size: 6.5rem;
   font-family: var(--font-display);
-  color: rgba(201, 168, 76, 0.08);
+  color: rgba(13, 15, 20, 0.08);
   line-height: 1;
   pointer-events: none;
 }
@@ -2270,8 +2279,8 @@ textarea.form-control {
   width: 38px;
   height: 38px;
   border-radius: 10px;
-  background: rgba(201, 168, 76, 0.08);
-  border: 1px solid rgba(201, 168, 76, 0.15);
+  background: rgba(13, 15, 20, 0.08);
+  border: 1px solid rgba(13, 15, 20, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2312,8 +2321,8 @@ textarea.form-control {
   font-size: 1.6rem;
   line-height: 1;
   padding: 8px;
-  background: rgba(201, 168, 76, 0.08);
-  border: 1px solid rgba(201, 168, 76, 0.18);
+  background: rgba(13, 15, 20, 0.08);
+  border: 1px solid rgba(13, 15, 20, 0.18);
   border-radius: 12px;
   color: var(--gold);
 }
@@ -2374,8 +2383,8 @@ textarea.form-control {
 }
 
 .form-control-ob:focus {
-  border-color: rgba(201, 168, 76, 0.5);
-  box-shadow: var(--shadow-gold), 0 0 12px rgba(201, 168, 76, 0.15);
+  border-color: rgba(13, 15, 20, 0.5);
+  box-shadow: var(--shadow-gold), 0 0 12px rgba(13, 15, 20, 0.15);
   background: var(--bg2);
 }
 
@@ -2463,17 +2472,17 @@ textarea.form-control {
 }
 
 .topic-chip:hover {
-  border-color: rgba(201, 168, 76, 0.4);
+  border-color: rgba(13, 15, 20, 0.4);
   color: var(--text);
   transform: translateY(-1px);
 }
 
 .topic-chip.active {
-  background: linear-gradient(135deg, var(--gold) 0%, #A87C2A 100%);
+  background: linear-gradient(135deg, var(--gold) 0%, #1C2030 100%);
   border-color: var(--gold);
-  color: #1A1200;
+  color: #ECEAE0;
   font-weight: 700;
-  box-shadow: var(--shadow-gold), 0 4px 12px rgba(201, 168, 76, 0.2);
+  box-shadow: var(--shadow-gold), 0 4px 12px rgba(13, 15, 20, 0.2);
 }
 
 .chip-icon {
@@ -2488,7 +2497,7 @@ textarea.form-control {
 
 /* Covenant Card */
 .covenant-card-ob {
-  background: linear-gradient(135deg, rgba(201, 168, 76, 0.05) 0%, rgba(91, 142, 255, 0.03) 100%);
+  background: linear-gradient(135deg, rgba(13, 15, 20, 0.05) 0%, rgba(91, 142, 255, 0.03) 100%);
   border: 1px solid var(--border-dim);
   border-radius: 16px;
   padding: 20px;
@@ -2581,7 +2590,7 @@ textarea.form-control {
 
 .ob-btn-next:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(201, 168, 76, 0.22);
+  box-shadow: 0 6px 20px rgba(13, 15, 20, 0.22);
 }
 
 .ob-btn-next:active {
@@ -2614,7 +2623,7 @@ textarea.form-control {
 }
 
 [data-theme="light"] .topic-chip.active {
-  color: #1A1200;
+  color: #ECEAE0;
 }
 
 [data-theme="light"] .onboarding-features-list {
@@ -2770,7 +2779,7 @@ textarea.form-control {
   background: linear-gradient(135deg, rgba(28, 32, 48, 0.65) 0%, rgba(20, 23, 32, 0.75) 100%);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(201, 168, 76, 0.16);
+  border: 1px solid rgba(13, 15, 20, 0.16);
   border-radius: 16px;
   padding: 16px;
   margin-bottom: 12px;
@@ -2806,8 +2815,8 @@ textarea.form-control {
 .ticket-card-premium:active,
 .ticket-card-premium:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4), 0 0 15px rgba(201, 168, 76, 0.12);
-  border-color: rgba(201, 168, 76, 0.35);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4), 0 0 15px rgba(13, 15, 20, 0.12);
+  border-color: rgba(13, 15, 20, 0.35);
 }
 
 .ticket-card-premium:hover::before {
@@ -2835,9 +2844,9 @@ textarea.form-control {
 }
 
 .status-pill-open {
-  background: rgba(201, 168, 76, 0.14);
+  background: rgba(13, 15, 20, 0.14);
   color: var(--gold-light);
-  border: 1px solid rgba(201, 168, 76, 0.35);
+  border: 1px solid rgba(13, 15, 20, 0.35);
 }
 .status-pill-open .status-dot {
   background: var(--gold-light);
@@ -2866,9 +2875,9 @@ textarea.form-control {
 }
 
 .status-pill-closed {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(13, 15, 20, 0.08);
   color: var(--text3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(13, 15, 20, 0.15);
 }
 .status-pill-closed .status-dot {
   background: var(--text3);
@@ -2902,8 +2911,8 @@ textarea.form-control {
 
 .ticket-bubble-user {
   align-self: flex-end;
-  background: linear-gradient(135deg, rgba(201, 168, 76, 0.18) 0%, rgba(28, 32, 48, 0.92) 100%);
-  border: 1px solid rgba(201, 168, 76, 0.3);
+  background: linear-gradient(135deg, rgba(13, 15, 20, 0.18) 0%, rgba(28, 32, 48, 0.92) 100%);
+  border: 1px solid rgba(13, 15, 20, 0.3);
   border-bottom-right-radius: 4px;
 }
 
@@ -2944,7 +2953,7 @@ textarea.form-control {
   background: rgba(20, 23, 32, 0.9);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(201, 168, 76, 0.22);
+  border: 1px solid rgba(13, 15, 20, 0.22);
   border-radius: 16px;
   padding: 12px;
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
@@ -2966,7 +2975,7 @@ textarea.form-control {
 .ticket-reply-textarea:focus {
   outline: none;
   border-color: var(--gold);
-  box-shadow: 0 0 12px rgba(201, 168, 76, 0.25);
+  box-shadow: 0 0 12px rgba(13, 15, 20, 0.25);
   background: rgba(13, 15, 20, 0.95);
 }
 
@@ -2982,7 +2991,7 @@ textarea.form-control {
   font-size: 0.88rem;
   padding: 10px 16px;
   border-radius: 10px;
-  box-shadow: 0 4px 15px rgba(201, 168, 76, 0.3);
+  box-shadow: 0 4px 15px rgba(13, 15, 20, 0.3);
   transition: all 0.2s ease;
   margin-top: 8px;
   cursor: pointer;
@@ -2991,7 +3000,7 @@ textarea.form-control {
 
 .ticket-submit-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(201, 168, 76, 0.45);
+  box-shadow: 0 6px 20px rgba(13, 15, 20, 0.45);
 }
 
 .ticket-submit-btn:disabled {
