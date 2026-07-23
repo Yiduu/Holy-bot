@@ -11,7 +11,6 @@
   <link rel="stylesheet" href="styles.css?v=1.1" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 
@@ -323,17 +322,17 @@
 
         <!-- Stats -->
         <div class="section-title" data-i18n="My Progress">My Progress</div>
-        <div id="streakCard" class="card mb-16 streak-card" onclick="markStreakRead()">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-12">
-              <div class="streak-icon">🔥</div>
-              <div>
-                <div class="text-sm font-bold" data-i18n="Bible Streak">Bible Streak</div>
-                <div id="streakCount" class="text-xs text-dim">0 days</div>
-              </div>
-            </div>
-            <button id="markReadBtn" class="btn btn-ghost btn-sm" data-i18n="btn_mark_read">Mark Read</button>
+        <div id="streakCard" class="card mb-16 streak-card streak-card-hero" onclick="markStreakRead()">
+          <div class="streak-hero-label">
+            <span class="streak-icon">🔥</span>
+            <span data-i18n="Bible Streak">Bible Streak</span>
           </div>
+          <div class="streak-hero-main">
+            <div id="streakCount" class="streak-hero-number">0</div>
+            <div class="streak-hero-unit" data-i18n="streak_days_label">days</div>
+          </div>
+          <div id="streakLongest" class="streak-hero-sub"></div>
+          <button id="markReadBtn" class="btn btn-primary streak-hero-btn" data-i18n="btn_mark_read">Mark Read</button>
         </div>
 
         <div class="section-title" data-i18n="Community">Community</div>
@@ -350,12 +349,6 @@
             <div id="statSessions" class="stat-num">–</div>
             <div class="stat-label" data-i18n="Sessions Today">Sessions Today</div>
           </div>
-        </div>
-
-        <!-- Chart -->
-        <div class="section-title" data-i18n="Weekly Activity">Weekly Activity</div>
-        <div class="chart-wrap mb-16" style="height:160px">
-          <canvas id="activityChart"></canvas>
         </div>
 
         <!-- Quick Actions -->

@@ -7,7 +7,6 @@ let socket = null;
 let currentUser = null;
 let currentPage = 'dashboard';
 let jitsiApi = null;
-let chart = null;
 
 // ─── Helpers ──────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -1025,7 +1024,6 @@ window.loadDashboard = async function loadDashboard() {
     $('statSessions').textContent = stats.sessions_today;
   } catch { }
 
-  loadActivityChart();
   loadStreak();
 
   if (String(currentUser?.telegram_id) === String(window.ADMIN_ID)) {
@@ -1038,7 +1036,11 @@ window.loadDashboard = async function loadDashboard() {
 async function loadStreak() {
   try {
     const s = await apiFetch('/api/streaks');
-    $('streakCount').textContent = t('streak_display', { count: s.current_streak });
+    $('streakCount').textContent = s.current_streak;
+    const longestEl = $('streakLongest');
+    if (longestEl) {
+      longestEl.textContent = t('streak_longest_label', { longest: s.longest_streak || 0 });
+    }
 
     // Check if already read today (Ethiopia time)
     const etNow = new Date(new Date().getTime() + (3 * 60 * 60 * 1000));
@@ -1067,45 +1069,6 @@ async function markStreakRead() {
     showToast(t('streak_marked'), 'success');
     loadStreak();
   } catch (e) { showToast(e.message, 'error'); }
-}
-
-async function loadActivityChart() {
-  try {
-    const data = await apiFetch('/api/users/weekly-activity');
-    const ctx = $('activityChart')?.getContext('2d');
-    if (!ctx) return;
-    if (chart) chart.destroy();
-    chart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: data.map(d => d.date),
-        datasets: [
-          {
-            label: 'Messages',
-            data: data.map(d => d.messages),
-            backgroundColor: 'rgba(201,168,76,0.4)',
-            borderColor: 'rgba(201,168,76,0.8)',
-            borderWidth: 1, borderRadius: 4,
-          },
-          {
-            label: 'Sessions',
-            data: data.map(d => d.sessions),
-            backgroundColor: 'rgba(91,142,255,0.4)',
-            borderColor: 'rgba(91,142,255,0.8)',
-            borderWidth: 1, borderRadius: 4,
-          },
-        ],
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { labels: { color: getComputedStyle(document.documentElement).getPropertyValue('--text2').trim() } } },
-        scales: {
-          x: { ticks: { color: '#888' }, grid: { color: 'rgba(255,255,255,0.04)' } },
-          y: { ticks: { color: '#888' }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true },
-        },
-      },
-    });
-  } catch (e) { console.error('Chart error:', e); }
 }
 
 // ─── Mentors ──────────────────────────────────────────────────
