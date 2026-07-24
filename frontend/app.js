@@ -840,7 +840,10 @@ function connectSocket() {
 
   socket.on('ticket_reply', (data) => {
     haptic('success');
-    showToast(`📩 Admin replied to your support request: "${data.subject || 'Support'}"`, 'info');
+    const msg = data.reply
+      ? `📩 Admin replied to your support request: "${data.subject || 'Support'}"`
+      : `🔔 Your support request "${data.subject || 'Support'}" is now ${data.status_label || data.status}`;
+    showToast(msg, 'info');
     updateSupportBadge();
     if (currentPage === 'support') {
       loadUserTickets();

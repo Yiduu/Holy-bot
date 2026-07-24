@@ -518,7 +518,8 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     if (fetchErr || !ticket) return res.status(404).json({ error: 'Ticket not found' });
 
     const now = new Date().toISOString();
-    const updatedStatus = status || (replyText ? 'resolved' : ticket.status);
+    const updatedStatus = status || ticket.status;
+    const statusChanged = updatedStatus !== ticket.status;
     let newReplyCount = ticket.reply_count || 0;
 
     if (replyText) {
@@ -542,7 +543,7 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       .update({
         admin_reply: replyText || ticket.admin_reply,
         status: updatedStatus,
-        last_reply_at: replyText ? now : (ticket.last_reply_at || now),
+        last_reply_at: (replyText || statusChanged) ? now : (ticket.last_reply_at || now),
         reply_count: newReplyCount,
         updated_at: now
       })
@@ -554,8 +555,11 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
 
     await logAudit(admin_id, 'ticket_reply', null, 'support_ticket', { ticket_id: req.params.id, status: updatedStatus });
 
-    // Send notifications if admin replied
-    if (replyText) {
+    // Notify the user on any reply OR status change — not just when text was typed
+    if (replyText || statusChanged) {
+      const STATUS_LABEL = { open: 'Open', in_progress: 'In Progress', resolved: 'Resolved', closed: 'Closed' };
+      const statusLabel = STATUS_LABEL[updatedStatus] || updatedStatus;
+
       // 1. Socket.IO notification to online user
       const onlineUsers = global.onlineUsers || req.app.get('onlineUsers');
       const targetSocketId = onlineUsers?.get(String(ticket.telegram_id));
@@ -563,20 +567,27 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
         io.to(targetSocketId).emit('ticket_reply', {
           ticket_id: ticket.id,
           subject: ticket.subject,
-          reply: replyText,
+          reply: replyText || null,
           status: updatedStatus,
+          status_label: statusLabel,
           created_at: now
         });
       }
 
-      // 2. Telegram Bot notification via safeSend
+      // 2. Telegram Bot notification via safeSend — clean, professional copy
       try {
         const { safeSend } = require('../bot');
-        const preview = replyText.length > 250 ? replyText.substring(0, 250) + '…' : replyText;
-        const msgText = `📩 *Admin replied to your support ticket*\n\n*Subject:* ${ticket.subject}\n*Status:* ${updatedStatus.toUpperCase()}\n\n💬 "${preview}"\n\n_Open the app to view the full conversation or send a follow-up reply._`;
+        let msgText = `📩 *Support Request Update*\n\n*Subject:* ${ticket.subject}\n*Status:* ${statusLabel}`;
+        if (replyText) {
+          const preview = replyText.length > 300 ? replyText.substring(0, 300) + '…' : replyText;
+          msgText += `\n\n${preview}`;
+        }
+        msgText += updatedStatus === 'closed'
+          ? `\n\nThis request has been closed. Open the app if you need to review the conversation.`
+          : `\n\nOpen the app to view the full conversation or send a follow-up.`;
         await safeSend(ticket.telegram_id, msgText);
       } catch (botErr) {
-        console.error('[admin] Failed to send Telegram notification for ticket reply:', botErr.message);
+        console.error('[admin] Failed to send Telegram notification for ticket update:', botErr.message);
       }
     }
 

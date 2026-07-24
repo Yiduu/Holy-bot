@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>Holy Helper – Admin</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <style>
         :root {
@@ -2421,21 +2422,25 @@
             setTimeout(() => btn.classList.remove('spinning'), 600);
         }
 
-        /* ── WebSocket ──────────────────────────────────────────────── */
+        /* ── Realtime (Socket.IO) ─────────────────────────────────────── */
         function connectWS() {
             try {
-                const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-                wsConn = new WebSocket(`${proto}://${location.host}`);
-                wsConn.onopen = () => setWSStatus(true);
-                wsConn.onclose = () => { setWSStatus(false); setTimeout(connectWS, 5000); };
-                wsConn.onerror = () => setWSStatus(false);
-                wsConn.onmessage = e => {
-                    try {
-                        const d = JSON.parse(e.data);
-                        if (d.event === 'new_ticket') { loadStats(); if (activeTab === 'tickets') loadTickets(); }
-                        if (d.event === 'broadcast') { toast('Broadcast delivered', 'success'); }
-                    } catch { }
-                };
+                wsConn = io(API, { transports: ['websocket', 'polling'] });
+                wsConn.on('connect', () => setWSStatus(true));
+                wsConn.on('disconnect', () => setWSStatus(false));
+                wsConn.on('connect_error', () => setWSStatus(false));
+
+                wsConn.on('new_ticket', (d) => {
+                    toast(`🎫 New support request: "${d.subject || 'Untitled'}"`, 'info');
+                    loadStats();
+                    if (activeTab === 'tickets') loadTickets();
+                });
+
+                wsConn.on('new_ticket_reply', () => {
+                    if (activeTab === 'tickets') loadTickets();
+                });
+
+                wsConn.on('broadcast', () => toast('Broadcast delivered', 'success'));
             } catch { setWSStatus(false); }
         }
         function setWSStatus(on) {
