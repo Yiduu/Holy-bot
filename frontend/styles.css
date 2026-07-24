@@ -15,6 +15,9 @@
   --bg: #0D0F14;
   --bg2: #141720;
   --bg3: #1C2030;
+  --bg-rgb: 13, 15, 20;
+  --bg2-rgb: 20, 23, 32;
+  --bg3-rgb: 28, 32, 48;
   --surface: rgba(255, 255, 255, 0.04);
   --border: rgba(201, 168, 76, 0.18);
   --border-dim: rgba(255, 255, 255, 0.06);
@@ -44,6 +47,9 @@
   --bg: #F4F1EA;
   --bg2: #ECEAE0;
   --bg3: #E0DDD2;
+  --bg-rgb: 244, 241, 234;
+  --bg2-rgb: 236, 234, 224;
+  --bg3-rgb: 224, 221, 210;
   --surface: rgba(0, 0, 0, 0.04);
   --border: rgba(150, 120, 40, 0.2);
   --border-dim: rgba(0, 0, 0, 0.06);
@@ -1623,7 +1629,7 @@ textarea.form-control {
 
 /* ─── Streak Card: large hero variant ──────────────────────────── */
 .streak-card-hero {
-  background: linear-gradient(160deg, rgba(201, 168, 76, 0.16) 0%, rgba(13, 15, 20, 0.6) 65%);
+  background: linear-gradient(160deg, rgba(201, 168, 76, 0.16) 0%, rgba(var(--bg-rgb), 0.6) 65%);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-gold);
   padding: 24px 20px;
@@ -2767,7 +2773,7 @@ textarea.form-control {
 }
 
 .ticket-card-premium {
-  background: linear-gradient(135deg, rgba(28, 32, 48, 0.65) 0%, rgba(20, 23, 32, 0.75) 100%);
+  background: linear-gradient(135deg, rgba(var(--bg3-rgb), 0.65) 0%, rgba(var(--bg2-rgb), 0.75) 100%);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(201, 168, 76, 0.16);
@@ -2902,14 +2908,14 @@ textarea.form-control {
 
 .ticket-bubble-user {
   align-self: flex-end;
-  background: linear-gradient(135deg, rgba(201, 168, 76, 0.18) 0%, rgba(28, 32, 48, 0.92) 100%);
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.18) 0%, rgba(var(--bg3-rgb), 0.92) 100%);
   border: 1px solid rgba(201, 168, 76, 0.3);
   border-bottom-right-radius: 4px;
 }
 
 .ticket-bubble-admin {
   align-self: flex-start;
-  background: linear-gradient(135deg, rgba(91, 142, 255, 0.15) 0%, rgba(20, 23, 32, 0.92) 100%);
+  background: linear-gradient(135deg, rgba(91, 142, 255, 0.15) 0%, rgba(var(--bg2-rgb), 0.92) 100%);
   border: 1px solid rgba(91, 142, 255, 0.32);
   border-bottom-left-radius: 4px;
 }
@@ -2941,7 +2947,7 @@ textarea.form-control {
 
 /* Floating Input Panel */
 .ticket-reply-panel {
-  background: rgba(20, 23, 32, 0.9);
+  background: rgba(var(--bg2-rgb), 0.9);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(201, 168, 76, 0.22);
@@ -2953,7 +2959,7 @@ textarea.form-control {
 
 .ticket-reply-textarea {
   width: 100%;
-  background: rgba(13, 15, 20, 0.75);
+  background: rgba(var(--bg-rgb), 0.75);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
   color: var(--text);
@@ -2967,7 +2973,7 @@ textarea.form-control {
   outline: none;
   border-color: var(--gold);
   box-shadow: 0 0 12px rgba(201, 168, 76, 0.25);
-  background: rgba(13, 15, 20, 0.95);
+  background: rgba(var(--bg-rgb), 0.95);
 }
 
 .ticket-submit-btn {

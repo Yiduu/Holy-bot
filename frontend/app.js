@@ -2723,7 +2723,7 @@ async function loadUserTickets() {
 
     if (!tickets || tickets.length === 0) {
       container.innerHTML = `
-        <div class="empty-state card" style="text-align:center;padding:40px 20px;border-radius:18px;background:linear-gradient(135deg, rgba(28,32,48,0.5), rgba(20,23,32,0.7));border:1px dashed var(--border)">
+        <div class="empty-state card" style="text-align:center;padding:40px 20px;border-radius:18px;background:linear-gradient(135deg, rgba(var(--bg3-rgb),0.5), rgba(var(--bg2-rgb),0.7));border:1px dashed var(--border)">
           <div style="font-size:2.6rem;margin-bottom:10px">🎫</div>
           <div class="font-bold text-base mb-4" style="color:var(--text)">${t('No support requests found')}</div>
           <p class="text-xs text-dim mb-16" style="max-width:260px;margin-left:auto;margin-right:auto">You have not submitted any support requests yet. Need help? Create one anytime.</p>
@@ -2831,7 +2831,7 @@ async function loadTicketDetail(ticketId) {
 
     // Render original ticket message + reply thread
     let html = `
-      <div class="ticket-bubble ticket-bubble-user" style="align-self:flex-start;width:100%;max-width:100%;margin-bottom:12px;background:linear-gradient(135deg, rgba(201,168,76,0.12) 0%, rgba(20,23,32,0.85) 100%);border:1px solid rgba(201,168,76,0.25)">
+      <div class="ticket-bubble ticket-bubble-user" style="align-self:flex-start;width:100%;max-width:100%;margin-bottom:12px;background:linear-gradient(135deg, rgba(201,168,76,0.12) 0%, rgba(var(--bg2-rgb),0.85) 100%);border:1px solid rgba(201,168,76,0.25)">
         <div class="ticket-bubble-hdr">
           <span style="display:flex;align-items:center;gap:4px;color:var(--gold-light)">👤 <strong>You</strong> (Original Issue)</span>
           <span style="font-weight:normal;color:var(--text3);font-size:0.7rem">${formatDateTime(ticket.created_at)}</span>
