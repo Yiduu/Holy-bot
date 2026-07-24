@@ -8,7 +8,7 @@ module.exports = function supportRoutes(supabase, requireAuth, io, onlineUsers) 
   // POST /api/support – create ticket
   router.post('/', requireAuth, async (req, res) => {
     const { id: telegram_id } = req.telegramUser;
-    const { subject, description } = req.body;
+    const { subject, description, category } = req.body;
     if (!subject || !description) return res.status(400).json({ error: 'subject and description required' });
 
     const now = new Date().toISOString();
@@ -18,6 +18,7 @@ module.exports = function supportRoutes(supabase, requireAuth, io, onlineUsers) 
         telegram_id,
         subject,
         description,
+        category: category || null,
         status: 'open',
         reply_count: 0,
         last_reply_at: now,

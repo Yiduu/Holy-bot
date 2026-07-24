@@ -389,22 +389,6 @@
           </button>
         </div>
 
-        <!-- Support -->
-        <div class="section-title" data-i18n="Support">Support</div>
-        <div class="card mb-16">
-          <div class="form-group">
-            <label class="form-label" data-i18n="Subject">Subject</label>
-            <input id="ticketSubject" class="form-control" placeholder="What do you need help with?"
-              data-i18n="What do you need help with?" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" data-i18n="Description">Description</label>
-            <textarea id="ticketDesc" class="form-control" rows="3" placeholder="Describe your issue..."
-              data-i18n="Describe your issue..."></textarea>
-          </div>
-          <button class="btn btn-outline btn-sm" onclick="submitTicket()" data-i18n="Submit Ticket">Submit
-            Ticket</button>
-        </div>
       </div>
     </div>
 
@@ -716,9 +700,9 @@
     <!-- ── Page: Support / My Tickets ────────────────────────────── -->
     <div id="page-support" class="page">
       <div class="app-header">
-        <h2 data-i18n="My Tickets">My Tickets</h2>
-        <button class="btn btn-sm btn-primary" onclick="toggleNewTicketModal(true)" data-i18n="New Ticket">+ New
-          Ticket</button>
+        <h2 data-i18n="My Support Requests">My Support Requests</h2>
+        <button class="btn btn-sm btn-primary" onclick="toggleNewTicketModal(true)" data-i18n="New Request">+ New
+          Request</button>
       </div>
       <div class="page-content">
         <p class="text-sm text-dim mb-12">Track your support requests, view responses, and reply to our support team.
@@ -736,7 +720,7 @@
           <button class="btn btn-ghost btn-sm" onclick="navigate('support')">← Back</button>
           <h3 id="ticketDetailSubject"
             style="margin:0;font-size:1rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px;color:var(--text)">
-            Ticket Detail</h3>
+            Support Request</h3>
         </div>
         <span id="ticketDetailStatus" class="status-pill status-pill-open"><span class="status-dot"></span>open</span>
       </div>
@@ -851,12 +835,23 @@
     style="display:none">
     <div class="modal-sheet">
       <div class="modal-handle"></div>
-      <div class="modal-title" data-i18n="New Support Ticket">New Support Ticket</div>
+      <div class="modal-title" data-i18n="New Support Request">New Support Request</div>
       <p class="text-sm text-dim mb-16">Describe your issue or question. Our admin team will respond shortly.</p>
 
       <div class="form-group">
         <label class="form-label" data-i18n="Subject">Subject</label>
         <input id="modalTicketSubject" class="form-control" placeholder="What do you need help with?" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" data-i18n="Category">Category (optional)</label>
+        <select id="modalTicketCategory" class="form-control">
+          <option value="">General</option>
+          <option value="account">Account</option>
+          <option value="technical">Technical Issue</option>
+          <option value="mentorship">Mentorship</option>
+          <option value="billing">Billing</option>
+          <option value="other">Other</option>
+        </select>
       </div>
       <div class="form-group mb-16">
         <label class="form-label" data-i18n="Description">Description</label>
@@ -867,7 +862,7 @@
       <div class="flex gap-8 mt-12">
         <button class="btn btn-ghost flex-1" onclick="toggleNewTicketModal(false)">Cancel</button>
         <button class="ticket-submit-btn flex-1" style="margin-top:0" onclick="submitModalTicket()">
-          <span>Submit Ticket</span>
+          <span>Submit Request</span>
           <span>🙏</span>
         </button>
       </div>

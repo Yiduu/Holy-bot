@@ -840,7 +840,7 @@ function connectSocket() {
 
   socket.on('ticket_reply', (data) => {
     haptic('success');
-    showToast(`📩 Admin replied to your ticket: "${data.subject || 'Support'}"`, 'info');
+    showToast(`📩 Admin replied to your support request: "${data.subject || 'Support'}"`, 'info');
     updateSupportBadge();
     if (currentPage === 'support') {
       loadUserTickets();
@@ -2722,10 +2722,10 @@ async function loadUserTickets() {
       container.innerHTML = `
         <div class="empty-state card" style="text-align:center;padding:40px 20px;border-radius:18px;background:linear-gradient(135deg, rgba(28,32,48,0.5), rgba(20,23,32,0.7));border:1px dashed var(--border)">
           <div style="font-size:2.6rem;margin-bottom:10px">🎫</div>
-          <div class="font-bold text-base mb-4" style="color:var(--text)">${t('No tickets found')}</div>
-          <p class="text-xs text-dim mb-16" style="max-width:260px;margin-left:auto;margin-right:auto">You have not submitted any support tickets yet. Need help? Create a ticket anytime.</p>
+          <div class="font-bold text-base mb-4" style="color:var(--text)">${t('No support requests found')}</div>
+          <p class="text-xs text-dim mb-16" style="max-width:260px;margin-left:auto;margin-right:auto">You have not submitted any support requests yet. Need help? Create one anytime.</p>
           <button class="ticket-submit-btn" style="max-width:180px;margin:0 auto" onclick="toggleNewTicketModal(true)">
-            <span>+ Create Ticket</span>
+            <span>+ New Request</span>
           </button>
         </div>`;
       return;
@@ -2816,7 +2816,7 @@ async function loadTicketDetail(ticketId) {
 
     if (ticket.status === 'closed') {
       replyTextarea.disabled = true;
-      replyTextarea.placeholder = 'This ticket has been marked as closed.';
+      replyTextarea.placeholder = 'This support request has been marked as closed.';
       replyBtn.disabled = true;
       replyBtn.style.opacity = '0.5';
     } else {
@@ -2898,15 +2898,15 @@ async function submitTicketReply() {
 function toggleNewTicketModal(show) {
   haptic('selection');
   const modal = $('newTicketModal');
-  if (modal) {
-    modal.style.display = show ? 'flex' : 'none';
-  }
+  if (!modal) return;
+  modal.classList.toggle('open', show);
 }
 
 async function submitModalTicket() {
   haptic('medium');
   const subject = $('modalTicketSubject').value.trim();
   const description = $('modalTicketDesc').value.trim();
+  const category = $('modalTicketCategory')?.value || '';
   if (!subject || !description) {
     haptic('error');
     showToast('Fill in all fields', 'error');
@@ -2914,11 +2914,12 @@ async function submitModalTicket() {
   }
 
   try {
-    await apiFetch('/api/support', { method: 'POST', body: { subject, description } });
+    await apiFetch('/api/support', { method: 'POST', body: { subject, description, category } });
     haptic('success');
-    showToast('Support ticket submitted 🙏', 'success');
+    showToast('Support request submitted 🙏', 'success');
     $('modalTicketSubject').value = '';
     $('modalTicketDesc').value = '';
+    if ($('modalTicketCategory')) $('modalTicketCategory').value = '';
     toggleNewTicketModal(false);
     if (currentPage === 'support') {
       loadUserTickets();
@@ -2929,21 +2930,6 @@ async function submitModalTicket() {
     haptic('error');
     showToast(e.message, 'error');
   }
-}
-
-async function submitTicket() {
-  haptic('medium');
-  const subject = $('ticketSubject').value.trim();
-  const description = $('ticketDesc').value.trim();
-  if (!subject || !description) { haptic('error'); showToast('Fill in all fields', 'error'); return; }
-
-  try {
-    await apiFetch('/api/support', { method: 'POST', body: { subject, description } });
-    haptic('success');
-    showToast('Ticket submitted', 'success');
-    $('ticketSubject').value = ''; $('ticketDesc').value = '';
-    if (currentPage === 'support') loadUserTickets();
-  } catch (e) { haptic('error'); showToast(e.message, 'error'); }
 }
 
 // ─── Localization ─────────────────────────────────────────────

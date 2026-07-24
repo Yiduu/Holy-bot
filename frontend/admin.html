@@ -1698,7 +1698,7 @@
                         <line x1="12" y1="8" x2="12" y2="12" />
                         <line x1="12" y1="16" x2="12.01" y2="16" />
                     </svg>
-                    Support Tickets
+                    Support Requests
                     <span id="ticketsBadge" class="nav-badge" style="display:none">0</span>
                 </div>
                 <div class="nav-item" onclick="showTab('topics')" id="nav-topics">
@@ -1828,7 +1828,7 @@
                                     <line x1="12" y1="16" x2="12.01" y2="16" />
                                 </svg></div>
                             <div class="stat-num" id="st-tickets">–</div>
-                            <div class="stat-label">Open Tickets</div>
+                            <div class="stat-label">Open Requests</div>
                         </div>
                     </div>
 
@@ -1871,7 +1871,7 @@
                                     <line x1="12" y1="16" x2="12.01" y2="16" />
                                 </svg>
                             </div>
-                            <div class="quick-btn-label">Open Tickets</div>
+                            <div class="quick-btn-label">Open Requests</div>
                             <div class="quick-btn-sub" id="qa-tix">Loading…</div>
                         </div>
                         <div class="quick-btn" onclick="showTab('broadcast')">
@@ -2162,7 +2162,7 @@
                             <option value="reject_application">Reject Application</option>
                             <option value="ban_user">Ban User</option>
                             <option value="delete_user">Delete User</option>
-                            <option value="resolve_ticket">Resolve Ticket</option>
+                            <option value="resolve_ticket">Resolve Request</option>
                             <option value="broadcast">Broadcast</option>
                         </select>
                     </div>
@@ -2392,7 +2392,7 @@
         /* ── Tab nav ────────────────────────────────────────────────── */
         const TITLES = {
             overview: 'Overview', users: 'Users', conversations: 'Conversations', mentorship: 'Mentorship', applications: 'Mentor Applications',
-            messages: 'Message Moderation', tickets: 'Support Tickets', topics: 'Counseling Topics',
+            messages: 'Message Moderation', tickets: 'Support Requests', topics: 'Counseling Topics',
             'mentorship-requests': 'Request Log',
             broadcast: 'Broadcast', audit: 'Audit Log'
         };
@@ -2760,7 +2760,7 @@
             c.innerHTML = '<div class="loading">Loading…</div>';
             try {
                 const tickets = await api('/api/admin/tickets');
-                if (!tickets?.length) { c.innerHTML = '<div class="empty">🎉 No support tickets</div>'; return; }
+                if (!tickets?.length) { c.innerHTML = '<div class="empty">🎉 No support requests</div>'; return; }
                 c.innerHTML = tickets.map(t => {
                     const statusClass = t.status === 'open' ? 'chip-gold' : t.status === 'in_progress' ? 'chip-blue' : t.status === 'resolved' ? 'chip-green' : 'chip-gray';
                     const replyCount = t.reply_count || 0;
