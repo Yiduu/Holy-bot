@@ -2899,6 +2899,7 @@ function toggleNewTicketModal(show) {
   haptic('selection');
   const modal = $('newTicketModal');
   if (!modal) return;
+  modal.style.display = '';
   modal.classList.toggle('open', show);
 }
 
