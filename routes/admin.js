@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const axios = require('axios');
 
 // Prefix shown above an admin's custom message, localized by the applicant's
 // preferred language (user_settings.language). Falls back to English.
@@ -421,13 +422,52 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       is_read: m.is_read,
       is_flagged: m.is_flagged,
       edited_at: m.edited_at,
-      is_deleted: m.is_deleted
+      is_deleted: m.is_deleted,
+      file_id: m.file_id || null,
+      file_type: m.file_type || null,
+      file_name: m.file_name || null,
+      file_size: m.file_size || null,
+      mime_type: m.mime_type || null,
+      duration: m.duration || null
     }));
 
     res.json({
       messages: responseMessages,
       has_more
     });
+  });
+
+  // GET /api/admin/messages/file/:file_id – stream a voice/photo/document
+  // attachment for admin review. Mirrors the same proxy pattern used by
+  // /api/messages/file/:file_id (routes/messages.js): the bot token never
+  // leaves the server, we just resolve Telegram's file_path and pipe the
+  // bytes through. Already admin-gated by the router.use(requireAuth,
+  // requireAdmin) at the top of this file — no extra check needed here.
+  router.get('/messages/file/:file_id', async (req, res) => {
+    const { file_id } = req.params;
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+
+    try {
+      const { data } = await axios.get(`https://api.telegram.org/bot${token}/getFile`, {
+        params: { file_id }
+      });
+
+      if (!data.ok || !data.result?.file_path) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+
+      const fileUrl = `https://api.telegram.org/file/bot${token}/${data.result.file_path}`;
+      const fileRes = await axios.get(fileUrl, { responseType: 'stream' });
+
+      if (fileRes.headers['content-type']) res.setHeader('Content-Type', fileRes.headers['content-type']);
+      if (fileRes.headers['content-length']) res.setHeader('Content-Length', fileRes.headers['content-length']);
+      res.setHeader('Cache-Control', 'private, max-age=86400');
+
+      fileRes.data.pipe(res);
+    } catch (err) {
+      console.error('[GET /admin/messages/file/:file_id] Error:', err.message);
+      res.status(500).json({ error: 'Failed to fetch file' });
+    }
   });
 
   router.get('/search/users', async (req, res) => {

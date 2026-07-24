@@ -1421,6 +1421,79 @@
             color: var(--text3);
         }
 
+        /* ── Chat attachments (voice / photo / file) ─────────────────── */
+        .admin-msg-voice {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 180px;
+        }
+
+        .admin-msg-voice-play {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .admin-msg-voice-dur {
+            font-size: 10px;
+            color: var(--text3);
+        }
+
+        .admin-msg-photo img {
+            max-width: 220px;
+            max-height: 220px;
+            border-radius: 8px;
+            display: block;
+            cursor: pointer;
+        }
+
+        .admin-msg-photo-placeholder,
+        .admin-msg-photo-error {
+            font-size: 11px;
+            color: var(--text3);
+            padding: 10px;
+        }
+
+        .admin-msg-file {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 180px;
+        }
+
+        .admin-msg-file-meta {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .admin-msg-file-name {
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .admin-msg-file-size {
+            font-size: 10px;
+            color: var(--text3);
+        }
+
+        .admin-msg-file-btn {
+            border: 1px solid var(--border);
+            background: var(--surface);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
         /* ── Mentorship Tab Styles ─────────────────────────────────── */
         .mentorship-grid {
             display: grid;
@@ -3075,6 +3148,138 @@
             }
         }
 
+        /* ── Attachment rendering (admin chat viewer) ─────────────────── */
+        const ADMIN_FILE_ICONS = { document: '📄', audio: '🎵', video: '🎬', photo: '🖼️', voice: '🎙️' };
+
+        async function adminFetchBlob(path) {
+            const res = await fetch(`${API}${path}`, { headers: hdrs() });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.blob();
+        }
+
+        function adminFormatDuration(seconds) {
+            if (seconds === null || seconds === undefined || isNaN(seconds)) return '';
+            const m = Math.floor(seconds / 60), s = Math.floor(seconds % 60);
+            return `${m}:${String(s).padStart(2, '0')}`;
+        }
+
+        function adminFormatFileSize(bytes) {
+            if (bytes === null || bytes === undefined || isNaN(bytes)) return '';
+            if (bytes < 1024) return `${bytes} B`;
+            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+            return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        }
+
+        function renderAdminAttachment(m) {
+            const fileId = esc(m.file_id || '');
+            switch (m.file_type) {
+                case 'voice':
+                case 'audio':
+                    return `
+                        <div class="admin-msg-voice">
+                            <button class="admin-msg-voice-play" data-file-id="${fileId}" onclick="playAdminVoice(this)">▶️</button>
+                            <div>
+                                <div>${ADMIN_FILE_ICONS[m.file_type]} ${m.file_type === 'voice' ? 'Voice message' : esc(m.file_name || 'Audio')}</div>
+                                <div class="admin-msg-voice-dur">${adminFormatDuration(m.duration)}</div>
+                            </div>
+                            <audio style="display:none" preload="none"></audio>
+                        </div>`;
+                case 'video':
+                    return `
+                        <div class="admin-msg-video" data-file-id="${fileId}">
+                            <button class="admin-msg-file-btn" onclick="playAdminVideo(this)">▶️ Play video${m.duration ? ` (${adminFormatDuration(m.duration)})` : ''}</button>
+                        </div>`;
+                case 'photo':
+                    return `
+                        <div class="admin-msg-photo" data-file-id="${fileId}">
+                            <div class="admin-msg-photo-placeholder">🖼️ Loading photo…</div>
+                        </div>`;
+                case 'document':
+                default:
+                    return `
+                        <div class="admin-msg-file">
+                            <div>${ADMIN_FILE_ICONS[m.file_type] || '📎'}</div>
+                            <div class="admin-msg-file-meta">
+                                <div class="admin-msg-file-name">${esc(m.file_name || 'File')}</div>
+                                <div class="admin-msg-file-size">${adminFormatFileSize(m.file_size)}</div>
+                            </div>
+                            <button class="admin-msg-file-btn" data-state="download" data-file-id="${fileId}" data-file-name="${esc(m.file_name || 'file')}" onclick="handleAdminFileAction(this)">⬇️</button>
+                        </div>`;
+            }
+        }
+
+        function hydrateAdminPhotos(container) {
+            if (!container) return;
+            container.querySelectorAll('.admin-msg-photo[data-file-id]:not(.loaded)').forEach(async el => {
+                el.classList.add('loaded');
+                try {
+                    const blob = await adminFetchBlob(`/api/admin/messages/file/${el.dataset.fileId}`);
+                    const url = URL.createObjectURL(blob);
+                    el.innerHTML = `<img src="${url}" alt="Photo attachment" onclick="window.open('${url}','_blank')" />`;
+                } catch (e) {
+                    el.innerHTML = '<div class="admin-msg-photo-error">⚠️ Failed to load photo</div>';
+                }
+            });
+        }
+
+        async function playAdminVoice(btn) {
+            const wrap = btn.closest('.admin-msg-voice');
+            const audioEl = wrap.querySelector('audio');
+            if (!audioEl.src) {
+                btn.disabled = true;
+                try {
+                    const blob = await adminFetchBlob(`/api/admin/messages/file/${btn.dataset.fileId}`);
+                    audioEl.src = URL.createObjectURL(blob);
+                } catch (e) {
+                    btn.disabled = false;
+                    toast('Failed to load voice message', 'error');
+                    return;
+                }
+                btn.disabled = false;
+                audioEl.onended = () => { btn.textContent = '▶️'; };
+            }
+            if (audioEl.paused) { audioEl.play(); btn.textContent = '⏸️'; }
+            else { audioEl.pause(); btn.textContent = '▶️'; }
+        }
+
+        async function playAdminVideo(btn) {
+            const wrap = btn.closest('.admin-msg-video');
+            btn.disabled = true;
+            const original = btn.innerHTML;
+            btn.innerHTML = '⏳ Loading…';
+            try {
+                const blob = await adminFetchBlob(`/api/admin/messages/file/${wrap.dataset.fileId}`);
+                const url = URL.createObjectURL(blob);
+                wrap.innerHTML = `<video src="${url}" controls autoplay style="max-width:260px;border-radius:8px"></video>`;
+            } catch (e) {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                toast('Failed to load video', 'error');
+            }
+        }
+
+        async function handleAdminFileAction(btn) {
+            if (btn.dataset.state === 'open') {
+                if (btn.dataset.blobUrl) window.open(btn.dataset.blobUrl, '_blank');
+                return;
+            }
+            btn.disabled = true;
+            const original = btn.innerHTML;
+            btn.innerHTML = '⏳';
+            try {
+                const blob = await adminFetchBlob(`/api/admin/messages/file/${btn.dataset.fileId}`);
+                const url = URL.createObjectURL(blob);
+                btn.dataset.blobUrl = url;
+                btn.dataset.state = 'open';
+                btn.innerHTML = '📂';
+                btn.disabled = false;
+            } catch (e) {
+                btn.disabled = false;
+                btn.innerHTML = original;
+                toast('Failed to download file', 'error');
+            }
+        }
+
         async function openChat(mentorId, menteeId, mentorAnon, menteeAnon) {
             currentChatMentorId = mentorId;
             currentChatMenteeId = menteeId;
@@ -3132,6 +3337,8 @@
                     let contentHtml = '';
                     if (m.is_deleted) {
                         contentHtml = `<span class="chat-deleted-placeholder">Message deleted</span>`;
+                    } else if (m.file_type) {
+                        contentHtml = renderAdminAttachment(m) + (m.content ? `<div style="margin-top:6px">${esc(m.content)}</div>` : '');
                     } else {
                         contentHtml = esc(m.content);
                     }
@@ -3163,6 +3370,7 @@
                     container.insertAdjacentHTML('afterbegin', msgsHTML);
                     container.scrollTop = container.scrollHeight - oldScrollHeight;
                 }
+                hydrateAdminPhotos(container);
 
                 chatHasMore = d.has_more;
                 if (chatHasMore && d.messages.length > 0) {
