@@ -139,8 +139,18 @@ function renderFileAttachment(msg) {
         <div class="msg-voice">
           <button class="msg-voice-play" data-file-id="${fileId}" onclick="playVoiceMessage(this)" aria-label="Play ${msg.file_type === 'voice' ? 'voice message' : 'audio'}">▶️</button>
           <div class="msg-voice-info">
-            <div class="msg-voice-wave">${FILE_TYPE_ICONS[msg.file_type]} ${msg.file_type === 'voice' ? 'Voice message' : escapeHtml(msg.file_name || 'Audio')}</div>
-            <div class="msg-voice-duration">${formatDuration(msg.duration)}</div>
+            <div class="msg-voice-label">${FILE_TYPE_ICONS[msg.file_type]} ${msg.file_type === 'voice' ? 'Voice message' : escapeHtml(msg.file_name || 'Audio')}</div>
+            <div class="msg-voice-track" data-duration="${msg.duration || 0}">
+              <div class="msg-voice-progress">
+                <div class="msg-voice-progress-fill"></div>
+                <div class="msg-voice-progress-handle"></div>
+              </div>
+            </div>
+            <div class="msg-voice-time">
+              <span class="msg-voice-elapsed">0:00</span>
+              <span class="msg-voice-status" hidden>Downloading…</span>
+              <span class="msg-voice-total">${formatDuration(msg.duration)}</span>
+            </div>
           </div>
           <audio class="msg-voice-audio" style="display:none" preload="none"></audio>
         </div>`;
@@ -186,34 +196,96 @@ function hydratePhotoMessages(container) {
     try {
       const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
       const url = URL.createObjectURL(blob);
-      el.innerHTML = `<img src="${url}" class="msg-photo-img" alt="Photo attachment" onclick="window.open('${url}', '_blank')" />`;
+      el.innerHTML = `<img src="${url}" class="msg-photo-img" alt="Photo attachment" onclick="openImageLightbox('${url}')" />`;
     } catch (e) {
       el.innerHTML = '<div class="msg-photo-error">⚠️ Failed to load photo</div>';
     }
   });
 }
 
+// Full-screen in-app image viewer. We deliberately avoid window.open() here
+// — inside Telegram's mobile in-app browser, window.open() on a blob: URL is
+// frequently blocked (desktop works fine, which is why the bug only showed
+// up on phones). A DOM overlay always works because it never leaves the page.
+function openImageLightbox(url) {
+  closeImageLightbox();
+  const overlay = document.createElement('div');
+  overlay.className = 'img-lightbox-overlay';
+  overlay.id = 'imgLightboxOverlay';
+  overlay.onclick = closeImageLightbox;
+  overlay.innerHTML = `
+    <button class="img-lightbox-close" onclick="event.stopPropagation(); closeImageLightbox()" aria-label="Close">✕</button>
+    <img src="${url}" alt="Photo attachment" onclick="event.stopPropagation()" />
+  `;
+  document.body.appendChild(overlay);
+  haptic('light');
+}
+
+function closeImageLightbox() {
+  const overlay = document.getElementById('imgLightboxOverlay');
+  if (overlay) overlay.remove();
+}
+
 async function playVoiceMessage(btn) {
   const fileId = btn.dataset.fileId;
   const container = btn.closest('.msg-voice');
   const audioEl = container.querySelector('audio');
+  const track = container.querySelector('.msg-voice-track');
+  const fill = container.querySelector('.msg-voice-progress-fill');
+  const handle = container.querySelector('.msg-voice-progress-handle');
+  const elapsedEl = container.querySelector('.msg-voice-elapsed');
+  const totalEl = container.querySelector('.msg-voice-total');
+  const statusEl = container.querySelector('.msg-voice-status');
 
   if (!audioEl.src) {
     btn.disabled = true;
-    const originalLabel = btn.textContent;
     btn.textContent = '⏳';
+    statusEl.hidden = false;
+    container.classList.add('msg-voice-downloading');
     try {
       const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
       audioEl.src = URL.createObjectURL(blob);
     } catch (e) {
       btn.disabled = false;
-      btn.textContent = originalLabel;
+      btn.textContent = '▶️';
+      statusEl.hidden = true;
+      container.classList.remove('msg-voice-downloading');
       haptic('error');
       showToast('Failed to load voice message', 'error');
       return;
     }
     btn.disabled = false;
-    audioEl.onended = () => { btn.textContent = '▶️'; };
+    statusEl.hidden = true;
+    container.classList.remove('msg-voice-downloading');
+
+    audioEl.onloadedmetadata = () => {
+      if (isFinite(audioEl.duration) && audioEl.duration > 0) {
+        totalEl.textContent = formatDuration(audioEl.duration);
+      }
+    };
+    audioEl.ontimeupdate = () => {
+      const dur = audioEl.duration || parseFloat(track.dataset.duration) || 0;
+      const pct = dur ? Math.min(100, (audioEl.currentTime / dur) * 100) : 0;
+      fill.style.width = `${pct}%`;
+      handle.style.left = `${pct}%`;
+      elapsedEl.textContent = formatDuration(audioEl.currentTime);
+    };
+    audioEl.onended = () => {
+      btn.textContent = '▶️';
+      fill.style.width = '0%';
+      handle.style.left = '0%';
+      elapsedEl.textContent = '0:00';
+    };
+
+    const seek = (evt) => {
+      if (!audioEl.duration) return;
+      const rect = track.getBoundingClientRect();
+      const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+      const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+      audioEl.currentTime = pct * audioEl.duration;
+    };
+    track.addEventListener('click', seek);
+    track.addEventListener('touchstart', seek, { passive: true });
   }
 
   if (audioEl.paused) {
@@ -244,17 +316,37 @@ async function playChatVideo(btn) {
   }
 }
 
+// Opens a fetched blob so it works on desktop AND inside Telegram's mobile
+// in-app browser. window.open() on a blob: URL is unreliable in Telegram's
+// mobile WebView — it's silently blocked as a popup on Android and simply
+// does nothing on iOS — which is exactly why "Open" worked on desktop but
+// tapping did nothing on phone. We try window.open() first (desktop still
+// gets an inline preview tab when the browser supports it) and fall back to
+// a programmatic download link, which uses the browser's native
+// save/open handling instead of a blocked popup.
+function openBlobFile(url, fileName) {
+  const win = window.open(url, '_blank');
+  if (!win) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName || 'file';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+}
+
 // Document attachments start as a "⬇️ Download" button. First tap fetches
 // the file and flips the button into "📂 Open" (mirroring Telegram's own
-// download-then-open flow); a second tap opens the file in a new tab, where
-// the browser renders it inline when it can (PDFs, images, text) or falls
-// back to its own native download prompt when it can't (e.g. .docx, .zip).
+// download-then-open flow); a second tap opens the file via openBlobFile()
+// above, which works reliably on both desktop and mobile.
 async function handleFileAction(btn) {
   const state = btn.dataset.state || 'download';
 
   if (state === 'open') {
     haptic('light');
-    if (btn.dataset.blobUrl) window.open(btn.dataset.blobUrl, '_blank');
+    if (btn.dataset.blobUrl) openBlobFile(btn.dataset.blobUrl, btn.dataset.fileName);
     return;
   }
 
