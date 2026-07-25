@@ -1426,10 +1426,11 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            min-width: 180px;
+            min-width: 200px;
         }
 
         .admin-msg-voice-play {
+            position: relative;
             width: 30px;
             height: 30px;
             border-radius: 50%;
@@ -1438,11 +1439,78 @@
             color: var(--text);
             font-size: 12px;
             flex-shrink: 0;
+            cursor: pointer;
         }
 
-        .admin-msg-voice-dur {
+        .admin-msg-voice-play.loading {
+            background: transparent;
+            color: var(--gold);
+        }
+
+        .admin-msg-voice-play.loading::before {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            border: 2px solid var(--border);
+            border-top-color: var(--gold);
+            border-right-color: var(--gold);
+            animation: adminVoiceSpin 0.8s linear infinite;
+        }
+
+        @keyframes adminVoiceSpin {
+            to { transform: rotate(360deg); }
+        }
+
+        .admin-msg-voice-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+
+        .admin-msg-voice-label {
+            font-size: 11px;
+            color: var(--text3);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .admin-msg-voice-track {
+            position: relative;
+            height: 12px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .admin-msg-voice-progress {
+            position: relative;
+            width: 100%;
+            height: 3px;
+            background: var(--border-dim);
+            border-radius: 2px;
+        }
+
+        .admin-msg-voice-progress-fill {
+            position: absolute;
+            left: 0; top: 0; height: 100%;
+            width: 0%;
+            background: var(--gold);
+            border-radius: 2px;
+        }
+
+        .admin-msg-voice-progress-handle {
+            position: absolute;
+            top: 50%; left: 0%;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--gold);
+            transform: translate(-50%, -50%);
+        }
+
+        .admin-msg-voice-time {
+            display: flex;
+            justify-content: space-between;
             font-size: 10px;
             color: var(--text3);
+            font-variant-numeric: tabular-nums;
         }
 
         .admin-msg-photo img {
@@ -1450,6 +1518,37 @@
             max-height: 220px;
             border-radius: 8px;
             display: block;
+            cursor: pointer;
+        }
+
+        .admin-img-lightbox-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.92);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 24px;
+        }
+
+        .admin-img-lightbox-overlay img {
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 8px;
+        }
+
+        .admin-img-lightbox-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.12);
+            border: none;
+            color: #fff;
+            font-size: 16px;
             cursor: pointer;
         }
 
@@ -3178,9 +3277,18 @@
                     return `
                         <div class="admin-msg-voice">
                             <button class="admin-msg-voice-play" data-file-id="${fileId}" onclick="playAdminVoice(this)">▶️</button>
-                            <div>
-                                <div>${ADMIN_FILE_ICONS[m.file_type]} ${m.file_type === 'voice' ? 'Voice message' : esc(m.file_name || 'Audio')}</div>
-                                <div class="admin-msg-voice-dur">${adminFormatDuration(m.duration)}</div>
+                            <div class="admin-msg-voice-info">
+                                <div class="admin-msg-voice-label">${ADMIN_FILE_ICONS[m.file_type]} ${m.file_type === 'voice' ? 'Voice message' : esc(m.file_name || 'Audio')}</div>
+                                <div class="admin-msg-voice-track" data-duration="${m.duration || 0}">
+                                    <div class="admin-msg-voice-progress">
+                                        <div class="admin-msg-voice-progress-fill"></div>
+                                        <div class="admin-msg-voice-progress-handle"></div>
+                                    </div>
+                                </div>
+                                <div class="admin-msg-voice-time">
+                                    <span class="admin-msg-voice-elapsed">0:00</span>
+                                    <span class="admin-msg-voice-total">${adminFormatDuration(m.duration)}</span>
+                                </div>
                             </div>
                             <audio style="display:none" preload="none"></audio>
                         </div>`;
@@ -3208,6 +3316,40 @@
             }
         }
 
+        // Full-screen in-app viewer, mirroring the mini app fix — window.open()
+        // on a blob: URL is unreliable in mobile in-app browsers, so admins
+        // viewing from a phone get a working overlay instead of a dead tap.
+        function openAdminImageLightbox(url) {
+            closeAdminImageLightbox();
+            const overlay = document.createElement('div');
+            overlay.className = 'admin-img-lightbox-overlay';
+            overlay.id = 'adminImgLightboxOverlay';
+            overlay.onclick = closeAdminImageLightbox;
+            overlay.innerHTML = `
+                <button class="admin-img-lightbox-close" onclick="event.stopPropagation(); closeAdminImageLightbox()">✕</button>
+                <img src="${url}" alt="Photo attachment" onclick="event.stopPropagation()" />
+            `;
+            document.body.appendChild(overlay);
+        }
+
+        function closeAdminImageLightbox() {
+            const overlay = document.getElementById('adminImgLightboxOverlay');
+            if (overlay) overlay.remove();
+        }
+
+        function openAdminBlobFile(url, fileName) {
+            const win = window.open(url, '_blank');
+            if (!win) {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName || 'file';
+                a.rel = 'noopener';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+        }
+
         function hydrateAdminPhotos(container) {
             if (!container) return;
             container.querySelectorAll('.admin-msg-photo[data-file-id]:not(.loaded)').forEach(async el => {
@@ -3215,7 +3357,7 @@
                 try {
                     const blob = await adminFetchBlob(`/api/admin/messages/file/${el.dataset.fileId}`);
                     const url = URL.createObjectURL(blob);
-                    el.innerHTML = `<img src="${url}" alt="Photo attachment" onclick="window.open('${url}','_blank')" />`;
+                    el.innerHTML = `<img src="${url}" alt="Photo attachment" onclick="openAdminImageLightbox('${url}')" />`;
                 } catch (e) {
                     el.innerHTML = '<div class="admin-msg-photo-error">⚠️ Failed to load photo</div>';
                 }
@@ -3225,18 +3367,57 @@
         async function playAdminVoice(btn) {
             const wrap = btn.closest('.admin-msg-voice');
             const audioEl = wrap.querySelector('audio');
+            const track = wrap.querySelector('.admin-msg-voice-track');
+            const fill = wrap.querySelector('.admin-msg-voice-progress-fill');
+            const handle = wrap.querySelector('.admin-msg-voice-progress-handle');
+            const elapsedEl = wrap.querySelector('.admin-msg-voice-elapsed');
+            const totalEl = wrap.querySelector('.admin-msg-voice-total');
+
             if (!audioEl.src) {
                 btn.disabled = true;
+                btn.textContent = '↓';
+                btn.classList.add('loading');
                 try {
                     const blob = await adminFetchBlob(`/api/admin/messages/file/${btn.dataset.fileId}`);
                     audioEl.src = URL.createObjectURL(blob);
                 } catch (e) {
                     btn.disabled = false;
+                    btn.textContent = '▶️';
+                    btn.classList.remove('loading');
                     toast('Failed to load voice message', 'error');
                     return;
                 }
                 btn.disabled = false;
-                audioEl.onended = () => { btn.textContent = '▶️'; };
+                btn.classList.remove('loading');
+
+                audioEl.onloadedmetadata = () => {
+                    if (isFinite(audioEl.duration) && audioEl.duration > 0) {
+                        totalEl.textContent = adminFormatDuration(audioEl.duration);
+                    }
+                };
+                audioEl.ontimeupdate = () => {
+                    const dur = audioEl.duration || parseFloat(track.dataset.duration) || 0;
+                    const pct = dur ? Math.min(100, (audioEl.currentTime / dur) * 100) : 0;
+                    fill.style.width = `${pct}%`;
+                    handle.style.left = `${pct}%`;
+                    elapsedEl.textContent = adminFormatDuration(audioEl.currentTime);
+                };
+                audioEl.onended = () => {
+                    btn.textContent = '▶️';
+                    fill.style.width = '0%';
+                    handle.style.left = '0%';
+                    elapsedEl.textContent = '0:00';
+                };
+
+                const seek = (evt) => {
+                    if (!audioEl.duration) return;
+                    const rect = track.getBoundingClientRect();
+                    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+                    const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+                    audioEl.currentTime = pct * audioEl.duration;
+                };
+                track.addEventListener('click', seek);
+                track.addEventListener('touchstart', seek, { passive: true });
             }
             if (audioEl.paused) { audioEl.play(); btn.textContent = '⏸️'; }
             else { audioEl.pause(); btn.textContent = '▶️'; }
@@ -3260,7 +3441,7 @@
 
         async function handleAdminFileAction(btn) {
             if (btn.dataset.state === 'open') {
-                if (btn.dataset.blobUrl) window.open(btn.dataset.blobUrl, '_blank');
+                if (btn.dataset.blobUrl) openAdminBlobFile(btn.dataset.blobUrl, btn.dataset.fileName);
                 return;
             }
             btn.disabled = true;

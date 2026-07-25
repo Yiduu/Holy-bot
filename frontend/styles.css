@@ -996,14 +996,24 @@ textarea.form-control {
   opacity: 0.65;
   font-variant-numeric: tabular-nums;
 }
-.msg-voice-status {
+.msg-voice-play { position: relative; }
+.msg-voice-play.loading {
+  background: transparent;
   color: var(--gold);
-  font-style: italic;
-  animation: msgVoicePulse 1.2s ease-in-out infinite;
+  font-size: 11px;
 }
-@keyframes msgVoicePulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+.msg-voice-play.loading::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--gold);
+  border-right-color: var(--gold);
+  animation: msgVoiceSpin 0.8s linear infinite;
+}
+@keyframes msgVoiceSpin {
+  to { transform: rotate(360deg); }
 }
 .msg-voice-downloading .msg-voice-progress-fill { opacity: 0.3; }
 

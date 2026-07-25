@@ -148,7 +148,6 @@ function renderFileAttachment(msg) {
             </div>
             <div class="msg-voice-time">
               <span class="msg-voice-elapsed">0:00</span>
-              <span class="msg-voice-status" hidden>Downloading…</span>
               <span class="msg-voice-total">${formatDuration(msg.duration)}</span>
             </div>
           </div>
@@ -235,12 +234,11 @@ async function playVoiceMessage(btn) {
   const handle = container.querySelector('.msg-voice-progress-handle');
   const elapsedEl = container.querySelector('.msg-voice-elapsed');
   const totalEl = container.querySelector('.msg-voice-total');
-  const statusEl = container.querySelector('.msg-voice-status');
 
   if (!audioEl.src) {
     btn.disabled = true;
-    btn.textContent = '⏳';
-    statusEl.hidden = false;
+    btn.textContent = '↓';
+    btn.classList.add('loading');
     container.classList.add('msg-voice-downloading');
     try {
       const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
@@ -248,14 +246,14 @@ async function playVoiceMessage(btn) {
     } catch (e) {
       btn.disabled = false;
       btn.textContent = '▶️';
-      statusEl.hidden = true;
+      btn.classList.remove('loading');
       container.classList.remove('msg-voice-downloading');
       haptic('error');
       showToast('Failed to load voice message', 'error');
       return;
     }
     btn.disabled = false;
-    statusEl.hidden = true;
+    btn.classList.remove('loading');
     container.classList.remove('msg-voice-downloading');
 
     audioEl.onloadedmetadata = () => {
