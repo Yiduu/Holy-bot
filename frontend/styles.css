@@ -1078,9 +1078,9 @@ textarea.form-control {
 .msg-file-download,
 .msg-file-open {
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text);
@@ -1088,12 +1088,19 @@ textarea.form-control {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
   transition: var(--transition);
 }
-.msg-file-download:hover,
-.msg-file-open:hover { background: var(--gold-dim); border-color: var(--gold); }
-.msg-file-open { color: var(--gold); border-color: var(--gold-dim); }
+.msg-file-download:hover { background: var(--gold-dim); border-color: var(--gold); }
+.msg-file-open {
+  color: var(--bg);
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.msg-file-open:hover { background: var(--gold-light); }
 
 /* ── Video attachments ──────────────────────────────────────── */
 .msg-video-play {

@@ -1587,10 +1587,19 @@
         .admin-msg-file-btn {
             border: 1px solid var(--border);
             background: var(--surface);
-            border-radius: 6px;
-            padding: 4px 8px;
-            font-size: 12px;
+            border-radius: 999px;
+            padding: 5px 12px;
+            font-size: 11px;
+            font-weight: 600;
             flex-shrink: 0;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .admin-msg-file-btn.admin-msg-file-open {
+            background: var(--gold);
+            color: #1a1712;
+            border-color: var(--gold);
         }
 
         /* ── Mentorship Tab Styles ─────────────────────────────────── */
@@ -3311,7 +3320,7 @@
                                 <div class="admin-msg-file-name">${esc(m.file_name || 'File')}</div>
                                 <div class="admin-msg-file-size">${adminFormatFileSize(m.file_size)}</div>
                             </div>
-                            <button class="admin-msg-file-btn" data-state="download" data-file-id="${fileId}" data-file-name="${esc(m.file_name || 'file')}" onclick="handleAdminFileAction(this)">⬇️</button>
+                            <button class="admin-msg-file-btn" data-state="download" data-file-id="${fileId}" data-file-name="${esc(m.file_name || 'file')}" onclick="handleAdminFileAction(this)">⬇ Download</button>
                         </div>`;
             }
         }
@@ -3337,11 +3346,22 @@
             if (overlay) overlay.remove();
         }
 
-        function openAdminBlobFile(url, fileName) {
-            const win = window.open(url, '_blank');
+        async function openAdminBlobFile(blobUrl, fileName) {
+            try {
+                const blob = await fetch(blobUrl).then(r => r.blob());
+                const file = new File([blob], fileName || 'file', { type: blob.type || 'application/octet-stream' });
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({ files: [file] });
+                    return;
+                }
+            } catch (e) {
+                // Share sheet unavailable or dismissed — fall through below.
+            }
+
+            const win = window.open(blobUrl, '_blank');
             if (!win) {
                 const a = document.createElement('a');
-                a.href = url;
+                a.href = blobUrl;
                 a.download = fileName || 'file';
                 a.rel = 'noopener';
                 document.body.appendChild(a);
@@ -3452,7 +3472,8 @@
                 const url = URL.createObjectURL(blob);
                 btn.dataset.blobUrl = url;
                 btn.dataset.state = 'open';
-                btn.innerHTML = '📂';
+                btn.classList.add('admin-msg-file-open');
+                btn.innerHTML = 'Open';
                 btn.disabled = false;
             } catch (e) {
                 btn.disabled = false;
