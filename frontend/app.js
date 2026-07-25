@@ -175,7 +175,7 @@ function renderFileAttachment(msg) {
             <div class="msg-file-name">${escapeHtml(msg.file_name || 'File')}</div>
             <div class="msg-file-size">${formatFileSize(msg.file_size)}</div>
           </div>
-          <button class="msg-file-download" data-state="download" data-file-id="${fileId}" data-file-name="${escapeHtml(msg.file_name || 'file')}" onclick="handleFileAction(this)" aria-label="Download file">⬇ Download</button>
+          <button class="msg-file-download" data-state="download" data-file-id="${fileId}" data-file-name="${escapeHtml(msg.file_name || 'file')}" onclick="handleFileAction(this)" aria-label="Download file">⬇️</button>
         </div>`;
   }
 }
@@ -322,28 +322,11 @@ async function playChatVideo(btn) {
 // gets an inline preview tab when the browser supports it) and fall back to
 // a programmatic download link, which uses the browser's native
 // save/open handling instead of a blocked popup.
-// Hands a downloaded file to the phone's native "Open with" share sheet so
-// it launches in whatever app is installed for that file type (Adobe
-// Acrobat, Word, Photos, etc). This is the only sanctioned way for a web
-// page to trigger another app to open a file. Falls back to a browser tab
-// / forced download on desktop and on browsers without file-sharing support.
-async function openBlobFile(blobUrl, fileName) {
-  try {
-    const blob = await fetch(blobUrl).then(r => r.blob());
-    const file = new File([blob], fileName || 'file', { type: blob.type || 'application/octet-stream' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file] });
-      return;
-    }
-  } catch (e) {
-    // Share sheet unavailable, or the user dismissed it — fall through to
-    // the URL-based approach below instead of leaving the tap dead.
-  }
-
-  const win = window.open(blobUrl, '_blank');
+function openBlobFile(url, fileName) {
+  const win = window.open(url, '_blank');
   if (!win) {
     const a = document.createElement('a');
-    a.href = blobUrl;
+    a.href = url;
     a.download = fileName || 'file';
     a.rel = 'noopener';
     document.body.appendChild(a);
@@ -352,10 +335,10 @@ async function openBlobFile(blobUrl, fileName) {
   }
 }
 
-// Document attachments start as a "⬇ Download" button. First tap fetches
-// the file and flips the button into a plain "Open" button; a second tap
-// hands the file to openBlobFile() above to launch the phone's installed
-// app for it (or open/download it on desktop).
+// Document attachments start as a "⬇️ Download" button. First tap fetches
+// the file and flips the button into "📂 Open" (mirroring Telegram's own
+// download-then-open flow); a second tap opens the file via openBlobFile()
+// above, which works reliably on both desktop and mobile.
 async function handleFileAction(btn) {
   const state = btn.dataset.state || 'download';
 
@@ -378,7 +361,7 @@ async function handleFileAction(btn) {
     btn.dataset.state = 'open';
     btn.classList.remove('msg-file-download');
     btn.classList.add('msg-file-open');
-    btn.innerHTML = 'Open';
+    btn.innerHTML = '📂';
     btn.setAttribute('aria-label', 'Open file');
     haptic('success');
   } catch (e) {
