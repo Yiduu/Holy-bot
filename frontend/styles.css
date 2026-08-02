@@ -803,6 +803,17 @@ textarea.form-control {
   border-color: var(--border);
 }
 
+.mentor-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mentor-header-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .mentor-avatar {
   width: 44px;
   height: 44px;
