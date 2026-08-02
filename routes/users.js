@@ -240,6 +240,13 @@ module.exports = function userRoutes(supabase, requireAuth) {
         return res.status(404).json({ error: 'No active mentorship found' });
       }
 
+      // Fetch mentor's display name for the mini app's rating popup
+      const { data: mentor } = await supabase
+        .from('users')
+        .select('telegram_id, anonymous_id, user_settings(display_name)')
+        .eq('telegram_id', assignment.mentor_id)
+        .single();
+
       // Update assignment
       const { error: updateErr } = await supabase
         .from('mentorship_assignments')
@@ -254,10 +261,52 @@ module.exports = function userRoutes(supabase, requireAuth) {
       const { endMentorship: botEndMentorship } = require('../bot');
       await botEndMentorship(telegram_id, assignment.mentor_id, 'mentee');
 
-      res.json({ success: true });
+      res.json({
+        success: true,
+        mentor: {
+          telegram_id: assignment.mentor_id,
+          display_name: mentor?.user_settings?.display_name || mentor?.anonymous_id || 'Your mentor'
+        }
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // GET /api/users/pending-rating – checks whether the caller has a recently
+  // ended mentorship (ended by the mentor) that they haven't rated yet, so the
+  // mini app can pop the rating modal open as soon as they next load it.
+  router.get('/pending-rating', requireAuth, async (req, res) => {
+    const { id: telegram_id } = req.telegramUser;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: assignment, error } = await supabase
+      .from('mentorship_assignments')
+      .select('id, mentor_id, ended_at, mentor:mentor_id(telegram_id, anonymous_id, user_settings(display_name))')
+      .eq('user_id', telegram_id)
+      .eq('is_active', false)
+      .gte('ended_at', sevenDaysAgo)
+      .order('ended_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !assignment) return res.json(null);
+
+    const { data: existingRating } = await supabase
+      .from('mentor_ratings')
+      .select('id')
+      .eq('mentor_id', assignment.mentor_id)
+      .eq('user_id', telegram_id)
+      .gte('created_at', assignment.ended_at)
+      .maybeSingle();
+
+    if (existingRating) return res.json(null);
+
+    const m = assignment.mentor;
+    res.json({
+      mentor_id: assignment.mentor_id,
+      display_name: m?.user_settings?.display_name || m?.anonymous_id || 'Your mentor'
+    });
   });
 
   return router;

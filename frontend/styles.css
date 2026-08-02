@@ -842,13 +842,112 @@ textarea.form-control {
 }
 
 .badge-mentees {
-  background: rgba(91, 142, 255, 0.15);
-  color: var(--accent);
+  background: rgba(201, 168, 76, 0.09);
+  color: var(--gold);
+  border: 1px solid var(--border-dim);
 }
 
 .badge-spec {
-  background: rgba(201, 168, 76, 0.1);
+  background: rgba(201, 168, 76, 0.14);
+  color: var(--gold-light);
+}
+
+/* ─── Star Rating (small, inline) ───────────────────────────── */
+.rating-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.rating-row .stars {
+  display: inline-flex;
+  gap: 1px;
+}
+
+.rating-row .stars svg {
+  display: block;
+}
+
+.rating-num {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--gold-light);
+}
+
+.rating-count {
+  font-size: 0.68rem;
+  color: var(--text3);
+}
+
+.no-rating {
+  font-size: 0.68rem;
+  color: var(--text3);
+  font-style: italic;
+}
+
+/* ─── Rating Modal (pops up on mentorship end) ──────────────── */
+.rating-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 9999;
+}
+
+.rating-modal {
+  width: 100%;
+  max-width: 320px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 20px;
+  box-shadow: var(--shadow-lg);
+}
+
+.rating-modal-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--gold-dim);
+  border: 1.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+}
+
+.rating-modal-title {
+  font-family: var(--font-display);
   color: var(--gold);
+  font-size: 1rem;
+  text-align: center;
+}
+
+.rating-modal-sub {
+  font-size: 0.8rem;
+  color: var(--text2);
+  margin: 6px 0 16px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.big-stars {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 6px 0 18px;
+}
+
+.big-stars svg {
+  transition: transform 0.1s ease;
+}
+
+.big-stars svg:hover {
+  transform: scale(1.15);
 }
 
 /* ─── Chat ──────────────────────────────────────────────────── */

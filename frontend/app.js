@@ -876,7 +876,104 @@ function startGlobalRefresh() {
     updateRequestsBadge();
     updateSessionsBadge();
     updateMessageBadge();
+    checkPendingRating();
   }, 30000); // every 30 seconds
+}
+
+// ─── Mentor Rating ────────────────────────────────────────────
+let ratingModalOpen = false;
+
+async function checkPendingRating() {
+  if (ratingModalOpen || currentUser?.role !== 'user') return;
+  try {
+    const pending = await apiFetch('/api/users/pending-rating');
+    if (pending && pending.mentor_id) {
+      openRatingModal(pending.mentor_id, pending.display_name);
+    }
+  } catch (e) { /* silent — non-critical */ }
+}
+
+function renderStars(rating, count, size = 11) {
+  const r = rating || 0;
+  const full = Math.floor(r);
+  const half = (r - full) >= 0.5;
+  let svgs = '';
+  for (let i = 0; i < 5; i++) {
+    if (i < full) {
+      svgs += `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="#C9A84C"><path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-4.045-7.416 4.045 1.48-8.279-6.064-5.828 8.332-1.151z"/></svg>`;
+    } else if (i === full && half) {
+      svgs += `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="url(#ratingHalfGrad)"><path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-4.045-7.416 4.045 1.48-8.279-6.064-5.828 8.332-1.151z"/></svg>`;
+    } else {
+      svgs += `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#867F76" stroke-width="1.5"><path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-4.045-7.416 4.045 1.48-8.279-6.064-5.828 8.332-1.151z"/></svg>`;
+    }
+  }
+  if (!count) {
+    return `<div class="rating-row"><span class="no-rating">${t('no_ratings_yet') || 'No ratings yet'}</span></div>`;
+  }
+  return `<div class="rating-row"><span class="stars">${svgs}</span><span class="rating-num">${r.toFixed(1)}</span><span class="rating-count">(${count})</span></div>`;
+}
+
+function openRatingModal(mentorId, mentorName) {
+  ratingModalOpen = true;
+  let selected = 0;
+  const overlay = document.createElement('div');
+  overlay.id = 'ratingModalOverlay';
+  overlay.className = 'rating-modal-overlay';
+  overlay.innerHTML = `
+    <svg width="0" height="0" style="position:absolute">
+      <defs><linearGradient id="ratingHalfGrad" x1="0" x2="1" y1="0" y2="0">
+        <stop offset="50%" stop-color="#C9A84C"/><stop offset="50%" stop-color="#2A2E3A"/>
+      </linearGradient></defs>
+    </svg>
+    <div class="rating-modal">
+      <div class="rating-modal-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#C9A84C"><path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-4.045-7.416 4.045 1.48-8.279-6.064-5.828 8.332-1.151z"/></svg>
+      </div>
+      <div class="rating-modal-title">${t('rate_mentor_title') || 'Rate your mentor'}</div>
+      <div class="rating-modal-sub">${(t('rate_mentor_sub') || 'Your mentorship with {name} just ended. Tap a star to rate your experience.').replace('{name}', escapeHtml(mentorName))}</div>
+      <div class="big-stars" id="ratingBigStars"></div>
+      <div class="card-actions" style="display:flex;gap:8px;margin-top:4px;">
+        <button class="btn btn-outline btn-sm flex-1" onclick="closeRatingModal()">${t('btn_skip') || 'Skip'}</button>
+        <button class="btn btn-sm flex-1" id="ratingSubmitBtn" style="background:var(--gold);color:#1a1408;border-color:var(--gold);opacity:0.5;pointer-events:none;" onclick="submitMentorRating(${mentorId})">${t('btn_submit') || 'Submit rating'}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const starsWrap = overlay.querySelector('#ratingBigStars');
+  const paintStars = (n) => {
+    starsWrap.innerHTML = [1, 2, 3, 4, 5].map(i => `
+      <svg width="30" height="30" viewBox="0 0 24 24" data-star="${i}"
+        fill="${i <= n ? '#C9A84C' : 'none'}" stroke="${i <= n ? 'none' : '#867F76'}" stroke-width="1.5">
+        <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-4.045-7.416 4.045 1.48-8.279-6.064-5.828 8.332-1.151z"/>
+      </svg>`).join('');
+    starsWrap.querySelectorAll('svg').forEach(svg => {
+      svg.style.cursor = 'pointer';
+      svg.onclick = () => { selected = parseInt(svg.dataset.star); paintStars(selected);
+        const btn = $('ratingSubmitBtn'); btn.style.opacity = '1'; btn.style.pointerEvents = 'auto'; };
+    });
+  };
+  paintStars(0);
+}
+
+function closeRatingModal() {
+  ratingModalOpen = false;
+  document.getElementById('ratingModalOverlay')?.remove();
+}
+
+async function submitMentorRating(mentorId) {
+  const overlay = document.getElementById('ratingModalOverlay');
+  const stars = overlay?.querySelectorAll('#ratingBigStars svg[fill="#C9A84C"]').length || 0;
+  if (!stars) return;
+  haptic('medium');
+  try {
+    await apiFetch('/api/mentors/rate', { method: 'POST', body: { mentor_id: mentorId, stars } });
+    haptic('success');
+    showToast(t('rating_submitted') || 'Thanks for your feedback!', 'success');
+    closeRatingModal();
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
 }
 
 function stopGlobalRefresh() {
@@ -1325,6 +1422,7 @@ function startApp() {
   updateMessageBadge();
   updateRequestsBadge();
   updateSessionsBadge();
+  checkPendingRating();
 
 
   if (String(currentUser?.telegram_id) === String(window.ADMIN_ID)) {
@@ -1489,6 +1587,7 @@ async function loadMentors() {
               <div class="mentor-avatar">${letter}</div>
               <div class="mentor-info">
                 <div class="mentor-id">${escapeHtml(name)}</div>
+                ${renderStars(m.rating, m.rating_count)}
                 ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
                 <div class="mentor-bio">${escapeHtml(bio)}</div>
               </div>
@@ -3384,12 +3483,15 @@ async function endMentorship(assignId) {
     if (!confirm(t('confirm_end_mentorship') || 'Are you sure you want to end your mentorship?')) return;
     haptic('medium');
     try {
-      await apiFetch('/api/users/end-mentorship', { method: 'POST' });
+      const result = await apiFetch('/api/users/end-mentorship', { method: 'POST' });
       haptic('success');
       showToast(t('mentorship_ended'), 'success');
       // Refresh the badge — messages from this ended pairing no longer count.
       updateMessageBadge();
       navigate('dashboard');
+      if (result?.mentor?.telegram_id) {
+        openRatingModal(result.mentor.telegram_id, result.mentor.display_name);
+      }
     } catch (e) {
       haptic('error');
       showToast(e.message, 'error');

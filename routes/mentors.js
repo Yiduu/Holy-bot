@@ -25,7 +25,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     // is still selected because it is displayed on the mentor profile card.
     let query = supabase
       .from('users')
-      .select('telegram_id, anonymous_id, sex, preferred_mentee_sex, accepting_requests, user_settings(bio, specialization, max_mentees, display_name)')
+      .select('telegram_id, anonymous_id, sex, preferred_mentee_sex, accepting_requests, rating, rating_count, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
       .eq('is_banned', false);
 
@@ -544,6 +544,57 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     }
 
     res.status(400).json({ error: 'Invalid type' });
+  });
+
+  // POST /api/mentors/rate – mentee rates a mentor from the mini app
+  router.post('/rate', requireAuth, async (req, res) => {
+    const { id: user_id } = req.telegramUser;
+    const { mentor_id } = req.body;
+    const stars = parseInt(req.body.stars);
+
+    if (!mentor_id) return res.status(400).json({ error: 'mentor_id required' });
+    if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+      return res.status(400).json({ error: 'stars must be an integer between 1 and 5' });
+    }
+
+    // Only allow rating a mentor the user has actually been paired with.
+    const { data: everAssigned } = await supabase
+      .from('mentorship_assignments')
+      .select('id')
+      .eq('user_id', user_id)
+      .eq('mentor_id', mentor_id)
+      .limit(1)
+      .maybeSingle();
+
+    if (!everAssigned) {
+      return res.status(403).json({ error: 'You can only rate a mentor you have been paired with.' });
+    }
+
+    const { data: mentor, error: mentorErr } = await supabase
+      .from('users')
+      .select('rating, rating_count')
+      .eq('telegram_id', mentor_id)
+      .single();
+
+    if (mentorErr || !mentor) return res.status(404).json({ error: 'Mentor not found' });
+
+    const oldCount = mentor.rating_count || 0;
+    const oldRating = mentor.rating || 0;
+    const newCount = oldCount + 1;
+    const newRating = (oldRating * oldCount + stars) / newCount;
+
+    const { error: updateErr } = await supabase
+      .from('users')
+      .update({ rating: newRating, rating_count: newCount })
+      .eq('telegram_id', mentor_id);
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+    const { error: insertErr } = await supabase
+      .from('mentor_ratings')
+      .insert({ mentor_id, user_id, stars, created_at: new Date().toISOString() });
+    if (insertErr) return res.status(500).json({ error: insertErr.message });
+
+    res.json({ success: true, rating: newRating, rating_count: newCount });
   });
 
   // DELETE /api/mentors/end-mentorship/:assignment_id
