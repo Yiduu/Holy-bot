@@ -470,8 +470,15 @@
 
     <!-- ── Page: Chat ─────────────────────────────────────────────── -->
     <div id="page-chat" class="page">
-      <div class="app-header">
-        <h2 id="chatWith" data-i18n="Chat">Messages</h2>
+      <div class="app-header chat-header">
+        <div class="peer" id="chatPeer">
+          <div class="avatar" id="chatPeerAvatar">?</div>
+          <div class="peer-meta">
+            <h2 id="chatWith" class="peer-name" data-i18n="Chat">Messages</h2>
+            <div id="chatPeerStatus" class="peer-status" style="display:none;"></div>
+          </div>
+        </div>
+
         <div id="chatPartnerWrapper" style="display:none; position:relative;">
           <button id="chatPartnerDropdownBtn" class="btn btn-outline btn-sm flex items-center gap-4"
             style="border-radius:12px;background:var(--bg3);color:var(--text);font-weight:600;padding:6px 12px;"
@@ -487,18 +494,36 @@
             <!-- Rendered dynamically -->
           </div>
         </div>
+
         <div class="header-actions">
-          <button class="btn btn-ghost btn-sm" onclick="resetChatView()" style="color:var(--text3);">⟳ Reset</button>
-          <button class="btn btn-ghost btn-sm" onclick="refreshChat()"
-            style="color:var(--text2); display: inline-flex; align-items: center; justify-content: center;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 4 23 10 17 10" />
-              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          <button class="icon-btn" onclick="toggleChatHeaderMenu(event)" aria-label="More options">
+            <span class="tip">More</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" />
             </svg>
           </button>
-          <button class="btn btn-ghost btn-sm" onclick="clearChatHistory()" style="color:var(--danger)"
-            data-i18n="btn_clear">Clear</button>
+          <div class="menu-wrap">
+            <div id="chatHeaderMenu" class="overflow-menu">
+              <button class="menu-item" onclick="refreshChat(); closeChatHeaderMenu()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+                <span data-i18n="btn_refresh">Refresh chat</span>
+              </button>
+              <button class="menu-item" onclick="resetChatView(); closeChatHeaderMenu()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+                <span data-i18n="btn_reset">Reset view</span>
+              </button>
+              <button class="menu-item danger" onclick="clearChatHistory(); closeChatHeaderMenu()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" />
+                </svg>
+                <span data-i18n="btn_clear">Clear history</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       <div id="chatMessages" class="chat-messages"></div>

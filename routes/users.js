@@ -172,7 +172,8 @@ module.exports = function userRoutes(supabase, requireAuth) {
           partner: { 
             telegram_id: m.telegram_id, 
             anonymous_id: m.anonymous_id, 
-            display_name: m.user_settings?.display_name || m.anonymous_id 
+            display_name: m.user_settings?.display_name || m.anonymous_id,
+            last_active: m.last_active
           } 
         });
       } else {
@@ -187,7 +188,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
     } else {
       const { data: assignment, error } = await supabase
         .from('mentorship_assignments')
-        .select('mentor:mentor_id(telegram_id, anonymous_id, user_settings(display_name))')
+        .select('mentor:mentor_id(telegram_id, anonymous_id, last_active, user_settings(display_name))')
         .eq('user_id', telegram_id)
         .eq('is_active', true)
         .single();
@@ -201,7 +202,8 @@ module.exports = function userRoutes(supabase, requireAuth) {
         partner: { 
           telegram_id: m.telegram_id, 
           anonymous_id: m.anonymous_id, 
-          display_name: m.user_settings?.display_name || m.anonymous_id 
+          display_name: m.user_settings?.display_name || m.anonymous_id,
+          last_active: m.last_active
         } 
       });
     }

@@ -596,6 +596,53 @@ function isUserOnline(lastActive) {
   return Date.now() - new Date(lastActive).getTime() < 5 * 60 * 1000;
 }
 
+/* ── Chat header: avatar initials + real online status ───────── */
+function setChatPeerHeader(displayName, lastActive) {
+  const avatarEl = $('chatPeerAvatar');
+  if (avatarEl) {
+    const initials = (displayName || '?')
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map(w => w[0]?.toUpperCase() || '')
+      .join('');
+    avatarEl.textContent = initials || '?';
+  }
+
+  const statusEl = $('chatPeerStatus');
+  if (statusEl) {
+    if (isUserOnline(lastActive)) {
+      statusEl.textContent = 'Online';
+      statusEl.classList.remove('offline');
+      statusEl.style.display = 'block';
+    } else {
+      // No confident "last seen X ago" without a reliable timestamp source,
+      // so we just hide the line rather than show a stale/guessed status.
+      statusEl.style.display = 'none';
+    }
+  }
+}
+
+/* ── Chat header: overflow menu (Refresh / Reset / Clear) ────── */
+function toggleChatHeaderMenu(e) {
+  e.stopPropagation();
+  const menu = $('chatHeaderMenu');
+  if (!menu) return;
+  menu.classList.toggle('open');
+}
+
+function closeChatHeaderMenu() {
+  const menu = $('chatHeaderMenu');
+  if (menu) menu.classList.remove('open');
+}
+
+document.addEventListener('click', (e) => {
+  const menu = $('chatHeaderMenu');
+  if (menu && menu.classList.contains('open') && !menu.contains(e.target)) {
+    menu.classList.remove('open');
+  }
+});
+
 function toggleChatPartnerDropdown(e) {
   e.stopPropagation();
   const menu = $('chatPartnerDropdownMenu');
@@ -2213,6 +2260,7 @@ async function loadChat() {
       if (partnerWrapper) partnerWrapper.style.display = 'none';
       $('chatWith').style.display = 'block';
       $('chatWith').textContent = res.partner.display_name;
+      setChatPeerHeader(res.partner.display_name, res.partner.last_active);
       window.chatState = { with: res.partner.telegram_id, name: res.partner.display_name || res.partner.anonymous_id };
       loadMessages(res.partner.telegram_id);
     } else {
@@ -2247,6 +2295,7 @@ async function loadChat() {
         }).join('');
       }
 
+      setChatPeerHeader(partner.display_name, partner.last_active);
       window.chatState = { with: partner.telegram_id, name: partner.display_name || partner.anonymous_id };
       loadMessages(partner.telegram_id);
     }
