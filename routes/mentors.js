@@ -25,7 +25,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     // is still selected because it is displayed on the mentor profile card.
     let query = supabase
       .from('users')
-      .select('telegram_id, anonymous_id, sex, preferred_mentee_sex, accepting_requests, rating, rating_count, avatar_url, user_settings(bio, specialization, max_mentees, display_name)')
+      .select('telegram_id, anonymous_id, sex, preferred_mentee_sex, accepting_requests, rating, rating_count, avatar_file_id, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
       .eq('is_banned', false);
 
@@ -96,6 +96,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
       return {
         ...mentor,
+        avatar_url: mentor.avatar_file_id ? `/api/users/avatar-image/${mentor.avatar_file_id}` : null,
         mentee_count: count || 0,
         expertise_topics,
       };

@@ -1447,8 +1447,8 @@ function startApp() {
       const name = currentUser?.user_settings?.display_name || currentUser?.anonymous_id || '?';
       pillInitials.textContent = name.trim().charAt(0).toUpperCase() || '?';
     }
-    if (currentUser?.avatar_url) {
-      $('mentorProfileBtn')?.style.setProperty('background-image', `url('${currentUser.avatar_url}')`);
+    if (currentUser?.avatar_file_id) {
+      $('mentorProfileBtn')?.style.setProperty('background-image', `url('/api/users/avatar-image/${currentUser.avatar_file_id}')`);
     }
   }
 
@@ -2944,31 +2944,10 @@ function triggerAvatarFileSelect() {
   $('mentorAvatarFileInput')?.click();
 }
 
-// Resize + compress client-side so uploads stay small and fast, regardless
-// of how large the original photo from the phone's camera/library is.
-function resizeImageFile(file, maxSize = 480, quality = 0.85) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Could not read the selected file'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Could not read the selected image'));
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > height && width > maxSize) { height = Math.round(height * (maxSize / width)); width = maxSize; }
-        else if (height > maxSize) { width = Math.round(width * (maxSize / height)); height = maxSize; }
-        const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
-        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
+// ─── Avatar crop modal ──────────────────────────────────────────
+let cropState = null;
 
-async function handleAvatarFileSelected(event) {
+function handleAvatarFileSelected(event) {
   const file = event.target.files?.[0];
   event.target.value = ''; // allow re-selecting the same file later
   if (!file) return;
@@ -2976,10 +2955,120 @@ async function handleAvatarFileSelected(event) {
     showToast('Please choose a JPEG, PNG, or WEBP image', 'error');
     return;
   }
+  openAvatarCropModal(file);
+}
 
+function openAvatarCropModal(file) {
+  const reader = new FileReader();
+  reader.onerror = () => showToast('Could not read the selected file', 'error');
+  reader.onload = () => {
+    const img = new Image();
+    img.onerror = () => showToast('Could not read the selected image', 'error');
+    img.onload = () => {
+      const canvas = $('cropCanvas');
+      const size = canvas.width; // 480 internal px, displayed smaller via CSS
+      const minScale = Math.max(size / img.width, size / img.height);
+      cropState = {
+        img,
+        canvas,
+        ctx: canvas.getContext('2d'),
+        size,
+        scale: minScale,
+        minScale,
+        offsetX: 0,
+        offsetY: 0,
+        dragging: false,
+        lastX: 0,
+        lastY: 0
+      };
+      $('cropZoomSlider').value = 100;
+      drawCrop();
+      $('avatarCropModal').classList.add('open');
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function closeAvatarCropModal() {
+  $('avatarCropModal').classList.remove('open');
+  cropState = null;
+}
+
+function drawCrop() {
+  if (!cropState) return;
+  const { ctx, img, size, scale, offsetX, offsetY } = cropState;
+  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = '#141720';
+  ctx.fillRect(0, 0, size, size);
+  const w = img.width * scale;
+  const h = img.height * scale;
+  ctx.drawImage(img, (size - w) / 2 + offsetX, (size - h) / 2 + offsetY, w, h);
+}
+
+function clampCropOffset() {
+  const { img, scale, size } = cropState;
+  const w = img.width * scale, h = img.height * scale;
+  const maxX = Math.max(0, (w - size) / 2);
+  const maxY = Math.max(0, (h - size) / 2);
+  cropState.offsetX = Math.min(maxX, Math.max(-maxX, cropState.offsetX));
+  cropState.offsetY = Math.min(maxY, Math.max(-maxY, cropState.offsetY));
+}
+
+function onCropZoomChange(val) {
+  if (!cropState) return;
+  cropState.scale = cropState.minScale * (val / 100);
+  clampCropOffset();
+  drawCrop();
+}
+
+function cropGetPoint(e) {
+  const t = e.touches ? e.touches[0] : e;
+  return { x: t.clientX, y: t.clientY };
+}
+
+function cropPointerDown(e) {
+  if (!cropState) return;
+  cropState.dragging = true;
+  const p = cropGetPoint(e);
+  cropState.lastX = p.x;
+  cropState.lastY = p.y;
+}
+
+function cropPointerMove(e) {
+  if (!cropState || !cropState.dragging) return;
+  if (e.cancelable) e.preventDefault();
+  const p = cropGetPoint(e);
+  const ratio = cropState.canvas.width / cropState.canvas.clientWidth;
+  cropState.offsetX += (p.x - cropState.lastX) * ratio;
+  cropState.offsetY += (p.y - cropState.lastY) * ratio;
+  cropState.lastX = p.x;
+  cropState.lastY = p.y;
+  clampCropOffset();
+  drawCrop();
+}
+
+function cropPointerUp() {
+  if (cropState) cropState.dragging = false;
+}
+
+(function initCropStage() {
+  const stage = document.getElementById('cropStage') || document.querySelector('.crop-stage');
+  if (!stage) return;
+  stage.addEventListener('mousedown', cropPointerDown);
+  document.addEventListener('mousemove', cropPointerMove);
+  document.addEventListener('mouseup', cropPointerUp);
+  stage.addEventListener('touchstart', cropPointerDown, { passive: true });
+  stage.addEventListener('touchmove', cropPointerMove, { passive: false });
+  stage.addEventListener('touchend', cropPointerUp);
+})();
+
+async function confirmAvatarCrop() {
+  if (!cropState) return;
+  const dataUrl = cropState.canvas.toDataURL('image/jpeg', 0.88);
+  closeAvatarCropModal();
   try {
     haptic('light');
-    const dataUrl = await resizeImageFile(file);
     const result = await apiFetch('/api/users/avatar', { method: 'POST', body: { image: dataUrl } });
     renderMentorProfileAvatar($('mentorProfileNameDisplay')?.textContent, result.avatar_url);
     haptic('success');
