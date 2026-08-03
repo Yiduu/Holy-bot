@@ -12,73 +12,6 @@ let jitsiApi = null;
 const $ = id => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
 
-// ─── Built-in Avatars ────────────────────────────────────────
-// Mentors pick one of these instead of uploading a photo. Keep the id
-// list in sync with AVATAR_PRESET_IDS in routes/users.js.
-const AVATAR_PRESETS = [
-  { id: 'lion', emoji: '🦁', gradient: 'linear-gradient(135deg,#f6c453,#c9861a)' },
-  { id: 'owl', emoji: '🦉', gradient: 'linear-gradient(135deg,#b39ddb,#6d47b9)' },
-  { id: 'dove', emoji: '🕊️', gradient: 'linear-gradient(135deg,#93c5fd,#2563eb)' },
-  { id: 'lamb', emoji: '🐑', gradient: 'linear-gradient(135deg,#e5e7eb,#9099a6)' },
-  { id: 'fox', emoji: '🦊', gradient: 'linear-gradient(135deg,#fb923c,#c2410c)' },
-  { id: 'bear', emoji: '🐻', gradient: 'linear-gradient(135deg,#b08a5c,#6b4a2b)' },
-  { id: 'wolf', emoji: '🐺', gradient: 'linear-gradient(135deg,#9aa7b8,#4b5b6e)' },
-  { id: 'eagle', emoji: '🦅', gradient: 'linear-gradient(135deg,#7dd3fc,#0369a1)' },
-  { id: 'deer', emoji: '🦌', gradient: 'linear-gradient(135deg,#d6a97a,#8a5a2b)' },
-  { id: 'elephant', emoji: '🐘', gradient: 'linear-gradient(135deg,#cbd5e1,#5f6f83)' },
-  { id: 'panda', emoji: '🐼', gradient: 'linear-gradient(135deg,#eef2f6,#3a4453)' },
-  { id: 'butterfly', emoji: '🦋', gradient: 'linear-gradient(135deg,#5eead4,#0d8f80)' },
-];
-
-function getAvatarPreset(id) {
-  return AVATAR_PRESETS.find(p => p.id === id) || null;
-}
-
-// Returns an HTML string for card-style avatars (mentor list, active
-// mentor card). Falls back to initials when no preset is chosen.
-function avatarHtml(presetId, name, cls = 'mentor-avatar') {
-  const preset = getAvatarPreset(presetId);
-  if (preset) {
-    return `<div class="${cls} has-emoji" style="background:${preset.gradient}">${preset.emoji}</div>`;
-  }
-  const initials = (name || '?').trim().charAt(0).toUpperCase() || '?';
-  return `<div class="${cls}">${escapeHtml(initials)}</div>`;
-}
-
-// Applies a preset (or initials fallback) directly onto an existing
-// element — used for the chat header and other background-image spots.
-function applyAvatarToEl(el, presetId, name) {
-  if (!el) return;
-  const preset = getAvatarPreset(presetId);
-  if (preset) {
-    el.style.background = preset.gradient;
-    el.textContent = preset.emoji;
-    el.classList.add('has-emoji');
-  } else {
-    el.style.background = '';
-    el.classList.remove('has-emoji');
-    const initials = (name || '?').trim().charAt(0).toUpperCase() || '?';
-    el.textContent = initials;
-  }
-}
-
-// Nav "pill" and the mentor profile hero use a wrapper button plus an
-// inner span for the glyph — background goes on the button, the
-// emoji/initial goes on the span.
-function applyAvatarToPill(btnEl, textEl, presetId, name) {
-  const preset = getAvatarPreset(presetId);
-  if (btnEl) btnEl.style.background = preset ? preset.gradient : '';
-  if (textEl) {
-    if (preset) {
-      textEl.textContent = preset.emoji;
-      textEl.classList.add('has-emoji');
-    } else {
-      textEl.textContent = (name || '?').trim().charAt(0).toUpperCase() || '?';
-      textEl.classList.remove('has-emoji');
-    }
-  }
-}
-
 // Haptic Feedback Helper
 function haptic(type = 'light') {
   const tg = window.Telegram?.WebApp;
@@ -663,26 +596,17 @@ function isUserOnline(lastActive) {
   return Date.now() - new Date(lastActive).getTime() < 5 * 60 * 1000;
 }
 
-/* ── Chat header: avatar preset/initials + real online status ─── */
-function setChatPeerHeader(displayName, lastActive, avatarPreset) {
+/* ── Chat header: avatar initials + real online status ───────── */
+function setChatPeerHeader(displayName, lastActive) {
   const avatarEl = $('chatPeerAvatar');
   if (avatarEl) {
-    const preset = getAvatarPreset(avatarPreset);
-    if (preset) {
-      avatarEl.style.background = preset.gradient;
-      avatarEl.textContent = preset.emoji;
-      avatarEl.classList.add('has-emoji');
-    } else {
-      avatarEl.style.background = '';
-      avatarEl.classList.remove('has-emoji');
-      const initials = (displayName || '?')
-        .trim()
-        .split(/\s+/)
-        .slice(0, 2)
-        .map(w => w[0]?.toUpperCase() || '')
-        .join('');
-      avatarEl.textContent = initials || '?';
-    }
+    const initials = (displayName || '?')
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map(w => w[0]?.toUpperCase() || '')
+      .join('');
+    avatarEl.textContent = initials || '?';
   }
 
   const statusEl = $('chatPeerStatus');
@@ -969,7 +893,7 @@ async function checkPendingRating() {
   } catch (e) { /* silent — non-critical */ }
 }
 
-function starIconsHtml(rating, size = 11) {
+function renderStars(rating, count, size = 11) {
   const r = rating || 0;
   const full = Math.floor(r);
   const half = (r - full) >= 0.5;
@@ -983,21 +907,10 @@ function starIconsHtml(rating, size = 11) {
       svgs += `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#867F76" stroke-width="1.5"><path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-4.045-7.416 4.045 1.48-8.279-6.064-5.828 8.332-1.151z"/></svg>`;
     }
   }
-  return svgs;
-}
-
-function renderStars(rating, count, size = 11) {
-  const svgs = starIconsHtml(rating, size);
   if (!count) {
     return `<div class="rating-row"><span class="no-rating">${t('no_ratings_yet') || 'No ratings yet'}</span></div>`;
   }
-  return `<div class="rating-row"><span class="stars">${svgs}</span><span class="rating-num">${(rating || 0).toFixed(1)}</span><span class="rating-count">(${count})</span></div>`;
-}
-
-// Stars only, no number/count — used on the mentor profile hero where the
-// value and count are already shown once alongside it.
-function renderStarsOnly(rating, size = 12) {
-  return starIconsHtml(rating, size);
+  return `<div class="rating-row"><span class="stars">${svgs}</span><span class="rating-num">${r.toFixed(1)}</span><span class="rating-count">(${count})</span></div>`;
 }
 
 function openRatingModal(mentorId, mentorName) {
@@ -1256,7 +1169,6 @@ function navigate(page) {
     case 'support': loadUserTickets(); break;
     case 'requests': loadRequests(); break;
     case 'settings': loadSettings(); break;
-    case 'mentor-profile': loadMentorProfile(); break;
     case 'my-mentees': loadMyMentees(); break;
     case 'journal':
       journalView = 'list';
@@ -1523,13 +1435,6 @@ function startApp() {
     $('nav-requests')?.classList.remove('hidden');
     $('nav-my-mentees')?.style.setProperty('display', 'flex');
     document.querySelectorAll('.mentor-hidden').forEach(el => el.style.display = 'none');
-
-    $('mentorProfileBtn')?.classList.remove('hidden');
-    const pillInitials = $('mentorProfilePillInitials');
-    if (pillInitials) {
-      const name = currentUser?.user_settings?.display_name || currentUser?.anonymous_id || '?';
-      applyAvatarToPill($('mentorProfileBtn'), pillInitials, currentUser?.avatar_preset, name);
-    }
   }
 
   applyLanguage();
@@ -1623,20 +1528,19 @@ async function loadMentors() {
           const bio = m.user_settings?.bio || 'No bio provided';
           const letter = name.charAt(0).toUpperCase();
           const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
-          const avatarMarkup = avatarHtml(m.avatar_preset, name);
           activeMentorHtml = `
             <div class="card gold-border mb-16" style="border: 2px solid var(--gold);">
               <div class="text-xs font-bold uppercase tracking-wider mb-8" style="color:var(--gold)" data-i18n="your_active_mentor">
                 ${t('your_active_mentor') || 'Your Active Mentor'}
               </div>
-              <div class="flex items-center gap-8 mb-12">
+              <div class="mentor-header mb-8">
                 <div class="mentor-avatar">${letter}</div>
-                <div class="mentor-info">
+                <div class="mentor-header-info">
                   <div class="mentor-id">${escapeHtml(name)}</div>
                   ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
-                  <div class="mentor-bio">${escapeHtml(bio)}</div>
                 </div>
               </div>
+              <div class="mentor-bio mb-12">${escapeHtml(bio)}</div>
               <div class="flex gap-8">
                 <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${m.telegram_id}')" data-i18n="btn_message">${t('btn_message') || 'Message'}</button>
                 <button class="btn btn-danger btn-sm" onclick="endMentorship()" data-i18n="btn_end">${t('btn_end') || 'End Mentorship'}</button>
@@ -1670,6 +1574,7 @@ async function loadMentors() {
         const name = m.user_settings?.display_name || m.anonymous_id;
         const bio = m.user_settings?.bio || 'No bio provided';
         const spec = m.user_settings?.specialization || '';
+        const letter = name.charAt(0).toUpperCase();
         const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
         const mentees = m.mentee_count || 0;
         const max = m.user_settings?.max_mentees || 5;
@@ -1678,19 +1583,17 @@ async function loadMentors() {
         // Pass selectedTopic (topic ID) to the request function
         const topicIdParam = selectedTopic && selectedTopic !== '' ? `, ${selectedTopic}` : '';
 
-        const avatarMarkup = avatarHtml(m.avatar_preset, name);
-
         return `
           <div class="mentor-card">
-            <div class="flex items-center gap-8">
+            <div class="mentor-header">
               <div class="mentor-avatar">${letter}</div>
-              <div class="mentor-info">
+              <div class="mentor-header-info">
                 <div class="mentor-id">${escapeHtml(name)}</div>
                 ${renderStars(m.rating, m.rating_count)}
                 ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
-                <div class="mentor-bio">${escapeHtml(bio)}</div>
               </div>
             </div>
+            <div class="mentor-bio">${escapeHtml(bio)}</div>
             <div class="mentor-meta">
               ${spec ? `<span class="mentor-badge badge-spec">${escapeHtml(spec)}</span>` : ''}
               <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentee')}s</span>
@@ -2458,7 +2361,7 @@ async function loadChat() {
       if (partnerWrapper) partnerWrapper.style.display = 'none';
       $('chatWith').style.display = 'block';
       $('chatWith').textContent = res.partner.display_name;
-      setChatPeerHeader(res.partner.display_name, res.partner.last_active, res.partner.avatar_preset);
+      setChatPeerHeader(res.partner.display_name, res.partner.last_active);
       window.chatState = { with: res.partner.telegram_id, name: res.partner.display_name || res.partner.anonymous_id };
       loadMessages(res.partner.telegram_id);
     } else {
@@ -2899,6 +2802,19 @@ async function loadSettings() {
     $('toggleSessions').classList.toggle('on', s.notify_sessions !== false);
     $('toggleVerse').classList.toggle('on', s.notify_daily_verse !== false);
 
+    if (currentUser?.role === 'mentor') {
+      $('mentorSettings').classList.remove('hidden');
+      $('settingBio').value = s.bio || '';
+      $('settingSpecialization').value = s.specialization || '';
+      $('settingMaxMentees').value = s.max_mentees || 5;
+      $('settingMenteeSex').value = s.preferred_mentee_sex || 'prefer_not';
+
+      const acceptToggle = $('toggleAcceptingRequests');
+      if (acceptToggle) {
+        acceptToggle.classList.toggle('on', s.accepting_requests !== false);
+      }
+    }
+
     $('userAnonId').textContent = currentUser?.anonymous_id || '';
     $('userRole').textContent = currentUser?.role || '';
   } catch (e) { showToast(e.message, 'error'); }
@@ -2911,162 +2827,18 @@ async function saveSettings() {
     notify_messages: $('toggleMessages').classList.contains('on'),
     notify_sessions: $('toggleSessions').classList.contains('on'),
     notify_daily_verse: $('toggleVerse').classList.contains('on'),
+    bio: $('settingBio')?.value,
+    specialization: $('settingSpecialization')?.value,
+    max_mentees: parseInt($('settingMaxMentees')?.value) || 5,
   };
+  if (currentUser?.role === 'mentor') {
+    body.accepting_requests = $('toggleAcceptingRequests')?.classList.contains('on');
+    body.preferred_mentee_sex = $('settingMenteeSex')?.value;
+  }
   try {
     await apiFetch('/api/users/settings', { method: 'PATCH', body });
     haptic('success');
     showToast('Settings saved', 'success');
-  } catch (e) {
-    haptic('error');
-    showToast(e.message, 'error');
-  }
-}
-
-// ─── Mentor Profile page ────────────────────────────────────────
-let currentMentorBio = '';
-
-function renderMentorProfileAvatar(name, avatarPreset) {
-  const el = $('mentorProfileAvatar');
-  const pill = $('mentorProfilePillInitials');
-  applyAvatarToEl(el, avatarPreset, name);
-  applyAvatarToPill($('mentorProfileBtn'), pill, avatarPreset, name);
-  window._mentorAvatarPreset = avatarPreset || null;
-}
-
-async function loadMentorProfile() {
-  try {
-    const s = await apiFetch('/api/users/settings');
-    const name = s.display_name || currentUser?.anonymous_id || 'Mentor';
-
-    $('mentorProfileNameDisplay').textContent = name;
-    renderMentorProfileAvatar(name, s.avatar_preset);
-
-    currentMentorBio = s.bio || '';
-    renderMentorProfileBio();
-
-    $('settingSpecialization').value = s.specialization || '';
-    $('settingMaxMentees').value = s.max_mentees || 5;
-    $('settingMenteeSex').value = s.preferred_mentee_sex || 'prefer_not';
-    $('toggleAcceptingRequests')?.classList.toggle('on', s.accepting_requests !== false);
-
-    // Rating: stars shown once, value + count shown once, right next to each other.
-    const rating = currentUser?.rating || 0;
-    const ratingCount = currentUser?.rating_count || 0;
-    $('mentorProfileStars').innerHTML = renderStarsOnly(rating, 13);
-    $('mentorProfileRatingVal').textContent = ratingCount ? `${rating.toFixed(1)} (${ratingCount})` : 'No ratings';
-
-    try {
-      const mentees = await apiFetch('/api/mentors/my-mentees');
-      $('mentorProfileMenteeCount').textContent = Array.isArray(mentees) ? mentees.length : '0';
-    } catch { $('mentorProfileMenteeCount').textContent = '—'; }
-
-    try {
-      const myTopics = await apiFetch('/api/topics/my-expertise');
-      const chipsEl = $('mentorProfileTopicsChips');
-      if (chipsEl) {
-        chipsEl.innerHTML = myTopics.length
-          ? myTopics.map(t => `<span class="mp-topic-chip">${escapeHtml(t.topics?.name || '')}</span>`).join('')
-          : `<span class="text-xs text-dim">No topics selected yet.</span>`;
-      }
-    } catch { }
-  } catch (e) { showToast(e.message, 'error'); }
-}
-
-async function saveMentorProfile() {
-  haptic('medium');
-  const body = {
-    specialization: $('settingSpecialization')?.value,
-    max_mentees: parseInt($('settingMaxMentees')?.value) || 5,
-    accepting_requests: $('toggleAcceptingRequests')?.classList.contains('on'),
-    preferred_mentee_sex: $('settingMenteeSex')?.value,
-  };
-  try {
-    await apiFetch('/api/users/settings', { method: 'PATCH', body });
-    haptic('success');
-    showToast('Profile saved', 'success');
-  } catch (e) {
-    haptic('error');
-    showToast(e.message, 'error');
-  }
-}
-
-// ─── Bio: read-only view + dedicated edit modal ─────────────────
-function renderMentorProfileBio() {
-  const el = $('mentorProfileBioView');
-  if (!el) return;
-  if (currentMentorBio.trim()) {
-    el.textContent = currentMentorBio;
-    el.classList.remove('mp-bio-empty');
-  } else {
-    el.textContent = 'No bio yet — tell mentees about yourself.';
-    el.classList.add('mp-bio-empty');
-  }
-}
-
-function openBioEditModal() {
-  haptic('light');
-  const textarea = $('bioEditTextarea');
-  if (textarea) {
-    textarea.value = currentMentorBio;
-    updateBioCharCount();
-  }
-  $('bioEditModal')?.classList.add('open');
-  textarea?.focus();
-}
-
-function closeBioEditModal() {
-  $('bioEditModal')?.classList.remove('open');
-}
-
-function updateBioCharCount() {
-  const textarea = $('bioEditTextarea');
-  const counter = $('bioCharCount');
-  if (textarea && counter) counter.textContent = `${textarea.value.length}/500`;
-}
-
-async function saveBioEdit() {
-  haptic('medium');
-  const value = $('bioEditTextarea')?.value || '';
-  try {
-    await apiFetch('/api/users/settings', { method: 'PATCH', body: { bio: value } });
-    currentMentorBio = value;
-    renderMentorProfileBio();
-    closeBioEditModal();
-    haptic('success');
-    showToast('Bio updated', 'success');
-  } catch (e) {
-    haptic('error');
-    showToast(e.message, 'error');
-  }
-}
-
-// ─── Avatar picker (built-in icons, no upload) ──────────────────
-function openAvatarPicker() {
-  haptic('light');
-  const grid = $('avatarPickerGrid');
-  if (grid) {
-    grid.innerHTML = AVATAR_PRESETS.map(p => `
-      <button class="avatar-picker-item${window._mentorAvatarPreset === p.id ? ' selected' : ''}"
-        style="background:${p.gradient}" onclick="selectAvatarPreset('${p.id}')" aria-label="${p.id}">
-        ${p.emoji}
-      </button>`).join('');
-  }
-  $('avatarPickerModal')?.classList.add('open');
-}
-
-function closeAvatarPicker() {
-  $('avatarPickerModal')?.classList.remove('open');
-}
-
-async function selectAvatarPreset(presetId) {
-  haptic('medium');
-  try {
-    const result = await apiFetch('/api/users/settings', { method: 'PATCH', body: { avatar_preset: presetId } });
-    if (currentUser) currentUser.avatar_preset = result.avatar_preset;
-    renderMentorProfileAvatar($('mentorProfileNameDisplay')?.textContent, result.avatar_preset);
-    closeAvatarPicker();
-    haptic('success');
-    showToast(presetId ? 'Avatar updated' : 'Avatar cleared', 'success');
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
@@ -3210,9 +2982,9 @@ async function loadUserTickets() {
 
       return `
         <div class="ticket-card-premium status-${status}" onclick="openTicketDetail('${t.id}')">
-          <div class="flex justify-between items-center mb-8" style="gap:8px;">
-            <h4 class="font-bold text-sm" style="margin:0;color:var(--text);font-size:0.95rem;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.subject)}</h4>
-            <span class="status-pill status-pill-${status}" style="flex-shrink:0;">
+          <div class="flex justify-between items-center mb-8">
+            <h4 class="font-bold text-sm" style="margin:0;color:var(--text);font-size:0.95rem">${escapeHtml(t.subject)}</h4>
+            <span class="status-pill status-pill-${status}">
               <span class="status-dot"></span>
               ${status.replace('_', ' ')}
             </span>
@@ -3823,11 +3595,9 @@ async function loadJournalEntries() {
     }
     container.innerHTML = entries.map(e => `
       <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`, '${e.mood || 'neutral'}')">
+        <div class="journal-date">${formatDateTime(e.created_at)}</div>
         <div class="journal-mood">${getMoodIcon(e.mood)}</div>
-        <div class="journal-item-body">
-          <div class="journal-date">${formatDateTime(e.created_at)}</div>
-          <div class="journal-preview">${escapeHtml(e.content.substring(0, 140))}${e.content.length > 140 ? '…' : ''}</div>
-        </div>
+        <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
       </div>
     `).join('');
   } catch (e) { container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`; }

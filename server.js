@@ -53,9 +53,7 @@ app.use((req, res, next) => {
 
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }));
 app.use(helmet({ contentSecurityPolicy: false }));
-// Avatars are now built-in presets (no file uploads), so request bodies
-// are just text/JSON — keep this modest rather than sized for photos.
-app.use(express.json({ limit: '512kb' }));
+app.use(express.json({ limit: '10kb' }));
 app.use(express.static('frontend'));
 
 // ─── Rate Limiters ────────────────────────────────────────────────────────────
@@ -194,7 +192,7 @@ function requireAdmin(req, res, next) {
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth')(supabase, requireAuth));
-app.use('/api/users', require('./routes/users')(supabase, requireAuth, bot));
+app.use('/api/users', require('./routes/users')(supabase, requireAuth));
 app.use('/api/mentors', require('./routes/mentors')(supabase, requireAuth));
 app.use('/api/sessions', require('./routes/sessions')(supabase, requireAuth, io, onlineUsers));
 app.use('/api/messages', require('./routes/messages')(supabase, requireAuth, io, onlineUsers));
