@@ -1,0 +1,12 @@
+-- Migration: replace photo-upload avatars with built-in preset avatars.
+--
+-- Uploaded photos never worked reliably (the avatar column was renamed
+-- twice across migrations 13 and 14 — telegram storage, then supabase
+-- storage — and the app code drifted out of sync with it). Mentors now
+-- just pick one of a fixed set of built-in avatar icons instead of
+-- uploading a file, which removes the upload/storage pipeline entirely.
+--
+-- Old photo columns (avatar_file_id / avatar_url, depending on which
+-- prior migration actually ran) are left in place but unused, rather
+-- than dropped, so this migration is safe to run regardless of history.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_preset TEXT;

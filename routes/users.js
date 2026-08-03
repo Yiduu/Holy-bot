@@ -1,12 +1,19 @@
 'use strict';
 
 const express = require('express');
-const axios = require('axios');
 
 // ─── Stats cache (1 hour TTL) ─────────────────────────────────────────────────
 let statsCache = null;
 let statsCacheTime = 0;
 const STATS_TTL = 60 * 60 * 1000; // 1 hour
+
+// Built-in avatar options mentors can pick from — see frontend/app.js
+// AVATAR_PRESETS for the matching emoji/color catalog. Keep the id list
+// in sync between the two.
+const AVATAR_PRESET_IDS = [
+  'lion', 'owl', 'dove', 'lamb', 'fox', 'bear',
+  'wolf', 'eagle', 'deer', 'elephant', 'panda', 'butterfly'
+];
 
 module.exports = function userRoutes(supabase, requireAuth, bot) {
   const router = express.Router();
@@ -42,14 +49,14 @@ module.exports = function userRoutes(supabase, requireAuth, bot) {
     const { id } = req.telegramUser;
     const [settingsRes, userRes] = await Promise.all([
       supabase.from('user_settings').select('*').eq('telegram_id', id).single(),
-      supabase.from('users').select('accepting_requests, preferred_mentee_sex, avatar_file_id').eq('telegram_id', id).single()
+      supabase.from('users').select('accepting_requests, preferred_mentee_sex, avatar_preset').eq('telegram_id', id).single()
     ]);
     if (settingsRes.error) return res.status(500).json({ error: settingsRes.error.message });
     const merged = {
       ...settingsRes.data,
       accepting_requests: userRes.data ? userRes.data.accepting_requests !== false : true,
       preferred_mentee_sex: userRes.data?.preferred_mentee_sex || 'prefer_not',
-      avatar_url: userRes.data?.avatar_file_id ? `/api/users/avatar-image/${userRes.data.avatar_file_id}` : null
+      avatar_preset: userRes.data?.avatar_preset || null
     };
     res.json(merged);
   });
@@ -85,6 +92,16 @@ module.exports = function userRoutes(supabase, requireAuth, bot) {
       );
     }
 
+    if (req.body.avatar_preset !== undefined) {
+      const preset = req.body.avatar_preset;
+      if (preset !== null && !AVATAR_PRESET_IDS.includes(preset)) {
+        return res.status(400).json({ error: 'Invalid avatar_preset value' });
+      }
+      promises.push(
+        supabase.from('users').update({ avatar_preset: preset }).eq('telegram_id', id)
+      );
+    }
+
     const results = await Promise.all(promises);
     const settingsResult = results[0];
     if (settingsResult.error) return res.status(500).json({ error: settingsResult.error.message });
@@ -96,82 +113,12 @@ module.exports = function userRoutes(supabase, requireAuth, bot) {
         : (await supabase.from('users').select('accepting_requests').eq('telegram_id', id).single()).data?.accepting_requests !== false,
       preferred_mentee_sex: req.body.preferred_mentee_sex !== undefined
         ? req.body.preferred_mentee_sex
-        : (await supabase.from('users').select('preferred_mentee_sex').eq('telegram_id', id).single()).data?.preferred_mentee_sex || 'prefer_not'
+        : (await supabase.from('users').select('preferred_mentee_sex').eq('telegram_id', id).single()).data?.preferred_mentee_sex || 'prefer_not',
+      avatar_preset: req.body.avatar_preset !== undefined
+        ? req.body.avatar_preset
+        : (await supabase.from('users').select('avatar_preset').eq('telegram_id', id).single()).data?.avatar_preset || null
     };
     res.json(merged);
-  });
-
-  // POST /api/users/avatar – upload or replace the caller's profile photo.
-  // Expects { image: 'data:image/jpeg;base64,....' } (cropped/compressed client-side).
-  // Storage: the photo is sent to the user's own chat with the bot, which
-  // hosts it on Telegram's servers — we only keep the returned file_id.
-  router.post('/avatar', requireAuth, async (req, res) => {
-    const { id } = req.telegramUser;
-    const { image } = req.body;
-    if (!image || typeof image !== 'string') {
-      return res.status(400).json({ error: 'image is required' });
-    }
-
-    const match = image.match(/^data:(image\/(jpeg|png|webp));base64,(.+)$/);
-    if (!match) {
-      return res.status(400).json({ error: 'image must be a base64 JPEG, PNG, or WEBP data URL' });
-    }
-    const [, contentType, , base64Data] = match;
-    const buffer = Buffer.from(base64Data, 'base64');
-    if (buffer.length > 1.5 * 1024 * 1024) {
-      return res.status(400).json({ error: 'Image too large (max 1.5MB)' });
-    }
-
-    try {
-      const sent = await bot.sendPhoto(
-        id,
-        buffer,
-        { caption: '📸 Profile photo updated' },
-        { filename: 'avatar.jpg', contentType }
-      );
-      const sizes = sent.photo || [];
-      const fileId = sizes.length ? sizes[sizes.length - 1].file_id : null;
-      if (!fileId) return res.status(502).json({ error: 'Telegram did not return a photo file id' });
-
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ avatar_file_id: fileId })
-        .eq('telegram_id', id);
-      if (updateError) return res.status(500).json({ error: updateError.message });
-
-      // Cache-bust so the new photo shows immediately after a "change photo" upload
-      res.json({ avatar_url: `/api/users/avatar-image/${fileId}?v=${Date.now()}` });
-    } catch (err) {
-      res.status(502).json({ error: err.message || 'Failed to upload photo via Telegram' });
-    }
-  });
-
-  // GET /api/users/avatar-image/:fileId – public proxy for Telegram-hosted
-  // photos. Intentionally not behind requireAuth: <img> tags can't attach an
-  // auth header, and these photos are meant to be visible on mentor cards.
-  // Proxying (instead of redirecting to Telegram's URL) keeps the bot token
-  // — which that URL embeds — off the client.
-  router.get('/avatar-image/:fileId', async (req, res) => {
-    try {
-      const fileLink = await bot.getFileLink(req.params.fileId);
-      const upstream = await axios.get(fileLink, { responseType: 'stream' });
-      res.set('Content-Type', upstream.headers['content-type'] || 'image/jpeg');
-      res.set('Cache-Control', 'public, max-age=86400');
-      upstream.data.pipe(res);
-    } catch (err) {
-      res.status(404).json({ error: 'Photo not found' });
-    }
-  });
-
-  // DELETE /api/users/avatar – remove the caller's profile photo.
-  // Telegram doesn't support deleting an arbitrary previously-sent photo by
-  // file_id, so we just stop referencing it; the message stays in the
-  // mentor's own chat history with the bot the way any other bot photo would.
-  router.delete('/avatar', requireAuth, async (req, res) => {
-    const { id } = req.telegramUser;
-    const { error } = await supabase.from('users').update({ avatar_file_id: null }).eq('telegram_id', id);
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ success: true });
   });
 
   // POST /api/users/apply-mentor
@@ -213,15 +160,12 @@ module.exports = function userRoutes(supabase, requireAuth, bot) {
     const { id: telegram_id } = req.telegramUser;
     const { data, error } = await supabase
       .from('mentorship_assignments')
-      .select('*, mentor:mentor_id(telegram_id, anonymous_id, avatar_file_id, user_settings(bio, specialization, display_name))')
+      .select('*, mentor:mentor_id(telegram_id, anonymous_id, avatar_preset, user_settings(bio, specialization, display_name))')
       .eq('user_id', telegram_id)
       .eq('is_active', true)
       .single();
 
     if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
-    if (data?.mentor) {
-      data.mentor.avatar_url = data.mentor.avatar_file_id ? `/api/users/avatar-image/${data.mentor.avatar_file_id}` : null;
-    }
     res.json(data || null);
   });
 
@@ -266,7 +210,7 @@ module.exports = function userRoutes(supabase, requireAuth, bot) {
     } else {
       const { data: assignment, error } = await supabase
         .from('mentorship_assignments')
-        .select('mentor:mentor_id(telegram_id, anonymous_id, avatar_file_id, last_active, user_settings(display_name))')
+        .select('mentor:mentor_id(telegram_id, anonymous_id, avatar_preset, last_active, user_settings(display_name))')
         .eq('user_id', telegram_id)
         .eq('is_active', true)
         .single();
@@ -281,7 +225,7 @@ module.exports = function userRoutes(supabase, requireAuth, bot) {
           telegram_id: m.telegram_id, 
           anonymous_id: m.anonymous_id, 
           display_name: m.user_settings?.display_name || m.anonymous_id,
-          avatar_url: m.avatar_file_id ? `/api/users/avatar-image/${m.avatar_file_id}` : null,
+          avatar_preset: m.avatar_preset || null,
           last_active: m.last_active
         } 
       });

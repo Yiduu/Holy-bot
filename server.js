@@ -53,9 +53,9 @@ app.use((req, res, next) => {
 
 app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }));
 app.use(helmet({ contentSecurityPolicy: false }));
-// 2mb covers a base64-encoded avatar photo (resized/compressed client-side
-// before upload); every other endpoint's payloads stay far under this.
-app.use(express.json({ limit: '2mb' }));
+// Avatars are now built-in presets (no file uploads), so request bodies
+// are just text/JSON — keep this modest rather than sized for photos.
+app.use(express.json({ limit: '512kb' }));
 app.use(express.static('frontend'));
 
 // ─── Rate Limiters ────────────────────────────────────────────────────────────

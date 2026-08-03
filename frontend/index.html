@@ -16,6 +16,15 @@
 
 <body>
 
+  <!-- Shared SVG defs (half-star gradient used by star ratings app-wide) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="ratingHalfGrad" x1="0" x2="1" y1="0" y2="0">
+        <stop offset="50%" stop-color="#C9A84C" /><stop offset="50%" stop-color="#2A2E3A" />
+      </linearGradient>
+    </defs>
+  </svg>
+
   <!-- ─── Loading Screen ──────────────────────────────────────── -->
   <div id="loadingScreen" class="loading-screen">
     <div class="loading-logo"><img src="Holy%20logo1.png" alt="Holy Logo" class="loading-logo-img"></div>
@@ -706,24 +715,12 @@
         <div class="mp-hero">
           <div class="mp-avatar-wrap">
             <div id="mentorProfileAvatar" class="mp-avatar">?</div>
-            <div class="mp-avatar-edit-btn" onclick="toggleMentorAvatarMenu()">
+            <div class="mp-avatar-edit-btn" onclick="openAvatarPicker()" aria-label="Choose avatar">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                 stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
               </svg>
             </div>
-            <div id="mentorAvatarMenu" class="mp-avatar-menu">
-              <button onclick="triggerAvatarFileSelect()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
-                <span id="mentorAvatarActionLabel">Upload photo</span>
-              </button>
-              <button class="danger" id="mentorAvatarRemoveBtn" onclick="removeMentorAvatar()" style="display:none;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
-                Remove photo
-              </button>
-            </div>
-            <input type="file" id="mentorAvatarFileInput" accept="image/png, image/jpeg, image/webp"
-              style="display:none;" onchange="handleAvatarFileSelected(event)" />
           </div>
           <div id="mentorProfileNameDisplay" class="mp-name">—</div>
           <div class="mp-role">Mentor</div>
@@ -740,10 +737,18 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <label class="form-label">Bio</label>
-          <textarea id="settingBio" class="form-control" rows="3"
-            placeholder="Share a bit about your recovery journey…"></textarea>
+        <div class="mp-section-head">
+          <span class="form-label" style="margin:0;">Bio</span>
+          <button class="mp-edit-link" onclick="openBioEditModal()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+            Edit
+          </button>
+        </div>
+        <div class="card mb-16">
+          <p id="mentorProfileBioView" class="mp-bio-text">No bio yet — tell mentees about yourself.</p>
         </div>
         <div class="form-group">
           <label class="form-label">Specialization</label>
@@ -952,26 +957,29 @@
       </div>
     </div>
   <!-- ─── Avatar Crop Modal ─────────────────────────────────────── -->
-  <div id="avatarCropModal" class="modal-overlay" onclick="if(event.target===this)closeAvatarCropModal()">
+  <div id="avatarPickerModal" class="modal-overlay" onclick="if(event.target===this)closeAvatarPicker()">
     <div class="modal-sheet">
       <div class="modal-handle"></div>
-      <div class="modal-title">Adjust Photo</div>
-      <p class="text-sm text-dim mb-16">Drag to reposition, use the slider to zoom.</p>
+      <div class="modal-title">Choose an Avatar</div>
+      <p class="text-sm text-dim mb-16">Pick an icon to represent you — mentees will see this on your profile and
+        mentor cards.</p>
+      <div id="avatarPickerGrid" class="avatar-picker-grid"></div>
+      <button class="btn btn-ghost btn-full mt-12" onclick="selectAvatarPreset(null)">Use my initials instead</button>
+    </div>
+  </div>
 
-      <div class="crop-stage" id="cropStage">
-        <canvas id="cropCanvas" width="480" height="480"></canvas>
-        <div class="crop-circle-guide"></div>
-      </div>
-
-      <div class="crop-zoom-row">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-        <input type="range" id="cropZoomSlider" min="100" max="300" value="100" oninput="onCropZoomChange(this.value)" />
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-      </div>
-
+  <div id="bioEditModal" class="modal-overlay" onclick="if(event.target===this)closeBioEditModal()">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Edit Bio</div>
+      <p class="text-sm text-dim mb-16">Share a bit about your recovery journey — mentees will see this on your
+        profile.</p>
+      <textarea id="bioEditTextarea" class="form-control" rows="6" maxlength="500"
+        placeholder="Share a bit about your recovery journey…" oninput="updateBioCharCount()"></textarea>
+      <div id="bioCharCount" class="mp-bio-char-count">0/500</div>
       <div class="flex gap-8 mt-12">
-        <button class="btn btn-ghost flex-1" onclick="closeAvatarCropModal()">Cancel</button>
-        <button class="btn btn-primary flex-1" onclick="confirmAvatarCrop()">Use Photo</button>
+        <button class="btn btn-ghost flex-1" onclick="closeBioEditModal()">Cancel</button>
+        <button class="btn btn-primary flex-1" onclick="saveBioEdit()">Save</button>
       </div>
     </div>
   </div>

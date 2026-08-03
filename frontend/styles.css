@@ -274,6 +274,10 @@ h3 {
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--border);
 }
 
+.chat-header .avatar.has-emoji {
+  font-size: 1.3rem;
+}
+
 .chat-header .peer-meta {
   min-width: 0;
 }
@@ -830,6 +834,11 @@ textarea.form-control {
   color: var(--gold);
   flex-shrink: 0;
   object-fit: cover;
+}
+
+.mentor-avatar.has-emoji {
+  font-size: 1.4rem;
+  border-color: transparent;
 }
 
 .mentor-info {
@@ -2092,6 +2101,10 @@ textarea.form-control {
   transform: translateY(-1px);
 }
 
+#mentorProfilePillInitials.has-emoji {
+  font-size: 1.05rem;
+}
+
 /* ─── Mentor Profile page ──────────────────────────────────── */
 .mp-hero {
   text-align: center;
@@ -2123,6 +2136,11 @@ textarea.form-control {
   box-shadow: 0 8px 24px rgba(201, 168, 76, .25);
 }
 
+.mp-avatar.has-emoji {
+  font-size: 2.6rem;
+  color: #fff;
+}
+
 .mp-avatar-edit-btn {
   position: absolute;
   bottom: 0;
@@ -2143,66 +2161,6 @@ textarea.form-control {
 
 .mp-avatar-edit-btn:hover {
   background: var(--gold-dim);
-}
-
-.mp-avatar-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%) translateY(-6px);
-  width: 168px;
-  background: var(--bg2);
-  border: 1px solid var(--border-dim);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow);
-  padding: 6px;
-  z-index: 30;
-  text-align: left;
-  opacity: 0;
-  visibility: hidden;
-  transition: .16s ease;
-}
-
-.mp-avatar-menu.open {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
-}
-
-.mp-avatar-menu button {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 9px 10px;
-  border-radius: 7px;
-  background: none;
-  border: none;
-  color: var(--text2);
-  font-family: var(--font-body);
-  font-size: .8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: .15s ease;
-}
-
-.mp-avatar-menu button svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
-.mp-avatar-menu button:hover {
-  background: var(--bg3);
-  color: var(--text);
-}
-
-.mp-avatar-menu button.danger {
-  color: var(--danger);
-}
-
-.mp-avatar-menu button.danger:hover {
-  background: rgba(224, 92, 92, .14);
 }
 
 .mp-name {
@@ -2259,6 +2217,83 @@ textarea.form-control {
   gap: 6px;
 }
 
+/* ─── Bio: read-only view + Edit button ──────────────────────── */
+.mp-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.mp-edit-link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: var(--gold-light);
+  font-family: var(--font-body);
+  font-size: .78rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: .15s ease;
+}
+
+.mp-edit-link:hover {
+  background: var(--gold-dim);
+}
+
+.mp-bio-text {
+  font-size: .85rem;
+  line-height: 1.55;
+  color: var(--text2);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.mp-bio-text.mp-bio-empty {
+  color: var(--text3);
+  font-style: italic;
+}
+
+.mp-bio-char-count {
+  text-align: right;
+  font-size: .68rem;
+  color: var(--text3);
+  margin-top: 4px;
+}
+
+/* ─── Built-in avatar picker ──────────────────────────────────── */
+.avatar-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.avatar-picker-item {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  cursor: pointer;
+  transition: transform .12s ease, border-color .12s ease;
+}
+
+.avatar-picker-item:active {
+  transform: scale(0.94);
+}
+
+.avatar-picker-item.selected {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--gold);
+}
+
 .mp-topic-chip {
   font-size: .72rem;
   font-weight: 600;
@@ -2268,16 +2303,6 @@ textarea.form-control {
   color: var(--gold-light);
   border: 1px solid var(--border);
 }
-
-/* ─── Avatar crop modal ─────────────────────────────────────── */
-.crop-stage {
-  position: relative;
-  width: 260px;
-  height: 260px;
-  margin: 0 auto 16px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: var(--bg2);
   border: 1px solid var(--border-dim);
   touch-action: none;
   cursor: grab;

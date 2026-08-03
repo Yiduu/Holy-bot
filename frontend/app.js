@@ -12,6 +12,73 @@ let jitsiApi = null;
 const $ = id => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
 
+// ─── Built-in Avatars ────────────────────────────────────────
+// Mentors pick one of these instead of uploading a photo. Keep the id
+// list in sync with AVATAR_PRESET_IDS in routes/users.js.
+const AVATAR_PRESETS = [
+  { id: 'lion', emoji: '🦁', gradient: 'linear-gradient(135deg,#f6c453,#c9861a)' },
+  { id: 'owl', emoji: '🦉', gradient: 'linear-gradient(135deg,#b39ddb,#6d47b9)' },
+  { id: 'dove', emoji: '🕊️', gradient: 'linear-gradient(135deg,#93c5fd,#2563eb)' },
+  { id: 'lamb', emoji: '🐑', gradient: 'linear-gradient(135deg,#e5e7eb,#9099a6)' },
+  { id: 'fox', emoji: '🦊', gradient: 'linear-gradient(135deg,#fb923c,#c2410c)' },
+  { id: 'bear', emoji: '🐻', gradient: 'linear-gradient(135deg,#b08a5c,#6b4a2b)' },
+  { id: 'wolf', emoji: '🐺', gradient: 'linear-gradient(135deg,#9aa7b8,#4b5b6e)' },
+  { id: 'eagle', emoji: '🦅', gradient: 'linear-gradient(135deg,#7dd3fc,#0369a1)' },
+  { id: 'deer', emoji: '🦌', gradient: 'linear-gradient(135deg,#d6a97a,#8a5a2b)' },
+  { id: 'elephant', emoji: '🐘', gradient: 'linear-gradient(135deg,#cbd5e1,#5f6f83)' },
+  { id: 'panda', emoji: '🐼', gradient: 'linear-gradient(135deg,#eef2f6,#3a4453)' },
+  { id: 'butterfly', emoji: '🦋', gradient: 'linear-gradient(135deg,#5eead4,#0d8f80)' },
+];
+
+function getAvatarPreset(id) {
+  return AVATAR_PRESETS.find(p => p.id === id) || null;
+}
+
+// Returns an HTML string for card-style avatars (mentor list, active
+// mentor card). Falls back to initials when no preset is chosen.
+function avatarHtml(presetId, name, cls = 'mentor-avatar') {
+  const preset = getAvatarPreset(presetId);
+  if (preset) {
+    return `<div class="${cls} has-emoji" style="background:${preset.gradient}">${preset.emoji}</div>`;
+  }
+  const initials = (name || '?').trim().charAt(0).toUpperCase() || '?';
+  return `<div class="${cls}">${escapeHtml(initials)}</div>`;
+}
+
+// Applies a preset (or initials fallback) directly onto an existing
+// element — used for the chat header and other background-image spots.
+function applyAvatarToEl(el, presetId, name) {
+  if (!el) return;
+  const preset = getAvatarPreset(presetId);
+  if (preset) {
+    el.style.background = preset.gradient;
+    el.textContent = preset.emoji;
+    el.classList.add('has-emoji');
+  } else {
+    el.style.background = '';
+    el.classList.remove('has-emoji');
+    const initials = (name || '?').trim().charAt(0).toUpperCase() || '?';
+    el.textContent = initials;
+  }
+}
+
+// Nav "pill" and the mentor profile hero use a wrapper button plus an
+// inner span for the glyph — background goes on the button, the
+// emoji/initial goes on the span.
+function applyAvatarToPill(btnEl, textEl, presetId, name) {
+  const preset = getAvatarPreset(presetId);
+  if (btnEl) btnEl.style.background = preset ? preset.gradient : '';
+  if (textEl) {
+    if (preset) {
+      textEl.textContent = preset.emoji;
+      textEl.classList.add('has-emoji');
+    } else {
+      textEl.textContent = (name || '?').trim().charAt(0).toUpperCase() || '?';
+      textEl.classList.remove('has-emoji');
+    }
+  }
+}
+
 // Haptic Feedback Helper
 function haptic(type = 'light') {
   const tg = window.Telegram?.WebApp;
@@ -596,15 +663,18 @@ function isUserOnline(lastActive) {
   return Date.now() - new Date(lastActive).getTime() < 5 * 60 * 1000;
 }
 
-/* ── Chat header: avatar photo/initials + real online status ─── */
-function setChatPeerHeader(displayName, lastActive, avatarUrl) {
+/* ── Chat header: avatar preset/initials + real online status ─── */
+function setChatPeerHeader(displayName, lastActive, avatarPreset) {
   const avatarEl = $('chatPeerAvatar');
   if (avatarEl) {
-    if (avatarUrl) {
-      avatarEl.style.backgroundImage = `url('${avatarUrl}')`;
-      avatarEl.textContent = '';
+    const preset = getAvatarPreset(avatarPreset);
+    if (preset) {
+      avatarEl.style.background = preset.gradient;
+      avatarEl.textContent = preset.emoji;
+      avatarEl.classList.add('has-emoji');
     } else {
-      avatarEl.style.backgroundImage = '';
+      avatarEl.style.background = '';
+      avatarEl.classList.remove('has-emoji');
       const initials = (displayName || '?')
         .trim()
         .split(/\s+/)
@@ -899,7 +969,7 @@ async function checkPendingRating() {
   } catch (e) { /* silent — non-critical */ }
 }
 
-function renderStars(rating, count, size = 11) {
+function starIconsHtml(rating, size = 11) {
   const r = rating || 0;
   const full = Math.floor(r);
   const half = (r - full) >= 0.5;
@@ -913,10 +983,21 @@ function renderStars(rating, count, size = 11) {
       svgs += `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#867F76" stroke-width="1.5"><path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-4.045-7.416 4.045 1.48-8.279-6.064-5.828 8.332-1.151z"/></svg>`;
     }
   }
+  return svgs;
+}
+
+function renderStars(rating, count, size = 11) {
+  const svgs = starIconsHtml(rating, size);
   if (!count) {
     return `<div class="rating-row"><span class="no-rating">${t('no_ratings_yet') || 'No ratings yet'}</span></div>`;
   }
-  return `<div class="rating-row"><span class="stars">${svgs}</span><span class="rating-num">${r.toFixed(1)}</span><span class="rating-count">(${count})</span></div>`;
+  return `<div class="rating-row"><span class="stars">${svgs}</span><span class="rating-num">${(rating || 0).toFixed(1)}</span><span class="rating-count">(${count})</span></div>`;
+}
+
+// Stars only, no number/count — used on the mentor profile hero where the
+// value and count are already shown once alongside it.
+function renderStarsOnly(rating, size = 12) {
+  return starIconsHtml(rating, size);
 }
 
 function openRatingModal(mentorId, mentorName) {
@@ -1445,10 +1526,7 @@ function startApp() {
     const pillInitials = $('mentorProfilePillInitials');
     if (pillInitials) {
       const name = currentUser?.user_settings?.display_name || currentUser?.anonymous_id || '?';
-      pillInitials.textContent = name.trim().charAt(0).toUpperCase() || '?';
-    }
-    if (currentUser?.avatar_file_id) {
-      $('mentorProfileBtn')?.style.setProperty('background-image', `url('/api/users/avatar-image/${currentUser.avatar_file_id}')`);
+      applyAvatarToPill($('mentorProfileBtn'), pillInitials, currentUser?.avatar_preset, name);
     }
   }
 
@@ -1543,16 +1621,14 @@ async function loadMentors() {
           const bio = m.user_settings?.bio || 'No bio provided';
           const letter = name.charAt(0).toUpperCase();
           const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
-          const avatarHtml = m.avatar_url
-            ? `<img class="mentor-avatar" src="${escapeHtml(m.avatar_url)}" alt="${escapeHtml(name)}" />`
-            : `<div class="mentor-avatar">${letter}</div>`;
+          const avatarMarkup = avatarHtml(m.avatar_preset, name);
           activeMentorHtml = `
             <div class="card gold-border mb-16" style="border: 2px solid var(--gold);">
               <div class="text-xs font-bold uppercase tracking-wider mb-8" style="color:var(--gold)" data-i18n="your_active_mentor">
                 ${t('your_active_mentor') || 'Your Active Mentor'}
               </div>
               <div class="mentor-header mb-8">
-                ${avatarHtml}
+                ${avatarMarkup}
                 <div class="mentor-header-info">
                   <div class="mentor-id">${escapeHtml(name)}</div>
                   ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
@@ -1592,7 +1668,6 @@ async function loadMentors() {
         const name = m.user_settings?.display_name || m.anonymous_id;
         const bio = m.user_settings?.bio || 'No bio provided';
         const spec = m.user_settings?.specialization || '';
-        const letter = name.charAt(0).toUpperCase();
         const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
         const mentees = m.mentee_count || 0;
         const max = m.user_settings?.max_mentees || 5;
@@ -1601,14 +1676,12 @@ async function loadMentors() {
         // Pass selectedTopic (topic ID) to the request function
         const topicIdParam = selectedTopic && selectedTopic !== '' ? `, ${selectedTopic}` : '';
 
-        const avatarHtml = m.avatar_url
-          ? `<img class="mentor-avatar" src="${escapeHtml(m.avatar_url)}" alt="${escapeHtml(name)}" />`
-          : `<div class="mentor-avatar">${letter}</div>`;
+        const avatarMarkup = avatarHtml(m.avatar_preset, name);
 
         return `
           <div class="mentor-card">
             <div class="mentor-header">
-              ${avatarHtml}
+              ${avatarMarkup}
               <div class="mentor-header-info">
                 <div class="mentor-id">${escapeHtml(name)}</div>
                 ${renderStars(m.rating, m.rating_count)}
@@ -2383,7 +2456,7 @@ async function loadChat() {
       if (partnerWrapper) partnerWrapper.style.display = 'none';
       $('chatWith').style.display = 'block';
       $('chatWith').textContent = res.partner.display_name;
-      setChatPeerHeader(res.partner.display_name, res.partner.last_active, res.partner.avatar_url);
+      setChatPeerHeader(res.partner.display_name, res.partner.last_active, res.partner.avatar_preset);
       window.chatState = { with: res.partner.telegram_id, name: res.partner.display_name || res.partner.anonymous_id };
       loadMessages(res.partner.telegram_id);
     } else {
@@ -2848,29 +2921,14 @@ async function saveSettings() {
 }
 
 // ─── Mentor Profile page ────────────────────────────────────────
-function renderMentorProfileAvatar(name, avatarUrl) {
+let currentMentorBio = '';
+
+function renderMentorProfileAvatar(name, avatarPreset) {
   const el = $('mentorProfileAvatar');
   const pill = $('mentorProfilePillInitials');
-  const initials = (name || '?').trim().charAt(0).toUpperCase() || '?';
-  if (el) {
-    if (avatarUrl) {
-      el.style.backgroundImage = `url('${avatarUrl}')`;
-      el.textContent = '';
-    } else {
-      el.style.backgroundImage = '';
-      el.textContent = initials;
-    }
-  }
-  if (pill) {
-    pill.textContent = avatarUrl ? '' : initials;
-    const pillBtn = $('mentorProfileBtn');
-    if (pillBtn) pillBtn.style.backgroundImage = avatarUrl ? `url('${avatarUrl}')` : '';
-  }
-  const removeBtn = $('mentorAvatarRemoveBtn');
-  const actionLabel = $('mentorAvatarActionLabel');
-  if (removeBtn) removeBtn.style.display = avatarUrl ? 'flex' : 'none';
-  if (actionLabel) actionLabel.textContent = avatarUrl ? 'Change photo' : 'Upload photo';
-  window._mentorAvatarUrl = avatarUrl || null;
+  applyAvatarToEl(el, avatarPreset, name);
+  applyAvatarToPill($('mentorProfileBtn'), pill, avatarPreset, name);
+  window._mentorAvatarPreset = avatarPreset || null;
 }
 
 async function loadMentorProfile() {
@@ -2878,20 +2936,22 @@ async function loadMentorProfile() {
     const s = await apiFetch('/api/users/settings');
     const name = s.display_name || currentUser?.anonymous_id || 'Mentor';
 
-    $('mentorProfileNameDisplay').textContent = s.display_name || currentUser?.anonymous_id || 'Mentor';
-    renderMentorProfileAvatar(name, s.avatar_url);
+    $('mentorProfileNameDisplay').textContent = name;
+    renderMentorProfileAvatar(name, s.avatar_preset);
 
-    $('settingBio').value = s.bio || '';
+    currentMentorBio = s.bio || '';
+    renderMentorProfileBio();
+
     $('settingSpecialization').value = s.specialization || '';
     $('settingMaxMentees').value = s.max_mentees || 5;
     $('settingMenteeSex').value = s.preferred_mentee_sex || 'prefer_not';
     $('toggleAcceptingRequests')?.classList.toggle('on', s.accepting_requests !== false);
 
-    // Rating + mentee count, pulled from the same mentor list your mentees see
+    // Rating: stars shown once, value + count shown once, right next to each other.
     const rating = currentUser?.rating || 0;
     const ratingCount = currentUser?.rating_count || 0;
-    $('mentorProfileRatingVal').textContent = ratingCount ? rating.toFixed(1) : 'No ratings yet';
-    $('mentorProfileStars').innerHTML = renderStars(rating, ratingCount, 12);
+    $('mentorProfileStars').innerHTML = renderStarsOnly(rating, 13);
+    $('mentorProfileRatingVal').textContent = ratingCount ? `${rating.toFixed(1)} (${ratingCount})` : 'No ratings';
 
     try {
       const mentees = await apiFetch('/api/mentors/my-mentees');
@@ -2913,7 +2973,6 @@ async function loadMentorProfile() {
 async function saveMentorProfile() {
   haptic('medium');
   const body = {
-    bio: $('settingBio')?.value,
     specialization: $('settingSpecialization')?.value,
     max_mentees: parseInt($('settingMaxMentees')?.value) || 5,
     accepting_requests: $('toggleAcceptingRequests')?.classList.contains('on'),
@@ -2929,189 +2988,83 @@ async function saveMentorProfile() {
   }
 }
 
-function toggleMentorAvatarMenu() {
+// ─── Bio: read-only view + dedicated edit modal ─────────────────
+function renderMentorProfileBio() {
+  const el = $('mentorProfileBioView');
+  if (!el) return;
+  if (currentMentorBio.trim()) {
+    el.textContent = currentMentorBio;
+    el.classList.remove('mp-bio-empty');
+  } else {
+    el.textContent = 'No bio yet — tell mentees about yourself.';
+    el.classList.add('mp-bio-empty');
+  }
+}
+
+function openBioEditModal() {
   haptic('light');
-  $('mentorAvatarMenu')?.classList.toggle('open');
+  const textarea = $('bioEditTextarea');
+  if (textarea) {
+    textarea.value = currentMentorBio;
+    updateBioCharCount();
+  }
+  $('bioEditModal')?.classList.add('open');
+  textarea?.focus();
 }
 
-document.addEventListener('click', (e) => {
-  const wrap = e.target.closest('.mp-avatar-wrap');
-  if (!wrap) $('mentorAvatarMenu')?.classList.remove('open');
-});
-
-function triggerAvatarFileSelect() {
-  $('mentorAvatarMenu')?.classList.remove('open');
-  const input = $('mentorAvatarFileInput');
-  if (!input) {
-    console.error('#mentorAvatarFileInput missing from the DOM — likely a stale cached index.html.');
-    showToast('Photo picker is unavailable — please refresh the app', 'error');
-    return;
-  }
-  input.click();
+function closeBioEditModal() {
+  $('bioEditModal')?.classList.remove('open');
 }
 
-// ─── Avatar crop modal ──────────────────────────────────────────
-let cropState = null;
+function updateBioCharCount() {
+  const textarea = $('bioEditTextarea');
+  const counter = $('bioCharCount');
+  if (textarea && counter) counter.textContent = `${textarea.value.length}/500`;
+}
 
-function handleAvatarFileSelected(event) {
-  const file = event.target.files?.[0];
-  event.target.value = ''; // allow re-selecting the same file later
-  if (!file) return;
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    showToast('Please choose a JPEG, PNG, or WEBP image', 'error');
-    return;
-  }
+async function saveBioEdit() {
+  haptic('medium');
+  const value = $('bioEditTextarea')?.value || '';
   try {
-    openAvatarCropModal(file);
-  } catch (e) {
-    console.error('openAvatarCropModal failed:', e);
-    showToast('Could not open the photo editor', 'error');
-  }
-}
-
-function openAvatarCropModal(file) {
-  const modal = $('avatarCropModal');
-  const canvas = $('cropCanvas');
-  const slider = $('cropZoomSlider');
-  if (!modal || !canvas || !slider) {
-    console.error('Crop modal elements missing from the DOM (avatarCropModal/cropCanvas/cropZoomSlider). You may be running a stale cached copy of index.html.');
-    showToast('Photo editor is unavailable — please refresh the app', 'error');
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onerror = () => showToast('Could not read the selected file', 'error');
-  reader.onload = () => {
-    const img = new Image();
-    img.onerror = () => showToast('Could not read the selected image', 'error');
-    img.onload = () => {
-      const size = canvas.width; // 480 internal px, displayed smaller via CSS
-      const minScale = Math.max(size / img.width, size / img.height);
-      cropState = {
-        img,
-        canvas,
-        ctx: canvas.getContext('2d'),
-        size,
-        scale: minScale,
-        minScale,
-        offsetX: 0,
-        offsetY: 0,
-        dragging: false,
-        lastX: 0,
-        lastY: 0
-      };
-      slider.value = 100;
-      drawCrop();
-      modal.classList.add('open');
-    };
-    img.src = reader.result;
-  };
-  reader.readAsDataURL(file);
-}
-
-function closeAvatarCropModal() {
-  $('avatarCropModal').classList.remove('open');
-  cropState = null;
-}
-
-function drawCrop() {
-  if (!cropState) return;
-  const { ctx, img, size, scale, offsetX, offsetY } = cropState;
-  ctx.clearRect(0, 0, size, size);
-  ctx.fillStyle = '#141720';
-  ctx.fillRect(0, 0, size, size);
-  const w = img.width * scale;
-  const h = img.height * scale;
-  ctx.drawImage(img, (size - w) / 2 + offsetX, (size - h) / 2 + offsetY, w, h);
-}
-
-function clampCropOffset() {
-  const { img, scale, size } = cropState;
-  const w = img.width * scale, h = img.height * scale;
-  const maxX = Math.max(0, (w - size) / 2);
-  const maxY = Math.max(0, (h - size) / 2);
-  cropState.offsetX = Math.min(maxX, Math.max(-maxX, cropState.offsetX));
-  cropState.offsetY = Math.min(maxY, Math.max(-maxY, cropState.offsetY));
-}
-
-function onCropZoomChange(val) {
-  if (!cropState) return;
-  cropState.scale = cropState.minScale * (val / 100);
-  clampCropOffset();
-  drawCrop();
-}
-
-function cropGetPoint(e) {
-  const t = e.touches ? e.touches[0] : e;
-  return { x: t.clientX, y: t.clientY };
-}
-
-function cropPointerDown(e) {
-  if (!cropState) return;
-  cropState.dragging = true;
-  const p = cropGetPoint(e);
-  cropState.lastX = p.x;
-  cropState.lastY = p.y;
-}
-
-function cropPointerMove(e) {
-  if (!cropState || !cropState.dragging) return;
-  if (e.cancelable) e.preventDefault();
-  const p = cropGetPoint(e);
-  const ratio = cropState.canvas.width / cropState.canvas.clientWidth;
-  cropState.offsetX += (p.x - cropState.lastX) * ratio;
-  cropState.offsetY += (p.y - cropState.lastY) * ratio;
-  cropState.lastX = p.x;
-  cropState.lastY = p.y;
-  clampCropOffset();
-  drawCrop();
-}
-
-function cropPointerUp() {
-  if (cropState) cropState.dragging = false;
-}
-
-(function initCropStage() {
-  const stage = document.getElementById('cropStage') || document.querySelector('.crop-stage');
-  if (!stage) return;
-  stage.addEventListener('mousedown', cropPointerDown);
-  document.addEventListener('mousemove', cropPointerMove);
-  document.addEventListener('mouseup', cropPointerUp);
-  stage.addEventListener('touchstart', cropPointerDown, { passive: true });
-  stage.addEventListener('touchmove', cropPointerMove, { passive: false });
-  stage.addEventListener('touchend', cropPointerUp);
-})();
-
-async function confirmAvatarCrop() {
-  if (!cropState) {
-    console.error('confirmAvatarCrop called with no active cropState');
-    showToast('Nothing to upload — please reselect the photo', 'error');
-    return;
-  }
-  try {
-    haptic('light');
-    const dataUrl = cropState.canvas.toDataURL('image/jpeg', 0.88);
-    closeAvatarCropModal();
-    const result = await apiFetch('/api/users/avatar', { method: 'POST', body: { image: dataUrl } });
-    renderMentorProfileAvatar($('mentorProfileNameDisplay')?.textContent, result.avatar_url);
+    await apiFetch('/api/users/settings', { method: 'PATCH', body: { bio: value } });
+    currentMentorBio = value;
+    renderMentorProfileBio();
+    closeBioEditModal();
     haptic('success');
-    showToast('Photo updated', 'success');
+    showToast('Bio updated', 'success');
   } catch (e) {
-    console.error('Avatar upload failed:', e);
-    closeAvatarCropModal();
     haptic('error');
-    showToast(e?.message || 'Photo upload failed', 'error');
+    showToast(e.message, 'error');
   }
 }
 
-async function removeMentorAvatar() {
-  $('mentorAvatarMenu')?.classList.remove('open');
+// ─── Avatar picker (built-in icons, no upload) ──────────────────
+function openAvatarPicker() {
+  haptic('light');
+  const grid = $('avatarPickerGrid');
+  if (grid) {
+    grid.innerHTML = AVATAR_PRESETS.map(p => `
+      <button class="avatar-picker-item${window._mentorAvatarPreset === p.id ? ' selected' : ''}"
+        style="background:${p.gradient}" onclick="selectAvatarPreset('${p.id}')" aria-label="${p.id}">
+        ${p.emoji}
+      </button>`).join('');
+  }
+  $('avatarPickerModal')?.classList.add('open');
+}
+
+function closeAvatarPicker() {
+  $('avatarPickerModal')?.classList.remove('open');
+}
+
+async function selectAvatarPreset(presetId) {
   haptic('medium');
   try {
-    await apiFetch('/api/users/avatar', { method: 'DELETE' });
-    renderMentorProfileAvatar($('mentorProfileNameDisplay')?.textContent, null);
+    const result = await apiFetch('/api/users/settings', { method: 'PATCH', body: { avatar_preset: presetId } });
+    if (currentUser) currentUser.avatar_preset = result.avatar_preset;
+    renderMentorProfileAvatar($('mentorProfileNameDisplay')?.textContent, result.avatar_preset);
+    closeAvatarPicker();
     haptic('success');
-    showToast('Photo removed', 'success');
+    showToast(presetId ? 'Avatar updated' : 'Avatar cleared', 'success');
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
