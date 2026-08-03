@@ -1035,8 +1035,10 @@ function openRatingModal(mentorId, mentorName) {
       </svg>`).join('');
     starsWrap.querySelectorAll('svg').forEach(svg => {
       svg.style.cursor = 'pointer';
-      svg.onclick = () => { selected = parseInt(svg.dataset.star); paintStars(selected);
-        const btn = $('ratingSubmitBtn'); btn.style.opacity = '1'; btn.style.pointerEvents = 'auto'; };
+      svg.onclick = () => {
+        selected = parseInt(svg.dataset.star); paintStars(selected);
+        const btn = $('ratingSubmitBtn'); btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
+      };
     });
   };
   paintStars(0);
@@ -1627,14 +1629,14 @@ async function loadMentors() {
               <div class="text-xs font-bold uppercase tracking-wider mb-8" style="color:var(--gold)" data-i18n="your_active_mentor">
                 ${t('your_active_mentor') || 'Your Active Mentor'}
               </div>
-              <div class="mentor-header mb-8">
-                ${avatarMarkup}
-                <div class="mentor-header-info">
+              <div class="flex items-center gap-8 mb-12">
+                <div class="mentor-avatar">${letter}</div>
+                <div class="mentor-info">
                   <div class="mentor-id">${escapeHtml(name)}</div>
                   ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
+                  <div class="mentor-bio">${escapeHtml(bio)}</div>
                 </div>
               </div>
-              <div class="mentor-bio mb-12">${escapeHtml(bio)}</div>
               <div class="flex gap-8">
                 <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${m.telegram_id}')" data-i18n="btn_message">${t('btn_message') || 'Message'}</button>
                 <button class="btn btn-danger btn-sm" onclick="endMentorship()" data-i18n="btn_end">${t('btn_end') || 'End Mentorship'}</button>
@@ -1680,15 +1682,15 @@ async function loadMentors() {
 
         return `
           <div class="mentor-card">
-            <div class="mentor-header">
-              ${avatarMarkup}
-              <div class="mentor-header-info">
+            <div class="flex items-center gap-8">
+              <div class="mentor-avatar">${letter}</div>
+              <div class="mentor-info">
                 <div class="mentor-id">${escapeHtml(name)}</div>
                 ${renderStars(m.rating, m.rating_count)}
                 ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
+                <div class="mentor-bio">${escapeHtml(bio)}</div>
               </div>
             </div>
-            <div class="mentor-bio">${escapeHtml(bio)}</div>
             <div class="mentor-meta">
               ${spec ? `<span class="mentor-badge badge-spec">${escapeHtml(spec)}</span>` : ''}
               <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentee')}s</span>
