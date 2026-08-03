@@ -2941,7 +2941,13 @@ document.addEventListener('click', (e) => {
 
 function triggerAvatarFileSelect() {
   $('mentorAvatarMenu')?.classList.remove('open');
-  $('mentorAvatarFileInput')?.click();
+  const input = $('mentorAvatarFileInput');
+  if (!input) {
+    console.error('#mentorAvatarFileInput missing from the DOM — likely a stale cached index.html.');
+    showToast('Photo picker is unavailable — please refresh the app', 'error');
+    return;
+  }
+  input.click();
 }
 
 // ─── Avatar crop modal ──────────────────────────────────────────
@@ -2955,17 +2961,30 @@ function handleAvatarFileSelected(event) {
     showToast('Please choose a JPEG, PNG, or WEBP image', 'error');
     return;
   }
-  openAvatarCropModal(file);
+  try {
+    openAvatarCropModal(file);
+  } catch (e) {
+    console.error('openAvatarCropModal failed:', e);
+    showToast('Could not open the photo editor', 'error');
+  }
 }
 
 function openAvatarCropModal(file) {
+  const modal = $('avatarCropModal');
+  const canvas = $('cropCanvas');
+  const slider = $('cropZoomSlider');
+  if (!modal || !canvas || !slider) {
+    console.error('Crop modal elements missing from the DOM (avatarCropModal/cropCanvas/cropZoomSlider). You may be running a stale cached copy of index.html.');
+    showToast('Photo editor is unavailable — please refresh the app', 'error');
+    return;
+  }
+
   const reader = new FileReader();
   reader.onerror = () => showToast('Could not read the selected file', 'error');
   reader.onload = () => {
     const img = new Image();
     img.onerror = () => showToast('Could not read the selected image', 'error');
     img.onload = () => {
-      const canvas = $('cropCanvas');
       const size = canvas.width; // 480 internal px, displayed smaller via CSS
       const minScale = Math.max(size / img.width, size / img.height);
       cropState = {
@@ -2981,9 +3000,9 @@ function openAvatarCropModal(file) {
         lastX: 0,
         lastY: 0
       };
-      $('cropZoomSlider').value = 100;
+      slider.value = 100;
       drawCrop();
-      $('avatarCropModal').classList.add('open');
+      modal.classList.add('open');
     };
     img.src = reader.result;
   };
