@@ -3083,18 +3083,24 @@ function cropPointerUp() {
 })();
 
 async function confirmAvatarCrop() {
-  if (!cropState) return;
-  const dataUrl = cropState.canvas.toDataURL('image/jpeg', 0.88);
-  closeAvatarCropModal();
+  if (!cropState) {
+    console.error('confirmAvatarCrop called with no active cropState');
+    showToast('Nothing to upload — please reselect the photo', 'error');
+    return;
+  }
   try {
     haptic('light');
+    const dataUrl = cropState.canvas.toDataURL('image/jpeg', 0.88);
+    closeAvatarCropModal();
     const result = await apiFetch('/api/users/avatar', { method: 'POST', body: { image: dataUrl } });
     renderMentorProfileAvatar($('mentorProfileNameDisplay')?.textContent, result.avatar_url);
     haptic('success');
     showToast('Photo updated', 'success');
   } catch (e) {
+    console.error('Avatar upload failed:', e);
+    closeAvatarCropModal();
     haptic('error');
-    showToast(e.message, 'error');
+    showToast(e?.message || 'Photo upload failed', 'error');
   }
 }
 
