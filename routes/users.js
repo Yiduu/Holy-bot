@@ -41,13 +41,14 @@ module.exports = function userRoutes(supabase, requireAuth) {
     const { id } = req.telegramUser;
     const [settingsRes, userRes] = await Promise.all([
       supabase.from('user_settings').select('*').eq('telegram_id', id).single(),
-      supabase.from('users').select('accepting_requests, preferred_mentee_sex').eq('telegram_id', id).single()
+      supabase.from('users').select('accepting_requests, preferred_mentee_sex, avatar_url').eq('telegram_id', id).single()
     ]);
     if (settingsRes.error) return res.status(500).json({ error: settingsRes.error.message });
     const merged = {
       ...settingsRes.data,
       accepting_requests: userRes.data ? userRes.data.accepting_requests !== false : true,
-      preferred_mentee_sex: userRes.data?.preferred_mentee_sex || 'prefer_not'
+      preferred_mentee_sex: userRes.data?.preferred_mentee_sex || 'prefer_not',
+      avatar_url: userRes.data?.avatar_url || null
     };
     res.json(merged);
   });
@@ -99,6 +100,58 @@ module.exports = function userRoutes(supabase, requireAuth) {
     res.json(merged);
   });
 
+  // POST /api/users/avatar – upload or replace the caller's profile photo
+  // Expects { image: 'data:image/jpeg;base64,....' } (resized/compressed client-side).
+  router.post('/avatar', requireAuth, async (req, res) => {
+    const { id } = req.telegramUser;
+    const { image } = req.body;
+    if (!image || typeof image !== 'string') {
+      return res.status(400).json({ error: 'image is required' });
+    }
+
+    const match = image.match(/^data:(image\/(jpeg|png|webp));base64,(.+)$/);
+    if (!match) {
+      return res.status(400).json({ error: 'image must be a base64 JPEG, PNG, or WEBP data URL' });
+    }
+    const [, contentType, ext, base64Data] = match;
+    const buffer = Buffer.from(base64Data, 'base64');
+    if (buffer.length > 1.5 * 1024 * 1024) {
+      return res.status(400).json({ error: 'Image too large (max 1.5MB)' });
+    }
+
+    const path = `${id}.${ext === 'jpeg' ? 'jpg' : ext}`;
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, buffer, { contentType, upsert: true });
+    if (uploadError) return res.status(500).json({ error: uploadError.message });
+
+    const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(path);
+    // Cache-bust so the new photo shows immediately after a "change photo" upload
+    const avatar_url = `${publicUrlData.publicUrl}?v=${Date.now()}`;
+
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ avatar_url })
+      .eq('telegram_id', id);
+    if (updateError) return res.status(500).json({ error: updateError.message });
+
+    res.json({ avatar_url });
+  });
+
+  // DELETE /api/users/avatar – remove the caller's profile photo
+  router.delete('/avatar', requireAuth, async (req, res) => {
+    const { id } = req.telegramUser;
+    // Best-effort cleanup across possible extensions; ignore individual failures.
+    await Promise.all(
+      ['jpg', 'png', 'webp'].map(ext =>
+        supabase.storage.from('avatars').remove([`${id}.${ext}`])
+      )
+    );
+    const { error } = await supabase.from('users').update({ avatar_url: null }).eq('telegram_id', id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  });
+
   // POST /api/users/apply-mentor
   router.post('/apply-mentor', requireAuth, async (req, res) => {
     const { id: telegram_id } = req.telegramUser;
@@ -138,7 +191,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
     const { id: telegram_id } = req.telegramUser;
     const { data, error } = await supabase
       .from('mentorship_assignments')
-      .select('*, mentor:mentor_id(telegram_id, anonymous_id, user_settings(bio, specialization, display_name))')
+      .select('*, mentor:mentor_id(telegram_id, anonymous_id, avatar_url, user_settings(bio, specialization, display_name))')
       .eq('user_id', telegram_id)
       .eq('is_active', true)
       .single();
@@ -188,7 +241,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
     } else {
       const { data: assignment, error } = await supabase
         .from('mentorship_assignments')
-        .select('mentor:mentor_id(telegram_id, anonymous_id, last_active, user_settings(display_name))')
+        .select('mentor:mentor_id(telegram_id, anonymous_id, avatar_url, last_active, user_settings(display_name))')
         .eq('user_id', telegram_id)
         .eq('is_active', true)
         .single();
@@ -203,6 +256,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
           telegram_id: m.telegram_id, 
           anonymous_id: m.anonymous_id, 
           display_name: m.user_settings?.display_name || m.anonymous_id,
+          avatar_url: m.avatar_url,
           last_active: m.last_active
         } 
       });

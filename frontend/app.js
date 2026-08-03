@@ -596,17 +596,23 @@ function isUserOnline(lastActive) {
   return Date.now() - new Date(lastActive).getTime() < 5 * 60 * 1000;
 }
 
-/* ── Chat header: avatar initials + real online status ───────── */
-function setChatPeerHeader(displayName, lastActive) {
+/* ── Chat header: avatar photo/initials + real online status ─── */
+function setChatPeerHeader(displayName, lastActive, avatarUrl) {
   const avatarEl = $('chatPeerAvatar');
   if (avatarEl) {
-    const initials = (displayName || '?')
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .map(w => w[0]?.toUpperCase() || '')
-      .join('');
-    avatarEl.textContent = initials || '?';
+    if (avatarUrl) {
+      avatarEl.style.backgroundImage = `url('${avatarUrl}')`;
+      avatarEl.textContent = '';
+    } else {
+      avatarEl.style.backgroundImage = '';
+      const initials = (displayName || '?')
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map(w => w[0]?.toUpperCase() || '')
+        .join('');
+      avatarEl.textContent = initials || '?';
+    }
   }
 
   const statusEl = $('chatPeerStatus');
@@ -1167,6 +1173,7 @@ function navigate(page) {
     case 'support': loadUserTickets(); break;
     case 'requests': loadRequests(); break;
     case 'settings': loadSettings(); break;
+    case 'mentor-profile': loadMentorProfile(); break;
     case 'my-mentees': loadMyMentees(); break;
     case 'journal':
       journalView = 'list';
@@ -1433,6 +1440,16 @@ function startApp() {
     $('nav-requests')?.classList.remove('hidden');
     $('nav-my-mentees')?.style.setProperty('display', 'flex');
     document.querySelectorAll('.mentor-hidden').forEach(el => el.style.display = 'none');
+
+    $('mentorProfileBtn')?.classList.remove('hidden');
+    const pillInitials = $('mentorProfilePillInitials');
+    if (pillInitials) {
+      const name = currentUser?.user_settings?.display_name || currentUser?.anonymous_id || '?';
+      pillInitials.textContent = name.trim().charAt(0).toUpperCase() || '?';
+    }
+    if (currentUser?.avatar_url) {
+      $('mentorProfileBtn')?.style.setProperty('background-image', `url('${currentUser.avatar_url}')`);
+    }
   }
 
   applyLanguage();
@@ -1526,13 +1543,16 @@ async function loadMentors() {
           const bio = m.user_settings?.bio || 'No bio provided';
           const letter = name.charAt(0).toUpperCase();
           const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
+          const avatarHtml = m.avatar_url
+            ? `<img class="mentor-avatar" src="${escapeHtml(m.avatar_url)}" alt="${escapeHtml(name)}" />`
+            : `<div class="mentor-avatar">${letter}</div>`;
           activeMentorHtml = `
             <div class="card gold-border mb-16" style="border: 2px solid var(--gold);">
               <div class="text-xs font-bold uppercase tracking-wider mb-8" style="color:var(--gold)" data-i18n="your_active_mentor">
                 ${t('your_active_mentor') || 'Your Active Mentor'}
               </div>
               <div class="mentor-header mb-8">
-                <div class="mentor-avatar">${letter}</div>
+                ${avatarHtml}
                 <div class="mentor-header-info">
                   <div class="mentor-id">${escapeHtml(name)}</div>
                   ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
@@ -1581,10 +1601,14 @@ async function loadMentors() {
         // Pass selectedTopic (topic ID) to the request function
         const topicIdParam = selectedTopic && selectedTopic !== '' ? `, ${selectedTopic}` : '';
 
+        const avatarHtml = m.avatar_url
+          ? `<img class="mentor-avatar" src="${escapeHtml(m.avatar_url)}" alt="${escapeHtml(name)}" />`
+          : `<div class="mentor-avatar">${letter}</div>`;
+
         return `
           <div class="mentor-card">
             <div class="mentor-header">
-              <div class="mentor-avatar">${letter}</div>
+              ${avatarHtml}
               <div class="mentor-header-info">
                 <div class="mentor-id">${escapeHtml(name)}</div>
                 ${renderStars(m.rating, m.rating_count)}
@@ -2359,7 +2383,7 @@ async function loadChat() {
       if (partnerWrapper) partnerWrapper.style.display = 'none';
       $('chatWith').style.display = 'block';
       $('chatWith').textContent = res.partner.display_name;
-      setChatPeerHeader(res.partner.display_name, res.partner.last_active);
+      setChatPeerHeader(res.partner.display_name, res.partner.last_active, res.partner.avatar_url);
       window.chatState = { with: res.partner.telegram_id, name: res.partner.display_name || res.partner.anonymous_id };
       loadMessages(res.partner.telegram_id);
     } else {
@@ -2800,19 +2824,6 @@ async function loadSettings() {
     $('toggleSessions').classList.toggle('on', s.notify_sessions !== false);
     $('toggleVerse').classList.toggle('on', s.notify_daily_verse !== false);
 
-    if (currentUser?.role === 'mentor') {
-      $('mentorSettings').classList.remove('hidden');
-      $('settingBio').value = s.bio || '';
-      $('settingSpecialization').value = s.specialization || '';
-      $('settingMaxMentees').value = s.max_mentees || 5;
-      $('settingMenteeSex').value = s.preferred_mentee_sex || 'prefer_not';
-
-      const acceptToggle = $('toggleAcceptingRequests');
-      if (acceptToggle) {
-        acceptToggle.classList.toggle('on', s.accepting_requests !== false);
-      }
-    }
-
     $('userAnonId').textContent = currentUser?.anonymous_id || '';
     $('userRole').textContent = currentUser?.role || '';
   } catch (e) { showToast(e.message, 'error'); }
@@ -2825,18 +2836,168 @@ async function saveSettings() {
     notify_messages: $('toggleMessages').classList.contains('on'),
     notify_sessions: $('toggleSessions').classList.contains('on'),
     notify_daily_verse: $('toggleVerse').classList.contains('on'),
-    bio: $('settingBio')?.value,
-    specialization: $('settingSpecialization')?.value,
-    max_mentees: parseInt($('settingMaxMentees')?.value) || 5,
   };
-  if (currentUser?.role === 'mentor') {
-    body.accepting_requests = $('toggleAcceptingRequests')?.classList.contains('on');
-    body.preferred_mentee_sex = $('settingMenteeSex')?.value;
-  }
   try {
     await apiFetch('/api/users/settings', { method: 'PATCH', body });
     haptic('success');
     showToast('Settings saved', 'success');
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
+}
+
+// ─── Mentor Profile page ────────────────────────────────────────
+function renderMentorProfileAvatar(name, avatarUrl) {
+  const el = $('mentorProfileAvatar');
+  const pill = $('mentorProfilePillInitials');
+  const initials = (name || '?').trim().charAt(0).toUpperCase() || '?';
+  if (el) {
+    if (avatarUrl) {
+      el.style.backgroundImage = `url('${avatarUrl}')`;
+      el.textContent = '';
+    } else {
+      el.style.backgroundImage = '';
+      el.textContent = initials;
+    }
+  }
+  if (pill) {
+    pill.textContent = avatarUrl ? '' : initials;
+    const pillBtn = $('mentorProfileBtn');
+    if (pillBtn) pillBtn.style.backgroundImage = avatarUrl ? `url('${avatarUrl}')` : '';
+  }
+  const removeBtn = $('mentorAvatarRemoveBtn');
+  const actionLabel = $('mentorAvatarActionLabel');
+  if (removeBtn) removeBtn.style.display = avatarUrl ? 'flex' : 'none';
+  if (actionLabel) actionLabel.textContent = avatarUrl ? 'Change photo' : 'Upload photo';
+  window._mentorAvatarUrl = avatarUrl || null;
+}
+
+async function loadMentorProfile() {
+  try {
+    const s = await apiFetch('/api/users/settings');
+    const name = s.display_name || currentUser?.anonymous_id || 'Mentor';
+
+    $('mentorProfileNameDisplay').textContent = s.display_name || currentUser?.anonymous_id || 'Mentor';
+    renderMentorProfileAvatar(name, s.avatar_url);
+
+    $('settingBio').value = s.bio || '';
+    $('settingSpecialization').value = s.specialization || '';
+    $('settingMaxMentees').value = s.max_mentees || 5;
+    $('settingMenteeSex').value = s.preferred_mentee_sex || 'prefer_not';
+    $('toggleAcceptingRequests')?.classList.toggle('on', s.accepting_requests !== false);
+
+    // Rating + mentee count, pulled from the same mentor list your mentees see
+    const rating = currentUser?.rating || 0;
+    const ratingCount = currentUser?.rating_count || 0;
+    $('mentorProfileRatingVal').textContent = ratingCount ? rating.toFixed(1) : 'No ratings yet';
+    $('mentorProfileStars').innerHTML = renderStars(rating, ratingCount, 12);
+
+    try {
+      const mentees = await apiFetch('/api/mentors/my-mentees');
+      $('mentorProfileMenteeCount').textContent = Array.isArray(mentees) ? mentees.length : '0';
+    } catch { $('mentorProfileMenteeCount').textContent = '—'; }
+
+    try {
+      const myTopics = await apiFetch('/api/topics/my-expertise');
+      const chipsEl = $('mentorProfileTopicsChips');
+      if (chipsEl) {
+        chipsEl.innerHTML = myTopics.length
+          ? myTopics.map(t => `<span class="mp-topic-chip">${escapeHtml(t.topics?.name || '')}</span>`).join('')
+          : `<span class="text-xs text-dim">No topics selected yet.</span>`;
+      }
+    } catch { }
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function saveMentorProfile() {
+  haptic('medium');
+  const body = {
+    bio: $('settingBio')?.value,
+    specialization: $('settingSpecialization')?.value,
+    max_mentees: parseInt($('settingMaxMentees')?.value) || 5,
+    accepting_requests: $('toggleAcceptingRequests')?.classList.contains('on'),
+    preferred_mentee_sex: $('settingMenteeSex')?.value,
+  };
+  try {
+    await apiFetch('/api/users/settings', { method: 'PATCH', body });
+    haptic('success');
+    showToast('Profile saved', 'success');
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
+}
+
+function toggleMentorAvatarMenu() {
+  haptic('light');
+  $('mentorAvatarMenu')?.classList.toggle('open');
+}
+
+document.addEventListener('click', (e) => {
+  const wrap = e.target.closest('.mp-avatar-wrap');
+  if (!wrap) $('mentorAvatarMenu')?.classList.remove('open');
+});
+
+function triggerAvatarFileSelect() {
+  $('mentorAvatarMenu')?.classList.remove('open');
+  $('mentorAvatarFileInput')?.click();
+}
+
+// Resize + compress client-side so uploads stay small and fast, regardless
+// of how large the original photo from the phone's camera/library is.
+function resizeImageFile(file, maxSize = 480, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read the selected file'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Could not read the selected image'));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxSize) { height = Math.round(height * (maxSize / width)); width = maxSize; }
+        else if (height > maxSize) { width = Math.round(width * (maxSize / height)); height = maxSize; }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleAvatarFileSelected(event) {
+  const file = event.target.files?.[0];
+  event.target.value = ''; // allow re-selecting the same file later
+  if (!file) return;
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    showToast('Please choose a JPEG, PNG, or WEBP image', 'error');
+    return;
+  }
+
+  try {
+    haptic('light');
+    const dataUrl = await resizeImageFile(file);
+    const result = await apiFetch('/api/users/avatar', { method: 'POST', body: { image: dataUrl } });
+    renderMentorProfileAvatar($('mentorProfileNameDisplay')?.textContent, result.avatar_url);
+    haptic('success');
+    showToast('Photo updated', 'success');
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
+}
+
+async function removeMentorAvatar() {
+  $('mentorAvatarMenu')?.classList.remove('open');
+  haptic('medium');
+  try {
+    await apiFetch('/api/users/avatar', { method: 'DELETE' });
+    renderMentorProfileAvatar($('mentorProfileNameDisplay')?.textContent, null);
+    haptic('success');
+    showToast('Photo removed', 'success');
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
@@ -2980,9 +3141,9 @@ async function loadUserTickets() {
 
       return `
         <div class="ticket-card-premium status-${status}" onclick="openTicketDetail('${t.id}')">
-          <div class="flex justify-between items-center mb-8">
-            <h4 class="font-bold text-sm" style="margin:0;color:var(--text);font-size:0.95rem">${escapeHtml(t.subject)}</h4>
-            <span class="status-pill status-pill-${status}">
+          <div class="flex justify-between items-center mb-8" style="gap:8px;">
+            <h4 class="font-bold text-sm" style="margin:0;color:var(--text);font-size:0.95rem;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.subject)}</h4>
+            <span class="status-pill status-pill-${status}" style="flex-shrink:0;">
               <span class="status-dot"></span>
               ${status.replace('_', ' ')}
             </span>
@@ -3593,9 +3754,11 @@ async function loadJournalEntries() {
     }
     container.innerHTML = entries.map(e => `
       <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`, '${e.mood || 'neutral'}')">
-        <div class="journal-date">${formatDateTime(e.created_at)}</div>
         <div class="journal-mood">${getMoodIcon(e.mood)}</div>
-        <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
+        <div class="journal-item-body">
+          <div class="journal-date">${formatDateTime(e.created_at)}</div>
+          <div class="journal-preview">${escapeHtml(e.content.substring(0, 140))}${e.content.length > 140 ? '…' : ''}</div>
+        </div>
       </div>
     `).join('');
   } catch (e) { container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`; }

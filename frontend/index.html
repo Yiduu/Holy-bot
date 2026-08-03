@@ -311,6 +311,10 @@
           <button id="adminBtn" class="btn btn-sm btn-outline hidden"
             onclick="window.location='/admin.html'">Admin</button>
           <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon">☀️</span></button>
+          <button id="mentorProfileBtn" class="profile-pill hidden" onclick="navigate('mentor-profile')"
+            aria-label="My mentor profile">
+            <span id="mentorProfilePillInitials">?</span>
+          </button>
         </div>
       </div>
       <div class="page-content">
@@ -592,7 +596,7 @@
     <div id="page-journal" class="page">
       <div class="app-header">
         <h2 data-i18n="btn_journal">Journal</h2>
-        <div>
+        <div class="flex items-center gap-8">
           <button id="journalViewToggle" class="btn btn-sm btn-outline" onclick="toggleJournalView()">📅
             Calendar</button>
           <button class="btn btn-sm btn-primary" onclick="showNewJournalEntry()" data-i18n="btn_new_entry">+
@@ -686,41 +690,93 @@
             <div id="toggleVerse" class="toggle on" onclick="toggleNotif('toggleVerse')"></div>
           </div>
         </div>
+      </div>
+    </div>
 
-        <!-- Mentor Settings -->
-        <div id="mentorSettings" class="hidden">
-          <div class="section-title">Mentor Profile</div>
-          <div class="card mb-16">
-            <div class="form-group">
-              <label class="form-label">Bio</label>
-              <textarea id="settingBio" class="form-control" rows="3"
-                placeholder="Share a bit about your recovery journey…"></textarea>
+    <!-- ── Page: Mentor Profile ────────────────────────────────────── -->
+    <div id="page-mentor-profile" class="page">
+      <div class="app-header">
+        <div class="flex items-center gap-8">
+          <button class="btn btn-ghost btn-sm" onclick="navigate('dashboard')">← Back</button>
+          <h2 style="font-size:1rem;margin:0;">My Profile</h2>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="saveMentorProfile()">Save</button>
+      </div>
+      <div class="page-content">
+        <div class="mp-hero">
+          <div class="mp-avatar-wrap">
+            <div id="mentorProfileAvatar" class="mp-avatar">?</div>
+            <div class="mp-avatar-edit-btn" onclick="toggleMentorAvatarMenu()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
             </div>
-            <div class="form-group">
-              <label class="form-label">Specialization</label>
-              <input id="settingSpecialization" class="form-control" placeholder="e.g. Young adults, Married men…" />
+            <div id="mentorAvatarMenu" class="mp-avatar-menu">
+              <button onclick="triggerAvatarFileSelect()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                <span id="mentorAvatarActionLabel">Upload photo</span>
+              </button>
+              <button class="danger" id="mentorAvatarRemoveBtn" onclick="removeMentorAvatar()" style="display:none;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
+                Remove photo
+              </button>
             </div>
-            <div class="form-group">
-              <label class="form-label">Mentees I Mentor</label>
-              <select id="settingMenteeSex" class="form-control">
-                <option value="prefer_not">Both</option>
-                <option value="M">Male only</option>
-                <option value="F">Female only</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Max Mentees</label>
-              <input id="settingMaxMentees" type="number" class="form-control" min="1" max="20" value="5" />
-            </div>
-            <div class="divider"></div>
-            <div class="toggle-wrap">
-              <span>Accept New Requests</span>
-              <div id="toggleAcceptingRequests" class="toggle on" onclick="toggleAcceptingRequests()"></div>
-            </div>
-            <div class="divider"></div>
-            <button class="btn btn-outline btn-sm btn-full" onclick="openTopicModal(true)"
-              data-i18n="settings_expertise_topics">Topics to Mentor</button>
+            <input type="file" id="mentorAvatarFileInput" accept="image/png, image/jpeg, image/webp"
+              style="display:none;" onchange="handleAvatarFileSelected(event)" />
           </div>
+          <div id="mentorProfileNameDisplay" class="mp-name">—</div>
+          <div class="mp-role">Mentor</div>
+          <div class="mp-stats">
+            <div class="mp-stat">
+              <div id="mentorProfileStars" class="mp-stars"></div>
+              <div id="mentorProfileRatingVal" class="mp-stat-val">—</div>
+              <div class="mp-stat-lbl">Rating</div>
+            </div>
+            <div class="mp-stat">
+              <div id="mentorProfileMenteeCount" class="mp-stat-val">—</div>
+              <div class="mp-stat-lbl">Mentees</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Bio</label>
+          <textarea id="settingBio" class="form-control" rows="3"
+            placeholder="Share a bit about your recovery journey…"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Specialization</label>
+          <input id="settingSpecialization" class="form-control" placeholder="e.g. Young adults, Married men…" />
+        </div>
+
+        <div class="section-title">Mentee Preferences</div>
+        <div class="card mb-16">
+          <div class="form-group">
+            <label class="form-label">Mentees I Mentor</label>
+            <select id="settingMenteeSex" class="form-control">
+              <option value="prefer_not">Both</option>
+              <option value="M">Male only</option>
+              <option value="F">Female only</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Max Mentees</label>
+            <input id="settingMaxMentees" type="number" class="form-control" min="1" max="20" value="5" />
+          </div>
+        </div>
+
+        <div class="card mb-16">
+          <div class="toggle-wrap">
+            <span>Accept New Requests</span>
+            <div id="toggleAcceptingRequests" class="toggle on" onclick="toggleAcceptingRequests()"></div>
+          </div>
+        </div>
+
+        <div class="section-title">Topics I Mentor</div>
+        <div class="card mb-16">
+          <div id="mentorProfileTopicsChips" class="mp-chip-row"></div>
+          <button class="btn btn-outline btn-sm btn-full mt-8" onclick="openTopicModal(true)">Edit Topics</button>
         </div>
       </div>
     </div>
