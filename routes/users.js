@@ -138,7 +138,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
     const { id: telegram_id } = req.telegramUser;
     const { data, error } = await supabase
       .from('mentorship_assignments')
-      .select('*, mentor:mentor_id(telegram_id, anonymous_id, user_settings(bio, specialization, display_name))')
+      .select('*, mentor:mentor_id(telegram_id, anonymous_id, photo_file_id, photo_updated_at, user_settings(bio, specialization, display_name))')
       .eq('user_id', telegram_id)
       .eq('is_active', true)
       .single();
@@ -157,7 +157,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
     if (user.role === 'mentor') {
       const { data: mentees, error } = await supabase
         .from('mentorship_assignments')
-        .select('user:user_id(telegram_id, anonymous_id, last_active, user_settings(display_name))')
+        .select('user:user_id(telegram_id, anonymous_id, last_active, photo_file_id, photo_updated_at, user_settings(display_name))')
         .eq('mentor_id', telegram_id)
         .eq('is_active', true);
 
@@ -173,7 +173,9 @@ module.exports = function userRoutes(supabase, requireAuth) {
             telegram_id: m.telegram_id,
             anonymous_id: m.anonymous_id,
             display_name: m.user_settings?.display_name || m.anonymous_id,
-            last_active: m.last_active
+            last_active: m.last_active,
+            photo_file_id: m.photo_file_id,
+            photo_updated_at: m.photo_updated_at
           }
         });
       } else {
@@ -181,14 +183,16 @@ module.exports = function userRoutes(supabase, requireAuth) {
           telegram_id: m.user.telegram_id,
           anonymous_id: m.user.anonymous_id,
           display_name: m.user.user_settings?.display_name || m.user.anonymous_id,
-          last_active: m.user.last_active
+          last_active: m.user.last_active,
+          photo_file_id: m.user.photo_file_id,
+          photo_updated_at: m.user.photo_updated_at
         }));
         return res.json({ type: 'multiple', mentees: list });
       }
     } else {
       const { data: assignment, error } = await supabase
         .from('mentorship_assignments')
-        .select('mentor:mentor_id(telegram_id, anonymous_id, last_active, user_settings(display_name))')
+        .select('mentor:mentor_id(telegram_id, anonymous_id, last_active, photo_file_id, photo_updated_at, user_settings(display_name))')
         .eq('user_id', telegram_id)
         .eq('is_active', true)
         .single();
@@ -203,7 +207,9 @@ module.exports = function userRoutes(supabase, requireAuth) {
           telegram_id: m.telegram_id,
           anonymous_id: m.anonymous_id,
           display_name: m.user_settings?.display_name || m.anonymous_id,
-          last_active: m.last_active
+          last_active: m.last_active,
+          photo_file_id: m.photo_file_id,
+          photo_updated_at: m.photo_updated_at
         }
       });
     }

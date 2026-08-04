@@ -76,6 +76,56 @@ async function fetchAuthedBlob(path) {
   return res.blob();
 }
 
+// ─── Mentor/User Avatar Rendering ───────────────────────────────────────────
+const avatarUrlCache = new Map();
+const avatarInflight = new Map();
+
+function renderAvatar(m, letter) {
+  const safeLetter = escapeHtml(letter || '?');
+  if (m?.photo_file_id) {
+    return `<div class="mentor-avatar" data-avatar-tid="${m.telegram_id}" data-avatar-v="${m.photo_updated_at || ''}">${safeLetter}</div>`;
+  }
+  return `<div class="mentor-avatar">${safeLetter}</div>`;
+}
+
+async function loadAvatarUrl(tid, v) {
+  const key = `${tid}:${v}`;
+  if (avatarUrlCache.has(key)) return avatarUrlCache.get(key);
+  if (avatarInflight.has(key)) return avatarInflight.get(key);
+
+  const promise = fetchAuthedBlob(`/api/avatar/${tid}?v=${v}`)
+    .then(blob => {
+      const url = URL.createObjectURL(blob);
+      avatarUrlCache.set(key, url);
+      return url;
+    })
+    .finally(() => avatarInflight.delete(key));
+
+  avatarInflight.set(key, promise);
+  return promise;
+}
+
+function hydrateAvatars(container) {
+  if (!container) return;
+  const els = container.querySelectorAll('[data-avatar-tid]:not(.avatar-loaded)');
+  els.forEach(async el => {
+    el.classList.add('avatar-loaded');
+    const tid = el.dataset.avatarTid;
+    const v = el.dataset.avatarV || '';
+    try {
+      const url = await loadAvatarUrl(tid, v);
+      const img = document.createElement('img');
+      img.alt = '';
+      img.onerror = () => { el.classList.remove('avatar-loaded'); img.remove(); };
+      img.src = url;
+      el.innerHTML = '';
+      el.appendChild(img);
+    } catch (e) {
+      el.classList.remove('avatar-loaded');
+    }
+  });
+}
+
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
   if (diff < 60000) return 'just now';
@@ -596,8 +646,8 @@ function isUserOnline(lastActive) {
   return Date.now() - new Date(lastActive).getTime() < 5 * 60 * 1000;
 }
 
-/* ── Chat header: avatar initials + real online status ───────── */
-function setChatPeerHeader(displayName, lastActive) {
+/* ── Chat header: avatar photo/initials + real online status ───── */
+function setChatPeerHeader(displayName, lastActive, telegramId, photoFileId, photoUpdatedAt) {
   const avatarEl = $('chatPeerAvatar');
   if (avatarEl) {
     const initials = (displayName || '?')
@@ -607,6 +657,15 @@ function setChatPeerHeader(displayName, lastActive) {
       .map(w => w[0]?.toUpperCase() || '')
       .join('');
     avatarEl.textContent = initials || '?';
+    avatarEl.classList.remove('avatar-loaded');
+    delete avatarEl.dataset.avatarTid;
+    delete avatarEl.dataset.avatarV;
+
+    if (photoFileId && telegramId) {
+      avatarEl.dataset.avatarTid = telegramId;
+      avatarEl.dataset.avatarV = photoUpdatedAt || '';
+      hydrateAvatars(avatarEl.parentElement || document);
+    }
   }
 
   const statusEl = $('chatPeerStatus');
@@ -1534,7 +1593,7 @@ async function loadMentors() {
                 ${t('your_active_mentor') || 'Your Active Mentor'}
               </div>
               <div class="mentor-header mb-8">
-                <div class="mentor-avatar">${letter}</div>
+                ${renderAvatar(m, letter)}
                 <div class="mentor-header-info">
                   <div class="mentor-id">${escapeHtml(name)}</div>
                   ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
@@ -1586,7 +1645,7 @@ async function loadMentors() {
         return `
           <div class="mentor-card">
             <div class="mentor-header">
-              <div class="mentor-avatar">${letter}</div>
+              ${renderAvatar(m, letter)}
               <div class="mentor-header-info">
                 <div class="mentor-id">${escapeHtml(name)}</div>
                 ${renderStars(m.rating, m.rating_count)}
@@ -1618,6 +1677,7 @@ async function loadMentors() {
 
     container.innerHTML = activeMentorHtml + mentorsListHtml;
     applyLanguage();
+    hydrateAvatars(container);
   } catch (e) {
     container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`;
   }
@@ -2361,7 +2421,7 @@ async function loadChat() {
       if (partnerWrapper) partnerWrapper.style.display = 'none';
       $('chatWith').style.display = 'block';
       $('chatWith').textContent = res.partner.display_name;
-      setChatPeerHeader(res.partner.display_name, res.partner.last_active);
+      setChatPeerHeader(res.partner.display_name, res.partner.last_active, res.partner.telegram_id, res.partner.photo_file_id, res.partner.photo_updated_at);
       window.chatState = { with: res.partner.telegram_id, name: res.partner.display_name || res.partner.anonymous_id };
       loadMessages(res.partner.telegram_id);
     } else {
@@ -2396,7 +2456,7 @@ async function loadChat() {
         }).join('');
       }
 
-      setChatPeerHeader(partner.display_name, partner.last_active);
+      setChatPeerHeader(partner.display_name, partner.last_active, partner.telegram_id, partner.photo_file_id, partner.photo_updated_at);
       window.chatState = { with: partner.telegram_id, name: partner.display_name || partner.anonymous_id };
       loadMessages(partner.telegram_id);
     }
@@ -2817,7 +2877,228 @@ async function loadSettings() {
 
     $('userAnonId').textContent = currentUser?.anonymous_id || '';
     $('userRole').textContent = currentUser?.role || '';
+    loadProfilePhoto();
   } catch (e) { showToast(e.message, 'error'); }
+}
+
+function avatarInitials() {
+  const name = currentUser?.user_settings?.display_name || currentUser?.anonymous_id || '?';
+  const text = String(name || '?').trim();
+  return text ? text.charAt(0).toUpperCase() : '?';
+}
+
+async function loadProfilePhoto() {
+  const preview = $('settingsAvatarPreview');
+  const removeBtn = $('removeAvatarBtn');
+  if (!preview) return;
+
+  preview.textContent = avatarInitials();
+  removeBtn?.classList.add('hidden');
+
+  if (!currentUser?.photo_file_id) return;
+
+  preview.classList.add('avatar-loading');
+  try {
+    const url = await loadAvatarUrl(currentUser.telegram_id, currentUser.photo_updated_at || '');
+    const img = document.createElement('img');
+    img.alt = '';
+    img.onerror = () => { preview.textContent = avatarInitials(); removeBtn?.classList.add('hidden'); };
+    img.src = url;
+    preview.innerHTML = '';
+    preview.appendChild(img);
+    removeBtn?.classList.remove('hidden');
+  } catch (e) {
+    console.error('Failed to load profile photo:', e);
+  } finally {
+    preview.classList.remove('avatar-loading');
+  }
+}
+
+const cropState = { naturalW: 0, naturalH: 0, baseScale: 1, zoom: 100, offsetX: 0, offsetY: 0, stageSize: 320, dragging: false, startX: 0, startY: 0, startOffsetX: 0, startOffsetY: 0 };
+const MIN_AVATAR_DIMENSION = 150;
+
+function onAvatarFileSelected(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+
+  if (!file.type.startsWith('image/')) {
+    showToast('Please choose an image file', 'error');
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('Image must be under 5MB', 'error');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onerror = () => showToast('Could not read that image', 'error');
+  reader.onload = () => {
+    const img = $('cropImage');
+    img.onerror = () => showToast('Could not open that image', 'error');
+    img.onload = () => {
+      if (img.naturalWidth < MIN_AVATAR_DIMENSION || img.naturalHeight < MIN_AVATAR_DIMENSION) {
+        showToast(`Please choose an image at least ${MIN_AVATAR_DIMENSION}×${MIN_AVATAR_DIMENSION}px`, 'error');
+        return;
+      }
+      const stage = $('cropStage');
+      cropState.stageSize = stage.clientWidth || 320;
+      cropState.naturalW = img.naturalWidth;
+      cropState.naturalH = img.naturalHeight;
+      cropState.baseScale = Math.max(cropState.stageSize / img.naturalWidth, cropState.stageSize / img.naturalHeight);
+      cropState.zoom = 100;
+      cropState.offsetX = 0;
+      cropState.offsetY = 0;
+      $('cropZoom').value = 100;
+      updateCropImagePosition();
+      openCropModal();
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function updateCropImagePosition() {
+  const img = $('cropImage');
+  const finalScale = cropState.baseScale * (cropState.zoom / 100);
+  const drawnW = cropState.naturalW * finalScale;
+  const drawnH = cropState.naturalH * finalScale;
+  const maxOffsetX = Math.max(0, (drawnW - cropState.stageSize) / 2);
+  const maxOffsetY = Math.max(0, (drawnH - cropState.stageSize) / 2);
+  cropState.offsetX = Math.max(-maxOffsetX, Math.min(maxOffsetX, cropState.offsetX));
+  cropState.offsetY = Math.max(-maxOffsetY, Math.min(maxOffsetY, cropState.offsetY));
+
+  img.style.width = `${drawnW}px`;
+  img.style.height = `${drawnH}px`;
+  img.style.left = `${cropState.stageSize / 2 + cropState.offsetX - drawnW / 2}px`;
+  img.style.top = `${cropState.stageSize / 2 + cropState.offsetY - drawnH / 2}px`;
+}
+
+function onCropZoom(value) {
+  cropState.zoom = parseFloat(value);
+  updateCropImagePosition();
+}
+
+function cropWheelZoom(e) {
+  e.preventDefault();
+  const next = Math.max(100, Math.min(300, cropState.zoom - e.deltaY * 0.2));
+  cropState.zoom = next;
+  $('cropZoom').value = next;
+  updateCropImagePosition();
+}
+
+function cropPointerDown(e) {
+  cropState.dragging = true;
+  cropState.startX = e.clientX;
+  cropState.startY = e.clientY;
+  cropState.startOffsetX = cropState.offsetX;
+  cropState.startOffsetY = cropState.offsetY;
+  e.target.setPointerCapture?.(e.pointerId);
+}
+
+function cropPointerMove(e) {
+  if (!cropState.dragging) return;
+  cropState.offsetX = cropState.startOffsetX + (e.clientX - cropState.startX);
+  cropState.offsetY = cropState.startOffsetY + (e.clientY - cropState.startY);
+  updateCropImagePosition();
+}
+
+function cropPointerUp() {
+  cropState.dragging = false;
+}
+
+function openCropModal() {
+  const stage = $('cropStage');
+  stage.addEventListener('pointerdown', cropPointerDown);
+  stage.addEventListener('pointermove', cropPointerMove);
+  stage.addEventListener('pointerup', cropPointerUp);
+  stage.addEventListener('pointercancel', cropPointerUp);
+  stage.addEventListener('wheel', cropWheelZoom, { passive: false });
+  $('avatarCropModal').classList.add('open');
+  requestAnimationFrame(() => {
+    cropState.stageSize = stage.clientWidth || 320;
+    updateCropImagePosition();
+  });
+}
+
+function closeCropModal() {
+  const stage = $('cropStage');
+  stage.removeEventListener('pointerdown', cropPointerDown);
+  stage.removeEventListener('pointermove', cropPointerMove);
+  stage.removeEventListener('pointerup', cropPointerUp);
+  stage.removeEventListener('pointercancel', cropPointerUp);
+  stage.removeEventListener('wheel', cropWheelZoom);
+  $('avatarCropModal').classList.remove('open');
+  $('cropImage').src = '';
+}
+
+async function confirmAvatarCrop() {
+  const btn = $('cropSaveBtn');
+  btn.classList.add('loading');
+  btn.disabled = true;
+  try {
+    const finalScale = cropState.baseScale * (cropState.zoom / 100);
+    const drawnW = cropState.naturalW * finalScale;
+    const drawnH = cropState.naturalH * finalScale;
+    const left = cropState.stageSize / 2 + cropState.offsetX - drawnW / 2;
+    const top = cropState.stageSize / 2 + cropState.offsetY - drawnH / 2;
+    const sx = -left / finalScale;
+    const sy = -top / finalScale;
+    const sSize = cropState.stageSize / finalScale;
+
+    const OUT = 480;
+    const canvas = document.createElement('canvas');
+    canvas.width = OUT;
+    canvas.height = OUT;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage($('cropImage'), sx, sy, sSize, sSize, 0, 0, OUT, OUT);
+
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+    if (!blob) throw new Error('Could not process image');
+
+    const { initData, user } = getTelegramData();
+    const fd = new FormData();
+    fd.append('avatar', blob, 'avatar.jpg');
+    const res = await fetch(`${API}/api/avatar`, {
+      method: 'POST',
+      headers: { 'x-telegram-init-data': initData, 'x-telegram-id': user?.id || '' },
+      body: fd,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    currentUser.photo_file_id = data.photo_file_id;
+    currentUser.photo_updated_at = data.photo_updated_at;
+
+    haptic('success');
+    showToast('Photo updated', 'success');
+    closeCropModal();
+    await loadProfilePhoto();
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+}
+
+async function removeAvatar() {
+  if (!confirm('Remove your profile photo?')) return;
+  haptic('medium');
+  try {
+    await apiFetch('/api/avatar', { method: 'DELETE' });
+    currentUser.photo_file_id = null;
+    currentUser.photo_updated_at = null;
+    haptic('success');
+    showToast('Photo removed', 'success');
+    await loadProfilePhoto();
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
+  }
 }
 
 async function saveSettings() {
@@ -3238,14 +3519,18 @@ async function loadMyMentees() {
       const { user, assigned_at, id: assignId } = m;
       const sessionCount = stats[user.telegram_id] || 0;
       const displayName = user.user_settings?.display_name || user.anonymous_id;
+      const letter = (displayName || '?').charAt(0).toUpperCase();
 
       html += `
         <div class="card mb-12">
           <div class="flex justify-between items-start mb-8">
-            <div>
-              <div class="font-bold" style="color:var(--gold)">${escapeHtml(displayName)}</div>
-              <div class="text-xs text-dim">${t('Joined')} ${new Date(assigned_at).toLocaleDateString()}</div>
-              <div class="text-xs text-dim">${t('Sessions:')} ${sessionCount}</div>
+            <div class="flex items-center gap-8">
+              ${renderAvatar(user, letter)}
+              <div>
+                <div class="font-bold" style="color:var(--gold)">${escapeHtml(displayName)}</div>
+                <div class="text-xs text-dim">${t('Joined')} ${new Date(assigned_at).toLocaleDateString()}</div>
+                <div class="text-xs text-dim">${t('Sessions:')} ${sessionCount}</div>
+              </div>
             </div>
             <button class="btn btn-ghost btn-sm" onclick="endMentorship('${assignId}')">${t('btn_end')}</button>
           </div>
@@ -3261,6 +3546,7 @@ async function loadMyMentees() {
         </div>`;
     }
     container.innerHTML = html;
+    hydrateAvatars(container);
 
     for (const m of mentees) {
       const note = await apiFetch(`/api/mentors/notes/${m.user.telegram_id}`);
