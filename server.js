@@ -201,6 +201,7 @@ app.use('/api/support', require('./routes/support')(supabase, requireAuth, io, o
 app.use('/api/topics', require('./routes/topics')(supabase, requireAuth, requireAdmin));
 app.use('/api/streaks', require('./routes/streaks')(supabase, requireAuth));
 app.use('/api/journal', require('./routes/journal')(supabase, requireAuth));
+app.use('/api/avatar', require('./routes/avatar')(supabase, requireAuth, bot));
 
 // ─── Health check (enhanced – probes DB connection) ──────────────────────────
 app.get('/health', async (req, res) => {
