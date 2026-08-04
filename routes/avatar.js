@@ -3,7 +3,6 @@
 const express = require('express');
 const axios = require('axios');
 const multer = require('multer');
-const { getAvatarValue, setAvatarValue, clearAvatarValue } = require('../utils/avatar');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -46,26 +45,15 @@ module.exports = function avatarRoutes(supabase, requireAuth, bot) {
         if (!largest) return res.status(500).json({ error: 'Telegram did not return a photo file' });
 
         const now = new Date().toISOString();
-        const { value, error, column } = await setAvatarValue(supabase, req.telegramUser.id, largest.file_id);
-
-        if (error) return res.status(500).json({ error: error.message });
-
-        const { data: userData, error: tsError } = await supabase
+        const { data, error } = await supabase
           .from('users')
-          .update({ photo_updated_at: now })
+          .update({ photo_file_id: largest.file_id, photo_updated_at: now })
           .eq('telegram_id', req.telegramUser.id)
-          .select('photo_updated_at')
+          .select('photo_file_id, photo_updated_at')
           .single();
 
-        if (tsError) {
-          console.warn('[POST /avatar] photo_updated_at update failed:', tsError.message);
-        }
-
-        res.json({
-          photo_file_id: value,
-          photo_updated_at: userData?.photo_updated_at || now,
-          avatar_column: column,
-        });
+        if (error) return res.status(500).json({ error: error.message });
+        res.json(data);
       } catch (e) {
         console.error('[POST /avatar] Error:', e.message);
         res.status(500).json({ error: 'Failed to upload photo' });
@@ -76,16 +64,12 @@ module.exports = function avatarRoutes(supabase, requireAuth, bot) {
   // DELETE /api/avatar – remove the uploaded photo, reverting to the
   // existing letter-initial fallback everywhere it's shown.
   router.delete('/', requireAuth, async (req, res) => {
-    const { error } = await clearAvatarValue(supabase, req.telegramUser.id);
-
-    if (error) return res.status(500).json({ error: error.message });
-
-    const { error: tsError } = await supabase
+    const { error } = await supabase
       .from('users')
-      .update({ photo_updated_at: null })
+      .update({ photo_file_id: null, photo_updated_at: null })
       .eq('telegram_id', req.telegramUser.id);
 
-    if (tsError) console.warn('[DELETE /avatar] photo_updated_at clear failed:', tsError.message);
+    if (error) return res.status(500).json({ error: error.message });
     res.json({ removed: true });
   });
 
@@ -96,15 +80,18 @@ module.exports = function avatarRoutes(supabase, requireAuth, bot) {
   router.get('/:telegram_id', requireAuth, async (req, res) => {
     const { telegram_id } = req.params;
 
-    const { value, error } = await getAvatarValue(supabase, telegram_id);
+    const { data: user } = await supabase
+      .from('users')
+      .select('photo_file_id')
+      .eq('telegram_id', telegram_id)
+      .single();
 
-    if (error) return res.status(500).json({ error: error.message });
-    if (!value) return res.status(404).json({ error: 'No photo set' });
+    if (!user?.photo_file_id) return res.status(404).json({ error: 'No photo set' });
 
     const token = process.env.TELEGRAM_BOT_TOKEN;
     try {
       const { data } = await axios.get(`https://api.telegram.org/bot${token}/getFile`, {
-        params: { file_id: value },
+        params: { file_id: user.photo_file_id },
       });
 
       if (!data.ok || !data.result?.file_path) {
