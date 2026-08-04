@@ -129,10 +129,16 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .eq('is_active', true)
       .single();
     if (activeAssign) return res.status(409).json({ error: 'You already have an active mentor' });
-    // Get mentor's current mentee count and max_mentees
+    const DEFAULT_MAX_MENTEES = parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
+
+    // Get mentor's current mentee count and max_mentees. max_mentees lives in
+    // user_settings (that's what the mentor edits and what the mentor card
+    // displays), so the capacity check must read from there too — reading
+    // from the stale users.max_mentees column caused mentors to be reported
+    // as "full" even when their displayed slot count still had room.
     const { data: mentor, error: mentorErr } = await supabase
       .from('users')
-      .select('max_mentees, accepting_requests')
+      .select('accepting_requests, user_settings(max_mentees)')
       .eq('telegram_id', mentor_id)
       .single();
 
@@ -144,13 +150,15 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       return res.status(409).json({ error: 'This mentor is not accepting new requests at this time.' });
     }
 
+    const mentorMaxMentees = mentor.user_settings?.max_mentees || DEFAULT_MAX_MENTEES;
+
     const { count: currentMentees } = await supabase
       .from('mentorship_assignments')
       .select('id', { count: 'exact', head: true })
       .eq('mentor_id', mentor_id)
       .eq('is_active', true);
 
-    if (currentMentees >= (mentor.max_mentees || DEFAULT_MAX_MENTEES)) {
+    if (currentMentees >= mentorMaxMentees) {
       return res.status(409).json({ error: 'Mentor is at full capacity. Please try another mentor.' });
     }
 
@@ -484,10 +492,13 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
         if (countErr) return res.status(500).json({ error: countErr.message });
 
-        // Get target mentor's max_mentees
+        // Get target mentor's max_mentees from user_settings — same reasoning
+        // as the /request endpoint: user_settings.max_mentees is the value
+        // mentors edit and the value shown on the mentor card, so it's the
+        // single source of truth for capacity checks.
         const { data: targetMentor, error: mentorErr } = await supabase
           .from('users')
-          .select('max_mentees')
+          .select('user_settings(max_mentees)')
           .eq('telegram_id', targetTid)
           .single();
 
@@ -496,7 +507,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
         }
 
         const DEFAULT_MAX_MENTEES = parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
-        const maxMentees = targetMentor.max_mentees || DEFAULT_MAX_MENTEES;
+        const maxMentees = targetMentor.user_settings?.max_mentees || DEFAULT_MAX_MENTEES;
 
         if ((currentCount || 0) >= maxMentees) {
           return res.status(400).json({ error: 'Target mentor has reached their maximum capacity.' });

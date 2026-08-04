@@ -445,7 +445,7 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
   const userSex = userData?.sex;
 
   let query = supabase.from('users')
-    .select('telegram_id, anonymous_id, rating, rating_count, last_active, max_mentees, user_settings(bio, display_name)')
+    .select('telegram_id, anonymous_id, rating, rating_count, last_active, user_settings(bio, display_name, max_mentees)')
     .in('telegram_id', ids)
     .eq('is_banned', false)
     .eq('role', 'mentor');
@@ -477,7 +477,7 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
   const menteeCount = {};
   (assignments || []).forEach(a => { menteeCount[a.mentor_id] = (menteeCount[a.mentor_id] || 0) + 1; });
 
-  let available = allMentors.filter(m => (menteeCount[m.telegram_id] || 0) < (m.max_mentees || DEFAULT_MAX_MENTEES));
+  let available = allMentors.filter(m => (menteeCount[m.telegram_id] || 0) < (m.user_settings?.max_mentees || DEFAULT_MAX_MENTEES));
 
   // Sort
   if (sort === 'rating') {
@@ -515,7 +515,7 @@ async function listMentors(chatId, page = 0, topicId, sort = 'rating') {
     const bio = mdEscape(m.user_settings?.bio || tSync(lang, 'no_bio'));
     const stars = renderStars(m.rating, m.rating_count);
     const status = isOnline(m.last_active) ? tSync(lang, 'status_online') : tSync(lang, 'status_away');
-    const slots = (m.max_mentees || DEFAULT_MAX_MENTEES) - (menteeCount[m.telegram_id] || 0);
+    const slots = (m.user_settings?.max_mentees || DEFAULT_MAX_MENTEES) - (menteeCount[m.telegram_id] || 0);
 
     text += `${badge} *${displayName}*\n`;
     text += `${tSync(lang, 'label_status')}: ${status}\n`;
@@ -1047,10 +1047,10 @@ async function acceptMentorship(mentorId, userId, topicId) {
   const mentorLang = await getUserLang(mentorId);
   const userLang = await getUserLang(userId);
 
-  // Verify mentor capacity
-  const { data: mentor } = await supabase.from('users').select('max_mentees').eq('telegram_id', mentorId).single();
+  // Verify mentor capacity (max_mentees lives in user_settings, not users)
+  const { data: mentor } = await supabase.from('users').select('user_settings(max_mentees)').eq('telegram_id', mentorId).single();
   const { data: current } = await supabase.from('mentorship_assignments').select('id').eq('mentor_id', mentorId).eq('is_active', true);
-  if ((current?.length || 0) >= (mentor?.max_mentees || DEFAULT_MAX_MENTEES)) {
+  if ((current?.length || 0) >= (mentor?.user_settings?.max_mentees || DEFAULT_MAX_MENTEES)) {
     await safeSend(mentorId, tSync(mentorLang, 'mentor_at_capacity'));
     await safeSend(userId, tSync(userLang, 'mentor_rejected'));
     await notifyWaitingList(topicId);
@@ -1718,9 +1718,11 @@ bot.on('message', async (msg) => {
       }
 
       // ── 3. Check mentor capacity & availability ──────────────
+      // max_mentees lives in user_settings (what the mentor edits and what
+      // the mentor list displays), not on the users table.
       const { data: mentor } = await supabase
         .from('users')
-        .select('max_mentees, accepting_requests')
+        .select('accepting_requests, user_settings(max_mentees)')
         .eq('telegram_id', mentorId)
         .single();
 
@@ -1735,7 +1737,7 @@ bot.on('message', async (msg) => {
         .select('id', { count: 'exact', head: true })
         .eq('mentor_id', mentorId)
         .eq('is_active', true);
-      if (currentMentees >= (mentor?.max_mentees || DEFAULT_MAX_MENTEES)) {
+      if (currentMentees >= (mentor?.user_settings?.max_mentees || DEFAULT_MAX_MENTEES)) {
         await safeSend(chatId, '❌ This mentor has reached their capacity. Please try another.');
         clearState(chatId);
         return showMainMenu(chatId);
@@ -1923,7 +1925,7 @@ bot.on('callback_query', async (query) => {
     await supabase.from('users').insert({
       telegram_id: chatId, chat_id: chatId, anonymous_id: state.tempData.nickname,
       sex: state.tempData.sex, age_range: state.tempData.age_range,
-      education_level: state.tempData.education_level, role: 'user', max_mentees: DEFAULT_MAX_MENTEES
+      education_level: state.tempData.education_level, role: 'user'
     });
     await supabase.from('user_settings').insert({ telegram_id: chatId, language: selectedLang, display_name: state.tempData.nickname });
     setLangCache(chatId, selectedLang);
