@@ -25,7 +25,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     // is still selected because it is displayed on the mentor profile card.
     let query = supabase
       .from('users')
-      .select('telegram_id, anonymous_id, sex, preferred_mentee_sex, accepting_requests, rating, rating_count, user_settings(bio, specialization, max_mentees, display_name)')
+      .select('telegram_id, anonymous_id, sex, preferred_mentee_sex, accepting_requests, rating, rating_count, photo_file_id, photo_updated_at, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
       .eq('is_banned', false);
 
@@ -343,7 +343,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     const { id: mentor_id } = req.telegramUser;
     const { data, error } = await supabase
       .from('mentorship_assignments')
-      .select('*, user:user_id(telegram_id, anonymous_id, last_active, user_settings(display_name))')
+      .select('*, user:user_id(telegram_id, anonymous_id, last_active, photo_file_id, photo_updated_at, user_settings(display_name))')
       .eq('mentor_id', mentor_id)
       .eq('is_active', true);
     if (error) return res.status(500).json({ error: error.message });
