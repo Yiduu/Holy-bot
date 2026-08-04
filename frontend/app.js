@@ -3039,7 +3039,10 @@ function closeCropModal() {
   stage.removeEventListener('pointercancel', cropPointerUp);
   stage.removeEventListener('wheel', cropWheelZoom);
   $('avatarCropModal').classList.remove('open');
-  $('cropImage').src = '';
+  const img = $('cropImage');
+  img.onerror = null;
+  img.onload = null;
+  img.src = '';
 }
 
 async function confirmAvatarCrop() {
