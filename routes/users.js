@@ -1,7 +1,6 @@
 'use strict';
 
 const express = require('express');
-const { getAvatarMap } = require('../utils/avatar');
 
 // ─── Stats cache (1 hour TTL) ─────────────────────────────────────────────────
 let statsCache = null;
@@ -145,16 +144,6 @@ module.exports = function userRoutes(supabase, requireAuth) {
       .single();
 
     if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
-
-    if (data?.mentor) {
-      const avatarMap = await getAvatarMap(supabase, [data.mentor.telegram_id]);
-      data.mentor = {
-        ...data.mentor,
-        photo_file_id: avatarMap[data.mentor.telegram_id] || null,
-        photo_updated_at: null,
-      };
-    }
-
     res.json(data || null);
   });
 
@@ -176,11 +165,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
 
       if (!mentees || mentees.length === 0) {
         return res.json({ type: 'none' });
-      }
-
-      const avatarMap = await getAvatarMap(supabase, mentees.map(m => m.user?.telegram_id).filter(Boolean));
-
-      if (mentees.length === 1) {
+      } else if (mentees.length === 1) {
         const m = mentees[0].user;
         return res.json({
           type: 'single',
@@ -188,9 +173,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
             telegram_id: m.telegram_id,
             anonymous_id: m.anonymous_id,
             display_name: m.user_settings?.display_name || m.anonymous_id,
-            last_active: m.last_active,
-            photo_file_id: avatarMap[m.telegram_id] || null,
-            photo_updated_at: null
+            last_active: m.last_active
           }
         });
       } else {
@@ -198,9 +181,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
           telegram_id: m.user.telegram_id,
           anonymous_id: m.user.anonymous_id,
           display_name: m.user.user_settings?.display_name || m.user.anonymous_id,
-          last_active: m.user.last_active,
-          photo_file_id: avatarMap[m.user.telegram_id] || null,
-          photo_updated_at: null
+          last_active: m.user.last_active
         }));
         return res.json({ type: 'multiple', mentees: list });
       }
@@ -216,16 +197,13 @@ module.exports = function userRoutes(supabase, requireAuth) {
       if (!assignment) return res.json({ type: 'none' });
 
       const m = assignment.mentor;
-      const avatarMap = await getAvatarMap(supabase, [m.telegram_id]);
       return res.json({
         type: 'single',
         partner: {
           telegram_id: m.telegram_id,
           anonymous_id: m.anonymous_id,
           display_name: m.user_settings?.display_name || m.anonymous_id,
-          last_active: m.last_active,
-          photo_file_id: avatarMap[m.telegram_id] || null,
-          photo_updated_at: null
+          last_active: m.last_active
         }
       });
     }

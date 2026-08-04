@@ -635,25 +635,6 @@
           </div>
         </div>
 
-        <!-- Profile Photo -->
-        <div class="section-title" data-i18n="Profile Photo">Profile Photo</div>
-        <div class="card mb-16">
-          <div class="avatar-upload-row">
-            <div class="avatar-preview-wrap">
-              <div id="settingsAvatarPreview" class="avatar-preview">?</div>
-              <button class="avatar-camera-btn" onclick="$('avatarFileInput').click()" aria-label="Change photo">📷</button>
-            </div>
-            <div class="avatar-upload-info">
-              <div class="avatar-upload-title" data-i18n="avatar_help">Shown to mentees and mentors in chat and listings. Stays anonymous — no name is attached to it.</div>
-              <div class="avatar-upload-actions">
-                <button class="btn btn-outline btn-sm" onclick="$('avatarFileInput').click()" data-i18n="Change Photo">Change Photo</button>
-                <button id="removeAvatarBtn" class="btn btn-ghost btn-sm hidden" onclick="removeAvatar()" data-i18n="Remove">Remove</button>
-              </div>
-            </div>
-          </div>
-          <input type="file" id="avatarFileInput" accept="image/*" class="hidden" onchange="onAvatarFileSelected(event)" />
-        </div>
-
         <!-- Display -->
         <div class="section-title" data-i18n="Display">Display</div>
         <div class="card mb-16">
@@ -1025,27 +1006,6 @@
   </div>
 
   <!-- ─── Topic Selection Modal ────────────────────────────────── -->
-  <div id="avatarCropModal" class="modal-overlay">
-    <div class="modal-sheet" style="max-width:420px;margin:0 auto;">
-      <div class="modal-handle"></div>
-      <div class="modal-title" data-i18n="Adjust Photo">Adjust Photo</div>
-      <div class="crop-stage" id="cropStage">
-        <img id="cropImage" class="crop-image" alt="" />
-        <div class="crop-frame"></div>
-      </div>
-      <div class="crop-zoom-row">
-        <span>−</span>
-        <input type="range" id="cropZoom" class="crop-zoom" min="100" max="300" value="100" oninput="onCropZoom(this.value)" />
-        <span>+</span>
-      </div>
-      <p class="crop-hint" data-i18n="crop_hint">Drag to reposition · use the slider to zoom</p>
-      <div class="flex gap-8 mt-16">
-        <button class="btn btn-outline btn-sm flex-1" onclick="closeCropModal()" data-i18n="Cancel">Cancel</button>
-        <button class="btn btn-primary btn-sm flex-1" id="cropSaveBtn" onclick="confirmAvatarCrop()" data-i18n="Save Photo">Save Photo</button>
-      </div>
-    </div>
-  </div>
-
   <div id="topicModal" class="modal-overlay" onclick="if(event.target===this)closeTopicModal()">
     <div class="modal-sheet">
       <div class="modal-handle"></div>
