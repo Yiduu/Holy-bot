@@ -1010,6 +1010,13 @@ textarea.form-control {
   color: var(--gold);
   flex-shrink: 0;
   overflow: hidden;
+  cursor: default;
+}
+
+.mentor-avatar.has-photo,
+.avatar-preview.has-photo,
+.avatar.has-photo {
+  cursor: zoom-in;
 }
 
 .mentor-avatar img {

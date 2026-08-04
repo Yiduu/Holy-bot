@@ -83,7 +83,7 @@ const avatarInflight = new Map();
 function renderAvatar(m, letter) {
   const safeLetter = escapeHtml(letter || '?');
   if (m?.photo_file_id) {
-    return `<div class="mentor-avatar" data-avatar-tid="${m.telegram_id}" data-avatar-v="${m.photo_updated_at || ''}">${safeLetter}</div>`;
+    return `<div class="mentor-avatar has-photo" data-avatar-tid="${m.telegram_id}" data-avatar-v="${m.photo_updated_at || ''}" onclick="viewAvatar(this)">${safeLetter}</div>`;
   }
   return `<div class="mentor-avatar">${safeLetter}</div>`;
 }
@@ -116,14 +116,21 @@ function hydrateAvatars(container) {
       const url = await loadAvatarUrl(tid, v);
       const img = document.createElement('img');
       img.alt = '';
-      img.onerror = () => { el.classList.remove('avatar-loaded'); img.remove(); };
+      img.onerror = () => { el.classList.remove('avatar-loaded', 'has-photo'); img.remove(); };
       img.src = url;
       el.innerHTML = '';
       el.appendChild(img);
+      el.classList.add('has-photo');
     } catch (e) {
-      el.classList.remove('avatar-loaded');
+      el.classList.remove('avatar-loaded', 'has-photo');
     }
   });
+}
+
+function viewAvatar(el) {
+  const img = el?.querySelector('img');
+  if (!img || !img.src) return;
+  openImageLightbox(img.src);
 }
 
 function timeAgo(dateStr) {
@@ -657,13 +664,14 @@ function setChatPeerHeader(displayName, lastActive, telegramId, photoFileId, pho
       .map(w => w[0]?.toUpperCase() || '')
       .join('');
     avatarEl.textContent = initials || '?';
-    avatarEl.classList.remove('avatar-loaded');
+    avatarEl.classList.remove('avatar-loaded', 'has-photo');
     delete avatarEl.dataset.avatarTid;
     delete avatarEl.dataset.avatarV;
 
     if (photoFileId && telegramId) {
       avatarEl.dataset.avatarTid = telegramId;
       avatarEl.dataset.avatarV = photoUpdatedAt || '';
+      avatarEl.classList.add('has-photo');
       hydrateAvatars(avatarEl.parentElement || document);
     }
   }
@@ -2893,6 +2901,7 @@ async function loadProfilePhoto() {
   if (!preview) return;
 
   preview.textContent = avatarInitials();
+  preview.classList.remove('has-photo');
   removeBtn?.classList.add('hidden');
 
   if (!currentUser?.photo_file_id) return;
@@ -2902,10 +2911,11 @@ async function loadProfilePhoto() {
     const url = await loadAvatarUrl(currentUser.telegram_id, currentUser.photo_updated_at || '');
     const img = document.createElement('img');
     img.alt = '';
-    img.onerror = () => { preview.textContent = avatarInitials(); removeBtn?.classList.add('hidden'); };
+    img.onerror = () => { preview.textContent = avatarInitials(); preview.classList.remove('has-photo'); removeBtn?.classList.add('hidden'); };
     img.src = url;
     preview.innerHTML = '';
     preview.appendChild(img);
+    preview.classList.add('has-photo');
     removeBtn?.classList.remove('hidden');
   } catch (e) {
     console.error('Failed to load profile photo:', e);

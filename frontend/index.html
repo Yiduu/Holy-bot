@@ -473,7 +473,7 @@
     <div id="page-chat" class="page">
       <div class="app-header chat-header">
         <div class="peer" id="chatPeer">
-          <div class="avatar" id="chatPeerAvatar">?</div>
+          <div class="avatar" id="chatPeerAvatar" onclick="viewAvatar(this)">?</div>
           <div class="peer-meta">
             <h2 id="chatWith" class="peer-name" data-i18n="Chat">Messages</h2>
             <div id="chatPeerStatus" class="peer-status" style="display:none;"></div>
@@ -640,7 +640,7 @@
         <div class="card mb-16">
           <div class="avatar-upload-row">
             <div class="avatar-preview-wrap">
-              <div id="settingsAvatarPreview" class="avatar-preview">?</div>
+              <div id="settingsAvatarPreview" class="avatar-preview" onclick="viewAvatar(this)">?</div>
               <button class="avatar-camera-btn" onclick="$('avatarFileInput').click()" aria-label="Change photo">📷</button>
             </div>
             <div class="avatar-upload-info">
