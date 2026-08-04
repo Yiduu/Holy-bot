@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const { getAvatarMap } = require('../utils/avatar');
 
 module.exports = function mentorRoutes(supabase, requireAuth) {
   const router = express.Router();
@@ -73,6 +74,8 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     if (error) return res.status(500).json({ error: error.message });
 
+    const avatarMap = await getAvatarMap(supabase, (data || []).map(m => m.telegram_id));
+
     // Enrich with mentee counts and expertise topics
     const enriched = await Promise.all((data || []).map(async (mentor) => {
       const { count } = await supabase.from('mentorship_assignments')
@@ -96,6 +99,8 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
       return {
         ...mentor,
+        photo_file_id: avatarMap[mentor.telegram_id] || null,
+        photo_updated_at: null,
         mentee_count: count || 0,
         expertise_topics,
       };
@@ -343,11 +348,22 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     const { id: mentor_id } = req.telegramUser;
     const { data, error } = await supabase
       .from('mentorship_assignments')
-      .select('*, user:user_id(telegram_id, anonymous_id, last_active, photo_file_id, photo_updated_at, user_settings(display_name))')
+      .select('*, user:user_id(telegram_id, anonymous_id, last_active, user_settings(display_name))')
       .eq('mentor_id', mentor_id)
       .eq('is_active', true);
     if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+
+    const avatarMap = await getAvatarMap(supabase, (data || []).map(item => item.user?.telegram_id).filter(Boolean));
+    const enriched = (data || []).map(item => ({
+      ...item,
+      user: item.user ? {
+        ...item.user,
+        photo_file_id: avatarMap[item.user.telegram_id] || null,
+        photo_updated_at: null,
+      } : item.user,
+    }));
+
+    res.json(enriched);
   });
 
   // GET /api/mentors/my-mentees/stats – session counts per mentee

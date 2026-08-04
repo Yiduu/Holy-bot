@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const { getAvatarMap } = require('../utils/avatar');
 
 // ─── Stats cache (1 hour TTL) ─────────────────────────────────────────────────
 let statsCache = null;
@@ -138,12 +139,22 @@ module.exports = function userRoutes(supabase, requireAuth) {
     const { id: telegram_id } = req.telegramUser;
     const { data, error } = await supabase
       .from('mentorship_assignments')
-      .select('*, mentor:mentor_id(telegram_id, anonymous_id, photo_file_id, photo_updated_at, user_settings(bio, specialization, display_name))')
+      .select('*, mentor:mentor_id(telegram_id, anonymous_id, user_settings(bio, specialization, display_name))')
       .eq('user_id', telegram_id)
       .eq('is_active', true)
       .single();
 
     if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
+
+    if (data?.mentor) {
+      const avatarMap = await getAvatarMap(supabase, [data.mentor.telegram_id]);
+      data.mentor = {
+        ...data.mentor,
+        photo_file_id: avatarMap[data.mentor.telegram_id] || null,
+        photo_updated_at: null,
+      };
+    }
+
     res.json(data || null);
   });
 
@@ -157,7 +168,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
     if (user.role === 'mentor') {
       const { data: mentees, error } = await supabase
         .from('mentorship_assignments')
-        .select('user:user_id(telegram_id, anonymous_id, last_active, photo_file_id, photo_updated_at, user_settings(display_name))')
+        .select('user:user_id(telegram_id, anonymous_id, last_active, user_settings(display_name))')
         .eq('mentor_id', telegram_id)
         .eq('is_active', true);
 
@@ -165,7 +176,11 @@ module.exports = function userRoutes(supabase, requireAuth) {
 
       if (!mentees || mentees.length === 0) {
         return res.json({ type: 'none' });
-      } else if (mentees.length === 1) {
+      }
+
+      const avatarMap = await getAvatarMap(supabase, mentees.map(m => m.user?.telegram_id).filter(Boolean));
+
+      if (mentees.length === 1) {
         const m = mentees[0].user;
         return res.json({
           type: 'single',
@@ -174,8 +189,8 @@ module.exports = function userRoutes(supabase, requireAuth) {
             anonymous_id: m.anonymous_id,
             display_name: m.user_settings?.display_name || m.anonymous_id,
             last_active: m.last_active,
-            photo_file_id: m.photo_file_id,
-            photo_updated_at: m.photo_updated_at
+            photo_file_id: avatarMap[m.telegram_id] || null,
+            photo_updated_at: null
           }
         });
       } else {
@@ -184,15 +199,15 @@ module.exports = function userRoutes(supabase, requireAuth) {
           anonymous_id: m.user.anonymous_id,
           display_name: m.user.user_settings?.display_name || m.user.anonymous_id,
           last_active: m.user.last_active,
-          photo_file_id: m.user.photo_file_id,
-          photo_updated_at: m.user.photo_updated_at
+          photo_file_id: avatarMap[m.user.telegram_id] || null,
+          photo_updated_at: null
         }));
         return res.json({ type: 'multiple', mentees: list });
       }
     } else {
       const { data: assignment, error } = await supabase
         .from('mentorship_assignments')
-        .select('mentor:mentor_id(telegram_id, anonymous_id, last_active, photo_file_id, photo_updated_at, user_settings(display_name))')
+        .select('mentor:mentor_id(telegram_id, anonymous_id, last_active, user_settings(display_name))')
         .eq('user_id', telegram_id)
         .eq('is_active', true)
         .single();
@@ -201,6 +216,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
       if (!assignment) return res.json({ type: 'none' });
 
       const m = assignment.mentor;
+      const avatarMap = await getAvatarMap(supabase, [m.telegram_id]);
       return res.json({
         type: 'single',
         partner: {
@@ -208,8 +224,8 @@ module.exports = function userRoutes(supabase, requireAuth) {
           anonymous_id: m.anonymous_id,
           display_name: m.user_settings?.display_name || m.anonymous_id,
           last_active: m.last_active,
-          photo_file_id: m.photo_file_id,
-          photo_updated_at: m.photo_updated_at
+          photo_file_id: avatarMap[m.telegram_id] || null,
+          photo_updated_at: null
         }
       });
     }
