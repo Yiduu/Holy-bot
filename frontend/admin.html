@@ -2151,15 +2151,19 @@
                 <!-- ── Live Sessions ─────────────────────────────────── -->
                 <div class="pane" id="pane-live-sessions">
                     <div class="toolbar">
-                        <div style="font-size:12px;color:var(--text2)">
-                            Currently active video sessions. Updates in real time — audio/video itself runs
-                            peer-to-peer and isn't visible here, only who's in a call and for how long.
+                        <div style="display:flex;gap:6px">
+                            <button class="btn btn-sm" id="liveSessTabLive" onclick="switchSessionsView('live')">Live</button>
+                            <button class="btn btn-ghost btn-sm" id="liveSessTabHistory" onclick="switchSessionsView('history')">History</button>
                         </div>
-                        <button class="btn btn-ghost" onclick="loadLiveSessions()">Refresh</button>
+                        <div style="font-size:12px;color:var(--text2);flex:1">
+                            Audio/video runs peer-to-peer and isn't visible here — only who joined, when, and for how long.
+                        </div>
+                        <button class="btn btn-ghost" onclick="switchSessionsView(currentSessionsView)">Refresh</button>
                     </div>
                     <div id="liveSessionsContainer" class="mentorship-grid">
                         <div class="loading">Loading…</div>
                     </div>
+                    <div class="pagination" id="sessionsHistoryPager"></div>
                 </div>
 
                 <!-- ── Mentorship ────────────────────────────────────── -->
@@ -2600,7 +2604,7 @@
             document.getElementById('topbarTitle').textContent = TITLES[tab] || tab;
             activeTab = tab; closeSidebar();
             const loaders = {
-                overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), 'live-sessions': loadLiveSessions, mentorship: () => loadMentorship(1), applications: () => loadApps(1),
+                overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), 'live-sessions': () => switchSessionsView(currentSessionsView), mentorship: () => loadMentorship(1), applications: () => loadApps(1),
                 messages: () => loadMessages(1), tickets: loadTickets, topics: loadTopics,
                 'mentorship-requests': () => loadMentorshipRequests(1),
                 broadcast: () => { }, audit: () => loadAudit(1)
@@ -2639,7 +2643,7 @@
                 wsConn.on('admin:session_activity', (d) => {
                     if (d.type === 'created') toast(`📹 ${d.host} started "${d.title}"`, 'info');
                     refreshLiveSessionsBadge();
-                    if (activeTab === 'live-sessions') loadLiveSessions();
+                    if (activeTab === 'live-sessions' && currentSessionsView === 'live') loadLiveSessions();
                 });
             } catch { setWSStatus(false); }
         }
@@ -2852,10 +2856,66 @@
             try {
                 const d = await api(`/api/admin/users/${tid}/sessions`);
                 if (!d.sessions?.length) { c.innerHTML = '<div class="empty">No sessions</div>'; return; }
-                c.innerHTML = d.sessions.map(s => `<div style="padding:7px 0;border-bottom:1px solid var(--border-dim);font-size:12.5px">
-      <span style="color:var(--text3)">${ago(s.created_at)}</span> · <span>${esc(s.status || '')}</span>
-    </div>`).join('');
+                c.innerHTML = d.sessions.map(s => renderSessionSummaryCard(s)).join('');
             } catch (e) { c.innerHTML = `<div class="loading">${e.message}</div>`; }
+        }
+
+        // Compact summary card: status, total duration, who ended it, and a
+        // per-participant join/leave breakdown. Used both in the per-user
+        // Sessions tab and the Live Sessions history view.
+        function renderSessionSummaryCard(s) {
+            const statusChip = s.status === 'active' ? '<span class="chip chip-green">● Live</span>'
+                : s.status === 'ended' ? '<span class="chip chip-gray">Ended</span>'
+                : s.status === 'cleared' ? '<span class="chip chip-gray">Cleared</span>'
+                : `<span class="chip chip-gold">${esc(s.status)}</span>`;
+
+            const endedByLabel = s.ended_by === 'admin' ? ' by admin' : s.ended_by === 'host' ? ' by host' : '';
+            const durationLabel = s.total_duration_seconds != null
+                ? `${fmtDuration(s.total_duration_seconds)}${(s.status === 'ended' || s.status === 'cleared') ? endedByLabel : ''}`
+                : '–';
+
+            const participantRows = (s.participants || []).map(p => `
+                <div class="mentee-row">
+                    <div class="mentee-row-header">
+                        <span class="mentee-name" style="font-family:var(--font-mono);font-size:11.5px;color:var(--accent);">
+                            ${esc(p.anonymous_id)}${p.is_host ? ' <span class="chip chip-gold" style="font-size:9px;padding:1px 5px;">Host</span>' : ''}
+                        </span>
+                    </div>
+                    <div class="mentee-details">
+                        <div class="mentee-detail-item">
+                            <span class="mentee-detail-label">Joined</span>
+                            <span class="mentee-detail-value">${p.joined_at ? new Date(p.joined_at).toLocaleString() : '–'}</span>
+                        </div>
+                        <div class="mentee-detail-item">
+                            <span class="mentee-detail-label">Left</span>
+                            <span class="mentee-detail-value">${p.left_at ? new Date(p.left_at).toLocaleString() : (p.still_in_session ? 'Still in session' : '–')}</span>
+                        </div>
+                        <div class="mentee-detail-item" style="grid-column: span 2;">
+                            <span class="mentee-detail-label">Duration</span>
+                            <span class="mentee-detail-value">${p.duration_seconds != null ? fmtDuration(p.duration_seconds) : '–'}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            return `
+                <div class="mentor-card" style="margin-bottom:10px">
+                    <div class="mentor-header">
+                        <div class="mentor-info">
+                            <span class="mentor-name">${esc(s.title || 'Session')}</span>
+                        </div>
+                        ${statusChip}
+                    </div>
+                    <div class="mentor-bio">
+                        ${s.is_group ? '👥 Group' : '💬 1‑on‑1'} · Host: ${esc(s.host)} · Total duration: ${durationLabel}
+                    </div>
+                    <div class="mentees-section">
+                        <div class="mentees-list" style="display:flex;">
+                            ${participantRows || '<div class="empty" style="padding:6px 0">No join records</div>'}
+                        </div>
+                    </div>
+                </div>
+            `;
         }
 
         /* ── Applications ───────────────────────────────────────────── */
@@ -3599,6 +3659,8 @@
 
         /* ── Live Sessions ──────────────────────────────────────────── */
         let liveSessionsTicker = null;
+        let currentSessionsView = 'live';
+        let sessionsHistoryPage = 1;
 
         function fmtDuration(sec) {
             sec = Math.max(0, sec | 0);
@@ -3621,6 +3683,15 @@
             } catch { /* non-fatal */ }
         }
 
+        function switchSessionsView(view) {
+            currentSessionsView = view;
+            document.getElementById('liveSessTabLive').classList.toggle('btn-ghost', view !== 'live');
+            document.getElementById('liveSessTabHistory').classList.toggle('btn-ghost', view !== 'history');
+            document.getElementById('sessionsHistoryPager').innerHTML = '';
+            if (view === 'live') loadLiveSessions();
+            else loadSessionsHistory(1);
+        }
+
         async function loadLiveSessions() {
             const container = document.getElementById('liveSessionsContainer');
             if (!liveSessionsTicker) {
@@ -3629,7 +3700,7 @@
                 let tickCount = 0;
                 liveSessionsTicker = setInterval(() => {
                     tickCount++;
-                    if (activeTab !== 'live-sessions') return;
+                    if (activeTab !== 'live-sessions' || currentSessionsView !== 'live') return;
                     if (tickCount % 10 === 0) { loadLiveSessions(); return; }
                     document.querySelectorAll('[data-duration-start]').forEach(el => {
                         const start = parseInt(el.dataset.durationStart, 10);
@@ -3659,7 +3730,11 @@
                             <div class="mentee-details">
                                 <div class="mentee-detail-item">
                                     <span class="mentee-detail-label">Joined</span>
-                                    <span class="mentee-detail-value">${ago(p.joined_at)}</span>
+                                    <span class="mentee-detail-value">${new Date(p.joined_at).toLocaleString()}</span>
+                                </div>
+                                <div class="mentee-detail-item">
+                                    <span class="mentee-detail-label">In session for</span>
+                                    <span class="mentee-detail-value">${fmtDuration(p.duration_seconds)}</span>
                                 </div>
                             </div>
                         </div>
@@ -3689,6 +3764,28 @@
                 }).join('');
             } catch (e) {
                 container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${e.message}</div>`;
+            }
+        }
+
+        // Past sessions (ended/cleared/currently-active) with total duration,
+        // who ended each one, and a per-participant join/leave breakdown —
+        // same card used in the per-user Sessions tab.
+        async function loadSessionsHistory(page = 1) {
+            sessionsHistoryPage = page;
+            const container = document.getElementById('liveSessionsContainer');
+            container.innerHTML = '<div class="loading">Loading…</div>';
+            try {
+                const d = await api(`/api/admin/sessions?page=${page}`);
+                if (!d.sessions?.length) {
+                    container.innerHTML = `<div class="empty">No past sessions</div>`;
+                    document.getElementById('sessionsHistoryPager').innerHTML = '';
+                    return;
+                }
+                container.innerHTML = d.sessions.map(s => renderSessionSummaryCard(s)).join('');
+                pager('sessionsHistoryPager', page, d.pages, 'loadSessionsHistory');
+            } catch (e) {
+                container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${e.message}</div>`;
+                document.getElementById('sessionsHistoryPager').innerHTML = '';
             }
         }
 

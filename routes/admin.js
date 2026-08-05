@@ -18,6 +18,57 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     await supabase.from('audit_logs').insert({ admin_id, action, target_id, target_type, details });
   }
 
+  // Shared formatter: turns a video_sessions row (with host + session_participants
+  // embedded) into a response object with per-participant join/leave times and
+  // durations, plus the session's total duration and who ended it.
+  // `adminEndedIds` is a Set of session ids known (from audit_logs) to have been
+  // force-ended by an admin rather than by the host mentor.
+  function formatSessionDetail(s, adminEndedIds = new Set()) {
+    const now = Date.now();
+    const endedAtMs = s.ended_at ? new Date(s.ended_at).getTime() : null;
+
+    const participants = (s.session_participants || []).map(p => {
+      const joinedMs = p.joined_at ? new Date(p.joined_at).getTime() : null;
+      const leftMs = p.left_at ? new Date(p.left_at).getTime() : null;
+      const durationEndMs = leftMs || endedAtMs || now;
+      return {
+        telegram_id: p.telegram_id,
+        anonymous_id: p.user?.anonymous_id || 'Unknown',
+        is_host: s.host?.telegram_id === p.telegram_id,
+        joined_at: p.joined_at || null,
+        left_at: p.left_at || null,
+        duration_seconds: joinedMs ? Math.max(0, Math.floor((durationEndMs - joinedMs) / 1000)) : null,
+        still_in_session: !!(joinedMs && !leftMs && s.status === 'active'),
+      };
+    });
+
+    let ended_by = null;
+    if (s.status === 'ended' || s.status === 'cleared') {
+      ended_by = adminEndedIds.has(s.id) ? 'admin' : 'host';
+    }
+
+    const startMs = s.started_at ? new Date(s.started_at).getTime() : null;
+    const total_duration_seconds = startMs
+      ? Math.max(0, Math.floor(((endedAtMs || (s.status === 'active' ? now : startMs)) - startMs) / 1000))
+      : null;
+
+    return {
+      id: s.id,
+      title: s.title,
+      is_group: s.is_group,
+      status: s.status,
+      host: s.host?.anonymous_id || 'Unknown',
+      host_id: s.host?.telegram_id || null,
+      scheduled_at: s.scheduled_at,
+      started_at: s.started_at,
+      ended_at: s.ended_at,
+      ended_by,
+      total_duration_seconds,
+      participant_count: participants.length,
+      participants,
+    };
+  }
+
   // ==================== STATS ====================
   router.get('/stats', async (req, res) => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -73,13 +124,25 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
 
   router.get('/users/:id/sessions', async (req, res) => {
     const { id } = req.params;
-    const { data, error } = await supabase
+    const { data: sessions, error } = await supabase
       .from('video_sessions')
-      .select('*')
+      .select(`
+        id, room_name, title, is_group, status, scheduled_at, started_at, ended_at,
+        host:host_id(telegram_id, anonymous_id),
+        session_participants(telegram_id, joined_at, left_at, user:telegram_id(anonymous_id))
+      `)
       .eq('host_id', id)
       .order('created_at', { ascending: false });
+
     if (error) return res.status(500).json({ error: error.message });
-    res.json({ sessions: data || [] });
+
+    const ids = (sessions || []).map(s => s.id);
+    const { data: adminEnds } = ids.length
+      ? await supabase.from('audit_logs').select('target_id').eq('action', 'admin_end_session').in('target_id', ids)
+      : { data: [] };
+    const adminEndedIds = new Set((adminEnds || []).map(a => a.target_id));
+
+    res.json({ sessions: (sessions || []).map(s => formatSessionDetail(s, adminEndedIds)) });
   });
 
   // ==================== USERS LIST (paginated) ====================
@@ -777,7 +840,7 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       const { data: sessions, error } = await supabase
         .from('video_sessions')
         .select(`
-          id, room_name, title, is_group, status, scheduled_at, started_at,
+          id, room_name, title, is_group, status, scheduled_at, started_at, ended_at,
           host:host_id(telegram_id, anonymous_id),
           session_participants(telegram_id, joined_at, left_at, user:telegram_id(anonymous_id))
         `)
@@ -787,29 +850,55 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       if (error) return res.status(500).json({ error: error.message });
 
       const formatted = (sessions || []).map(s => {
-        const participants = (s.session_participants || [])
-          .filter(p => p.joined_at && !p.left_at)
-          .map(p => ({
-            telegram_id: p.telegram_id,
-            anonymous_id: p.user?.anonymous_id || 'Unknown',
-            joined_at: p.joined_at,
-            is_host: s.host?.telegram_id === p.telegram_id,
-          }));
-
-        return {
-          id: s.id,
-          title: s.title,
-          is_group: s.is_group,
-          host: s.host?.anonymous_id || 'Unknown',
-          host_id: s.host?.telegram_id || null,
-          started_at: s.started_at,
-          duration_seconds: s.started_at ? Math.max(0, Math.floor((Date.now() - new Date(s.started_at).getTime()) / 1000)) : 0,
-          participant_count: participants.length,
-          participants,
-        };
+        const detail = formatSessionDetail(s);
+        detail.participants = detail.participants.filter(p => p.still_in_session);
+        detail.participant_count = detail.participants.length;
+        detail.duration_seconds = detail.total_duration_seconds; // back-compat with existing frontend field name
+        return detail;
       });
 
       res.json({ sessions: formatted, count: formatted.length });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Paginated session history — all past (and current) sessions with total
+  // duration and, once ended, who ended them (the host mentor, or an admin
+  // via the force-end action below). Defaults to non-scheduled sessions.
+  router.get('/sessions', async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = Math.max(1, parseInt(req.query.limit) || 20);
+      const offset = (page - 1) * limit;
+      const status = req.query.status || null;
+
+      let query = supabase
+        .from('video_sessions')
+        .select(`
+          id, room_name, title, is_group, status, scheduled_at, started_at, ended_at,
+          host:host_id(telegram_id, anonymous_id),
+          session_participants(telegram_id, joined_at, left_at, user:telegram_id(anonymous_id))
+        `, { count: 'exact' });
+
+      query = status ? query.eq('status', status) : query.neq('status', 'scheduled');
+      if (req.query.host_id) query = query.eq('host_id', parseInt(req.query.host_id));
+
+      const { data: sessions, count, error } = await query
+        .order('started_at', { ascending: false, nullsFirst: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) return res.status(500).json({ error: error.message });
+
+      const ids = (sessions || []).map(s => s.id);
+      const { data: adminEnds } = ids.length
+        ? await supabase.from('audit_logs').select('target_id').eq('action', 'admin_end_session').in('target_id', ids)
+        : { data: [] };
+      const adminEndedIds = new Set((adminEnds || []).map(a => a.target_id));
+
+      const formatted = (sessions || []).map(s => formatSessionDetail(s, adminEndedIds));
+
+      res.json({ sessions: formatted, total: count || 0, page, pages: Math.ceil((count || 0) / limit) });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }
@@ -829,7 +918,14 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       .single();
 
     if (error) return res.status(404).json({ error: 'Session not found' });
-    res.json(session);
+
+    const { data: adminEnds } = await supabase
+      .from('audit_logs')
+      .select('target_id')
+      .eq('action', 'admin_end_session')
+      .eq('target_id', req.params.id);
+
+    res.json(formatSessionDetail(session, new Set((adminEnds || []).map(a => a.target_id))));
   });
 
   // Admin can force-end a live session (e.g. reported misconduct).
