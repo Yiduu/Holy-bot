@@ -678,15 +678,29 @@ function setChatPeerHeader(displayName, lastActive, telegramId, photoFileId, pho
 
   const statusEl = $('chatPeerStatus');
   if (statusEl) {
-    if (isUserOnline(lastActive)) {
-      statusEl.textContent = 'Online';
-      statusEl.classList.remove('offline');
-      statusEl.style.display = 'block';
-    } else {
-      // No confident "last seen X ago" without a reliable timestamp source,
-      // so we just hide the line rather than show a stale/guessed status.
-      statusEl.style.display = 'none';
-    }
+    // Stash the real last-active value so the typing indicator (which
+    // temporarily overwrites this element) can restore the correct
+    // Online/hidden state once the person stops typing.
+    window.chatPeerLastActive = lastActive;
+    renderPeerStatus();
+  }
+}
+
+// Renders the peer's real presence (Online, or hidden if not recently
+// active) into the status line under their name. Also used to restore
+// that line after a "Typing…" state clears.
+function renderPeerStatus() {
+  const statusEl = $('chatPeerStatus');
+  if (!statusEl) return;
+  statusEl.classList.remove('typing');
+  if (isUserOnline(window.chatPeerLastActive)) {
+    statusEl.textContent = 'Online';
+    statusEl.classList.remove('offline');
+    statusEl.style.display = 'block';
+  } else {
+    // No confident "last seen X ago" without a reliable timestamp source,
+    // so we just hide the line rather than show a stale/guessed status.
+    statusEl.style.display = 'none';
   }
 }
 
@@ -1126,11 +1140,15 @@ function connectSocket() {
 
   socket.on('typing', ({ from_id }) => {
     if (window.chatState?.with && String(window.chatState.with) === String(from_id)) {
-      const partnerName = window.chatState.name || 'Partner';
-      const indicatorText = t('typing_indicator', { name: partnerName });
-      $('typingIndicator').innerHTML = `${escapeHtml(indicatorText)} <span class="typing-dots"><span></span><span></span><span></span></span>`;
+      const statusEl = $('chatPeerStatus');
+      if (statusEl) {
+        statusEl.innerHTML = `Typing <span class="typing-dots"><span></span><span></span><span></span></span>`;
+        statusEl.classList.add('typing');
+        statusEl.classList.remove('offline');
+        statusEl.style.display = 'block';
+      }
       clearTimeout(window.typingTimeout);
-      window.typingTimeout = setTimeout(() => { $('typingIndicator').innerHTML = ''; }, 3000);
+      window.typingTimeout = setTimeout(renderPeerStatus, 3000);
     }
   });
 

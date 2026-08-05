@@ -325,6 +325,12 @@ h3 {
   color: var(--text3);
 }
 
+.chat-header .peer-status.typing {
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+}
+
 /* ─── Chat header: icon button + overflow menu ─────────────── */
 .chat-header .icon-btn {
   width: 34px;
@@ -1784,16 +1790,7 @@ textarea.form-control {
   }
 }
 
-/* ── Typing indicator ───────────────────────────────────────── */
-.typing-indicator {
-  font-size: 0.75rem;
-  color: var(--text3);
-  padding: 2px 14px 4px;
-  flex-shrink: 0;
-  min-height: 20px;
-  letter-spacing: 0.01em;
-}
-
+/* ── Typing indicator (rendered inline in .peer-status, see above) ───── */
 .typing-dots {
   display: inline-flex;
   align-items: center;
