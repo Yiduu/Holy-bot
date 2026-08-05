@@ -142,7 +142,12 @@ img {
 /* Consistent, gold-tinted focus ring for keyboard users */
 .btn:focus-visible, .mood-btn:focus-visible, .toggle:focus-visible,
 .nav-item:focus-visible, .theme-toggle:focus-visible, .icon-btn:focus-visible,
-.segmented button:focus-visible, .card:focus-visible, .fab:focus-visible {
+.segmented button:focus-visible, .card:focus-visible, .fab:focus-visible,
+.mentor-card:focus-visible, .session-item:focus-visible, .journal-item:focus-visible,
+.stat-card:focus-visible, .streak-card:focus-visible, .calendar-day:focus-visible,
+.topic-chip:focus-visible, .ticket-card-premium:focus-visible, .theme-btn:focus-visible,
+.chat-send-btn:focus-visible, .emoji-btn:focus-visible, .avatar-camera-btn:focus-visible,
+.form-control:focus-visible, .form-control-ob:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
@@ -384,19 +389,19 @@ h3 {
   background: var(--bg2);
   border: 1px solid var(--border-dim);
   border-radius: var(--radius-sm);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow), var(--inset-hi);
   padding: 6px;
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-6px);
-  transition: .16s ease;
+  transform: translateY(-6px) scale(0.97);
+  transition: 0.22s var(--ease-premium);
   z-index: 200;
 }
 
 .chat-header .overflow-menu.open {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0);
+  transform: none;
 }
 
 .chat-header .menu-item {
@@ -617,8 +622,15 @@ h3 {
   background: var(--surface);
   border: 1px solid var(--border-dim);
   border-radius: var(--radius-sm);
+  box-shadow: var(--inset-hi);
   padding: 12px;
   text-align: center;
+  transition: transform 0.25s var(--ease-premium), border-color 0.25s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border);
 }
 
 .stat-num {
@@ -1010,15 +1022,22 @@ textarea.form-control {
   background: var(--surface);
   border: 1px solid var(--border-dim);
   border-radius: var(--radius);
+  box-shadow: var(--inset-hi);
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: border-color var(--transition);
+  transition: transform 0.3s var(--ease-premium), box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
 .mentor-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-gold), var(--inset-hi);
   border-color: var(--border);
+}
+
+.mentor-card:active {
+  transform: translateY(-1px) scale(0.99);
 }
 
 .mentor-header {
@@ -1038,6 +1057,7 @@ textarea.form-control {
   border-radius: 50%;
   background: linear-gradient(135deg, var(--gold-dim), var(--bg3));
   border: 1.5px solid var(--border);
+  box-shadow: var(--inset-hi);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1387,7 +1407,7 @@ textarea.form-control {
   background: var(--bg2);
   border: 1px solid var(--border-dim);
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), var(--inset-hi);
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -1396,7 +1416,7 @@ textarea.form-control {
   opacity: 0;
   transform: scale(0.9) translateY(4px);
   pointer-events: none;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.2s var(--ease-premium), transform 0.2s var(--ease-premium);
   transform-origin: bottom right;
 }
 
@@ -2255,12 +2275,13 @@ textarea.form-control {
   border-radius: var(--radius) var(--radius) 0 0;
   border: 1px solid var(--border-dim);
   border-bottom: none;
+  box-shadow: var(--shadow-lg), var(--inset-hi);
   padding: 20px;
   width: 100%;
   max-height: 85vh;
   overflow-y: auto;
   transform: translateY(100%);
-  transition: transform 0.3s ease;
+  transition: transform 0.35s var(--ease-premium);
 }
 
 .modal-overlay.open .modal-sheet {
@@ -2287,11 +2308,18 @@ textarea.form-control {
   background: var(--bg2);
   border-radius: var(--radius);
   border: 1px solid var(--border-dim);
+  box-shadow: var(--shadow-lg), var(--inset-hi);
   padding: 20px;
   width: calc(100% - 32px);
   max-width: 400px;
   max-height: 85vh;
   overflow-y: auto;
+  animation: fadeScaleIn 0.3s var(--ease-premium) both;
+}
+
+@keyframes fadeScaleIn {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to { opacity: 1; transform: none; }
 }
 
 /* ─── Onboarding ─────────────────────────────────────────────── */
@@ -2391,6 +2419,7 @@ textarea.form-control {
   background: var(--surface);
   border-radius: var(--radius);
   border: 1px solid var(--border-dim);
+  box-shadow: var(--inset-hi);
 }
 
 /* ─── Session list item ──────────────────────────────────────── */
@@ -2403,7 +2432,14 @@ textarea.form-control {
   border-radius: var(--radius-sm);
   background: var(--surface);
   border: 1px solid var(--border-dim);
+  box-shadow: var(--inset-hi);
   margin-bottom: 8px;
+  transition: transform 0.25s var(--ease-premium), border-color 0.25s ease;
+}
+
+.session-item:hover {
+  transform: translateY(-2px);
+  border-color: var(--border);
 }
 
 .session-icon {
@@ -2452,7 +2488,12 @@ textarea.form-control {
   background: linear-gradient(135deg, rgba(255, 165, 0, 0.1) 0%, rgba(255, 69, 0, 0.05) 100%);
   border: 1px solid rgba(255, 165, 0, 0.2);
   cursor: pointer;
-  transition: transform 0.2s ease;
+  transition: transform 0.25s var(--ease-premium), box-shadow 0.25s ease;
+}
+
+.streak-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
 }
 
 .streak-card:active {
@@ -2559,12 +2600,14 @@ textarea.form-control {
   border-radius: var(--radius-sm);
   border-left: 3px solid var(--gold);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.25s var(--ease-premium), transform 0.25s var(--ease-premium), box-shadow 0.25s ease;
   margin-bottom: 8px;
 }
 
 .journal-item:hover {
   background: var(--bg3);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
 }
 
 .journal-date {
@@ -2608,7 +2651,7 @@ textarea.form-control {
   border-radius: 8px;
   background: var(--surface);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.25s var(--ease-premium), color 0.25s ease, transform 0.25s var(--ease-premium);
 }
 
 .calendar-day.has-entry {
@@ -2625,6 +2668,7 @@ textarea.form-control {
 .calendar-day:not(.empty):hover {
   background: var(--gold);
   color: #1a1200;
+  transform: translateY(-1px);
 }
 
 
