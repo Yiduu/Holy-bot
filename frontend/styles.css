@@ -36,7 +36,7 @@
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
   --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 -8px 28px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
   --shadow-gold: 0 0 20px rgba(201, 168, 76, 0.15);
 
   --nav-h: 68px;
@@ -44,6 +44,12 @@
   --font-body: 'Lato', sans-serif;
 
   --transition: 0.2s ease;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Derived elevation + glass tokens — same palette, more depth */
+  --inset-hi: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --inset-hi-gold: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 [data-theme="light"] {
@@ -62,7 +68,9 @@
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   --shadow-sm: 0 2px 8px rgba(30, 25, 15, 0.08);
   --shadow-md: 0 6px 20px rgba(30, 25, 15, 0.10);
-  --shadow-lg: 0 -8px 28px rgba(30, 25, 15, 0.12);
+  --shadow-lg: 0 24px 60px rgba(30, 25, 15, 0.14), 0 2px 6px rgba(30, 25, 15, 0.08);
+  --inset-hi: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --inset-hi-gold: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 /* ─── Reset ────────────────────────────────────────────────── */
@@ -78,6 +86,8 @@ html {
   font-size: 18px;
   height: 100%;
   -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body {
@@ -88,6 +98,7 @@ body {
   overflow: hidden;
   transition: background var(--transition), color var(--transition);
   font-weight: 400;
+  line-height: 1.45;
   text-shadow: 0 0 0.4px currentColor, 0 0 0.4px currentColor;
 }
 
@@ -115,8 +126,8 @@ img {
 
 /* ─── Scrollbar ─────────────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -124,8 +135,16 @@ img {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--gold-dim);
+  background: var(--border);
   border-radius: 99px;
+}
+
+/* Consistent, gold-tinted focus ring for keyboard users */
+.btn:focus-visible, .mood-btn:focus-visible, .toggle:focus-visible,
+.nav-item:focus-visible, .theme-toggle:focus-visible, .icon-btn:focus-visible,
+.segmented button:focus-visible, .card:focus-visible, .fab:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
 }
 
 /* ─── Typography ────────────────────────────────────────────── */
@@ -134,7 +153,7 @@ h2,
 h3,
 h4 {
   font-family: var(--font-display);
-  letter-spacing: 0.03em;
+  letter-spacing: 0.015em;
 }
 
 h1 {
@@ -193,14 +212,14 @@ h3 {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: var(--bg);
+  background: linear-gradient(180deg, var(--bg2), transparent);
   border-bottom: 1px solid var(--border-dim);
-  padding: 5px 16px;
-  height: 52px;
+  padding: 10px 16px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(6px);
   flex-shrink: 0;
 }
 
@@ -515,14 +534,19 @@ h3 {
   background: var(--surface);
   border: 1px solid var(--border-dim);
   border-radius: var(--radius);
+  box-shadow: var(--inset-hi);
   padding: 16px;
-  box-shadow: var(--shadow-sm);
-  transition: border-color var(--transition), box-shadow var(--transition);
+  transition: transform 0.3s var(--ease-premium), box-shadow 0.3s ease, border-color 0.3s ease, opacity .25s ease;
 }
 
 .card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-gold), var(--inset-hi);
   border-color: var(--border);
-  box-shadow: var(--shadow-md);
+}
+
+.card:active {
+  transform: translateY(-1px) scale(0.99);
 }
 
 .card.gold-border {
@@ -562,20 +586,23 @@ h3 {
 }
 
 .verse-text {
+  position: relative;
   font-style: italic;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   line-height: 1.6;
   color: var(--text);
+  padding-left: 2px;
   margin-bottom: 8px;
-  position: relative;
   z-index: 1;
 }
 
 .verse-ref {
   font-family: var(--font-display);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
   color: var(--gold);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  margin-top: 9px;
 }
 
 /* ─── Stats Grid ────────────────────────────────────────────── */
@@ -613,29 +640,34 @@ h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 11px 20px;
+  gap: 7px;
+  padding: 12px 17px;
   border-radius: var(--radius-sm);
-  font-size: 0.875rem;
+  font-size: 0.83rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  transition: all var(--transition);
+  letter-spacing: 0.01em;
+  transition: transform 0.15s var(--ease-spring), box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
   white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn:active {
+  transform: scale(0.94);
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, var(--gold) 0%, #A87C2A 100%);
-  color: #1A1200;
-  box-shadow: 0 4px 16px rgba(201, 168, 76, 0.3);
+  background: linear-gradient(135deg, var(--gold-light), var(--gold) 65%, #A87C2A);
+  color: #20180a;
+  box-shadow: var(--shadow-sm), var(--inset-hi-gold);
 }
 
 .btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(201, 168, 76, 0.4);
+  box-shadow: var(--shadow-gold), var(--inset-hi-gold);
 }
 
 .btn-primary:active {
-  transform: none;
+  transform: scale(0.94);
 }
 
 .btn-outline {
@@ -646,6 +678,7 @@ h3 {
 
 .btn-outline:hover {
   background: var(--gold-dim);
+  border-color: var(--gold);
 }
 
 .btn-ghost {
@@ -655,6 +688,7 @@ h3 {
 
 .btn-ghost:hover {
   background: var(--surface);
+  color: var(--text);
 }
 
 .btn-danger {
@@ -763,18 +797,20 @@ textarea.form-control {
 
 .toggle {
   width: 44px;
-  height: 24px;
-  border-radius: 12px;
+  height: 25px;
+  border-radius: 13px;
   background: var(--bg3);
   border: 1px solid var(--border-dim);
   position: relative;
   cursor: pointer;
-  transition: background var(--transition);
+  transition: background var(--transition), box-shadow var(--transition);
+  flex-shrink: 0;
 }
 
 .toggle.on {
   background: var(--gold);
   border-color: var(--gold);
+  box-shadow: 0 0 10px rgba(201,168,76,.25);
 }
 
 .toggle::after {
