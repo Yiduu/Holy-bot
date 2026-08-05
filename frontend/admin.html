@@ -1840,6 +1840,14 @@
                     </svg>
                     Conversations
                 </div>
+                <div class="nav-item" onclick="showTab('live-sessions')" id="nav-live-sessions">
+                    <svg viewBox="0 0 24 24">
+                        <polygon points="23 7 16 12 23 17 23 7" />
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                    </svg>
+                    Live Sessions
+                    <span id="liveSessionsBadge" class="nav-badge" style="display:none;background:var(--success)">0</span>
+                </div>
                 <div class="nav-item" onclick="showTab('mentorship')" id="nav-mentorship">
                     <svg viewBox="0 0 24 24">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -2138,6 +2146,20 @@
                         </table>
                     </div>
                     <div class="pagination" id="conversationsPager"></div>
+                </div>
+
+                <!-- ── Live Sessions ─────────────────────────────────── -->
+                <div class="pane" id="pane-live-sessions">
+                    <div class="toolbar">
+                        <div style="font-size:12px;color:var(--text2)">
+                            Currently active video sessions. Updates in real time — audio/video itself runs
+                            peer-to-peer and isn't visible here, only who's in a call and for how long.
+                        </div>
+                        <button class="btn btn-ghost" onclick="loadLiveSessions()">Refresh</button>
+                    </div>
+                    <div id="liveSessionsContainer" class="mentorship-grid">
+                        <div class="loading">Loading…</div>
+                    </div>
                 </div>
 
                 <!-- ── Mentorship ────────────────────────────────────── -->
@@ -2564,7 +2586,7 @@
 
         /* ── Tab nav ────────────────────────────────────────────────── */
         const TITLES = {
-            overview: 'Overview', users: 'Users', conversations: 'Conversations', mentorship: 'Mentorship', applications: 'Mentor Applications',
+            overview: 'Overview', users: 'Users', conversations: 'Conversations', 'live-sessions': 'Live Sessions', mentorship: 'Mentorship', applications: 'Mentor Applications',
             messages: 'Message Moderation', tickets: 'Support Requests', topics: 'Counseling Topics',
             'mentorship-requests': 'Request Log',
             broadcast: 'Broadcast', audit: 'Audit Log'
@@ -2578,7 +2600,7 @@
             document.getElementById('topbarTitle').textContent = TITLES[tab] || tab;
             activeTab = tab; closeSidebar();
             const loaders = {
-                overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), mentorship: () => loadMentorship(1), applications: () => loadApps(1),
+                overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), 'live-sessions': loadLiveSessions, mentorship: () => loadMentorship(1), applications: () => loadApps(1),
                 messages: () => loadMessages(1), tickets: loadTickets, topics: loadTopics,
                 'mentorship-requests': () => loadMentorshipRequests(1),
                 broadcast: () => { }, audit: () => loadAudit(1)
@@ -2613,6 +2635,12 @@
                 });
 
                 wsConn.on('broadcast', () => toast('Broadcast delivered', 'success'));
+
+                wsConn.on('admin:session_activity', (d) => {
+                    if (d.type === 'created') toast(`📹 ${d.host} started "${d.title}"`, 'info');
+                    refreshLiveSessionsBadge();
+                    if (activeTab === 'live-sessions') loadLiveSessions();
+                });
             } catch { setWSStatus(false); }
         }
         function setWSStatus(on) {
@@ -3569,6 +3597,112 @@
             loadChatMessages(false);
         }
 
+        /* ── Live Sessions ──────────────────────────────────────────── */
+        let liveSessionsTicker = null;
+
+        function fmtDuration(sec) {
+            sec = Math.max(0, sec | 0);
+            const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+            return h > 0
+                ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+                : `${m}:${String(s).padStart(2, '0')}`;
+        }
+
+        async function refreshLiveSessionsBadge() {
+            try {
+                const d = await api('/api/admin/sessions/live');
+                const badge = document.getElementById('liveSessionsBadge');
+                if (d.count > 0) {
+                    badge.textContent = d.count;
+                    badge.style.display = 'inline-block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            } catch { /* non-fatal */ }
+        }
+
+        async function loadLiveSessions() {
+            const container = document.getElementById('liveSessionsContainer');
+            if (!liveSessionsTicker) {
+                // Tick durations forward every second while the tab is visible,
+                // and do a full reload every 10s to pick up joins/leaves.
+                let tickCount = 0;
+                liveSessionsTicker = setInterval(() => {
+                    tickCount++;
+                    if (activeTab !== 'live-sessions') return;
+                    if (tickCount % 10 === 0) { loadLiveSessions(); return; }
+                    document.querySelectorAll('[data-duration-start]').forEach(el => {
+                        const start = parseInt(el.dataset.durationStart, 10);
+                        el.textContent = fmtDuration(Math.floor(Date.now() / 1000) - start);
+                    });
+                }, 1000);
+            }
+
+            try {
+                const d = await api('/api/admin/sessions/live');
+                refreshLiveSessionsBadge();
+
+                if (!d.sessions?.length) {
+                    container.innerHTML = `<div class="empty">No live sessions right now</div>`;
+                    return;
+                }
+
+                container.innerHTML = d.sessions.map(s => {
+                    const startedTs = s.started_at ? Math.floor(new Date(s.started_at).getTime() / 1000) : Math.floor(Date.now() / 1000);
+                    const participantsHtml = s.participants.map(p => `
+                        <div class="mentee-row">
+                            <div class="mentee-row-header">
+                                <span class="mentee-name" style="font-family:var(--font-mono);font-size:11.5px;color:var(--accent);">
+                                    ${esc(p.anonymous_id)}${p.is_host ? ' <span class="chip chip-gold" style="font-size:9px;padding:1px 5px;">Host</span>' : ''}
+                                </span>
+                            </div>
+                            <div class="mentee-details">
+                                <div class="mentee-detail-item">
+                                    <span class="mentee-detail-label">Joined</span>
+                                    <span class="mentee-detail-value">${ago(p.joined_at)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+
+                    return `
+                        <div class="mentor-card">
+                            <div class="mentor-header">
+                                <div class="mentor-info">
+                                    <span class="mentor-name">${esc(s.title)}</span>
+                                </div>
+                                <span class="chip chip-green">● Live · <span data-duration-start="${startedTs}">${fmtDuration(Math.floor(Date.now() / 1000) - startedTs)}</span></span>
+                            </div>
+                            <div class="mentor-bio">
+                                ${s.is_group ? '👥 Group session' : '💬 1‑on‑1 session'} · Host: ${esc(s.host)} · ${s.participant_count} participant${s.participant_count === 1 ? '' : 's'}
+                            </div>
+                            <div class="mentees-section">
+                                <div class="mentees-list" style="display:flex;">
+                                    ${participantsHtml}
+                                </div>
+                                <button class="btn btn-ghost btn-sm" style="margin-top:8px;color:var(--danger)" onclick="endLiveSession('${s.id}')">
+                                    End Session
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${e.message}</div>`;
+            }
+        }
+
+        async function endLiveSession(id) {
+            if (!confirm('End this session now? Both participants will be disconnected immediately.')) return;
+            try {
+                await api(`/api/admin/sessions/${id}/end`, { method: 'PATCH' });
+                toast('Session ended', 'success');
+                loadLiveSessions();
+            } catch (e) {
+                toast(`Error: ${e.message}`, 'error');
+            }
+        }
+
         /* ── Mentorship ──────────────────────────────────────────────── */
         let mentorshipTimer = null;
         let mentorshipPage = 1;
@@ -3699,6 +3833,8 @@
         /* ── Init ───────────────────────────────────────────────────── */
         window.Telegram?.WebApp?.ready();
         loadStats();
+        refreshLiveSessionsBadge();
+        setInterval(refreshLiveSessionsBadge, 15000);
     </script>
 </body>
 

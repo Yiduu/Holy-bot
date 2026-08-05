@@ -56,6 +56,16 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
 
     if (error) return res.status(500).json({ error: error.message });
 
+    // Let the admin dashboard's Live Sessions view know a session now exists
+    io.emit('admin:session_activity', {
+      type: 'created',
+      session_id: session.id,
+      host: hostUser.anonymous_id,
+      title: session.title,
+      is_group: !!is_group,
+      at: new Date().toISOString(),
+    });
+
     // Add host as participant
     await supabase.from('session_participants').insert({ session_id: session.id, telegram_id: host_id });
 
@@ -205,6 +215,16 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     }
 
     const { data: user } = await supabase.from('users').select('anonymous_id').eq('telegram_id', telegram_id).single();
+
+    // Let the admin dashboard's Live Sessions view update in real time
+    io.emit('admin:session_activity', {
+      type: 'participant_joined',
+      session_id: session.id,
+      telegram_id,
+      anonymous_id: user?.anonymous_id || 'Unknown',
+      at: new Date().toISOString(),
+    });
+
     const isModerator = session.host_id === telegram_id;
     let jitsiToken = null;
     if (JITSI_DOMAIN !== 'meet.jit.si') {
@@ -244,6 +264,8 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
         }
       }
     }
+
+    io.emit('admin:session_activity', { type: 'ended', session_id: req.params.id, at: new Date().toISOString() });
 
     res.json({ success: true });
   });

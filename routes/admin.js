@@ -767,6 +767,90 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     res.json({ success: true });
   });
 
+  // ==================== LIVE SESSIONS ====================
+  // Currently-active video sessions with their live participant lists.
+  // Note: only metadata is available here (who's in the room, since when) —
+  // the actual audio/video runs peer-to-peer over Jitsi and never touches
+  // this server, so it can't be "watched" from this endpoint.
+  router.get('/sessions/live', async (req, res) => {
+    try {
+      const { data: sessions, error } = await supabase
+        .from('video_sessions')
+        .select(`
+          id, room_name, title, is_group, status, scheduled_at, started_at,
+          host:host_id(telegram_id, anonymous_id),
+          session_participants(telegram_id, joined_at, left_at, user:telegram_id(anonymous_id))
+        `)
+        .eq('status', 'active')
+        .order('started_at', { ascending: false });
+
+      if (error) return res.status(500).json({ error: error.message });
+
+      const formatted = (sessions || []).map(s => {
+        const participants = (s.session_participants || [])
+          .filter(p => p.joined_at && !p.left_at)
+          .map(p => ({
+            telegram_id: p.telegram_id,
+            anonymous_id: p.user?.anonymous_id || 'Unknown',
+            joined_at: p.joined_at,
+            is_host: s.host?.telegram_id === p.telegram_id,
+          }));
+
+        return {
+          id: s.id,
+          title: s.title,
+          is_group: s.is_group,
+          host: s.host?.anonymous_id || 'Unknown',
+          host_id: s.host?.telegram_id || null,
+          started_at: s.started_at,
+          duration_seconds: s.started_at ? Math.max(0, Math.floor((Date.now() - new Date(s.started_at).getTime()) / 1000)) : 0,
+          participant_count: participants.length,
+          participants,
+        };
+      });
+
+      res.json({ sessions: formatted, count: formatted.length });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Full detail for one session, including anyone who has since left
+  // (join/leave timestamps) — useful for reviewing a session after the fact.
+  router.get('/sessions/:id', async (req, res) => {
+    const { data: session, error } = await supabase
+      .from('video_sessions')
+      .select(`
+        *,
+        host:host_id(telegram_id, anonymous_id),
+        session_participants(telegram_id, joined_at, left_at, user:telegram_id(anonymous_id))
+      `)
+      .eq('id', req.params.id)
+      .single();
+
+    if (error) return res.status(404).json({ error: 'Session not found' });
+    res.json(session);
+  });
+
+  // Admin can force-end a live session (e.g. reported misconduct).
+  // This is a visible action — every participant's client gets a
+  // 'session_ended' event and their call is disconnected immediately.
+  router.patch('/sessions/:id/end', async (req, res) => {
+    const admin_id = req.telegramUser.id;
+    const { data: session } = await supabase.from('video_sessions').select('id, status').eq('id', req.params.id).single();
+    if (!session) return res.status(404).json({ error: 'Session not found' });
+    if (session.status !== 'active') return res.status(400).json({ error: 'Session is not active' });
+
+    await supabase.from('video_sessions').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', req.params.id);
+    await supabase.from('session_participants').update({ left_at: new Date().toISOString() }).eq('session_id', req.params.id).is('left_at', null);
+
+    io.emit('session_ended', { session_id: req.params.id, ended_by: 'admin' });
+    io.emit('admin:session_activity', { type: 'ended_by_admin', session_id: req.params.id, at: new Date().toISOString() });
+
+    await logAudit(admin_id, 'admin_end_session', req.params.id, 'video_session');
+    res.json({ success: true });
+  });
+
   // ==================== MENTORSHIP REQUEST LOG ====================
   router.get('/mentorship-requests', async (req, res) => {
     try {
