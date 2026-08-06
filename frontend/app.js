@@ -1279,11 +1279,23 @@ function toggleChatInput(visible) {
 }
 
 // ─── Onboarding ───────────────────────────────────────────────
+const ONBOARDING_TOTAL_STEPS = 7;
 let onboardingStep = 0;
+
+const ICON_CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+const ICON_WARN_SVG = '<svg class="err-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
 
 async function showOnboarding() {
   $('loadingScreen')?.classList.add('hidden');
   $('onboarding').style.display = 'flex';
+
+  // Reset selection state in case onboarding is re-entered
+  $('regSex').value = '';
+  $('regAge').value = '';
+  $('regEdu').value = '';
+  $('regNickname').value = '';
+  onNicknameInput();
+  $$('.sex-option-btn, .segmented-option').forEach(btn => btn.classList.remove('active'));
 
   // Load topics for onboarding
   try {
@@ -1297,8 +1309,8 @@ async function showOnboarding() {
     const chipsContainer = $('regTopicsChips');
     if (chipsContainer) {
       chipsContainer.innerHTML = topics.map(t => `
-        <div class="topic-chip" id="onb-topic-${t.id}" onclick="toggleOnboardingTopicChip(${t.id})">
-          <span class="chip-icon">+</span>
+        <div class="topic-chip-card" id="onb-topic-${t.id}" onclick="toggleOnboardingTopicChip(${t.id})">
+          <span class="chip-check-icon">${ICON_CHECK_SVG}</span>
           <span class="chip-name">${escapeHtml(t.name)}</span>
         </div>
       `).join('');
@@ -1321,109 +1333,157 @@ function toggleOnboardingTopicChip(id) {
   option.selected = !option.selected;
 
   const chip = $(`onb-topic-${id}`);
-  if (chip) {
-    chip.classList.toggle('active', option.selected);
-    const icon = chip.querySelector('.chip-icon');
-    if (icon) {
-      icon.textContent = option.selected ? '✓' : '+';
-    }
-  }
+  if (chip) chip.classList.toggle('active', option.selected);
 }
 
 function showStep(step) {
   haptic('light');
   onboardingStep = step;
 
-  // Update step dots if any
-  $$('.step-dot').forEach((d, i) => {
-    d.classList.toggle('active', i === step);
-    d.classList.toggle('done', i < step);
-  });
-
-  // Update stepper connectors
   const fill = $('ob-step-line-fill');
   if (fill) {
-    fill.style.width = (step / 2 * 100) + '%';
+    fill.style.width = (step / (ONBOARDING_TOTAL_STEPS - 1) * 100) + '%';
   }
 
-  // Update stepper active states
-  $$('.stepper-step').forEach((d, i) => {
+  $$('.stepper-dot').forEach((d, i) => {
     d.classList.toggle('active', i === step);
     d.classList.toggle('done', i < step);
   });
+
+  const count = $('obStepCount');
+  if (count) count.textContent = `${step + 1}/${ONBOARDING_TOTAL_STEPS}`;
+
+  const backBtn = $('obBackBtn');
+  if (backBtn) backBtn.classList.toggle('hidden', step === 0);
 
   $$('.onboarding-step').forEach((s, i) => s.classList.toggle('hidden', i !== step));
   clearAllFieldErrors();
 }
 
+function prevStep() {
+  if (onboardingStep > 0) showStep(onboardingStep - 1);
+}
+
+// Dots only allow jumping backward to a step already completed — forward
+// progress always goes through the Continue buttons so each step is validated.
 function goToStepIfValid(step) {
-  if (step === 0) {
-    showStep(0);
-  } else if (step === 1) {
-    showStep(1);
-  } else if (step === 2) {
-    validateStep1AndGo(2);
+  if (step <= onboardingStep) {
+    showStep(step);
   }
 }
 
-function showInlineError(fieldId, message) {
-  const field = $(fieldId);
-  if (!field) return;
+function showInlineError(targetId, message) {
+  const el = $(targetId);
+  if (!el) return;
 
-  field.classList.add('is-invalid');
-  const parent = field.closest('.form-group-ob') || field.parentNode;
+  const isGroup = el.id && el.id.startsWith('group-');
+  if (!isGroup) el.classList.add('is-invalid');
+
+  const parent = isGroup ? el : (el.closest('.form-group-ob') || el.parentNode);
+  parent.classList.add('is-invalid-group');
+
   let errorDiv = parent.querySelector('.inline-error');
   if (!errorDiv) {
     errorDiv = document.createElement('div');
     errorDiv.className = 'inline-error';
     parent.appendChild(errorDiv);
   }
-  errorDiv.innerHTML = `⚠️ ${escapeHtml(message)}`;
+  errorDiv.innerHTML = `${ICON_WARN_SVG}<span>${escapeHtml(message)}</span>`;
 }
 
-function clearFieldError(fieldId) {
-  const field = $(fieldId);
-  if (!field) return;
-  field.classList.remove('is-invalid');
-  const parent = field.closest('.form-group-ob') || field.parentNode;
+function clearFieldError(targetId) {
+  const el = $(targetId);
+  if (!el) return;
+  el.classList.remove('is-invalid');
+
+  const isGroup = el.id && el.id.startsWith('group-');
+  const parent = isGroup ? el : (el.closest('.form-group-ob') || el.parentNode);
+  parent.classList.remove('is-invalid-group');
+
   const errorDiv = parent.querySelector('.inline-error');
-  if (errorDiv) {
-    errorDiv.remove();
-  }
+  if (errorDiv) errorDiv.remove();
 }
 
 function clearAllFieldErrors() {
   $$('.inline-error').forEach(el => el.remove());
   $$('.form-control-ob').forEach(el => el.classList.remove('is-invalid'));
+  $$('.is-invalid-group').forEach(el => el.classList.remove('is-invalid-group'));
 }
 
-function validateStep1AndGo(nextStep) {
-  const sex = $('regSex').value;
-  const age_range = $('regAge').value;
-  const education_level = $('regEdu').value;
+function selectSex(value) {
+  haptic('light');
+  $('regSex').value = value;
+  clearFieldError('group-regSex');
+  $$('#group-regSex .sex-option-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === value);
+  });
+}
 
+function selectAge(value) {
+  haptic('light');
+  $('regAge').value = value;
+  clearFieldError('group-regAge');
+  $$('#group-regAge .segmented-option').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === value);
+  });
+}
+
+function selectEdu(value) {
+  haptic('light');
+  $('regEdu').value = value;
+  clearFieldError('group-regEdu');
+  $$('#group-regEdu .segmented-option').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === value);
+  });
+}
+
+function onNicknameInput() {
+  clearFieldError('regNickname');
+  const val = $('regNickname')?.value || '';
+  const counter = $('nicknameCounter');
+  if (counter) counter.textContent = `${val.length}/20`;
+}
+
+// Generic per-step validator: validates the field(s) owned by `step`,
+// then advances to `step + 1`. Steps with nothing required (e.g. Topics)
+// simply pass through.
+function validateAndGoNext(step) {
   clearAllFieldErrors();
+  let ok = true;
 
-  let hasError = false;
-  if (!sex) {
-    showInlineError('regSex', 'Please select your sex');
-    hasError = true;
-  }
-  if (!age_range) {
-    showInlineError('regAge', 'Please select your age range');
-    hasError = true;
-  }
-  if (!education_level) {
-    showInlineError('regEdu', 'Please select your education level');
-    hasError = true;
+  if (step === 1) {
+    if (!$('regSex').value) {
+      showInlineError('group-regSex', 'Please select your sex');
+      ok = false;
+    }
+  } else if (step === 2) {
+    if (!$('regAge').value) {
+      showInlineError('group-regAge', 'Please select your age range');
+      ok = false;
+    }
+  } else if (step === 3) {
+    if (!$('regEdu').value) {
+      showInlineError('group-regEdu', 'Please select your education level');
+      ok = false;
+    }
+  } else if (step === 4) {
+    const nickname = $('regNickname').value.trim();
+    const nickRegex = /^[a-zA-Z0-9_]{3,20}$/;
+    if (!nickname) {
+      showInlineError('regNickname', 'Please choose a nickname');
+      ok = false;
+    } else if (!nickRegex.test(nickname)) {
+      showInlineError('regNickname', '3-20 characters: letters, numbers, and underscores only');
+      ok = false;
+    }
   }
 
-  if (hasError) {
+  if (!ok) {
     haptic('error');
     return;
   }
 
-  showStep(nextStep);
+  showStep(step + 1);
 }
 
 async function completeRegistration() {
@@ -1431,48 +1491,35 @@ async function completeRegistration() {
   const age_range = $('regAge').value;
   const education_level = $('regEdu').value;
   const nickname = $('regNickname').value.trim();
+  const nickRegex = /^[a-zA-Z0-9_]{3,20}$/;
 
   clearAllFieldErrors();
 
   let hasError = false;
-  if (!sex) {
-    showInlineError('regSex', 'Sex selection is required');
-    hasError = true;
-  }
-  if (!age_range) {
-    showInlineError('regAge', 'Age range is required');
-    hasError = true;
-  }
-  if (!education_level) {
-    showInlineError('regEdu', 'Education level is required');
-    hasError = true;
-  }
-
-  if (!nickname) {
-    showInlineError('regNickname', 'Anonymous nickname is required');
-    hasError = true;
-  } else {
-    const nickRegex = /^[a-zA-Z0-9_]{3,20}$/;
-    if (!nickRegex.test(nickname)) {
-      showInlineError('regNickname', '3-20 characters: letters, numbers, and underscores only');
-      hasError = true;
-    }
-  }
+  let firstErrorStep = null;
+  if (!sex) { hasError = true; firstErrorStep = firstErrorStep ?? 1; }
+  if (!age_range) { hasError = true; firstErrorStep = firstErrorStep ?? 2; }
+  if (!education_level) { hasError = true; firstErrorStep = firstErrorStep ?? 3; }
+  if (!nickname || !nickRegex.test(nickname)) { hasError = true; firstErrorStep = firstErrorStep ?? 4; }
 
   if (hasError) {
     haptic('error');
-    if (!sex || !age_range || !education_level) {
-      showStep(1);
-      if (!sex) showInlineError('regSex', 'Sex selection is required');
-      if (!age_range) showInlineError('regAge', 'Age range is required');
-      if (!education_level) showInlineError('regEdu', 'Education level is required');
+    showStep(firstErrorStep);
+    if (!sex) showInlineError('group-regSex', 'Sex selection is required');
+    if (!age_range) showInlineError('group-regAge', 'Age range is required');
+    if (!education_level) showInlineError('group-regEdu', 'Education level is required');
+    if (!nickname) {
+      showInlineError('regNickname', 'Anonymous nickname is required');
+    } else if (!nickRegex.test(nickname)) {
+      showInlineError('regNickname', '3-20 characters: letters, numbers, and underscores only');
     }
     showToast('Please correct the errors below', 'error');
     return;
   }
 
   const regBtn = $('regBtn');
-  regBtn.disabled = true; regBtn.textContent = 'Registering...';
+  regBtn.disabled = true;
+  regBtn.innerHTML = '<span>Joining…</span>';
 
   try {
     const data = await apiFetch('/api/auth/register', {
@@ -1490,15 +1537,20 @@ async function completeRegistration() {
     currentUser = data.user;
     $('onboarding').style.display = 'none';
     startApp();
-    showToast('Welcome! You are now registered 🙏', 'success');
+    showToast('Welcome! You are now registered', 'success');
   } catch (e) {
     haptic('error');
     if (e.message.toLowerCase().includes('taken')) {
+      showStep(4);
       showInlineError('regNickname', 'This nickname is already taken. Please try another.');
     } else {
       showToast(e.message, 'error');
     }
-    regBtn.disabled = false; regBtn.textContent = 'Join the Community 🙏';
+  } finally {
+    if (regBtn) {
+      regBtn.disabled = false;
+      regBtn.innerHTML = '<span>Agree &amp; Join</span><span class="btn-arrow">→</span>';
+    }
   }
 }
 

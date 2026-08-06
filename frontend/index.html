@@ -39,105 +39,294 @@
     <div class="ob-bg-orb ob-orb2"></div>
 
     <div class="onboarding-container">
-      <!-- ── Logo / Header ── -->
-      <div class="onboarding-header">
-        <div class="onboarding-logo-ring">
-          <img src="Holy%20logo1.png" alt="Holy Helper Logo" class="onboarding-logo-img" />
-        </div>
-        <h1 class="onboarding-title">Holy Helper</h1>
-        <p class="onboarding-sub">A safe space to forget the past and run for the future</p>
-      </div>
+      <!-- ── Top bar: Back + Stepper + Count ── -->
+      <div class="onboarding-topbar">
+        <button id="obBackBtn" class="ob-back-btn hidden" onclick="prevStep()" aria-label="Go back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
 
-      <!-- ── Stepper Indicator ── -->
-      <div class="onboarding-stepper">
-        <div class="stepper-track">
-          <div id="ob-step-line-fill" class="stepper-line-fill" style="width:0%"></div>
-        </div>
-        <div class="stepper-steps">
-          <div class="stepper-step active" id="ob-step-idx-0" onclick="goToStepIfValid(0)">
-            <span class="step-num">1</span>
-            <span class="step-label">Welcome</span>
+        <div class="onboarding-stepper" id="onboardingStepper">
+          <div class="stepper-track">
+            <div id="ob-step-line-fill" class="stepper-line-fill" style="width:0%"></div>
           </div>
-          <div class="stepper-step" id="ob-step-idx-1" onclick="goToStepIfValid(1)">
-            <span class="step-num">2</span>
-            <span class="step-label">About You</span>
-          </div>
-          <div class="stepper-step" id="ob-step-idx-2" onclick="goToStepIfValid(2)">
-            <span class="step-num">3</span>
-            <span class="step-label">Register</span>
+          <div class="stepper-dots" id="stepperDots">
+            <span class="stepper-dot active" onclick="goToStepIfValid(0)" aria-label="Step 1"></span>
+            <span class="stepper-dot" onclick="goToStepIfValid(1)" aria-label="Step 2"></span>
+            <span class="stepper-dot" onclick="goToStepIfValid(2)" aria-label="Step 3"></span>
+            <span class="stepper-dot" onclick="goToStepIfValid(3)" aria-label="Step 4"></span>
+            <span class="stepper-dot" onclick="goToStepIfValid(4)" aria-label="Step 5"></span>
+            <span class="stepper-dot" onclick="goToStepIfValid(5)" aria-label="Step 6"></span>
+            <span class="stepper-dot" onclick="goToStepIfValid(6)" aria-label="Step 7"></span>
           </div>
         </div>
+
+        <span class="ob-step-count" id="obStepCount">1/7</span>
       </div>
 
       <!-- ── Central Onboarding Card ── -->
-      <div class="onboarding-card">
+      <div class="onboarding-card" id="onboardingCard">
+
         <!-- Step 0: Welcome -->
         <div class="onboarding-step">
-          <div class="verse-panel">
-            <svg class="verse-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" />
-              <path d="M2 17l10 5 10-5" />
-              <path d="M2 12l10 5 10-5" />
-            </svg>
-            <blockquote id="verseTextOnboarding" class="verse-quote">"ብረት ብረትን ይስለዋል ሰውም ባልንጀራውን ይስላል"</blockquote>
-            <cite id="verseRefOnboarding" class="verse-author">ምሳሌ 27:17</cite>
+          <div class="ob-hero">
+            <div class="onboarding-logo-ring">
+              <img src="Holy%20logo1.png" alt="Holy Helper Logo" class="onboarding-logo-img" />
+            </div>
+            <span class="ob-hero-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M12 2.5l7.5 3.2v5.6c0 4.9-3.2 8.9-7.5 10.4-4.3-1.5-7.5-5.5-7.5-10.4V5.7L12 2.5z"></path>
+                <path d="M9 12.2l2.1 2.1 4-4.3"></path>
+              </svg>
+            </span>
           </div>
 
-          <p class="onboarding-intro-text">
-            This community is <strong>100% anonymous</strong>. No real names, emails, or phone numbers are collected.
-            You will receive a pseudonym only you will know.
-          </p>
+          <h1 class="onboarding-title ob-fade-up" style="--d:0">Holy Helper</h1>
+          <p class="onboarding-tagline ob-fade-up" style="--d:1">A safe space for your journey</p>
 
-          <div class="onboarding-features-list">
-            <div class="onboarding-feature-item">
-              <div class="feature-icon">
-                <svg class="ob-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-                </svg>
-              </div>
-              <div class="feature-details">
-                <h4 class="feature-title">Fully Anonymous</h4>
-                <p class="feature-description">Your true identity is always protected</p>
-              </div>
-            </div>
-            <div class="feature-divider"></div>
-            <div class="onboarding-feature-item">
-              <div class="feature-icon">
-                <svg class="ob-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 2v20M8 8h8"></path>
-                </svg>
-              </div>
-              <div class="feature-details">
-                <h4 class="feature-title">Christian Accountability</h4>
-                <p class="feature-description">A community built on faith & honesty</p>
-              </div>
-            </div>
-            <div class="feature-divider"></div>
-            <div class="onboarding-feature-item">
-              <div class="feature-icon">
-                <svg class="ob-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M23 7l-7 5 7 5V7z"></path>
-                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
-                </svg>
-              </div>
-              <div class="feature-details">
-                <h4 class="feature-title">Free Mentor Sessions</h4>
-                <p class="feature-description">Live video support, at no cost to you</p>
-              </div>
-            </div>
+          <div class="ob-values-row ob-fade-up" style="--d:2" aria-hidden="true">
+            <span class="ob-value-icon" title="Safe">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M12 2.5l7.5 3.2v5.6c0 4.9-3.2 8.9-7.5 10.4-4.3-1.5-7.5-5.5-7.5-10.4V5.7L12 2.5z"></path>
+              </svg>
+            </span>
+            <span class="ob-value-icon" title="Faith">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                stroke-linejoin="round">
+                <line x1="12" y1="2.5" x2="12" y2="21.5"></line>
+                <line x1="6" y1="8" x2="18" y2="8"></line>
+              </svg>
+            </span>
+            <span class="ob-value-icon" title="Care">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path
+                  d="M20.8 8.6c0 4.6-8.8 10-8.8 10s-8.8-5.4-8.8-10a4.9 4.9 0 0 1 8.8-3 4.9 4.9 0 0 1 8.8 3z"></path>
+              </svg>
+            </span>
           </div>
 
-          <button class="btn btn-primary btn-full ob-btn-next" onclick="showStep(1)">
+          <button class="btn btn-primary btn-full ob-btn-next ob-fade-up" style="--d:3" onclick="showStep(1)">
             <span>Begin My Journey</span>
             <span class="btn-arrow">→</span>
           </button>
         </div>
 
-        <!-- Step 1: Basic info -->
+        <!-- Step 1: Sex -->
+        <div class="onboarding-step hidden">
+          <div class="step-intro-header">
+            <div class="step-intro-icon">
+              <svg class="ob-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 16v-4"></path>
+                <path d="M12 8h.01"></path>
+              </svg>
+            </div>
+            <div>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0">What's your sex?</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1">Helps us match you with the right mentor</p>
+            </div>
+          </div>
+
+          <div class="sex-select-grid" id="group-regSex">
+            <button type="button" class="sex-option-btn ob-fade-up" style="--d:2" data-value="M"
+              onclick="selectSex('M')">
+              <span class="sex-icon-wrap">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <circle cx="10" cy="14" r="6"></circle>
+                  <line x1="14.5" y1="9.5" x2="20" y2="4"></line>
+                  <polyline points="15 4 20 4 20 9"></polyline>
+                </svg>
+              </span>
+              <span class="sex-label">Male</span>
+            </button>
+            <button type="button" class="sex-option-btn ob-fade-up" style="--d:3" data-value="F"
+              onclick="selectSex('F')">
+              <span class="sex-icon-wrap">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <circle cx="12" cy="9" r="6"></circle>
+                  <line x1="12" y1="15" x2="12" y2="22"></line>
+                  <line x1="8.5" y1="18.5" x2="15.5" y2="18.5"></line>
+                </svg>
+              </span>
+              <span class="sex-label">Female</span>
+            </button>
+          </div>
+          <input type="hidden" id="regSex" value="" />
+
+          <div class="button-group-ob">
+            <button class="btn-ob-ghost" onclick="prevStep()">← Back</button>
+            <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(1)">
+              <span>Continue</span>
+              <span class="btn-arrow">→</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2: Age Range -->
+        <div class="onboarding-step hidden">
+          <div class="step-intro-header">
+            <div class="step-intro-icon">
+              <svg class="ob-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="5" width="18" height="16" rx="2"></rect>
+                <line x1="16" y1="3" x2="16" y2="7"></line>
+                <line x1="8" y1="3" x2="8" y2="7"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+            </div>
+            <div>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0">What's your age range?</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1">Just a range — nothing exact needed</p>
+            </div>
+          </div>
+
+          <div class="segmented-list" id="group-regAge">
+            <button type="button" class="segmented-option ob-fade-up" style="--d:2" data-value="13-17"
+              onclick="selectAge('13-17')">
+              <span class="segmented-label">13 – 17</span>
+              <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg></span>
+            </button>
+            <button type="button" class="segmented-option ob-fade-up" style="--d:2" data-value="18-24"
+              onclick="selectAge('18-24')">
+              <span class="segmented-label">18 – 24</span>
+              <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg></span>
+            </button>
+            <button type="button" class="segmented-option ob-fade-up" style="--d:3" data-value="25-34"
+              onclick="selectAge('25-34')">
+              <span class="segmented-label">25 – 34</span>
+              <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg></span>
+            </button>
+            <button type="button" class="segmented-option ob-fade-up" style="--d:3" data-value="35-44"
+              onclick="selectAge('35-44')">
+              <span class="segmented-label">35 – 44</span>
+              <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg></span>
+            </button>
+            <button type="button" class="segmented-option ob-fade-up" style="--d:4" data-value="45-54"
+              onclick="selectAge('45-54')">
+              <span class="segmented-label">45 – 54</span>
+              <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg></span>
+            </button>
+            <button type="button" class="segmented-option ob-fade-up" style="--d:4" data-value="55+"
+              onclick="selectAge('55+')">
+              <span class="segmented-label">55+</span>
+              <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg></span>
+            </button>
+          </div>
+          <input type="hidden" id="regAge" value="" />
+
+          <div class="button-group-ob">
+            <button class="btn-ob-ghost" onclick="prevStep()">← Back</button>
+            <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(2)">
+              <span>Continue</span>
+              <span class="btn-arrow">→</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 3: Education Level -->
+        <div class="onboarding-step hidden">
+          <div class="step-intro-header">
+            <div class="step-intro-icon">
+              <svg class="ob-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 10L12 5 2 10l10 5 10-5z"></path>
+                <path d="M6 12v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"></path>
+              </svg>
+            </div>
+            <div>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0">What's your education level?</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1">Helps us tailor how we support you</p>
+            </div>
+          </div>
+
+          <div class="segmented-list" id="group-regEdu">
+            <button type="button" class="segmented-option ob-fade-up" style="--d:2" data-value="none"
+              onclick="selectEdu('none')">
+              <span class="segmented-label">None</span>
+              <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg></span>
+            </button>
+            <button type="button" class="segmented-option ob-fade-up" style="--d:2" data-value="primary"
+              onclick="selectEdu('primary')">
+              <span class="segmented-label">Primary</span>
+              <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg></span>
+            </button>
+            <button type="button" class="segmented-option ob-fade-up" style="--d:3" data-value="secondary"
+              onclick="selectEdu('secondary')">
+              <span class="segmented-label">Secondary / High School</span>
+              <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg></span>
+            </button>
+            <button type="button" class="segmented-option ob-fade-up" style="--d:3" data-value="undergraduate"
+              onclick="selectEdu('undergraduate')">
+              <span class="segmented-label">Undergraduate</span>
+              <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg></span>
+            </button>
+            <button type="button" class="segmented-option ob-fade-up" style="--d:4" data-value="graduate"
+              onclick="selectEdu('graduate')">
+              <span class="segmented-label">Graduate</span>
+              <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg></span>
+            </button>
+            <button type="button" class="segmented-option ob-fade-up" style="--d:4" data-value="postgraduate"
+              onclick="selectEdu('postgraduate')">
+              <span class="segmented-label">Postgraduate</span>
+              <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg></span>
+            </button>
+          </div>
+          <input type="hidden" id="regEdu" value="" />
+
+          <div class="button-group-ob">
+            <button class="btn-ob-ghost" onclick="prevStep()">← Back</button>
+            <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(3)">
+              <span>Continue</span>
+              <span class="btn-arrow">→</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 4: Nickname -->
         <div class="onboarding-step hidden">
           <div class="step-intro-header">
             <div class="step-intro-icon">
@@ -148,160 +337,94 @@
               </svg>
             </div>
             <div>
-              <h3 class="step-intro-title">Tell Us About You</h3>
-              <p class="step-intro-desc">Help us match you with the right mentor (anonymous info only)</p>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0">Choose your nickname</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1">A name only you will know — kept anonymous</p>
             </div>
           </div>
 
-          <div class="form-group-ob" id="group-regSex">
-            <label class="form-label-ob">Sex</label>
-            <div class="select-wrapper-ob">
-              <select id="regSex" class="form-control-ob" onchange="clearFieldError('regSex')">
-                <option value="">Select your sex…</option>
-                <option value="M">Male</option>
-                <option value="F">Female</option>
-              </select>
-              <span class="select-arrow-ob"></span>
-            </div>
-          </div>
-
-          <div class="form-group-ob" id="group-regAge">
-            <label class="form-label-ob">Age Range</label>
-            <div class="select-wrapper-ob">
-              <select id="regAge" class="form-control-ob" onchange="clearFieldError('regAge')">
-                <option value="">Select your age range…</option>
-                <option value="13-17">13–17</option>
-                <option value="18-24">18–24</option>
-                <option value="25-34">25–34</option>
-                <option value="35-44">35–44</option>
-                <option value="45-54">45–54</option>
-                <option value="55+">55+</option>
-              </select>
-              <span class="select-arrow-ob"></span>
-            </div>
-          </div>
-
-          <div class="form-group-ob" id="group-regEdu">
-            <label class="form-label-ob">Education Level</label>
-            <div class="select-wrapper-ob">
-              <select id="regEdu" class="form-control-ob" onchange="clearFieldError('regEdu')">
-                <option value="">Select education level…</option>
-                <option value="none">None</option>
-                <option value="primary">Primary</option>
-                <option value="secondary">Secondary / High School</option>
-                <option value="undergraduate">Undergraduate</option>
-                <option value="graduate">Graduate</option>
-                <option value="postgraduate">Postgraduate</option>
-              </select>
-              <span class="select-arrow-ob"></span>
-            </div>
-          </div>
-
-          <div class="form-group-ob" id="group-regTopics">
-            <label class="form-label-ob">Topics you need support with</label>
-            <p class="form-helper-ob">Select all that apply to help match you with specialized mentors</p>
-            <select id="regTopicsSelect" class="form-control" multiple style="display:none"></select>
-            <div id="regTopicsChips" class="topics-chips-list">
-              <!-- Dynamic chips will be populated here -->
+          <div class="form-group-ob ob-fade-up" style="--d:2" id="group-regNickname">
+            <label class="form-label-ob">Nickname</label>
+            <input id="regNickname" class="form-control-ob" placeholder="e.g. HopeSeeker" maxlength="20"
+              oninput="onNicknameInput()" autocomplete="off" />
+            <div class="nickname-meta-row">
+              <p class="form-helper-ob">Letters, numbers, and underscores only</p>
+              <span class="char-counter" id="nicknameCounter">0/20</span>
             </div>
           </div>
 
           <div class="button-group-ob">
-            <button class="btn-ob-ghost" onclick="showStep(0)">← Back</button>
-            <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateStep1AndGo(2)">
+            <button class="btn-ob-ghost" onclick="prevStep()">← Back</button>
+            <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(4)">
               <span>Continue</span>
               <span class="btn-arrow">→</span>
             </button>
           </div>
         </div>
 
-        <!-- Step 2: Confirm & Register -->
+        <!-- Step 5: Topics -->
         <div class="onboarding-step hidden">
           <div class="step-intro-header">
             <div class="step-intro-icon">
-              <svg class="ob-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              <svg class="ob-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
                 stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                <path
+                  d="M20.59 13.41L11 3.83A2 2 0 0 0 9.59 3.17L4 3a1 1 0 0 0-1 1l.17 5.59a2 2 0 0 0 .66 1.41l9.58 9.59a2 2 0 0 0 2.83 0l4.35-4.35a2 2 0 0 0 0-2.83z">
+                </path>
+                <circle cx="7.5" cy="7.5" r="1.5"></circle>
               </svg>
             </div>
             <div>
-              <h3 class="step-intro-title">Your Pseudonym</h3>
-              <p class="step-intro-desc">Choose a nickname to represent you anonymously and commit to the covenant</p>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0">What brings you here?</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1">Select all topics you'd like support with</p>
             </div>
           </div>
 
-          <div class="form-group-ob" id="group-regNickname">
-            <label class="form-label-ob">Anonymous Nickname</label>
-            <input id="regNickname" class="form-control-ob" placeholder="e.g. HopeSeeker_22" maxlength="20"
-              oninput="clearFieldError('regNickname')" />
-            <p class="form-helper-ob">3–20 characters. Letters, numbers, and underscores only</p>
-          </div>
-
-          <div class="covenant-card-ob">
-            <div class="covenant-header">
-              <span class="covenant-icon">
-                <svg class="ob-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                  stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                  <line x1="16" y1="13" x2="8" y2="13"></line>
-                  <line x1="16" y1="17" x2="8" y2="17"></line>
-                  <polyline points="10 9 9 9 8 9"></polyline>
-                </svg>
-              </span>
-              <span class="covenant-title">Community Commitment</span>
-            </div>
-            <ul class="covenant-list-ob">
-              <li>
-                <span class="covenant-check">
-                  <svg class="ob-check-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                </span>
-                <span class="covenant-text">I commit to honesty and active pursuit of my recovery journey</span>
-              </li>
-              <li>
-                <span class="covenant-check">
-                  <svg class="ob-check-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                </span>
-                <span class="covenant-text">I will treat fellow members and mentors with respect and respect
-                  anonymity</span>
-              </li>
-              <li>
-                <span class="covenant-check">
-                  <svg class="ob-check-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                </span>
-                <span class="covenant-text">I understand this is a support community, not a replacement for medical
-                  help</span>
-              </li>
-              <li>
-                <span class="covenant-check">
-                  <svg class="ob-check-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                </span>
-                <span class="covenant-text">I agree to absolute confidentiality and will not share inappropriate
-                  content</span>
-              </li>
-            </ul>
+          <select id="regTopicsSelect" class="form-control" multiple style="display:none"></select>
+          <div id="regTopicsChips" class="topics-chips-grid ob-fade-up" style="--d:2">
+            <!-- Dynamic chips will be populated here -->
           </div>
 
           <div class="button-group-ob">
-            <button class="btn-ob-ghost" onclick="showStep(1)">← Back</button>
-            <button id="regBtn" class="btn btn-primary flex-1 ob-btn-next" onclick="completeRegistration()">
-              <span>Join the Community</span>
-              <span class="btn-pray">🙏</span>
+            <button class="btn-ob-ghost" onclick="prevStep()">← Back</button>
+            <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(5)">
+              <span>Continue</span>
+              <span class="btn-arrow">→</span>
             </button>
           </div>
         </div>
+
+        <!-- Step 6: Agree & Join -->
+        <div class="onboarding-step hidden">
+          <div class="step-intro-header">
+            <div class="step-intro-icon">
+              <svg class="ob-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="2.5" x2="12" y2="21.5"></line>
+                <line x1="6" y1="8" x2="18" y2="8"></line>
+              </svg>
+            </div>
+            <div>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0">You're all set</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1">Review and join the community</p>
+            </div>
+          </div>
+
+          <div class="agree-summary-card ob-fade-up" style="--d:2">
+            <p class="agree-summary-text">
+              By joining, you agree to treat others with respect, keep this space confidential, and pursue your
+              journey with honesty. Your identity stays anonymous.
+            </p>
+          </div>
+
+          <div class="button-group-ob">
+            <button class="btn-ob-ghost" onclick="prevStep()">← Back</button>
+            <button id="regBtn" class="btn btn-primary flex-1 ob-btn-next" onclick="completeRegistration()">
+              <span>Agree &amp; Join</span>
+              <span class="btn-arrow">→</span>
+            </button>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>

@@ -4339,3 +4339,559 @@ textarea.form-control {
     animation: none !important;
   }
 }
+
+/* ============================================================
+   Onboarding Redesign — Step-by-step flow (v2)
+   Additive/override layer for the new 7-step onboarding.
+   Reuses existing tokens (--gold, --bg*, --text*, --font-*).
+   ============================================================ */
+
+/* ── Staggered fade-up for step titles/descriptions ── */
+@keyframes obFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ob-fade-up {
+  animation: obFadeUp 0.5s var(--ease-premium) both;
+  animation-delay: calc(var(--d, 0) * 0.08s);
+}
+
+/* ── Smooth slide/fade transition between steps (overrides old fade-only) ── */
+.onboarding-step {
+  animation: obStepSlideIn 0.4s var(--ease-premium) both;
+}
+
+@keyframes obStepSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ── Organic "How We Feel" style blob motion for onboarding orbs ── */
+.ob-orb1 {
+  animation: obOrbMorph1 18s ease-in-out infinite;
+}
+
+.ob-orb2 {
+  animation: obOrbMorph2 22s ease-in-out infinite;
+}
+
+@keyframes obOrbMorph1 {
+
+  0%,
+  100% {
+    border-radius: 50%;
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    border-radius: 60% 40% 55% 45% / 45% 55% 40% 60%;
+    transform: translate(24px, -18px) scale(1.06);
+  }
+
+  66% {
+    border-radius: 45% 55% 40% 60% / 60% 40% 55% 45%;
+    transform: translate(-16px, 12px) scale(0.96);
+  }
+}
+
+@keyframes obOrbMorph2 {
+
+  0%,
+  100% {
+    border-radius: 50%;
+    transform: translate(0, 0) scale(1);
+  }
+
+  50% {
+    border-radius: 42% 58% 63% 37% / 48% 44% 56% 52%;
+    transform: translate(-26px, -14px) scale(1.08);
+  }
+}
+
+/* ── Top bar: Back button + Stepper + Step count ── */
+.onboarding-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+  position: relative;
+  z-index: 1;
+}
+
+.ob-back-btn {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-dim);
+  background: var(--surface);
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.ob-back-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.ob-back-btn:hover {
+  color: var(--gold);
+  border-color: rgba(201, 168, 76, 0.4);
+}
+
+.ob-back-btn.hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.onboarding-stepper {
+  flex: 1;
+  position: relative;
+  margin-bottom: 0;
+  padding: 0;
+}
+
+.onboarding-stepper .stepper-track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  transform: translateY(-50%);
+  background: var(--border-dim);
+  border-radius: 2px;
+}
+
+.onboarding-stepper .stepper-line-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--gold-light));
+  border-radius: 2px;
+  transition: width 0.4s var(--ease-premium);
+}
+
+.stepper-dots {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.stepper-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bg2);
+  border: 2px solid var(--border-dim);
+  cursor: pointer;
+  transition: all 0.3s var(--ease-premium);
+  padding: 0;
+}
+
+.stepper-dot.active {
+  background: var(--gold);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-dim);
+  transform: scale(1.3);
+}
+
+.stepper-dot.done {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.ob-step-count {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text3);
+  letter-spacing: 0.04em;
+  min-width: 28px;
+  text-align: right;
+}
+
+/* ── Welcome hero (Step 0) ── */
+.ob-hero {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.ob-hero-badge {
+  position: absolute;
+  bottom: -4px;
+  right: calc(50% - 58px);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--bg2);
+  border: 2px solid var(--bg);
+  box-shadow: var(--shadow-gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+}
+
+.ob-hero-badge svg {
+  width: 18px;
+  height: 18px;
+}
+
+.onboarding-tagline {
+  text-align: center;
+  color: var(--text2);
+  font-size: 0.95rem;
+  margin-bottom: 24px;
+  line-height: 1.4;
+}
+
+.ob-values-row {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 40px;
+}
+
+.ob-value-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  transition: all var(--transition);
+}
+
+.ob-value-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.ob-value-icon:hover {
+  transform: translateY(-2px);
+  border-color: var(--gold);
+  background: var(--gold-dim);
+}
+
+/* ── Step header layout ── */
+.step-intro-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.step-intro-icon {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--gold-dim), var(--surface));
+  border: 1px solid rgba(201, 168, 76, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  margin-bottom: 0;
+}
+
+.ob-icon-lg {
+  width: 24px;
+  height: 24px;
+}
+
+.step-intro-title {
+  font-size: 1.25rem;
+  margin: 0 0 4px;
+}
+
+.step-intro-desc {
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* ── 2-column sex grid ── */
+.sex-select-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.sex-option-btn {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-premium);
+  color: var(--text);
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sex-icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--bg2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  transition: all 0.2s;
+}
+
+.sex-icon-wrap svg {
+  width: 24px;
+  height: 24px;
+}
+
+.sex-option-btn:hover {
+  border-color: rgba(201, 168, 76, 0.4);
+  background: var(--bg2);
+}
+
+.sex-option-btn.active {
+  border-color: var(--gold);
+  background: rgba(201, 168, 76, 0.05);
+}
+
+.sex-option-btn.active .sex-icon-wrap {
+  background: var(--gold);
+  color: #fff;
+  transform: scale(1.05);
+}
+
+/* ── Segmented list for Age & Edu ── */
+.segmented-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 32px;
+}
+
+.segmented-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text);
+  font-weight: 500;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.segmented-option:hover {
+  border-color: rgba(201, 168, 76, 0.4);
+  transform: translateX(4px);
+}
+
+.segmented-option.active {
+  border-color: var(--gold);
+  background: rgba(201, 168, 76, 0.05);
+}
+
+.segmented-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition: all 0.2s;
+}
+
+.segmented-check svg {
+  width: 12px;
+  height: 12px;
+}
+
+.segmented-option.active .segmented-check {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #fff;
+}
+
+/* ── Topics chips grid (v2) ── */
+.topics-chips-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 32px;
+}
+
+.topic-chip-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-premium);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chip-check-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition: all 0.2s;
+}
+
+.chip-check-icon svg {
+  width: 10px;
+  height: 10px;
+}
+
+.topic-chip-card:hover {
+  border-color: rgba(201, 168, 76, 0.4);
+  background: var(--bg2);
+  transform: translateY(-2px);
+}
+
+.topic-chip-card.active {
+  border-color: var(--gold);
+  background: rgba(201, 168, 76, 0.1);
+  color: var(--gold);
+}
+
+.topic-chip-card.active .chip-check-icon {
+  background: var(--gold);
+  color: #fff;
+}
+
+/* ── Form styling overrides for Nickname step ── */
+.nickname-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 8px;
+}
+
+/* ── Agree step summary card ── */
+.agree-summary-card {
+  background: linear-gradient(145deg, var(--surface), var(--bg2));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 32px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.agree-summary-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--gold), transparent);
+}
+
+.agree-summary-text {
+  font-size: 0.95rem;
+  color: var(--text2);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Button Group Bottom ── */
+.button-group-ob {
+  display: flex;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.btn-ob-ghost {
+  padding: 14px 20px;
+  background: transparent;
+  border: 1px solid var(--border-dim);
+  border-radius: 12px;
+  color: var(--text2);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.btn-ob-ghost:hover {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* ── Inline error styling overrides for groups ── */
+.is-invalid-group {
+  animation: shake 0.4s;
+}
+
+.is-invalid-group .sex-option-btn,
+.is-invalid-group .segmented-option {
+  border-color: var(--danger);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.inline-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger);
+  font-size: 0.8rem;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 8px;
+  animation: obFadeUp 0.3s;
+}
+
+.err-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
