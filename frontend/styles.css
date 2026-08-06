@@ -3913,3 +3913,429 @@ textarea.form-control {
   cursor: not-allowed;
   box-shadow: none;
 }
+/* ============================================================
+   Organic UI Enhancements — Blobs, Stagger, Mood Picker, Ripple
+   Additive layer only: no existing rule above is modified,
+   removed, or overridden with !important (except elastic-press,
+   a new opt-in helper class).
+   ============================================================ */
+
+/* ─── Background blobs (soft drift + parallax) ─────────────── */
+.bg-blobs {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.bg-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.16;
+  will-change: transform;
+  transform: translate3d(var(--blob-x, 0px), var(--blob-y, 0px), 0);
+  transition: transform 0.6s var(--ease-premium);
+}
+
+[data-theme="light"] .bg-blob {
+  opacity: 0.11;
+}
+
+.bg-blob-1 {
+  width: 340px;
+  height: 340px;
+  top: -80px;
+  left: -60px;
+  background: radial-gradient(circle, var(--gold-light), var(--gold) 70%, transparent 100%);
+  animation: blobDrift1 22s ease-in-out infinite;
+}
+
+.bg-blob-2 {
+  width: 420px;
+  height: 420px;
+  bottom: -140px;
+  right: -100px;
+  background: radial-gradient(circle, var(--accent), transparent 70%);
+  animation: blobDrift2 26s ease-in-out infinite;
+}
+
+.bg-blob-3 {
+  width: 260px;
+  height: 260px;
+  top: 42%;
+  left: 58%;
+  background: radial-gradient(circle, var(--gold), transparent 70%);
+  animation: blobDrift3 30s ease-in-out infinite;
+}
+
+@keyframes blobDrift1 {
+
+  0%,
+  100% {
+    translate: 0 0;
+    scale: 1;
+  }
+
+  50% {
+    translate: 30px 40px;
+    scale: 1.08;
+  }
+}
+
+@keyframes blobDrift2 {
+
+  0%,
+  100% {
+    translate: 0 0;
+    scale: 1;
+  }
+
+  50% {
+    translate: -40px -30px;
+    scale: 1.1;
+  }
+}
+
+@keyframes blobDrift3 {
+
+  0%,
+  100% {
+    translate: 0 0;
+    scale: 1;
+  }
+
+  50% {
+    translate: 20px -35px;
+    scale: 0.94;
+  }
+}
+
+/* Keep the app shell above the blob layer */
+#app {
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Page crossfade + subtle scale ─────────────────────────
+   Same .page rule as before, but the fadeIn keyframe now also
+   scales in — a drop-in upgrade, no selectors changed. */
+.page {
+  animation: pageEnter 0.4s var(--ease-premium);
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ─── Staggered text/element reveal ─────────────────────────
+   Opt-in: add class="stagger-fade" to a container; its direct
+   children fade up one after another. */
+.stagger-fade>* {
+  opacity: 0;
+  animation: staggerUp 0.5s var(--ease-premium) forwards;
+}
+
+.stagger-fade>*:nth-child(1) {
+  animation-delay: 0.03s;
+}
+
+.stagger-fade>*:nth-child(2) {
+  animation-delay: 0.09s;
+}
+
+.stagger-fade>*:nth-child(3) {
+  animation-delay: 0.15s;
+}
+
+.stagger-fade>*:nth-child(4) {
+  animation-delay: 0.21s;
+}
+
+.stagger-fade>*:nth-child(5) {
+  animation-delay: 0.27s;
+}
+
+.stagger-fade>*:nth-child(n+6) {
+  animation-delay: 0.33s;
+}
+
+@keyframes staggerUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ─── Elastic press helper (opt-in, on top of existing :active) */
+.elastic-press:active {
+  transform: scale(0.93) !important;
+}
+
+/* ─── Ripple (touch/click feedback for cards & buttons) ─────
+   .ripple-container is added automatically by app.js to any
+   .btn / .card / .journal-item / .mentor-card the user presses. */
+.ripple-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple-effect {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  transform: scale(0);
+  animation: rippleAnim 0.55s ease-out;
+  pointer-events: none;
+}
+
+[data-theme="light"] .ripple-effect {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+@keyframes rippleAnim {
+  to {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+/* ─── Mood picker (journal) ─────────────────────────────────
+   Visual companion to the existing #journalMood <select>,
+   which stays in the DOM (hidden) so saveJournalEntry() /
+   updateJournalEntry() keep reading its value unchanged. */
+.mood-picker {
+  display: flex;
+  gap: 10px;
+  margin: 6px 0 4px;
+}
+
+.mood-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-dim);
+  background: var(--surface);
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: transform 0.2s var(--ease-spring), border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.mood-option .mood-label {
+  font-family: var(--font-body);
+  font-size: 0.68rem;
+  color: var(--text2);
+}
+
+.mood-option:active {
+  transform: scale(0.9);
+}
+
+.mood-option.selected {
+  border-color: var(--gold);
+  background: var(--gold-dim);
+  transform: scale(1.06);
+  box-shadow: var(--shadow-gold);
+}
+
+.mood-option.selected .mood-label {
+  color: var(--gold);
+  font-weight: 700;
+}
+
+/* Respect users who've asked for less motion */
+@media (prefers-reduced-motion: reduce) {
+
+  .bg-blob,
+  .page,
+  .stagger-fade>*,
+  .ripple-effect,
+  .mood-option {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ============================================================
+   Premium icon pass — theme toggle, streak flame, mood faces,
+   journal view toggle, and a verse/streak card repolish.
+   Additive: existing .verse-card / .streak-card / .streak-icon /
+   .mood-option rules above are kept as-is; these rules extend
+   them for the new inner elements only.
+   ============================================================ */
+
+.theme-icon-svg { display: flex; align-items: center; justify-content: center; }
+.theme-icon-svg svg { display: block; }
+
+/* ─── Verse card repolish ────────────────────────────────── */
+.verse-card {
+  padding: 22px 20px 20px;
+}
+
+.verse-card::before {
+  font-size: 5.4rem;
+  top: -18px;
+  left: 12px;
+  opacity: 0.6;
+}
+
+.verse-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.verse-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--gold-dim);
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: var(--inset-hi-gold);
+}
+
+.verse-eyebrow {
+  font-family: var(--font-display);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+}
+
+.verse-text {
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
+.verse-divider {
+  height: 1px;
+  width: 36px;
+  margin: 12px 0 8px;
+  background: linear-gradient(90deg, var(--gold), transparent);
+  position: relative;
+  z-index: 1;
+}
+
+.verse-ref {
+  margin-top: 0;
+}
+
+/* ─── Streak card: flame icon + number glow ─────────────────── */
+.streak-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.streak-flame {
+  transform-origin: 50% 85%;
+  animation: flameFlicker 2.6s ease-in-out infinite;
+}
+
+@keyframes flameFlicker {
+
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+
+  25% {
+    transform: scale(1.05) rotate(-1.5deg);
+  }
+
+  50% {
+    transform: scale(0.97) rotate(1deg);
+  }
+
+  75% {
+    transform: scale(1.03) rotate(-0.5deg);
+  }
+}
+
+.streak-hero-main {
+  position: relative;
+}
+
+.streak-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 120px;
+  height: 120px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(201, 168, 76, 0.28), transparent 70%);
+  filter: blur(6px);
+  animation: glowPulse 3.4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes glowPulse {
+
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+}
+
+.streak-hero-number,
+.streak-hero-unit {
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Mood faces (journal picker + journal list) ────────────── */
+.mood-option .mood-svg {
+  color: var(--text2);
+  transition: color 0.2s ease, transform 0.2s var(--ease-spring);
+}
+
+.mood-option.selected .mood-svg {
+  color: var(--gold);
+  transform: scale(1.08);
+}
+
+.journal-mood .mood-svg {
+  color: var(--gold);
+}
+
+/* ─── Reduced motion: calm the new icon animations too ──────── */
+@media (prefers-reduced-motion: reduce) {
+
+  .streak-flame,
+  .streak-glow {
+    animation: none !important;
+  }
+}

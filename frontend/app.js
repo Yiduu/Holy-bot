@@ -847,11 +847,13 @@ function showToast(msg, type = 'info') {
 }
 
 // ─── Theme ────────────────────────────────────────────────────
+const THEME_ICON_SUN = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>';
+const THEME_ICON_MOON = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.4A8.4 8.4 0 1 1 9.6 3.5a6.8 6.8 0 0 0 10.9 10.9z"/></svg>';
 function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('theme', theme);
-  const icon = theme === 'light' ? '🌙' : '☀️';
-  $$('.theme-btn span').forEach(s => s.textContent = icon);
+  const icon = theme === 'light' ? THEME_ICON_MOON : THEME_ICON_SUN;
+  $$('.theme-btn span').forEach(s => s.innerHTML = icon);
 }
 function toggleTheme() {
   haptic('light');
@@ -1258,7 +1260,7 @@ function navigate(page) {
     case 'journal':
       journalView = 'list';
       loadJournalEntries();
-      $('journalViewToggle').innerHTML = '📅 ' + t('Calendar');
+      $('journalViewToggle').innerHTML = ICON_CALENDAR + ' ' + t('Calendar');
       break;
   }
   updateSessionsBadge();
@@ -3920,12 +3922,13 @@ async function loadJournalEntries() {
   } catch (e) { container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`; }
 }
 
+const MOOD_SVG = {
+  happy: '<svg class="mood-svg" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="0.9" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="0.9" fill="currentColor" stroke="none"/><path d="M8 14c1 1.4 2.4 2.1 4 2.1s3-.7 4-2.1" stroke-linejoin="round"/></svg>',
+  neutral: '<svg class="mood-svg" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="0.9" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="0.9" fill="currentColor" stroke="none"/><path d="M8.3 15h7.4" stroke-linejoin="round"/></svg>',
+  sad: '<svg class="mood-svg" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="0.9" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="0.9" fill="currentColor" stroke="none"/><path d="M8 16.1c1-1.4 2.4-2.1 4-2.1s3 .7 4 2.1" stroke-linejoin="round"/></svg>',
+};
 function getMoodIcon(mood) {
-  switch (mood) {
-    case 'happy': return '😊';
-    case 'sad': return '😢';
-    default: return '😐';
-  }
+  return MOOD_SVG[mood] || MOOD_SVG.neutral;
 }
 window.currentJournalEntryId = null;
 
@@ -4026,15 +4029,17 @@ function formatJournalText(action) {
 }
 let journalView = 'list'; // 'list' or 'calendar'
 
+const ICON_CALENDAR = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
+const ICON_LIST = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>';
 function toggleJournalView() {
   if (journalView === 'list') {
     journalView = 'calendar';
     showJournalCalendar();
-    $('journalViewToggle').innerHTML = '📋 ' + t('List');
+    $('journalViewToggle').innerHTML = ICON_LIST + ' ' + t('List');
   } else {
     journalView = 'list';
     loadJournalEntries();
-    $('journalViewToggle').innerHTML = '📅 ' + t('Calendar');
+    $('journalViewToggle').innerHTML = ICON_CALENDAR + ' ' + t('Calendar');
   }
 }
 
@@ -4104,3 +4109,197 @@ async function showJournalCalendar() {
 // ─── Boot ─────────────────────────────────────────────────────
 window.loadDashboard = loadDashboard;
 document.addEventListener('DOMContentLoaded', init);
+/* ============================================================
+   Organic UI Enhancements — additive, non-destructive
+   Wraps loadJournalEntries()/loadMentors() (calls the originals
+   unchanged, then layers classes onto the rendered DOM) instead
+   of editing their bodies, and drives everything else through
+   new listeners/observers. Nothing here removes or renames an
+   existing global.
+   ============================================================ */
+(function () {
+  // ── Background blobs: injected only if the static markup is
+  //    missing (e.g. older cached index.html) ──
+  function ensureBlobs() {
+    if (document.querySelector('.bg-blobs')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'bg-blobs';
+    wrap.setAttribute('aria-hidden', 'true');
+    wrap.innerHTML =
+      '<div class="bg-blob bg-blob-1"></div>' +
+      '<div class="bg-blob bg-blob-2"></div>' +
+      '<div class="bg-blob bg-blob-3"></div>';
+    document.body.insertBefore(wrap, document.body.firstChild);
+  }
+
+  // ── Subtle parallax for the blobs (pointer + scroll) ──
+  function initParallax() {
+    let ticking = false;
+
+    function apply(nx, ny) {
+      document.querySelectorAll('.bg-blob').forEach((el, i) => {
+        const depth = (i + 1) * 6; // px of travel per layer
+        el.style.setProperty('--blob-x', (nx * depth).toFixed(1) + 'px');
+        el.style.setProperty('--blob-y', (ny * depth).toFixed(1) + 'px');
+      });
+    }
+
+    window.addEventListener('pointermove', (e) => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        apply(e.clientX / window.innerWidth - 0.5, e.clientY / window.innerHeight - 0.5);
+        ticking = false;
+      });
+    }, { passive: true });
+
+    // Any scrollable .page-content drives a gentle vertical drift too
+    document.addEventListener('scroll', (e) => {
+      const el = e.target;
+      if (!el || !el.classList || !el.classList.contains('page-content')) return;
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const ny = Math.max(-0.5, Math.min(0.5, el.scrollTop / 1200 - 0.5));
+        apply(0, ny * 0.6);
+        ticking = false;
+      });
+    }, true);
+  }
+
+  // ── Ripple effect on presses (event delegation, no markup needed) ──
+  function initRipple() {
+    document.addEventListener('pointerdown', (e) => {
+      const el = e.target.closest('.btn, .card, .journal-item, .mentor-card');
+      if (!el) return;
+      el.classList.add('ripple-container');
+
+      const rect = el.getBoundingClientRect();
+      const size = Math.max(rect.width, rect.height);
+      const ripple = document.createElement('span');
+      ripple.className = 'ripple-effect';
+      ripple.style.width = ripple.style.height = size + 'px';
+      ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+      ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+      el.appendChild(ripple);
+      setTimeout(() => ripple.remove(), 600);
+    }, { passive: true });
+  }
+
+  // ── Staggered fade: restart the CSS animation whenever a
+  //    .stagger-fade group becomes visible (page switch, or a
+  //    fresh render of dynamic content) ──
+  function retriggerStagger(root) {
+    (root.matches?.('.stagger-fade') ? [root] : root.querySelectorAll('.stagger-fade'))
+      .forEach((group) => {
+        Array.from(group.children).forEach((child) => {
+          child.style.animation = 'none';
+          void child.offsetWidth; // force reflow to restart
+          child.style.animation = '';
+        });
+      });
+  }
+
+  function initPageObserver() {
+    const app = document.getElementById('app');
+    if (!app) return;
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((m) => {
+        if (m.type === 'attributes' && m.attributeName === 'class') {
+          const el = m.target;
+          if (el.classList.contains('page') && el.classList.contains('active')) {
+            retriggerStagger(el);
+          }
+        }
+      });
+    });
+    app.querySelectorAll('.page').forEach((p) =>
+      observer.observe(p, { attributes: true, attributeFilter: ['class'] })
+    );
+  }
+
+  // ── Layer stagger-fade onto dynamically rendered lists, without
+  //    touching the functions that render them ──
+  function wrap(fnName, after) {
+    const original = window[fnName];
+    if (typeof original !== 'function') return; // safe no-op if not loaded yet
+    window[fnName] = function (...args) {
+      const result = original.apply(this, args);
+      if (result && typeof result.then === 'function') {
+        return result.then((val) => { after(); return val; });
+      }
+      after();
+      return result;
+    };
+  }
+
+  function decorateJournalList() {
+    const list = document.getElementById('journalEntriesList');
+    if (list) {
+      list.classList.add('stagger-fade');
+      retriggerStagger(list);
+    }
+  }
+
+  function decorateMentorList() {
+    const list = document.getElementById('mentorsList');
+    if (list) {
+      list.classList.add('stagger-fade');
+      retriggerStagger(list);
+    }
+  }
+
+  // ── Mood picker: syncs the visual buttons with #journalMood ──
+  function wireMoodPicker() {
+    const select = document.getElementById('journalMood');
+    const picker = document.getElementById('moodPicker');
+    if (!select || !picker) return;
+
+    picker.addEventListener('click', (e) => {
+      const btn = e.target.closest('.mood-option');
+      if (!btn) return;
+      select.value = btn.dataset.mood;
+      select.dispatchEvent(new Event('change'));
+      if (typeof haptic === 'function') haptic('light');
+      syncMoodPicker();
+    });
+
+    select.addEventListener('change', syncMoodPicker);
+    syncMoodPicker();
+  }
+
+  function syncMoodPicker() {
+    const select = document.getElementById('journalMood');
+    const picker = document.getElementById('moodPicker');
+    if (!select || !picker) return;
+    picker.querySelectorAll('.mood-option').forEach((btn) => {
+      btn.classList.toggle('selected', btn.dataset.mood === select.value);
+    });
+  }
+
+  function watchJournalModal() {
+    const modal = document.getElementById('journalModal');
+    if (!modal) return;
+    const observer = new MutationObserver(() => {
+      if (modal.classList.contains('open')) syncMoodPicker();
+    });
+    observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  function init() {
+    ensureBlobs();
+    initParallax();
+    initRipple();
+    initPageObserver();
+    wireMoodPicker();
+    watchJournalModal();
+    wrap('loadJournalEntries', decorateJournalList);
+    wrap('loadMentors', decorateMentorList);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();

@@ -15,6 +15,12 @@
 </head>
 
 <body>
+  <!-- ── Organic background blobs (decorative, non-interactive) ─── -->
+  <div class="bg-blobs" aria-hidden="true">
+    <div class="bg-blob bg-blob-1"></div>
+    <div class="bg-blob bg-blob-2"></div>
+    <div class="bg-blob bg-blob-3"></div>
+  </div>
 
   <!-- ─── Loading Screen ──────────────────────────────────────── -->
   <div id="loadingScreen" class="loading-screen">
@@ -310,13 +316,31 @@
         <div class="header-actions">
           <button id="adminBtn" class="btn btn-sm btn-outline hidden"
             onclick="window.location='/admin.html'">Admin</button>
-          <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon">☀️</span></button>
+          <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon" class="theme-icon-svg">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="4.2" />
+                <path
+                  d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" />
+              </svg>
+            </span></button>
         </div>
       </div>
       <div class="page-content">
         <!-- Daily Verse -->
         <div class="verse-card">
+          <div class="verse-card-head">
+            <span class="verse-badge">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 5.5C4 4 7 3.3 12 4.5c5-1.2 8-.5 10 1v13c-2-1.5-5-2.2-10-1-5-1.2-8-.5-10 1z" />
+                <path d="M12 4.5v13" />
+              </svg>
+            </span>
+            <span class="verse-eyebrow" data-i18n="Today's Verse">Today's Verse</span>
+          </div>
           <div id="verseText" class="verse-text">Loading today's verse...</div>
+          <div class="verse-divider"></div>
           <div id="verseRef" class="verse-ref">...</div>
         </div>
 
@@ -324,10 +348,23 @@
         <div class="section-title" data-i18n="My Progress">My Progress</div>
         <div id="streakCard" class="card mb-16 streak-card streak-card-hero" onclick="markStreakRead()">
           <div class="streak-hero-label">
-            <span class="streak-icon">🔥</span>
+            <span class="streak-icon">
+              <svg class="streak-flame" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
+                <defs>
+                  <linearGradient id="flameGrad" x1="0" y1="1" x2="0" y2="0">
+                    <stop offset="0%" stop-color="#A87C2A" />
+                    <stop offset="55%" stop-color="var(--gold)" />
+                    <stop offset="100%" stop-color="var(--gold-light)" />
+                  </linearGradient>
+                </defs>
+                <path fill="url(#flameGrad)"
+                  d="M12.5 2c.6 2.4-.4 3.9-1.8 5.4C9 9.2 7 11 7 14a5 5 0 0 0 10 0c0-1.7-.7-2.7-1.4-3.7-.3 1.6-1.1 2.4-1.9 2.9.4-2.1-.3-3.6-1.6-5-1-1.1-1.3-2.3.4-4-.7 1.6.1 2.4 1 3.2C15 8.8 16 10.4 16 12.6a4.7 4.7 0 0 1-.4 1.9c1-1 1.4-2.3 1.4-3.8 0-3-2-4.6-3.4-6.4C13 3.5 12.8 2.8 12.5 2z" />
+              </svg>
+            </span>
             <span data-i18n="Bible Streak">Bible Streak</span>
           </div>
           <div class="streak-hero-main">
+            <span class="streak-glow" aria-hidden="true"></span>
             <div id="streakCount" class="streak-hero-number">0</div>
             <div class="streak-hero-unit" data-i18n="streak_days_label">days</div>
           </div>
@@ -396,10 +433,17 @@
     <div id="page-mentors" class="page">
       <div class="app-header">
         <h2 data-i18n="Find a Mentor">Find a Mentor</h2>
-        <button class="theme-btn" onclick="toggleTheme()"><span id="themeIconMentors">☀️</span></button>
+        <button class="theme-btn" onclick="toggleTheme()"><span id="themeIconMentors" class="theme-icon-svg">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4.2" />
+              <path
+                d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" />
+            </svg>
+          </span></button>
       </div>
       <div class="page-content">
-        <div class="page-intro mb-12">
+        <div class="page-intro mb-12 stagger-fade">
           <span class="page-intro-eyebrow" data-i18n="Mentorship">Mentorship</span>
           <p class="page-intro-text" data-i18n="Connect with an anonymous mentor.">Connect with an anonymous mentor.</p>
         </div>
@@ -567,7 +611,7 @@
         <h2 data-i18n="Requests">Requests</h2>
       </div>
       <div class="page-content">
-        <div class="page-intro mb-12">
+        <div class="page-intro mb-12 stagger-fade">
           <span class="page-intro-eyebrow" data-i18n="Requests">Requests</span>
           <p class="page-intro-text" data-i18n="Pending mentorship applications.">Pending mentorship applications.</p>
         </div>
@@ -601,7 +645,12 @@
       <div class="app-header">
         <h2 data-i18n="btn_journal">Journal</h2>
         <div>
-          <button id="journalViewToggle" class="btn btn-sm btn-outline" onclick="toggleJournalView()">📅
+          <button id="journalViewToggle" class="btn btn-sm btn-outline" onclick="toggleJournalView()"><svg
+              xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <path d="M16 2v4M8 2v4M3 10h18" />
+            </svg>
             Calendar</button>
           <button class="btn btn-sm btn-primary" onclick="showNewJournalEntry()" data-i18n="btn_new_entry">+
             New</button>
@@ -759,7 +808,7 @@
           Request</button>
       </div>
       <div class="page-content">
-        <div class="page-intro mb-12">
+        <div class="page-intro mb-12 stagger-fade">
           <span class="page-intro-eyebrow">Support</span>
           <p class="page-intro-text">Track requests and reply to our team.</p>
         </div>
@@ -1000,11 +1049,41 @@
 
       <div class="form-group">
         <label class="form-label">Mood</label>
-        <select id="journalMood" class="form-control">
+        <select id="journalMood" class="form-control hidden">
           <option value="happy">😊 Happy</option>
           <option value="neutral">😐 Neutral</option>
           <option value="sad">😢 Sad</option>
         </select>
+        <!-- Visual mood picker — mirrors #journalMood; wired up in app.js -->
+        <div id="moodPicker" class="mood-picker">
+          <button type="button" class="mood-option" data-mood="happy">
+            <svg class="mood-svg" xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+              <circle cx="12" cy="12" r="9" />
+              <circle cx="9" cy="10" r="0.9" fill="currentColor" stroke="none" />
+              <circle cx="15" cy="10" r="0.9" fill="currentColor" stroke="none" />
+              <path d="M8 14c1 1.4 2.4 2.1 4 2.1s3-.7 4-2.1" stroke-linejoin="round" />
+            </svg>
+            <span class="mood-label">Happy</span>
+          </button>
+          <button type="button" class="mood-option" data-mood="neutral">
+            <svg class="mood-svg" xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+              <circle cx="12" cy="12" r="9" />
+              <circle cx="9" cy="10" r="0.9" fill="currentColor" stroke="none" />
+              <circle cx="15" cy="10" r="0.9" fill="currentColor" stroke="none" />
+              <path d="M8.3 15h7.4" stroke-linejoin="round" />
+            </svg>
+            <span class="mood-label">Neutral</span>
+          </button>
+          <button type="button" class="mood-option" data-mood="sad">
+            <svg class="mood-svg" xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+              <circle cx="12" cy="12" r="9" />
+              <circle cx="9" cy="10" r="0.9" fill="currentColor" stroke="none" />
+              <circle cx="15" cy="10" r="0.9" fill="currentColor" stroke="none" />
+              <path d="M8 16.1c1-1.4 2.4-2.1 4-2.1s3 .7 4 2.1" stroke-linejoin="round" />
+            </svg>
+            <span class="mood-label">Sad</span>
+          </button>
+        </div>
       </div>
       <div class="form-group">
         <textarea id="journalContent" class="form-control" rows="8" data-i18n="journal_write_prompt"
