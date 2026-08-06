@@ -219,13 +219,23 @@ h3 {
   z-index: 100;
   background: linear-gradient(180deg, var(--bg2), transparent);
   border-bottom: 1px solid var(--border-dim);
-  padding: 10px 16px;
-  height: 56px;
+  padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+  min-height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   backdrop-filter: blur(6px);
   flex-shrink: 0;
+}
+
+.app-header h2 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1.2rem;
+  font-weight: 700;
 }
 
 /* ─── Logo ──────────────────────────────────────────────────── */
@@ -236,11 +246,6 @@ h3 {
   max-width: 150px;
   object-fit: contain;
   flex-shrink: 0;
-}
-
-.app-header h2 {
-  font-size: 1.2rem;
-  font-weight: 700;
 }
 
 /* ─── Page Intro (eyebrow + tagline) ───────────────────────── */
@@ -2327,7 +2332,7 @@ textarea.form-control {
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  padding: 40px 24px;
+  padding: calc(40px + env(safe-area-inset-top)) 24px 40px;
   overflow-y: auto;
   max-height: 100vh;
 }
@@ -2580,6 +2585,18 @@ textarea.form-control {
   .streak-hero-number {
     font-size: 3.4rem;
   }
+
+  .onboarding-topbar {
+    gap: 6px;
+  }
+
+  .ob-quick-controls {
+    gap: 6px;
+  }
+
+  .ob-step-count {
+    display: none;
+  }
 }
 
 /* ─── Journal ───────────────────────────────────────────────── */
@@ -2592,25 +2609,69 @@ textarea.form-control {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px;
-  background: var(--bg2);
-  border-radius: var(--radius-sm);
-  border-left: 3px solid var(--gold);
+  padding: 14px 16px;
+  background: linear-gradient(135deg, rgba(var(--bg3-rgb), 0.65) 0%, rgba(var(--bg2-rgb), 0.75) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(201, 168, 76, 0.16);
+  border-radius: 16px;
   cursor: pointer;
-  transition: background 0.25s var(--ease-premium), transform 0.25s var(--ease-premium), box-shadow 0.25s ease;
-  margin-bottom: 8px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  margin-bottom: 0;
+  position: relative;
+  overflow: hidden;
 }
 
+.journal-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--gold);
+  opacity: 0.7;
+  transition: opacity 0.25s ease;
+}
+
+.journal-item:active,
 .journal-item:hover {
-  background: var(--bg3);
+  background: linear-gradient(135deg, rgba(var(--bg3-rgb), 0.8) 0%, rgba(var(--bg2-rgb), 0.9) 100%);
   transform: translateY(-2px);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+}
+
+.journal-item:hover::before {
+  opacity: 1;
+}
+
+.journal-item .journal-mood {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--gold-dim);
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0;
+}
+
+.journal-item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .journal-date {
   font-size: 0.7rem;
   color: var(--text3);
-  min-width: 80px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .journal-preview {
@@ -2793,6 +2854,23 @@ textarea.form-control {
 
   .app-logo {
     max-width: 110px;
+  }
+
+  /* Headers with a title + action buttons (Journal, Support, etc.)
+     get tight on narrow phones — let them wrap onto a second line
+     instead of clipping or overflowing off-screen. */
+  .app-header {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .app-header h2 {
+    white-space: normal;
+    flex: 1 1 100%;
+  }
+
+  .app-header .header-actions {
+    flex-wrap: wrap;
   }
 }
 
@@ -4805,6 +4883,26 @@ textarea.form-control {
   color: #fff;
 }
 
+/* ── Topics render as a wrapping pill grid (multi-column) ── */
+.topics-modal-grid {
+  width: 100%;
+  max-height: 44vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 2px 4px;
+  margin-bottom: 8px;
+}
+
+.topics-modal-grid .topic-chip-card {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 360px) {
+  .topics-modal-grid {
+    max-height: 38vh;
+  }
+}
+
 /* ── Form styling overrides for Nickname step ── */
 .nickname-meta-row {
   display: flex;
@@ -4847,6 +4945,40 @@ textarea.form-control {
   display: flex;
   gap: 12px;
   margin-top: auto;
+}
+
+/* Quick controls (language + theme) pinned to the onboarding topbar so
+   they're reachable from the very first ("front") screen. */
+.ob-quick-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.lang-toggle-btn {
+  min-width: 38px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border-dim);
+  color: var(--text2);
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lang-toggle-btn:hover {
+  border-color: var(--border);
+  color: var(--gold);
 }
 
 .btn-ob-ghost {

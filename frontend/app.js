@@ -1288,6 +1288,7 @@ const ICON_WARN_SVG = '<svg class="err-icon" viewBox="0 0 24 24" fill="none" str
 async function showOnboarding() {
   $('loadingScreen')?.classList.add('hidden');
   $('onboarding').style.display = 'flex';
+  applyLanguage();
 
   // Reset selection state in case onboarding is re-entered
   $('regSex').value = '';
@@ -3567,6 +3568,9 @@ function applyLanguage() {
   const langSelect = $('settingLanguage');
   if (langSelect) langSelect.value = currentLanguage;
 
+  const obLangBtn = $('obLangBtn');
+  if (obLangBtn) obLangBtn.textContent = currentLanguage.toUpperCase();
+
   const toggleBtn = $('journalViewToggle');
   if (toggleBtn) {
     if (journalView === 'list') {
@@ -3583,6 +3587,14 @@ function changeLanguage(lang) {
   localStorage.setItem('language', lang);
   applyLanguage();
   loadDashboard();
+}
+
+function toggleOnboardingLanguage() {
+  haptic('selection');
+  const next = currentLanguage === 'en' ? 'am' : 'en';
+  currentLanguage = next;
+  localStorage.setItem('language', next);
+  applyLanguage();
 }
 
 // ─── Mentor Management ────────────────────────────────────────
@@ -3919,9 +3931,14 @@ async function openTopicModal(isExpertise = false) {
 function renderTopicList(topics, selectedIds) {
   const container = $('topicsList');
   if (!container) return;
-  container.innerHTML = topics.map(t => `
-    <div id="topic-${t.id}" class="chip ${selectedIds.includes(t.id) ? 'chip-gold' : 'chip-outline'}" onclick="toggleTopic(${t.id})">
-      ${escapeHtml(t.name)}
+  if (!topics.length) {
+    container.innerHTML = `<div class="empty-state"><span>${t('no_topics_found') || 'No topics found'}</span></div>`;
+    return;
+  }
+  container.innerHTML = topics.map(topicItem => `
+    <div id="topic-${topicItem.id}" class="topic-chip-card${selectedIds.includes(topicItem.id) ? ' active' : ''}" onclick="toggleTopic(${topicItem.id})">
+      <span class="chip-check-icon">${ICON_CHECK_SVG}</span>
+      <span class="chip-name">${escapeHtml(topicItem.name)}</span>
     </div>
   `).join('');
 }
@@ -3929,12 +3946,13 @@ function renderTopicList(topics, selectedIds) {
 function toggleTopic(id) {
   haptic('light');
   const idx = window.selectedTopics.indexOf(id);
+  const chip = $(`topic-${id}`);
   if (idx > -1) {
     window.selectedTopics.splice(idx, 1);
-    $(`topic-${id}`).className = 'chip chip-outline';
+    if (chip) chip.classList.remove('active');
   } else {
     window.selectedTopics.push(id);
-    $(`topic-${id}`).className = 'chip chip-gold';
+    if (chip) chip.classList.add('active');
   }
 }
 
@@ -3966,9 +3984,11 @@ async function loadJournalEntries() {
     }
     container.innerHTML = entries.map(e => `
       <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`, '${e.mood || 'neutral'}')">
-        <div class="journal-date">${formatDateTime(e.created_at)}</div>
         <div class="journal-mood">${getMoodIcon(e.mood)}</div>
-        <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
+        <div class="journal-item-body">
+          <div class="journal-date">${formatDateTime(e.created_at)}</div>
+          <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
+        </div>
       </div>
     `).join('');
   } catch (e) { container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`; }

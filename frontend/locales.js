@@ -206,7 +206,11 @@ const I18N = {
     "typing_indicator": "{name} is typing…",
     "msg_chat_invite": "You have a new message! Open the chat to read it.",
     // Session time-gate: shown when a session hasn't started yet (no countdown, just a static time)
-    "starts_at": "Starts at {time}"
+    "starts_at": "Starts at {time}",
+    "no_topics_found": "No topics found",
+    "journal_eyebrow": "Journal",
+    "journal_intro_text": "Reflect on your walk and track how you're feeling day to day.",
+    "support_eyebrow": "Support"
   },
   am: {
     "btn_find_mentor": "🔍 አማካሪ ፈልግ",
@@ -410,6 +414,10 @@ const I18N = {
     "typing_indicator": "{name} እየጻፈ ነው…",
     "msg_chat_invite": "አዲስ መልዕክት አለዎት! ለማንበብ ቻቱን ይክፈቱ።",
     // Session time-gate: shown when a session hasn't started yet
-    "starts_at": "የሚጀምረው በ {time}"
+    "starts_at": "የሚጀምረው በ {time}",
+    "no_topics_found": "ምንም ርዕስ አልተገኘም",
+    "journal_eyebrow": "ማስታወሻ",
+    "journal_intro_text": "ጉዞዎን ያስቡ እና በየቀኑ ስሜትዎን ይከታተሉ።",
+    "support_eyebrow": "ድጋፍ"
   }
 };
