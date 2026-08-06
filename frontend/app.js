@@ -1281,6 +1281,7 @@ function toggleChatInput(visible) {
 // ─── Onboarding ───────────────────────────────────────────────
 const ONBOARDING_TOTAL_STEPS = 7;
 let onboardingStep = 0;
+let onboardingTopicsCache = [];
 
 const ICON_CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
 const ICON_WARN_SVG = '<svg class="err-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
@@ -1298,29 +1299,124 @@ async function showOnboarding() {
   onNicknameInput();
   $$('.sex-option-btn, .segmented-option').forEach(btn => btn.classList.remove('active'));
 
-  // Load topics for onboarding
-  try {
-    const topics = await apiFetch('/api/topics');
-    const select = $('regTopicsSelect');
-    if (select) {
-      select.innerHTML = topics.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
-    }
+  const chipsContainer = $('regTopicsChips');
+  const emptyState = $('regTopicsEmpty');
+  const searchInput = $('regTopicsSearch');
+  const select = $('regTopicsSelect');
 
-    // Populate dynamic chips
-    const chipsContainer = $('regTopicsChips');
-    if (chipsContainer) {
-      chipsContainer.innerHTML = topics.map(t => `
-        <div class="topic-chip-card" id="onb-topic-${t.id}" onclick="toggleOnboardingTopicChip(${t.id})">
-          <span class="chip-check-icon">${ICON_CHECK_SVG}</span>
-          <span class="chip-name">${escapeHtml(t.name)}</span>
-        </div>
-      `).join('');
-    }
-  } catch (e) {
-    console.error('Failed to load topics for onboarding:', e);
+  onboardingTopicsCache = [];
+  if (searchInput) searchInput.value = '';
+  if (select) select.innerHTML = '';
+  emptyState?.classList.add('hidden');
+  if (chipsContainer) {
+    chipsContainer.classList.remove('hidden');
+    chipsContainer.innerHTML = `
+      <div class="topics-loading-state">
+        <span class="loading-spinner" style="width:20px;height:20px;margin:0"></span>
+        <span>Loading topics…</span>
+      </div>`;
   }
 
+  loadOnboardingTopics();
   showStep(0);
+}
+
+async function loadOnboardingTopics() {
+  const chipsContainer = $('regTopicsChips');
+  const emptyState = $('regTopicsEmpty');
+  const select = $('regTopicsSelect');
+  if (!chipsContainer) return;
+
+  emptyState?.classList.add('hidden');
+  chipsContainer.classList.remove('hidden');
+  chipsContainer.innerHTML = `
+    <div class="topics-loading-state">
+      <span class="loading-spinner" style="width:20px;height:20px;margin:0"></span>
+      <span>Loading topics…</span>
+    </div>`;
+
+  try {
+    const topics = await apiFetch('/api/topics');
+    onboardingTopicsCache = Array.isArray(topics) ? topics : [];
+
+    if (select) {
+      select.innerHTML = onboardingTopicsCache
+        .map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`)
+        .join('');
+    }
+
+    if (!onboardingTopicsCache.length) {
+      chipsContainer.classList.add('hidden');
+      if (emptyState) {
+        $('regTopicsEmptyText').textContent = 'No topics have been set up yet.';
+        emptyState.classList.remove('hidden');
+      }
+      return;
+    }
+
+    renderOnboardingTopicChips(onboardingTopicsCache);
+    renderOnboardingSelectedTags();
+  } catch (e) {
+    console.error('Failed to load topics for onboarding:', e);
+    chipsContainer.classList.add('hidden');
+    if (emptyState) {
+      $('regTopicsEmptyText').textContent = e.message || 'Could not load topics. Check your connection.';
+      emptyState.classList.remove('hidden');
+    }
+  }
+}
+
+function renderOnboardingTopicChips(topics) {
+  const chipsContainer = $('regTopicsChips');
+  const select = $('regTopicsSelect');
+  if (!chipsContainer || !select) return;
+
+  const selectedIds = new Set(Array.from(select.selectedOptions).map(o => Number(o.value)));
+
+  if (!topics.length) {
+    chipsContainer.innerHTML = '<p class="form-helper-ob" style="margin:4px 0">No topics match your search.</p>';
+    return;
+  }
+
+  chipsContainer.innerHTML = topics.map(t => `
+    <div class="topic-chip${selectedIds.has(t.id) ? ' active' : ''}" id="onb-topic-${t.id}"
+      onclick="toggleOnboardingTopicChip(${t.id})">
+      <span class="chip-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </span>
+      <span class="chip-name">${escapeHtml(t.name)}</span>
+    </div>
+  `).join('');
+}
+
+function renderOnboardingSelectedTags() {
+  const wrap = $('regTopicsSelectedTags');
+  const select = $('regTopicsSelect');
+  if (!wrap || !select) return;
+
+  const selected = Array.from(select.selectedOptions);
+  if (!selected.length) {
+    wrap.innerHTML = '';
+    wrap.classList.add('hidden');
+    return;
+  }
+
+  wrap.classList.remove('hidden');
+  wrap.innerHTML = selected.map(o => `
+    <span class="topic-tag-pill">
+      ${escapeHtml(o.textContent)}
+      <button type="button" class="topic-tag-remove" aria-label="Remove ${escapeHtml(o.textContent)}"
+        onclick="toggleOnboardingTopicChip(${Number(o.value)})">×</button>
+    </span>
+  `).join('');
+}
+
+function filterOnboardingTopics(query) {
+  const q = (query || '').trim().toLowerCase();
+  const filtered = q
+    ? onboardingTopicsCache.filter(t => t.name.toLowerCase().includes(q))
+    : onboardingTopicsCache;
+  renderOnboardingTopicChips(filtered);
 }
 
 function toggleOnboardingTopicChip(id) {
@@ -1334,7 +1430,8 @@ function toggleOnboardingTopicChip(id) {
   option.selected = !option.selected;
 
   const chip = $(`onb-topic-${id}`);
-  if (chip) chip.classList.toggle('active', option.selected);
+  chip?.classList.toggle('active', option.selected);
+  renderOnboardingSelectedTags();
 }
 
 function showStep(step) {
