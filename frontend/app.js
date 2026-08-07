@@ -1897,7 +1897,7 @@ async function loadRequests() {
   try {
     const requests = await apiFetch('/api/mentors/my-requests');
     if (!requests.length) {
-      container.innerHTML = '<div class="empty-state"><span>No pending requests</span></div>';
+      container.innerHTML = `<div class="empty-state"><span>${t('no_pending_requests')}</span></div>`;
       return;
     }
     container.innerHTML = requests.map(r => {
@@ -2165,7 +2165,7 @@ async function loadSessions() {
     const container = document.getElementById('upcomingSessions');
     if (container) {
       if (!upcoming.length) {
-        container.innerHTML = '<div class="empty-state"><span>No upcoming group sessions</span></div>';
+        container.innerHTML = `<div class="empty-state"><span>${t('no_upcoming_group_sessions')}</span></div>`;
       } else {
         container.innerHTML = upcoming.map(s => {
           const { isJoinable, label, labelClass } = getSessionState(s.scheduled_at, s.status);
@@ -2587,10 +2587,10 @@ async function loadChat() {
     const partnerWrapper = $('chatPartnerWrapper');
 
     if (res.type === 'none') {
-      $('chatMessages').innerHTML = '<div class="empty-state"><span>No active mentorship.</span></div>';
+      $('chatMessages').innerHTML = `<div class="empty-state"><span>${t('no_active_mentorship')}</span></div>`;
       toggleChatInput(false);
       $('chatWith').style.display = 'block';
-      $('chatWith').textContent = 'Messages';
+      $('chatWith').textContent = t('Messages');
       if (partnerWrapper) partnerWrapper.style.display = 'none';
       return;
     }
@@ -2713,8 +2713,8 @@ async function loadMessagesWithRetry(with_id, retryCount = 0) {
     if (e.message.includes('403') || e.message.includes('No active mentorship')) {
       container.innerHTML = `
         <div class="empty-state">
-          <span>No active mentorship with this user.</span>
-          <button class="btn btn-outline btn-sm mt-8" onclick="navigate('mentors')">Find a Mentor</button>
+          <span>${t('no_active_mentorship_with_user')}</span>
+          <button class="btn btn-outline btn-sm mt-8" onclick="navigate('mentors')">${t('Find a Mentor')}</button>
         </div>
       `;
       return;
@@ -3429,10 +3429,10 @@ async function loadUserTickets() {
       container.innerHTML = `
         <div class="empty-state card" style="text-align:center;padding:40px 20px;border-radius:18px;background:linear-gradient(135deg, rgba(var(--bg3-rgb),0.5), rgba(var(--bg2-rgb),0.7));border:1px dashed var(--border)">
           <div style="font-size:2.6rem;margin-bottom:10px">🎫</div>
-          <div class="font-bold text-base mb-4" style="color:var(--text)">${t('No support requests found')}</div>
-          <p class="text-xs text-dim mb-16" style="max-width:260px;margin-left:auto;margin-right:auto">You have not submitted any support requests yet. Need help? Create one anytime.</p>
+          <div class="font-bold text-base mb-4" style="color:var(--text)">${t('no_support_requests_found')}</div>
+          <p class="text-xs text-dim mb-16" style="max-width:260px;margin-left:auto;margin-right:auto">${t('no_support_requests_desc')}</p>
           <button class="ticket-submit-btn" style="max-width:180px;margin:0 auto" onclick="toggleNewTicketModal(true)">
-            <span>+ New Request</span>
+            <span>${t('new_request_btn')}</span>
           </button>
         </div>`;
       return;
@@ -3704,7 +3704,7 @@ async function loadMyMentees() {
 
     $('activeMenteeCount').textContent = mentees.length;
     if (!mentees.length) {
-      container.innerHTML = '<div class="empty-state"><span>No active mentees yet</span></div>';
+      container.innerHTML = `<div class="empty-state"><span>${t('no_active_mentees_yet')}</span></div>`;
       return;
     }
 

@@ -1094,7 +1094,7 @@
     <div class="modal-sheet">
       <div class="modal-handle"></div>
       <div class="modal-title" data-i18n="New Support Request">New Support Request</div>
-      <p class="text-sm text-dim mb-16">Describe your issue or question. Our admin team will respond shortly.</p>
+      <p class="text-sm text-dim mb-16" data-i18n="new_support_request_desc">Describe your issue or question. Our admin team will respond shortly.</p>
 
       <div class="form-group">
         <label class="form-label" data-i18n="Subject">Subject</label>
@@ -1117,9 +1117,9 @@
       </div>
 
       <div class="flex gap-8 mt-12">
-        <button class="btn btn-ghost flex-1" onclick="toggleNewTicketModal(false)">Cancel</button>
+        <button class="btn btn-ghost flex-1" onclick="toggleNewTicketModal(false)" data-i18n="btn_cancel">Cancel</button>
         <button class="ticket-submit-btn flex-1" style="margin-top:0" onclick="submitModalTicket()">
-          <span>Submit Request</span>
+          <span data-i18n="btn_submit_request">Submit Request</span>
           <span>🙏</span>
         </button>
       </div>
