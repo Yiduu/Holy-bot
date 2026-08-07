@@ -479,7 +479,7 @@
       <div class="app-header">
         <img src="Holy%20logo1.png" alt="Holy Helper" class="app-logo" />
         <div class="header-actions">
-          <button id="adminBtn" class="btn btn-sm btn-outline hidden"
+          <button id="adminBtn" class="btn btn-sm btn-outline hidden" data-i18n="btn_admin"
             onclick="window.location='/admin.html'">Admin</button>
           <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon" class="theme-icon-svg">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -752,7 +752,7 @@
           <button class="reply-cancel" onclick="cancelReply()">✖</button>
         </div>
         <div class="chat-input-wrapper">
-          <input id="chatInput" class="chat-input" placeholder="Type a message…" oninput="handleChatTyping()"
+          <input id="chatInput" class="chat-input" placeholder="Type a message…" data-i18n="chat_placeholder" oninput="handleChatTyping()"
             onkeydown="if(event.key==='Enter')sendMessage()" />
           <button class="emoji-btn" onclick="toggleEmojiPicker()">😊</button>
           <button class="chat-send-btn" onclick="sendMessage()">
@@ -836,8 +836,8 @@
     <!-- ── Page: Settings ────────────────────────────────────────── -->
     <div id="page-settings" class="page">
       <div class="app-header">
-        <h2>Settings</h2>
-        <button class="btn btn-sm btn-primary" onclick="saveSettings()">Save</button>
+        <h2 data-i18n="settings_title">Settings</h2>
+        <button class="btn btn-sm btn-primary" data-i18n="btn_save" onclick="saveSettings()">Save</button>
       </div>
       <div class="page-content">
         <!-- Identity -->
@@ -880,7 +880,7 @@
         <div class="card mb-16">
           <div class="form-group">
             <label class="form-label" data-i18n="Display Name (still anonymous)">Display Name (still anonymous)</label>
-            <input id="settingDisplayName" class="form-control" placeholder="Custom nickname…" />
+            <input id="settingDisplayName" class="form-control" placeholder="Custom nickname…" data-i18n="display_name_placeholder" />
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="Language">Language</label>
@@ -964,7 +964,7 @@
       <div class="page-content">
         <div class="page-intro mb-12 stagger-fade">
           <span class="page-intro-eyebrow" data-i18n="support_eyebrow">Support</span>
-          <p class="page-intro-text">Track requests and reply to our team.</p>
+          <p class="page-intro-text" data-i18n="support_intro">Track requests and reply to our team.</p>
         </div>
         <div id="userTicketsList" style="display:flex;flex-direction:column;gap:12px">
           <div class="loading-spinner" style="margin:40px auto"></div>
@@ -1000,7 +1000,7 @@
         <div id="ticketReplyBox" class="ticket-reply-panel">
           <div class="form-group mb-4">
             <textarea id="userTicketReplyText" class="ticket-reply-textarea" rows="3"
-              placeholder="Write a follow-up message..."></textarea>
+              placeholder="Write a follow-up message..." data-i18n="ticket_reply_placeholder"></textarea>
           </div>
           <button id="sendTicketReplyBtn" class="ticket-submit-btn" onclick="submitTicketReply()">
             <span>Send Reply</span>
@@ -1098,7 +1098,7 @@
 
       <div class="form-group">
         <label class="form-label" data-i18n="Subject">Subject</label>
-        <input id="modalTicketSubject" class="form-control" placeholder="What do you need help with?" />
+        <input id="modalTicketSubject" class="form-control" placeholder="What do you need help with?" data-i18n="ticket_subject_placeholder" />
       </div>
       <div class="form-group">
         <label class="form-label" data-i18n="Category">Category (optional)</label>
@@ -1113,7 +1113,7 @@
       <div class="form-group mb-16">
         <label class="form-label" data-i18n="Description">Description</label>
         <textarea id="modalTicketDesc" class="form-control" rows="4"
-          placeholder="Describe your issue in detail..."></textarea>
+          placeholder="Describe your issue in detail..." data-i18n="ticket_desc_placeholder"></textarea>
       </div>
 
       <div class="flex gap-8 mt-12">
@@ -1311,7 +1311,7 @@
       <div id="transferTopicFilterGroup" class="form-group" style="display:none;">
         <label class="form-label">Filter by Topic</label>
         <select id="transferTopicSelect" class="form-control" onchange="onTransferTopicChange(this.value)">
-          <option value="">All Topics (show all mentors)</option>
+          <option value="" data-i18n="all_topics_transfer">All Topics (show all mentors)</option>
         </select>
         <div style="height:1px;background:var(--border-dim);margin:14px 0;"></div>
       </div>
@@ -1337,7 +1337,7 @@
     <div class="modal">
       <h3 id="scheduleModalTitle">Schedule Session</h3>
       <div id="groupTitleField" class="form-group hidden">
-        <label class="form-label">Session Title</label>
+        <label class="form-label" data-i18n="session_title_label">Session Title</label>
         <input id="scheduleTitle" class="form-control" placeholder="e.g. Weekly Group Study" />
       </div>
       <div class="form-group">
@@ -1349,7 +1349,7 @@
         <input id="scheduleTime" type="time" class="form-control" />
       </div>
       <div id="groupParticipantsField" class="form-group hidden">
-        <label class="form-label">Invite Participants (Mentees)</label>
+        <label class="form-label" data-i18n="invite_participants_label">Invite Participants (Mentees)</label>
         <div id="menteeCheckboxes"
           style="max-height:150px;overflow-y:auto;background:var(--bg3);padding:8px;border-radius:var(--radius-sm)">
         </div>

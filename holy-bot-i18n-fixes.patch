@@ -1,0 +1,211 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index b2892df..f98bb90 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1129,7 +1129,7 @@ function connectSocket() {
+ 
+   socket.on('session_invite', (session) => {
+     haptic('success');
+-    showToast(`📹 Session invite: ${session.title}`, 'info');
++    showToast(`📹 ${t('session_invite_toast')}: ${session.title}`, 'info');
+     updateSessionsBadge();
+     if (confirm('A new session has been scheduled. Go to Sessions page to join?')) {
+       navigate('sessions');
+@@ -1833,7 +1833,7 @@ async function loadMentors() {
+             <div class="mentor-bio">${escapeHtml(bio)}</div>
+             <div class="mentor-meta">
+               ${spec ? `<span class="mentor-badge badge-spec">${escapeHtml(spec)}</span>` : ''}
+-              <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentee')}s</span>
++              <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentees')}</span>
+               ${m.accepting_requests === false ? `<span class="mentor-badge" style="background:rgba(224,92,92,0.1);color:var(--danger);border:1px solid rgba(224,92,92,0.2);">Not Accepting</span>` : ''}
+             </div>
+             ${currentUser?.role === 'mentor' ? '' : (mentees >= max ? `
+@@ -2108,7 +2108,7 @@ async function loadSessions() {
+     const privateContainer = document.getElementById('privateSessionsList');
+     if (privateContainer) {
+       if (mySessions.length === 0) {
+-        privateContainer.innerHTML = '<div class="empty-state">No active or upcoming private sessions.</div>';
++        privateContainer.innerHTML = `<div class="empty-state">${t('no_active_sessions')}</div>`;
+       } else {
+         privateContainer.innerHTML = mySessions.map(s => {
+           const session = s.session;
+@@ -2339,7 +2339,7 @@ function showScheduleModal(is_group, mentee_id = null) {
+     menteeList.innerHTML = '<div class="text-xs text-dim">Loading mentees...</div>';
+     apiFetch('/api/mentors/my-mentees').then(mentees => {
+       if (!mentees.length) {
+-        menteeList.innerHTML = '<div class="text-xs text-dim">No mentees to invite.</div>';
++        menteeList.innerHTML = `<div class="text-xs text-dim">${t('no_mentees_to_invite')}</div>`;
+         return;
+       }
+       menteeList.innerHTML = mentees.map(m => `
+diff --git a/frontend/index.html b/frontend/index.html
+index ccf1389..e1be204 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -479,7 +479,7 @@
+       <div class="app-header">
+         <img src="Holy%20logo1.png" alt="Holy Helper" class="app-logo" />
+         <div class="header-actions">
+-          <button id="adminBtn" class="btn btn-sm btn-outline hidden"
++          <button id="adminBtn" class="btn btn-sm btn-outline hidden" data-i18n="btn_admin"
+             onclick="window.location='/admin.html'">Admin</button>
+           <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon" class="theme-icon-svg">
+               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+@@ -752,7 +752,7 @@
+           <button class="reply-cancel" onclick="cancelReply()">✖</button>
+         </div>
+         <div class="chat-input-wrapper">
+-          <input id="chatInput" class="chat-input" placeholder="Type a message…" oninput="handleChatTyping()"
++          <input id="chatInput" class="chat-input" placeholder="Type a message…" data-i18n="chat_placeholder" oninput="handleChatTyping()"
+             onkeydown="if(event.key==='Enter')sendMessage()" />
+           <button class="emoji-btn" onclick="toggleEmojiPicker()">😊</button>
+           <button class="chat-send-btn" onclick="sendMessage()">
+@@ -836,8 +836,8 @@
+     <!-- ── Page: Settings ────────────────────────────────────────── -->
+     <div id="page-settings" class="page">
+       <div class="app-header">
+-        <h2>Settings</h2>
+-        <button class="btn btn-sm btn-primary" onclick="saveSettings()">Save</button>
++        <h2 data-i18n="settings_title">Settings</h2>
++        <button class="btn btn-sm btn-primary" data-i18n="btn_save" onclick="saveSettings()">Save</button>
+       </div>
+       <div class="page-content">
+         <!-- Identity -->
+@@ -880,7 +880,7 @@
+         <div class="card mb-16">
+           <div class="form-group">
+             <label class="form-label" data-i18n="Display Name (still anonymous)">Display Name (still anonymous)</label>
+-            <input id="settingDisplayName" class="form-control" placeholder="Custom nickname…" />
++            <input id="settingDisplayName" class="form-control" placeholder="Custom nickname…" data-i18n="display_name_placeholder" />
+           </div>
+           <div class="form-group">
+             <label class="form-label" data-i18n="Language">Language</label>
+@@ -964,7 +964,7 @@
+       <div class="page-content">
+         <div class="page-intro mb-12 stagger-fade">
+           <span class="page-intro-eyebrow" data-i18n="support_eyebrow">Support</span>
+-          <p class="page-intro-text">Track requests and reply to our team.</p>
++          <p class="page-intro-text" data-i18n="support_intro">Track requests and reply to our team.</p>
+         </div>
+         <div id="userTicketsList" style="display:flex;flex-direction:column;gap:12px">
+           <div class="loading-spinner" style="margin:40px auto"></div>
+@@ -1000,7 +1000,7 @@
+         <div id="ticketReplyBox" class="ticket-reply-panel">
+           <div class="form-group mb-4">
+             <textarea id="userTicketReplyText" class="ticket-reply-textarea" rows="3"
+-              placeholder="Write a follow-up message..."></textarea>
++              placeholder="Write a follow-up message..." data-i18n="ticket_reply_placeholder"></textarea>
+           </div>
+           <button id="sendTicketReplyBtn" class="ticket-submit-btn" onclick="submitTicketReply()">
+             <span>Send Reply</span>
+@@ -1098,7 +1098,7 @@
+ 
+       <div class="form-group">
+         <label class="form-label" data-i18n="Subject">Subject</label>
+-        <input id="modalTicketSubject" class="form-control" placeholder="What do you need help with?" />
++        <input id="modalTicketSubject" class="form-control" placeholder="What do you need help with?" data-i18n="ticket_subject_placeholder" />
+       </div>
+       <div class="form-group">
+         <label class="form-label" data-i18n="Category">Category (optional)</label>
+@@ -1113,7 +1113,7 @@
+       <div class="form-group mb-16">
+         <label class="form-label" data-i18n="Description">Description</label>
+         <textarea id="modalTicketDesc" class="form-control" rows="4"
+-          placeholder="Describe your issue in detail..."></textarea>
++          placeholder="Describe your issue in detail..." data-i18n="ticket_desc_placeholder"></textarea>
+       </div>
+ 
+       <div class="flex gap-8 mt-12">
+@@ -1311,7 +1311,7 @@
+       <div id="transferTopicFilterGroup" class="form-group" style="display:none;">
+         <label class="form-label">Filter by Topic</label>
+         <select id="transferTopicSelect" class="form-control" onchange="onTransferTopicChange(this.value)">
+-          <option value="">All Topics (show all mentors)</option>
++          <option value="" data-i18n="all_topics_transfer">All Topics (show all mentors)</option>
+         </select>
+         <div style="height:1px;background:var(--border-dim);margin:14px 0;"></div>
+       </div>
+@@ -1337,7 +1337,7 @@
+     <div class="modal">
+       <h3 id="scheduleModalTitle">Schedule Session</h3>
+       <div id="groupTitleField" class="form-group hidden">
+-        <label class="form-label">Session Title</label>
++        <label class="form-label" data-i18n="session_title_label">Session Title</label>
+         <input id="scheduleTitle" class="form-control" placeholder="e.g. Weekly Group Study" />
+       </div>
+       <div class="form-group">
+@@ -1349,7 +1349,7 @@
+         <input id="scheduleTime" type="time" class="form-control" />
+       </div>
+       <div id="groupParticipantsField" class="form-group hidden">
+-        <label class="form-label">Invite Participants (Mentees)</label>
++        <label class="form-label" data-i18n="invite_participants_label">Invite Participants (Mentees)</label>
+         <div id="menteeCheckboxes"
+           style="max-height:150px;overflow-y:auto;background:var(--bg3);padding:8px;border-radius:var(--radius-sm)">
+         </div>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index c1196c8..4399985 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -210,7 +210,29 @@ const I18N = {
+     "no_topics_found": "No topics found",
+     "journal_eyebrow": "Journal",
+     "journal_intro_text": "Reflect on your walk and track how you're feeling day to day.",
+-    "support_eyebrow": "Support"
++    "support_eyebrow": "Support",
++    "btn_admin": "Admin",
++    "Today's Verse": "Today's Verse",
++    "Connect with an anonymous mentor.": "Connect with an anonymous mentor.",
++    "All Topics": "All Topics",
++    "all_topics_transfer": "All Topics (show all mentors)",
++    "role_mentees": "mentees",
++    "no_active_sessions": "No active or upcoming private sessions.",
++    "no_mentees_to_invite": "No mentees to invite.",
++    "session_invite_toast": "Session invite",
++    "session_title_label": "Session Title",
++    "invite_participants_label": "Invite Participants (Mentees)",
++    "chat_placeholder": "Type a message…",
++    "My Support Requests": "My Support Requests",
++    "New Request": "+ New Request",
++    "Category": "Category (optional)",
++    "support_intro": "Track requests and reply to our team.",
++    "ticket_subject_placeholder": "What do you need help with?",
++    "ticket_desc_placeholder": "Describe your issue in detail...",
++    "ticket_reply_placeholder": "Write a follow-up message...",
++    "btn_save": "Save",
++    "Display Name (still anonymous)": "Display Name (still anonymous)",
++    "display_name_placeholder": "Custom nickname…"
+   },
+   am: {
+     "btn_find_mentor": "🔍 አማካሪ ፈልግ",
+@@ -419,6 +441,28 @@ const I18N = {
+     "no_topics_found": "ምንም ርዕስ አልተገኘም",
+     "journal_eyebrow": "ማስታወሻ",
+     "journal_intro_text": "ጉዞዎን ያስቡ እና በየቀኑ ስሜትዎን ይከታተሉ።",
+-    "support_eyebrow": "ድጋፍ"
++    "support_eyebrow": "ድጋፍ",
++    "btn_admin": "አስተዳዳሪ",
++    "Today's Verse": "የዕለቱ ጥቅስ",
++    "Connect with an anonymous mentor.": "ከማንነት ስውር አማካሪ ጋር ይገናኙ።",
++    "All Topics": "ሁሉም ርዕሶች",
++    "all_topics_transfer": "ሁሉም ርዕሶች (ሁሉንም አማካሪዎች አሳይ)",
++    "role_mentees": "ተመካሪዎች",
++    "no_active_sessions": "ንቁ ወይም መጪ የግል ክፍለ ጊዜዎች የሉም።",
++    "no_mentees_to_invite": "የሚጋበዙ ተመካሪዎች የሉም።",
++    "session_invite_toast": "የክፍለ ጊዜ ግብዣ",
++    "session_title_label": "የክፍለ ጊዜ ርዕስ",
++    "invite_participants_label": "ተሳታፊዎችን ይጋብዙ (ተመካሪዎች)",
++    "chat_placeholder": "መልእክት ይተይቡ…",
++    "My Support Requests": "የእኔ የድጋፍ ጥያቄዎች",
++    "New Request": "+ አዲስ ጥያቄ",
++    "Category": "ምድብ (አማራጭ)",
++    "support_intro": "ጥያቄዎችን ይከታተሉ እና ለቡድናችን ምላሽ ይስጡ።",
++    "ticket_subject_placeholder": "ምን እርዳታ ይፈልጋሉ?",
++    "ticket_desc_placeholder": "ችግርዎን በዝርዝር ይግለጹ...",
++    "ticket_reply_placeholder": "ተከታይ መልእክት ይጻፉ...",
++    "btn_save": "አስቀምጥ",
++    "Display Name (still anonymous)": "የማሳያ ስም (አሁንም ስውር)",
++    "display_name_placeholder": "የተለየ ቅጽል ስም…"
+   }
+ };
+\ No newline at end of file

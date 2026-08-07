@@ -1129,7 +1129,7 @@ function connectSocket() {
 
   socket.on('session_invite', (session) => {
     haptic('success');
-    showToast(`📹 Session invite: ${session.title}`, 'info');
+    showToast(`📹 ${t('session_invite_toast')}: ${session.title}`, 'info');
     updateSessionsBadge();
     if (confirm('A new session has been scheduled. Go to Sessions page to join?')) {
       navigate('sessions');
@@ -1833,7 +1833,7 @@ async function loadMentors() {
             <div class="mentor-bio">${escapeHtml(bio)}</div>
             <div class="mentor-meta">
               ${spec ? `<span class="mentor-badge badge-spec">${escapeHtml(spec)}</span>` : ''}
-              <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentee')}s</span>
+              <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentees')}</span>
               ${m.accepting_requests === false ? `<span class="mentor-badge" style="background:rgba(224,92,92,0.1);color:var(--danger);border:1px solid rgba(224,92,92,0.2);">Not Accepting</span>` : ''}
             </div>
             ${currentUser?.role === 'mentor' ? '' : (mentees >= max ? `
@@ -2108,7 +2108,7 @@ async function loadSessions() {
     const privateContainer = document.getElementById('privateSessionsList');
     if (privateContainer) {
       if (mySessions.length === 0) {
-        privateContainer.innerHTML = '<div class="empty-state">No active or upcoming private sessions.</div>';
+        privateContainer.innerHTML = `<div class="empty-state">${t('no_active_sessions')}</div>`;
       } else {
         privateContainer.innerHTML = mySessions.map(s => {
           const session = s.session;
@@ -2339,7 +2339,7 @@ function showScheduleModal(is_group, mentee_id = null) {
     menteeList.innerHTML = '<div class="text-xs text-dim">Loading mentees...</div>';
     apiFetch('/api/mentors/my-mentees').then(mentees => {
       if (!mentees.length) {
-        menteeList.innerHTML = '<div class="text-xs text-dim">No mentees to invite.</div>';
+        menteeList.innerHTML = `<div class="text-xs text-dim">${t('no_mentees_to_invite')}</div>`;
         return;
       }
       menteeList.innerHTML = mentees.map(m => `
