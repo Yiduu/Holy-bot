@@ -821,11 +821,28 @@ async function submitRating(chatId, mentorId, stars) {
   const { data: mentor } = await supabase.from('users').select('rating, rating_count').eq('telegram_id', mentorId).single();
   const oldCount = mentor?.rating_count || 0;
   const oldRating = mentor?.rating || 0;
-  const newCount = oldCount + 1;
-  const newRating = (oldRating * oldCount + stars) / newCount;
+
+  const { data: existing } = await supabase
+    .from('mentor_ratings')
+    .select('stars')
+    .eq('mentor_id', mentorId)
+    .eq('user_id', chatId)
+    .maybeSingle();
+
+  let newCount, newRating;
+  if (existing) {
+    newCount = oldCount;
+    newRating = oldCount > 0 ? (oldRating * oldCount - existing.stars + stars) / oldCount : stars;
+  } else {
+    newCount = oldCount + 1;
+    newRating = (oldRating * oldCount + stars) / newCount;
+  }
 
   await supabase.from('users').update({ rating: newRating, rating_count: newCount }).eq('telegram_id', mentorId);
-  await supabase.from('mentor_ratings').insert({ mentor_id: mentorId, user_id: chatId, stars, created_at: new Date().toISOString() });
+  await supabase.from('mentor_ratings').upsert(
+    { mentor_id: mentorId, user_id: chatId, stars, created_at: new Date().toISOString() },
+    { onConflict: 'mentor_id,user_id' }
+  );
 
   clearState(chatId);
   await safeSend(chatId, tSync(lang, 'rating_submitted', { stars: '⭐'.repeat(stars) }));

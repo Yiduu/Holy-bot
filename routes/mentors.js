@@ -589,10 +589,27 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     if (mentorErr || !mentor) return res.status(404).json({ error: 'Mentor not found' });
 
+    // Has this user already rated this mentor? If so, this is an edit, not a new rating.
+    const { data: existing, error: existingErr } = await supabase
+      .from('mentor_ratings')
+      .select('stars')
+      .eq('mentor_id', mentor_id)
+      .eq('user_id', user_id)
+      .maybeSingle();
+    if (existingErr) return res.status(500).json({ error: existingErr.message });
+
     const oldCount = mentor.rating_count || 0;
     const oldRating = mentor.rating || 0;
-    const newCount = oldCount + 1;
-    const newRating = (oldRating * oldCount + stars) / newCount;
+
+    let newCount, newRating;
+    if (existing) {
+      // Replace their previous score: count stays the same, average shifts by the delta.
+      newCount = oldCount;
+      newRating = oldCount > 0 ? (oldRating * oldCount - existing.stars + stars) / oldCount : stars;
+    } else {
+      newCount = oldCount + 1;
+      newRating = (oldRating * oldCount + stars) / newCount;
+    }
 
     const { error: updateErr } = await supabase
       .from('users')
@@ -602,7 +619,10 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     const { error: insertErr } = await supabase
       .from('mentor_ratings')
-      .insert({ mentor_id, user_id, stars, created_at: new Date().toISOString() });
+      .upsert(
+        { mentor_id, user_id, stars, created_at: new Date().toISOString() },
+        { onConflict: 'mentor_id,user_id' }
+      );
     if (insertErr) return res.status(500).json({ error: insertErr.message });
 
     res.json({ success: true, rating: newRating, rating_count: newCount });
