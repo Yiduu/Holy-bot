@@ -21,6 +21,7 @@ module.exports = function supportRoutes(supabase, requireAuth, io, onlineUsers) 
         category: category || null,
         status: 'open',
         reply_count: 0,
+        resolved_by: null,
         last_reply_at: now,
         created_at: now,
         updated_at: now
@@ -32,7 +33,7 @@ module.exports = function supportRoutes(supabase, requireAuth, io, onlineUsers) 
 
     // Notify admins via socket
     if (io) {
-      io.emit('new_ticket', { id: data.id, subject: data.subject, telegram_id });
+      io.emit('new_ticket', { id: data.id, subject: data.subject, telegram_id, created_at: now });
     }
 
     res.status(201).json(data);
@@ -166,6 +167,8 @@ module.exports = function supportRoutes(supabase, requireAuth, io, onlineUsers) 
         last_reply_at: now,
         reply_count: newReplyCount,
         status: newStatus,
+        // A fresh message means the issue isn't settled anymore
+        resolved_by: newStatus === 'open' ? null : ticket.resolved_by,
         updated_at: now
       })
       .eq('id', ticketId);
@@ -174,6 +177,7 @@ module.exports = function supportRoutes(supabase, requireAuth, io, onlineUsers) 
     if (io) {
       io.emit('new_ticket_reply', {
         ticket_id: ticketId,
+        subject: ticket.subject,
         sender_type: 'user',
         sender_id: telegram_id,
         content: content.trim(),
@@ -182,6 +186,57 @@ module.exports = function supportRoutes(supabase, requireAuth, io, onlineUsers) 
     }
 
     res.status(201).json(reply);
+  });
+
+  // PATCH /api/support/:id/resolve – support seeker marks their own ticket
+  // resolved (issue solved) or reopens it (still needs help). Admin-only
+  // "closed" status is untouched here — this is the user's own confirmation.
+  router.patch('/:id/resolve', requireAuth, async (req, res) => {
+    const { id: telegram_id } = req.telegramUser;
+    const ticketId = req.params.id;
+    const resolved = !!req.body.resolved;
+
+    const { data: ticket, error: ticketErr } = await supabase
+      .from('support_tickets')
+      .select('*')
+      .eq('id', ticketId)
+      .single();
+
+    if (ticketErr || !ticket) return res.status(404).json({ error: 'Ticket not found' });
+    if (String(ticket.telegram_id) !== String(telegram_id)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (ticket.status === 'closed') {
+      return res.status(400).json({ error: 'This request has already been closed' });
+    }
+
+    const now = new Date().toISOString();
+    const newStatus = resolved ? 'resolved' : 'open';
+
+    const { data, error } = await supabase
+      .from('support_tickets')
+      .update({
+        status: newStatus,
+        resolved_by: resolved ? 'user' : null,
+        last_reply_at: now,
+        updated_at: now
+      })
+      .eq('id', ticketId)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    if (io) {
+      io.emit(resolved ? 'ticket_resolved_by_user' : 'ticket_reopened_by_user', {
+        ticket_id: ticketId,
+        subject: ticket.subject,
+        telegram_id,
+        created_at: now
+      });
+    }
+
+    res.json(data);
   });
 
   return router;

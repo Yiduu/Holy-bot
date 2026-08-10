@@ -164,6 +164,27 @@ function escapeHtml(str) {
   d.textContent = str || '';
   return d.innerHTML;
 }
+
+// ─── Support / Ticket Icon Set ──────────────────────────────────────────────
+// Stroke-based, single-color SVGs (inherit currentColor) so they theme with
+// the rest of the app. Used in place of emoji throughout the support system.
+const TICKET_ICONS = {
+  ticket: '<path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a2 2 0 0 0 0 4v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1a2 2 0 0 0 0-4z"/><path d="M9 7v10" stroke-dasharray="2.5 2.5"/>',
+  chat: '<path d="M21 12a8.5 8.5 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.4-4.7A8.4 8.4 0 0 1 3.5 12 8.5 8.5 0 0 1 12 3.5 8.5 8.5 0 0 1 21 12z"/>',
+  calendar: '<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M16 2.5v4M8 2.5v4M3 9.5h18"/>',
+  send: '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.9 3.6-7 8-7s8 3.1 8 7"/>',
+  shield: '<path d="M12 2l8 3.2v6c0 5-3.4 8.7-8 10.8-4.6-2.1-8-5.8-8-10.8v-6z"/><path d="m9 12 2 2 4-4"/>',
+  check: '<circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.5 2.5L16 9.5"/>',
+  reopen: '<path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.3 2"/>',
+  bell: '<path d="M6 9a6 6 0 0 1 12 0c0 4.2 1.5 6 2 7H4c.5-1 2-2.8 2-7z"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0"/>',
+  inbox: '<path d="M3 12h4l2 3h6l2-3h4"/><path d="M5 5h14l2 7v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7z"/>'
+};
+function ticketIcon(name, size = 15) {
+  const body = TICKET_ICONS[name] || '';
+  return `<svg class="ticket-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+}
 // ─── Voice / File Attachment Rendering ─────────────────────────────────────
 
 function formatDuration(seconds) {
@@ -1164,15 +1185,27 @@ function connectSocket() {
   socket.on('ticket_reply', (data) => {
     haptic('success');
     const msg = data.reply
-      ? `📩 Admin replied to your support request: "${data.subject || 'Support'}"`
-      : `🔔 Your support request "${data.subject || 'Support'}" is now ${data.status_label || data.status}`;
+      ? `Admin replied to your support request: "${data.subject || 'Support'}"`
+      : `Your support request "${data.subject || 'Support'}" is now ${data.status_label || data.status}`;
     showToast(msg, 'info');
     updateSupportBadge();
     if (currentPage === 'support') {
       loadUserTickets();
     } else if (currentPage === 'ticket-detail' && window.activeTicketId === data.ticket_id) {
       loadTicketDetail(data.ticket_id);
+      hideTicketTyping();
     }
+  });
+
+  // Support chat typing indicator (admin → user direction only here)
+  socket.on('ticket_typing', ({ ticket_id, sender_type } = {}) => {
+    if (sender_type !== 'admin') return;
+    if (currentPage !== 'ticket-detail' || String(window.activeTicketId) !== String(ticket_id)) return;
+    const el = $('ticketTypingIndicator');
+    if (!el) return;
+    el.style.display = 'flex';
+    clearTimeout(window.ticketTypingTimeout);
+    window.ticketTypingTimeout = setTimeout(hideTicketTyping, 3000);
   });
 
   // Fired when a request is accepted or rejected — from the mini app OR the bot
@@ -3428,7 +3461,7 @@ async function loadUserTickets() {
     if (!tickets || tickets.length === 0) {
       container.innerHTML = `
         <div class="empty-state card" style="text-align:center;padding:40px 20px;border-radius:18px;background:linear-gradient(135deg, rgba(var(--bg3-rgb),0.5), rgba(var(--bg2-rgb),0.7));border:1px dashed var(--border)">
-          <div style="font-size:2.6rem;margin-bottom:10px">🎫</div>
+          <div style="color:var(--gold-light);margin-bottom:10px">${ticketIcon('ticket', 42)}</div>
           <div class="font-bold text-base mb-4" style="color:var(--text)">${t('no_support_requests_found')}</div>
           <p class="text-xs text-dim mb-16" style="max-width:260px;margin-left:auto;margin-right:auto">${t('no_support_requests_desc')}</p>
           <button class="ticket-submit-btn" style="max-width:180px;margin:0 auto" onclick="toggleNewTicketModal(true)">
@@ -3442,7 +3475,12 @@ async function loadUserTickets() {
       const status = t.status || 'open';
       const replyCount = t.reply_count || 0;
       const previewText = t.last_reply_preview ? escapeHtml(t.last_reply_preview) : escapeHtml(t.description);
-      const lastSenderLabel = t.last_reply_sender === 'admin' ? '🛡️ Admin:' : (t.last_reply_sender === 'user' ? ' You:' : '');
+      const lastSenderLabel = t.last_reply_sender === 'admin'
+        ? `${ticketIcon('shield', 12)} Admin:`
+        : (t.last_reply_sender === 'user' ? 'You:' : '');
+      const resolvedTag = t.resolved_by === 'user'
+        ? `<span class="chip chip-solved">${ticketIcon('check', 11)} You marked solved</span>`
+        : '';
 
       return `
         <div class="ticket-card-premium status-${status}" onclick="openTicketDetail('${t.id}')">
@@ -3454,11 +3492,14 @@ async function loadUserTickets() {
             </span>
           </div>
           <p class="text-xs text-dim mb-12" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45">
-            <strong style="color:var(--text2)">${lastSenderLabel}</strong> ${previewText}
+            <strong style="color:var(--text2);display:inline-flex;align-items:center;gap:3px">${lastSenderLabel}</strong> ${previewText}
           </p>
-          <div class="flex justify-between items-center text-xs text-dim pt-8" style="border-top:1px solid rgba(255,255,255,0.06)">
-            <span style="font-size:0.75rem">📅 Submitted ${timeAgo(t.created_at)}</span>
-            <span class="chip" style="background:rgba(201,168,76,0.1);color:var(--gold-light);font-size:0.72rem;padding:2px 8px;border-radius:12px;border:1px solid rgba(201,168,76,0.2)">💬 ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
+          <div class="flex justify-between items-center text-xs text-dim pt-8" style="border-top:1px solid rgba(255,255,255,0.06);gap:8px">
+            <span style="font-size:0.75rem;display:inline-flex;align-items:center;gap:4px">${ticketIcon('calendar', 12)} Submitted ${timeAgo(t.created_at)}</span>
+            <span style="display:flex;align-items:center;gap:6px">
+              ${resolvedTag}
+              <span class="chip" style="background:rgba(201,168,76,0.1);color:var(--gold-light);font-size:0.72rem;padding:2px 8px;border-radius:12px;border:1px solid rgba(201,168,76,0.2);display:inline-flex;align-items:center;gap:4px">${ticketIcon('chat', 11)} ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
+            </span>
           </div>
         </div>`;
     }).join('');
@@ -3517,6 +3558,8 @@ async function loadTicketDetail(ticketId) {
     statusEl.className = `status-pill status-pill-${status}`;
     statusEl.innerHTML = `<span class="status-dot"></span>${status.replace('_', ' ')}`;
 
+    window.activeTicketStatus = status;
+
     // Handle closed state input locking
     const replyTextarea = $('userTicketReplyText');
     const replyBtn = $('sendTicketReplyBtn');
@@ -3533,11 +3576,13 @@ async function loadTicketDetail(ticketId) {
       replyBtn.style.opacity = '1';
     }
 
+    renderTicketResolveBar(status, ticket.resolved_by);
+
     // Render original ticket message + reply thread
     let html = `
       <div class="ticket-bubble ticket-bubble-user" style="align-self:flex-start;width:100%;max-width:100%;margin-bottom:12px;background:linear-gradient(135deg, rgba(201,168,76,0.12) 0%, rgba(var(--bg2-rgb),0.85) 100%);border:1px solid rgba(201,168,76,0.25)">
         <div class="ticket-bubble-hdr">
-          <span style="display:flex;align-items:center;gap:4px;color:var(--gold-light)">👤 <strong>You</strong> (Original Issue)</span>
+          <span style="display:flex;align-items:center;gap:5px;color:var(--gold-light)">${ticketIcon('user', 13)} <strong>You</strong> (Original Issue)</span>
           <span style="font-weight:normal;color:var(--text3);font-size:0.7rem">${formatDateTime(ticket.created_at)}</span>
         </div>
         <div class="ticket-bubble-body">${escapeHtml(ticket.description)}</div>
@@ -3547,7 +3592,7 @@ async function loadTicketDetail(ticketId) {
       html += `
         <div class="ticket-bubble ticket-bubble-admin" style="align-self:flex-start;width:100%;max-width:100%;margin-bottom:12px">
           <div class="ticket-bubble-hdr">
-            <span style="display:flex;align-items:center;gap:4px;color:#7AA5FF">🛡️ <strong>Support Admin</strong></span>
+            <span style="display:flex;align-items:center;gap:5px;color:#7AA5FF">${ticketIcon('shield', 13)} <strong>Support Admin</strong></span>
             <span style="font-weight:normal;color:var(--text3);font-size:0.7rem">${formatDateTime(ticket.updated_at || ticket.created_at)}</span>
           </div>
           <div class="ticket-bubble-body">${escapeHtml(ticket.admin_reply)}</div>
@@ -3557,12 +3602,14 @@ async function loadTicketDetail(ticketId) {
     replies.forEach(r => {
       const isAdmin = r.sender_type === 'admin';
       const bubbleClass = isAdmin ? 'ticket-bubble-admin' : 'ticket-bubble-user';
-      const titleText = isAdmin ? '🛡️ Support Admin' : '👤 You';
+      const titleText = isAdmin
+        ? `${ticketIcon('shield', 13)} Support Admin`
+        : `${ticketIcon('user', 13)} You`;
 
       html += `
         <div class="ticket-bubble ${bubbleClass}" style="margin-bottom:8px">
           <div class="ticket-bubble-hdr">
-            <span>${titleText}</span>
+            <span style="display:flex;align-items:center;gap:5px">${titleText}</span>
             <span style="font-weight:normal;color:var(--text3);font-size:0.7rem">${formatDateTime(r.created_at)}</span>
           </div>
           <div class="ticket-bubble-body">${escapeHtml(r.content)}</div>
@@ -3573,6 +3620,62 @@ async function loadTicketDetail(ticketId) {
     threadContainer.scrollTop = threadContainer.scrollHeight;
   } catch (e) {
     threadContainer.innerHTML = `<div class="card text-center text-sm" style="color:var(--danger)">Error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// Shows "Mark as solved" for an open/in-progress ticket, or a confirmation +
+// reopen option once it's resolved. Hidden entirely once an admin closes it.
+function renderTicketResolveBar(status, resolvedBy) {
+  const bar = $('ticketResolveBar');
+  if (!bar) return;
+
+  if (status === 'closed') {
+    bar.style.display = 'none';
+    return;
+  }
+
+  bar.style.display = 'flex';
+
+  if (status === 'resolved') {
+    const byUser = resolvedBy === 'user';
+    bar.innerHTML = `
+      <span class="ticket-resolve-note">${ticketIcon('check', 15)} ${byUser ? 'You marked this solved' : 'Support marked this resolved'}</span>
+      <button class="btn btn-ghost btn-sm ticket-reopen-btn" onclick="toggleTicketResolved(false)">${ticketIcon('reopen', 13)} Still need help?</button>`;
+  } else {
+    bar.innerHTML = `
+      <span class="ticket-resolve-note">${ticketIcon('clock', 15)} Still open</span>
+      <button class="btn btn-sm ticket-resolve-btn" onclick="toggleTicketResolved(true)">${ticketIcon('check', 13)} Mark as solved</button>`;
+  }
+}
+
+let ticketTypingLastSent = 0;
+function onTicketReplyTyping() {
+  if (!window.activeTicketId || !socket?.connected) return;
+  const now = Date.now();
+  if (now - ticketTypingLastSent < 2500) return;
+  ticketTypingLastSent = now;
+  socket.emit('ticket_typing', { ticket_id: window.activeTicketId, sender_type: 'user' });
+}
+
+function hideTicketTyping() {
+  const el = $('ticketTypingIndicator');
+  if (el) el.style.display = 'none';
+}
+
+async function toggleTicketResolved(resolved) {
+  if (!window.activeTicketId) return;
+  haptic(resolved ? 'success' : 'medium');
+  try {
+    await apiFetch(`/api/support/${window.activeTicketId}/resolve`, {
+      method: 'PATCH',
+      body: { resolved }
+    });
+    showToast(resolved ? 'Marked as solved — thank you!' : 'Reopened. We\u2019ll take another look.', 'success');
+    loadTicketDetail(window.activeTicketId);
+    updateSupportBadge();
+  } catch (e) {
+    haptic('error');
+    showToast(e.message, 'error');
   }
 }
 
@@ -3595,6 +3698,7 @@ async function submitTicketReply() {
     haptic('success');
     showToast('Reply sent', 'success');
     replyInput.value = '';
+    updateSupportBadge();
     loadTicketDetail(window.activeTicketId);
   } catch (e) {
     haptic('error');
@@ -3624,7 +3728,7 @@ async function submitModalTicket() {
   try {
     await apiFetch('/api/support', { method: 'POST', body: { subject, description, category } });
     haptic('success');
-    showToast('Support request submitted 🙏', 'success');
+    showToast('Support request submitted', 'success');
     $('modalTicketSubject').value = '';
     $('modalTicketDesc').value = '';
     if ($('modalTicketCategory')) $('modalTicketCategory').value = '';

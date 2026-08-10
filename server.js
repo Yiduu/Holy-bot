@@ -113,6 +113,13 @@ io.on('connection', (socket) => {
     if (targetSocket) io.to(targetSocket).emit('typing', { from_id: socket.data.telegram_id });
   });
 
+  // Support ticket typing indicator — broadcast to everyone else (the ticket
+  // owner + every admin dashboard). Cheap and stateless by design.
+  socket.on('ticket_typing', ({ ticket_id, sender_type }) => {
+    if (!ticket_id || (sender_type !== 'user' && sender_type !== 'admin')) return;
+    socket.broadcast.emit('ticket_typing', { ticket_id, sender_type });
+  });
+
   socket.on('disconnect', () => {
     if (socket.data.telegram_id) {
       onlineUsers.delete(socket.data.telegram_id);

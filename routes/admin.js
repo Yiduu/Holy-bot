@@ -79,7 +79,7 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       supabase.from('users').select('telegram_id', { count: 'exact', head: true }).eq('role', 'mentor'),
       supabase.from('mentor_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
       supabase.from('messages').select('id', { count: 'exact', head: true }).eq('is_flagged', true),
-      supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+      supabase.from('support_tickets').select('id', { count: 'exact', head: true }).in('status', ['open', 'in_progress']),
     ]);
 
     res.json({
@@ -641,11 +641,17 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       newReplyCount += 1;
     }
 
+    const isResolvedOrClosed = updatedStatus === 'resolved' || updatedStatus === 'closed';
+    const resolvedBy = statusChanged
+      ? (isResolvedOrClosed ? 'admin' : null)
+      : ticket.resolved_by;
+
     const { data, error } = await supabase
       .from('support_tickets')
       .update({
         admin_reply: replyText || ticket.admin_reply,
         status: updatedStatus,
+        resolved_by: resolvedBy,
         last_reply_at: (replyText || statusChanged) ? now : (ticket.last_reply_at || now),
         reply_count: newReplyCount,
         updated_at: now
@@ -657,6 +663,18 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     if (error) return res.status(500).json({ error: error.message });
 
     await logAudit(admin_id, 'ticket_reply', null, 'support_ticket', { ticket_id: req.params.id, status: updatedStatus });
+
+    // Let every admin dashboard (not just this one) refresh its ticket list
+    // and open-ticket badge in real time.
+    if (io) {
+      io.emit('new_ticket_reply', {
+        ticket_id: ticket.id,
+        subject: ticket.subject,
+        sender_type: 'admin',
+        status: updatedStatus,
+        created_at: now
+      });
+    }
 
     // Notify the user on any reply OR status change — not just when text was typed
     if (replyText || statusChanged) {

@@ -997,14 +997,23 @@
           <div class="loading-spinner" style="margin:20px auto"></div>
         </div>
 
+        <div id="ticketTypingIndicator" class="ticket-typing-row" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3.2v6c0 5-3.4 8.7-8 10.8-4.6-2.1-8-5.8-8-10.8v-6z"/><path d="m9 12 2 2 4-4"/></svg>
+          <span>Support is typing</span>
+          <span class="typing-dots"><span></span><span></span><span></span></span>
+        </div>
+
+        <div id="ticketResolveBar" class="ticket-resolve-bar" style="display:none"></div>
+
         <div id="ticketReplyBox" class="ticket-reply-panel">
           <div class="form-group mb-4">
             <textarea id="userTicketReplyText" class="ticket-reply-textarea" rows="3"
-              placeholder="Write a follow-up message..." data-i18n="ticket_reply_placeholder"></textarea>
+              placeholder="Write a follow-up message..." data-i18n="ticket_reply_placeholder"
+              oninput="onTicketReplyTyping()"></textarea>
           </div>
           <button id="sendTicketReplyBtn" class="ticket-submit-btn" onclick="submitTicketReply()">
             <span>Send Reply</span>
-            <span>💬</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>
           </button>
         </div>
       </div>
@@ -1120,7 +1129,7 @@
         <button class="btn btn-ghost flex-1" onclick="toggleNewTicketModal(false)" data-i18n="btn_cancel">Cancel</button>
         <button class="ticket-submit-btn flex-1" style="margin-top:0" onclick="submitModalTicket()">
           <span data-i18n="btn_submit_request">Submit Request</span>
-          <span>🙏</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>
         </button>
       </div>
     </div>

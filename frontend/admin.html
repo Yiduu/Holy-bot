@@ -900,6 +900,52 @@
             gap: 8px
         }
 
+        .ticket-typing-row-admin {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 6px;
+        }
+
+        .typing-dots {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .typing-dots span {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--text-dim);
+            animation: typing-bounce 1.2s infinite ease-in-out;
+        }
+
+        .typing-dots span:nth-child(2) {
+            animation-delay: 0.15s;
+        }
+
+        .typing-dots span:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+
+        @keyframes typing-bounce {
+
+            0%,
+            60%,
+            100% {
+                transform: translateY(0);
+                opacity: 0.5;
+            }
+
+            30% {
+                transform: translateY(-3px);
+                opacity: 1;
+            }
+        }
+
         /* ── Inline textarea ─────────────────────────────────────── */
         .inline-area {
             padding: 8px 10px;
@@ -2534,16 +2580,61 @@
         }
 
         /* ── Toast ─────────────────────────────────────────────────── */
-        function toast(msg, type = 'info') {
+        function toast(msg, type = 'info', icon = null) {
             const t = document.createElement('div');
             t.className = 'toast';
             const bg = { error: 'var(--danger)', success: 'var(--success)', info: 'var(--bg3)' }[type] || 'var(--bg3)';
             t.style.background = bg;
             t.style.color = type === 'info' ? 'var(--text)' : '#fff';
-            t.textContent = msg;
+            if (icon) {
+                t.style.display = 'flex';
+                t.style.alignItems = 'center';
+                t.style.gap = '8px';
+                t.innerHTML = `${ticketIcon(icon, 16)}<span>${esc(msg)}</span>`;
+            } else {
+                t.textContent = msg;
+            }
             document.body.appendChild(t);
             setTimeout(() => t.style.opacity = '0', 2500);
             setTimeout(() => t.remove(), 2800);
+        }
+
+        /* ── Support icon set (mirrors the mini-app's icon set) ───────── */
+        const TICKET_ICONS = {
+            ticket: '<path d="M3 9a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a2 2 0 0 0 0 4v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1a2 2 0 0 0 0-4z"/><path d="M9 7v10" stroke-dasharray="2.5 2.5"/>',
+            chat: '<path d="M21 12a8.5 8.5 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.4-4.7A8.4 8.4 0 0 1 3.5 12 8.5 8.5 0 0 1 12 3.5 8.5 8.5 0 0 1 21 12z"/>',
+            user: '<circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.9 3.6-7 8-7s8 3.1 8 7"/>',
+            shield: '<path d="M12 2l8 3.2v6c0 5-3.4 8.7-8 10.8-4.6-2.1-8-5.8-8-10.8v-6z"/><path d="m9 12 2 2 4-4"/>',
+            check: '<circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.5 2.5L16 9.5"/>',
+            reopen: '<path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/>',
+            clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.3 2"/>',
+            bell: '<path d="M6 9a6 6 0 0 1 12 0c0 4.2 1.5 6 2 7H4c.5-1 2-2.8 2-7z"/><path d="M9.5 19a2.5 2.5 0 0 0 5 0"/>',
+            x: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6m0-6-6 6"/>'
+        };
+        function ticketIcon(name, size = 15) {
+            const body = TICKET_ICONS[name] || '';
+            return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:-2px">${body}</svg>`;
+        }
+
+        /* ── New-request desktop notification + sound ─────────────────── */
+        if (window.Notification && Notification.permission === 'default') {
+            // Ask once, quietly — first user interaction satisfies the browser gesture
+            // requirement in most browsers; if it's denied we just fall back to toasts.
+            document.addEventListener('click', () => Notification.requestPermission(), { once: true });
+        }
+        const NOTIFY_BEEP = 'data:audio/wav;base64,UklGRl4GAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YToGAAAAAP//AAABAAIAAwAEAAUABgAHAAgACQAKAAsADAANAA4ADwAQABEAEgATABQAFQAWABcAGAAZABoAGwAcAB0AHgAfACAAIQAiACMAJAAlACYAJwAoACkAKgArACwALQAuAC8AMAAxADIAMwA0ADUANgA3ADgAOQA6ADsAPAA9AD4APwBAAEEAQgBDAEQARQBGAEcASABJAEoASwBMAE0ATgBPAFAAUQBSAFMAVABVAFYAVwBYAFkAWgBbAFwAXQBeAF8AYABhAGIAYwBkAGUAZgBnAGgAaQBqAGsAbABtAG4AbwBwAHEAcgBzAHQAdQB2AHcAeAB5AHoAewB8AH0AfgB/AA==';
+        function notifyNewTicket(subject) {
+            try {
+                new Audio(NOTIFY_BEEP).play().catch(() => { });
+            } catch (e) { /* audio not supported — ignore */ }
+            if (window.Notification && Notification.permission === 'granted') {
+                try {
+                    new Notification('New support request', {
+                        body: subject || 'A support seeker just opened a new ticket.',
+                        tag: 'holy-support-ticket'
+                    });
+                } catch (e) { /* ignore */ }
+            }
         }
 
         /* ── Helpers ───────────────────────────────────────────────── */
@@ -2629,13 +2720,34 @@
                 wsConn.on('connect_error', () => setWSStatus(false));
 
                 wsConn.on('new_ticket', (d) => {
-                    toast(`🎫 New support request: "${d.subject || 'Untitled'}"`, 'info');
+                    toast(`New support request: "${d.subject || 'Untitled'}"`, 'info', 'ticket');
+                    notifyNewTicket(d.subject);
+                    bumpTicketsBadge(1);
                     loadStats();
                     if (activeTab === 'tickets') loadTickets();
                 });
 
-                wsConn.on('new_ticket_reply', () => {
+                wsConn.on('new_ticket_reply', (d = {}) => {
+                    loadStats();
                     if (activeTab === 'tickets') loadTickets();
+                    showTicketTyping(d.ticket_id, false);
+                });
+
+                wsConn.on('ticket_resolved_by_user', (d = {}) => {
+                    toast(`"${d.subject || 'A request'}" was marked solved by the user`, 'success', 'check');
+                    loadStats();
+                    if (activeTab === 'tickets') loadTickets();
+                });
+
+                wsConn.on('ticket_reopened_by_user', (d = {}) => {
+                    toast(`"${d.subject || 'A request'}" was reopened by the user`, 'info', 'reopen');
+                    loadStats();
+                    if (activeTab === 'tickets') loadTickets();
+                });
+
+                wsConn.on('ticket_typing', ({ ticket_id, sender_type } = {}) => {
+                    if (sender_type !== 'user') return;
+                    showTicketTyping(ticket_id, true);
                 });
 
                 wsConn.on('broadcast', () => toast('Broadcast delivered', 'success'));
@@ -2646,6 +2758,30 @@
                     if (activeTab === 'live-sessions' && currentSessionsView === 'live') loadLiveSessions();
                 });
             } catch { setWSStatus(false); }
+        }
+
+        // Optimistic badge bump so the count updates the instant a socket event
+        // lands, without waiting for the next /stats round trip.
+        function bumpTicketsBadge(delta) {
+            const tb = document.getElementById('ticketsBadge');
+            if (!tb) return;
+            const current = parseInt(tb.textContent, 10) || 0;
+            const next = Math.max(0, current + delta);
+            tb.textContent = next;
+            tb.style.display = next > 0 ? 'inline' : 'none';
+        }
+
+        const ticketTypingTimers = {};
+        function showTicketTyping(ticketId, show) {
+            const el = document.getElementById(`typing-${ticketId}`);
+            if (!el) return;
+            clearTimeout(ticketTypingTimers[ticketId]);
+            if (show) {
+                el.style.display = 'flex';
+                ticketTypingTimers[ticketId] = setTimeout(() => { el.style.display = 'none'; }, 3000);
+            } else {
+                el.style.display = 'none';
+            }
         }
         function setWSStatus(on) {
             document.getElementById('wsDot').className = 'ws-dot' + (on ? '' : ' offline');
@@ -3025,26 +3161,35 @@
             c.innerHTML = '<div class="loading">Loading…</div>';
             try {
                 const tickets = await api('/api/admin/tickets');
-                if (!tickets?.length) { c.innerHTML = '<div class="empty">🎉 No support requests</div>'; return; }
+                if (!tickets?.length) { c.innerHTML = `<div class="empty">${ticketIcon('check', 20)} No support requests</div>`; return; }
                 c.innerHTML = tickets.map(t => {
                     const statusClass = t.status === 'open' ? 'chip-gold' : t.status === 'in_progress' ? 'chip-blue' : t.status === 'resolved' ? 'chip-green' : 'chip-gray';
                     const replyCount = t.reply_count || 0;
                     const lastReplyTime = t.last_reply_at ? ago(t.last_reply_at) : ago(t.created_at);
+                    const solvedTag = t.resolved_by === 'user'
+                        ? `<span class="chip chip-green" style="display:inline-flex;align-items:center;gap:4px;font-size:11px">${ticketIcon('check', 11)} User confirmed solved</span>`
+                        : '';
 
                     return `
       <div class="ticket-card" id="ticket-${t.id}">
         <div class="ticket-hdr">
           <div>
-            <div class="ticket-subject">${esc(t.subject)}</div>
+            <div class="ticket-subject" style="display:flex;align-items:center;gap:6px">${ticketIcon('ticket', 14)} ${esc(t.subject)}</div>
             <div class="ticket-meta">From ${esc(t.user?.anonymous_id || String(t.telegram_id))} · Submitted ${ago(t.created_at)} · Last active ${lastReplyTime}</div>
           </div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <span class="chip" style="background:var(--bg3);font-size:11px">💬 ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+            ${solvedTag}
+            <span class="chip" style="background:var(--bg3);font-size:11px;display:inline-flex;align-items:center;gap:4px">${ticketIcon('chat', 11)} ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
             <span class="chip ${statusClass}">${t.status}</span>
           </div>
         </div>
         <div class="ticket-body">${esc(t.description)}</div>
-        
+
+        <div id="typing-${t.id}" class="ticket-typing-row-admin" style="display:none">
+          ${ticketIcon('user', 12)} <span>User is typing…</span>
+          <span class="typing-dots"><span></span><span></span><span></span></span>
+        </div>
+
         <!-- Toggleable Reply Thread -->
         <div id="thread-container-${t.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
           <div style="font-size:12px;font-weight:600;margin-bottom:6px;color:var(--text-dim)">Reply Thread:</div>
@@ -3054,20 +3199,29 @@
         </div>
 
         <div style="margin-top:8px">
-          <button class="btn btn-ghost btn-sm" style="font-size:11.5px;padding:3px 8px" onclick="toggleTicketThread('${t.id}')" id="btn-thread-${t.id}">📜 View Thread (${replyCount})</button>
+          <button class="btn btn-ghost btn-sm" style="font-size:11.5px;padding:3px 8px;display:inline-flex;align-items:center;gap:5px" onclick="toggleTicketThread('${t.id}')" id="btn-thread-${t.id}">${ticketIcon('chat', 12)} View Thread (${replyCount})</button>
         </div>
 
         <div class="ticket-reply" style="margin-top:10px">
-          <textarea class="inline-area" id="reply-${t.id}" placeholder="Write an admin reply…" rows="2"></textarea>
+          <textarea class="inline-area" id="reply-${t.id}" placeholder="Write an admin reply…" rows="2" oninput="onAdminTicketTyping('${t.id}')"></textarea>
           <div style="display:flex;gap:7px;flex-wrap:wrap">
             <button class="btn btn-ghost btn-sm" onclick="replyTicket('${t.id}','in_progress')">Reply & In Progress</button>
-            <button class="btn btn-success btn-sm" onclick="replyTicket('${t.id}','resolved')">✓ Resolve</button>
+            <button class="btn btn-success btn-sm" style="display:inline-flex;align-items:center;gap:5px" onclick="replyTicket('${t.id}','resolved')">${ticketIcon('check', 12)} Resolve</button>
             <button class="btn btn-ghost btn-sm" style="color:var(--text-dim)" onclick="replyTicket('${t.id}','closed')">Close</button>
           </div>
         </div>
       </div>`;
                 }).join('');
             } catch (e) { c.innerHTML = `<div class="loading">${e.message}</div>`; }
+        }
+
+        let adminTicketTypingLastSent = {};
+        function onAdminTicketTyping(ticketId) {
+            if (!wsConn?.connected) return;
+            const now = Date.now();
+            if (now - (adminTicketTypingLastSent[ticketId] || 0) < 2500) return;
+            adminTicketTypingLastSent[ticketId] = now;
+            wsConn.emit('ticket_typing', { ticket_id: ticketId, sender_type: 'admin' });
         }
 
         async function toggleTicketThread(id) {
@@ -3078,12 +3232,12 @@
 
             if (container.style.display !== 'none') {
                 container.style.display = 'none';
-                if (btn) btn.textContent = '📜 View Thread';
+                if (btn) btn.innerHTML = `${ticketIcon('chat', 12)} View Thread`;
                 return;
             }
 
             container.style.display = 'block';
-            if (btn) btn.textContent = '🙈 Hide Thread';
+            if (btn) btn.innerHTML = `${ticketIcon('x', 12)} Hide Thread`;
             list.innerHTML = '<div style="font-size:11px;color:var(--text-dim)">Loading thread…</div>';
 
             try {
@@ -3094,10 +3248,13 @@
                 }
                 list.innerHTML = replies.map(r => {
                     const isAdmin = r.sender_type === 'admin';
+                    const label = isAdmin
+                        ? `${ticketIcon('shield', 11)} Admin`
+                        : `${ticketIcon('user', 11)} User`;
                     return `
                     <div style="padding:6px 9px;border-radius:6px;margin-bottom:6px;background:${isAdmin ? 'var(--bg3)' : 'var(--bg2)'};border-left:3px solid ${isAdmin ? 'var(--accent)' : 'var(--gold)'}">
                       <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:bold;margin-bottom:3px">
-                        <span style="color:${isAdmin ? 'var(--accent)' : 'var(--gold)'}">${isAdmin ? '🛡️ Admin' : '👤 User'}</span>
+                        <span style="color:${isAdmin ? 'var(--accent)' : 'var(--gold)'};display:inline-flex;align-items:center;gap:4px">${label}</span>
                         <span style="color:var(--text-dim);font-weight:normal">${ago(r.created_at)}</span>
                       </div>
                       <div style="font-size:12px;white-space:pre-wrap;color:var(--text)">${esc(r.content)}</div>
@@ -3121,7 +3278,7 @@
                 await api(`/api/admin/tickets/${id}`, { method: 'PATCH', body: { reply, admin_reply: reply, status } });
                 toast('Ticket updated', 'success');
                 if (replyInput) replyInput.value = '';
-                
+
                 const threadContainer = document.getElementById(`thread-container-${id}`);
                 if (threadContainer && threadContainer.style.display !== 'none') {
                     toggleTicketThread(id);
