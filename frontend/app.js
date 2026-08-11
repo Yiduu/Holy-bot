@@ -1738,13 +1738,72 @@ window.loadDashboard = async function loadDashboard() {
 }
 
 // ─── Streaks ──────────────────────────────────────────────────
+
+// Stroke-style icon set matching the flame/mood-face icon language elsewhere
+// in this file — 24x24 viewBox, currentColor stroke, rounded caps.
+const STREAK_ICON_CHECK = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4.5 4.5L19 7"/></svg>';
+const STREAK_ICON_SHIELD_SM = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 4.5 6v6c0 5 3.2 8.6 7.5 10 4.3-1.4 7.5-5 7.5-10V6L12 2.5z"/></svg>';
+const STREAK_ICON_TROPHY = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 5H5a3 3 0 0 0 3 5M16 5h3a3 3 0 0 1-3 5"/><path d="M12 13v3M9 20h6M10 16h4v4h-4z"/></svg>';
+
+const WEEK_DAY_INITIALS = {
+  en: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
+  am: ['እ', 'ሰ', 'ማ', 'ረ', 'ሐ', 'ዓ', 'ቅ'],
+};
+
+function renderStreakWeek(week) {
+  const el = $('streakWeek');
+  if (!el || !Array.isArray(week)) return;
+
+  el.innerHTML = week.map(day => {
+    const d = new Date(day.date + 'T00:00:00');
+    const initials = WEEK_DAY_INITIALS[currentLanguage] || WEEK_DAY_INITIALS.en;
+    const label = initials[d.getDay()];
+
+    let dotClass = 'streak-week-dot';
+    let icon = '';
+    if (day.used_freeze) {
+      dotClass += ' is-frozen';
+      icon = STREAK_ICON_SHIELD_SM;
+    } else if (day.read) {
+      dotClass += ' is-read';
+      icon = STREAK_ICON_CHECK;
+    }
+    if (day.is_today) dotClass += ' is-today';
+
+    return `<div class="streak-week-item">
+      <div class="${dotClass}">${icon}</div>
+      <span class="streak-week-label">${label}</span>
+    </div>`;
+  }).join('');
+}
+
 async function loadStreak() {
   try {
     const s = await apiFetch('/api/streaks');
     $('streakCount').textContent = s.current_streak;
+
     const longestEl = $('streakLongest');
     if (longestEl) {
-      longestEl.textContent = t('streak_longest_label', { longest: s.longest_streak || 0 });
+      const isBest = s.current_streak > 0 && s.current_streak === s.longest_streak;
+      longestEl.innerHTML = isBest
+        ? `<span class="streak-best-badge">${STREAK_ICON_TROPHY} ${t('streak_best_badge')}</span>`
+        : t('streak_longest_label', { longest: s.longest_streak || 0 });
+    }
+
+    const freezeBadge = $('streakFreezeBadge');
+    const freezeCount = s.freezes_available || 0;
+    if (freezeBadge) {
+      freezeBadge.classList.toggle('hidden', freezeCount < 1);
+      $('streakFreezeCount').textContent = freezeCount;
+    }
+
+    renderStreakWeek(s.week);
+
+    // Nudge users who haven't opted into the evening reminder yet — only
+    // once they actually have a streak worth protecting.
+    const nudge = $('streakReminderNudge');
+    if (nudge) {
+      nudge.classList.toggle('hidden', s.notify_streak_reminder !== false || s.current_streak < 1);
     }
 
     // Check if already read today (Ethiopia time)
@@ -1755,11 +1814,11 @@ async function loadStreak() {
     if (s.last_read_date === today) {
       btn.textContent = t('streak_already_read');
       btn.disabled = true;
-      $('streakCard').style.opacity = '0.7';
+      $('streakCard').classList.add('is-done-today');
     } else {
       btn.textContent = t('btn_mark_read');
       btn.disabled = false;
-      $('streakCard').style.opacity = '1';
+      $('streakCard').classList.remove('is-done-today');
     }
   } catch (e) { console.error('Streak error:', e); }
 }
@@ -1771,8 +1830,36 @@ async function markStreakRead() {
   try {
     const s = await apiFetch('/api/streaks/mark', { method: 'POST' });
     haptic('success');
-    showToast(t('streak_marked'), 'success');
+
+    if (s.milestone) {
+      showToast(t('streak_milestone', { count: s.current_streak }), 'success');
+      const card = $('streakCard');
+      card.classList.add('streak-celebrate');
+      setTimeout(() => card.classList.remove('streak-celebrate'), 1200);
+    } else if (s.freeze_used) {
+      showToast(t('streak_saver_used'), 'success');
+    } else if (s.was_reset) {
+      showToast(t('streak_fresh_start'), 'info');
+    } else {
+      showToast(t('streak_marked'), 'success');
+    }
     loadStreak();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+// One-tap opt-in from the card itself — no need to dig into Settings.
+async function enableStreakReminder(event) {
+  event?.stopPropagation();
+  haptic('light');
+  try {
+    await apiFetch('/api/users/settings', {
+      method: 'PATCH',
+      body: { notify_streak_reminder: true },
+    });
+    $('streakReminderNudge')?.classList.add('hidden');
+    const toggle = $('toggleStreak');
+    if (toggle) toggle.classList.add('on');
+    showToast(t('streak_reminder_enabled'), 'success');
   } catch (e) { showToast(e.message, 'error'); }
 }
 
@@ -3072,6 +3159,7 @@ async function loadSettings() {
     $('toggleMessages').classList.toggle('on', s.notify_messages !== false);
     $('toggleSessions').classList.toggle('on', s.notify_sessions !== false);
     $('toggleVerse').classList.toggle('on', s.notify_daily_verse !== false);
+    $('toggleStreak').classList.toggle('on', s.notify_streak_reminder !== false);
 
     if (currentUser?.role === 'mentor') {
       $('mentorSettings').classList.remove('hidden');
@@ -3324,6 +3412,7 @@ async function saveSettings() {
     notify_messages: $('toggleMessages').classList.contains('on'),
     notify_sessions: $('toggleSessions').classList.contains('on'),
     notify_daily_verse: $('toggleVerse').classList.contains('on'),
+    notify_streak_reminder: $('toggleStreak').classList.contains('on'),
     bio: $('settingBio')?.value,
     specialization: $('settingSpecialization')?.value,
     max_mentees: parseInt($('settingMaxMentees')?.value) || 5,

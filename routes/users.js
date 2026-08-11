@@ -56,7 +56,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
   router.patch('/settings', requireAuth, async (req, res) => {
     const { id } = req.telegramUser;
     const allowed = ['display_name', 'notify_messages', 'notify_sessions', 'notify_daily_verse',
-      'availability_start', 'availability_end', 'max_mentees', 'bio', 'specialization'];
+      'notify_streak_reminder', 'availability_start', 'availability_end', 'max_mentees', 'bio', 'specialization'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];

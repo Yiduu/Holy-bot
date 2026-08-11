@@ -2333,20 +2333,63 @@ setInterval(async () => {
   }
 }, 60 * 1000);
 
-// Background job to reset streaks at midnight Ethiopia time
+// Background job to reset streaks at midnight Ethiopia time.
+// Only hard-resets streaks that missed TWO OR MORE full days — a single missed
+// day is left alone so a banked Streak Saver can still auto-cover it the next
+// time the user opens the app and hits /api/streaks/mark (see routes/streaks.js).
 setInterval(async () => {
   const now = getEthiopiaNow();
   if (now.getHours() !== 0 || now.getMinutes() !== 0) return;
 
-  const yest = new Date(now);
-  yest.setDate(yest.getDate() - 1);
-  const yestStr = yest.toISOString().split('T')[0];
+  const twoDaysAgo = new Date(now);
+  twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+  const twoDaysAgoStr = twoDaysAgo.toISOString().split('T')[0];
 
   const { error } = await supabase.from('bible_streaks')
     .update({ current_streak: 0 })
-    .lt('last_read_date', yestStr);
+    .lt('last_read_date', twoDaysAgoStr);
 
   if (!error) console.log('[Scheduler] Daily streak reset check completed.');
+}, 60 * 1000);
+
+// Evening Streak Saver reminder — nudges anyone with an active streak who
+// hasn't read yet today, so a busy evening doesn't cost them their streak.
+// Fires once, at 20:00 Ethiopia time.
+setInterval(async () => {
+  const now = getEthiopiaNow();
+  if (now.getHours() !== 20 || now.getMinutes() !== 0) return;
+
+  const todayStr = now.toISOString().split('T')[0];
+
+  const { data: streaks, error } = await supabase.from('bible_streaks')
+    .select('telegram_id, current_streak, freezes_available, last_read_date')
+    .gt('current_streak', 0)
+    .neq('last_read_date', todayStr);
+
+  if (error) { console.error('[Scheduler] Streak reminder query failed:', error.message); return; }
+  if (!streaks?.length) return;
+
+  const ids = streaks.map(s => s.telegram_id);
+  const [{ data: settingsRows }, { data: userRows }] = await Promise.all([
+    supabase.from('user_settings').select('telegram_id, notify_streak_reminder, language').in('telegram_id', ids),
+    supabase.from('users').select('telegram_id, chat_id').in('telegram_id', ids),
+  ]);
+
+  const settingsMap = new Map((settingsRows || []).map(r => [String(r.telegram_id), r]));
+  const chatIdMap = new Map((userRows || []).map(r => [String(r.telegram_id), r.chat_id]));
+
+  let sent = 0;
+  for (const s of streaks) {
+    const settings = settingsMap.get(String(s.telegram_id));
+    if (settings && settings.notify_streak_reminder === false) continue; // opted out
+
+    const lang = settings?.language || 'en';
+    const chatId = chatIdMap.get(String(s.telegram_id)) || s.telegram_id;
+    const key = (s.freezes_available || 0) > 0 ? 'streak_reminder_with_freeze' : 'streak_reminder';
+    const ok = await safeSend(chatId, tSync(lang, key, { streak: s.current_streak }));
+    if (ok) sent++;
+  }
+  if (sent) console.log(`[Scheduler] Sent ${sent} streak reminder(s).`);
 }, 60 * 1000);
 
 // Mentor application review polling

@@ -98,6 +98,8 @@
     "streak_display": "🔥 *Streak: {count} days*\nLongest: {longest} days\n\n📖 Today's Verse:\n*{reference}*\n_{verse}_",
     "streak_marked": "✅ Marked as read!",
     "streak_already_read": "✅ Already read today",
+    "streak_reminder": "🔥 Your *{streak}-day streak* is still waiting on you today. A couple of minutes in the Word keeps it alive — open Holy and tap Mark Read.",
+    "streak_reminder_with_freeze": "🔥 Your *{streak}-day streak* is waiting. Good news — you have a Streak Saver banked, so even if today slips by, the streak is protected. Still, reading today keeps you growing 🙏",
     "verse_title": "Daily Verse",
     "no_verse": "No verse available today.",
     "amharic_translation": "Amharic",
