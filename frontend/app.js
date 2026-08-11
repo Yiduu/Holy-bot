@@ -1956,7 +1956,11 @@ async function loadMentors() {
               <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentees')}</span>
               ${m.accepting_requests === false ? `<span class="mentor-badge" style="background:rgba(224,92,92,0.1);color:var(--danger);border:1px solid rgba(224,92,92,0.2);">Not Accepting</span>` : ''}
             </div>
-            ${currentUser?.role === 'mentor' ? '' : (mentees >= max ? `
+            ${currentUser?.role === 'mentor' ? '' : (m.request_pending ? `
+              <button class="btn btn-outline btn-sm btn-pending" disabled title="${t('request_pending_tooltip')}">
+                ${MENTOR_ICON_PENDING} ${t('btn_request_pending')}
+              </button>
+            ` : (mentees >= max ? `
               <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed;background:var(--bg3);color:var(--text3);" title="${t('capacity_full_tooltip')}">
                 ${t('capacity_full')}
               </button>
@@ -1965,10 +1969,11 @@ async function loadMentors() {
                 ${t('btn_request')}
               </button>
             ` : `
-              <button class="btn btn-outline btn-sm" onclick="requestMentorship(${m.telegram_id}${topicIdParam})" ${!canRequest ? 'disabled' : ''}>
+              <button class="btn btn-outline btn-sm" data-mentor-name="${escapeHtml(name)}"
+                onclick="requestMentorship(event, ${m.telegram_id}${topicIdParam})" ${!canRequest ? 'disabled' : ''}>
                 ${t('btn_request')}
               </button>
-            `))}
+            `)))}
           </div>`;
       }).join('');
     }
@@ -1992,8 +1997,24 @@ async function loadMentorTopics() {
     console.error('Failed to load topics for filter:', e);
   }
 }
-async function requestMentorship(mentor_id, topic_id = null) {
+// Small stroke-style hourglass icon for the Pending button state.
+const MENTOR_ICON_PENDING = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><path d="M6 3h12M6 21h12M6 3c0 5 4 6 6 9-2 3-6 4-6 9M18 3c0 5-4 6-6 9 2 3 6 4 6 9"/></svg>';
+
+async function requestMentorship(event, mentor_id, topic_id = null) {
   haptic('medium');
+  const btn = event?.currentTarget || null;
+  const mentorName = btn?.dataset?.mentorName || '';
+  const originalHtml = btn ? btn.innerHTML : '';
+
+  // Optimistic update — the button flips to Pending immediately so the user
+  // never wonders whether their tap registered, even before the network
+  // round-trip finishes.
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('btn-pending');
+    btn.innerHTML = `${MENTOR_ICON_PENDING} ${t('btn_request_pending')}`;
+  }
+
   try {
     const body = { mentor_id, message: 'I would like your mentorship.' };
     if (topic_id) {
@@ -2001,12 +2022,33 @@ async function requestMentorship(mentor_id, topic_id = null) {
     }
     await apiFetch('/api/mentors/request', { method: 'POST', body });
     haptic('success');
-    showToast('Mentorship request sent! 🙏', 'success');
+    openMentorRequestSentModal(mentorName);
     loadMentors();
   } catch (e) {
     haptic('error');
+    // Roll back the optimistic state — the request didn't actually go through.
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('btn-pending');
+      btn.innerHTML = originalHtml;
+    }
     showToast(e.message, 'error');
   }
+}
+
+// ─── Mentorship Request Confirmation Modal ─────────────────────
+function openMentorRequestSentModal(mentorName) {
+  const bodyEl = $('mentorRequestSentBody');
+  if (bodyEl) {
+    bodyEl.innerHTML = mentorName
+      ? t('request_sent_body_named', { name: `<strong>${escapeHtml(mentorName)}</strong>` })
+      : t('request_sent_body');
+  }
+  $('mentorRequestSentModal')?.classList.add('open');
+}
+
+function closeMentorRequestSentModal() {
+  $('mentorRequestSentModal')?.classList.remove('open');
 }
 
 // ─── Mentorship Requests ──────────────────────────────────────

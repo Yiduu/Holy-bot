@@ -1144,6 +1144,18 @@ textarea.form-control {
   color: var(--gold-light);
 }
 
+/* ─── Mentor card: request pending state ────────────────────── */
+.btn.btn-pending {
+  background: rgba(201, 168, 76, 0.1);
+  color: var(--gold-light);
+  border-color: rgba(201, 168, 76, 0.28);
+  opacity: 1;
+  cursor: default;
+  filter: none;
+}
+
+.btn.btn-pending svg { display: inline-block; vertical-align: -2px; }
+
 /* ─── Star Rating (small, inline) ───────────────────────────── */
 .rating-row {
   display: flex;
@@ -2303,6 +2315,39 @@ textarea.form-control {
   font-size: 1rem;
   color: var(--gold);
   margin-bottom: 16px;
+}
+
+/* ─── Request-sent confirmation modal ───────────────────────── */
+.request-sent-sheet {
+  text-align: center;
+}
+
+.request-sent-sheet .modal-title,
+.request-sent-sheet p {
+  text-align: center;
+}
+
+.request-sent-icon {
+  width: 56px;
+  height: 56px;
+  margin: 4px auto 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(91, 173, 122, 0.14);
+  color: var(--success);
+  box-shadow: 0 0 0 1px rgba(91, 173, 122, 0.25);
+  animation: requestSentPop 0.45s var(--ease-spring);
+}
+
+@keyframes requestSentPop {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .request-sent-icon { animation: none; }
 }
 
 /* ─── Modal (center style for schedule) ────────────────────── */

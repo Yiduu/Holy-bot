@@ -1,0 +1,245 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index ba9a05f..cefc4eb 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1956,7 +1956,11 @@ async function loadMentors() {
+               <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentees')}</span>
+               ${m.accepting_requests === false ? `<span class="mentor-badge" style="background:rgba(224,92,92,0.1);color:var(--danger);border:1px solid rgba(224,92,92,0.2);">Not Accepting</span>` : ''}
+             </div>
+-            ${currentUser?.role === 'mentor' ? '' : (mentees >= max ? `
++            ${currentUser?.role === 'mentor' ? '' : (m.request_pending ? `
++              <button class="btn btn-outline btn-sm btn-pending" disabled title="${t('request_pending_tooltip')}">
++                ${MENTOR_ICON_PENDING} ${t('btn_request_pending')}
++              </button>
++            ` : (mentees >= max ? `
+               <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed;background:var(--bg3);color:var(--text3);" title="${t('capacity_full_tooltip')}">
+                 ${t('capacity_full')}
+               </button>
+@@ -1965,10 +1969,11 @@ async function loadMentors() {
+                 ${t('btn_request')}
+               </button>
+             ` : `
+-              <button class="btn btn-outline btn-sm" onclick="requestMentorship(${m.telegram_id}${topicIdParam})" ${!canRequest ? 'disabled' : ''}>
++              <button class="btn btn-outline btn-sm" data-mentor-name="${escapeHtml(name)}"
++                onclick="requestMentorship(event, ${m.telegram_id}${topicIdParam})" ${!canRequest ? 'disabled' : ''}>
+                 ${t('btn_request')}
+               </button>
+-            `))}
++            `)))}
+           </div>`;
+       }).join('');
+     }
+@@ -1992,8 +1997,24 @@ async function loadMentorTopics() {
+     console.error('Failed to load topics for filter:', e);
+   }
+ }
+-async function requestMentorship(mentor_id, topic_id = null) {
++// Small stroke-style hourglass icon for the Pending button state.
++const MENTOR_ICON_PENDING = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><path d="M6 3h12M6 21h12M6 3c0 5 4 6 6 9-2 3-6 4-6 9M18 3c0 5-4 6-6 9 2 3 6 4 6 9"/></svg>';
++
++async function requestMentorship(event, mentor_id, topic_id = null) {
+   haptic('medium');
++  const btn = event?.currentTarget || null;
++  const mentorName = btn?.dataset?.mentorName || '';
++  const originalHtml = btn ? btn.innerHTML : '';
++
++  // Optimistic update — the button flips to Pending immediately so the user
++  // never wonders whether their tap registered, even before the network
++  // round-trip finishes.
++  if (btn) {
++    btn.disabled = true;
++    btn.classList.add('btn-pending');
++    btn.innerHTML = `${MENTOR_ICON_PENDING} ${t('btn_request_pending')}`;
++  }
++
+   try {
+     const body = { mentor_id, message: 'I would like your mentorship.' };
+     if (topic_id) {
+@@ -2001,14 +2022,35 @@ async function requestMentorship(mentor_id, topic_id = null) {
+     }
+     await apiFetch('/api/mentors/request', { method: 'POST', body });
+     haptic('success');
+-    showToast('Mentorship request sent! 🙏', 'success');
++    openMentorRequestSentModal(mentorName);
+     loadMentors();
+   } catch (e) {
+     haptic('error');
++    // Roll back the optimistic state — the request didn't actually go through.
++    if (btn) {
++      btn.disabled = false;
++      btn.classList.remove('btn-pending');
++      btn.innerHTML = originalHtml;
++    }
+     showToast(e.message, 'error');
+   }
+ }
+ 
++// ─── Mentorship Request Confirmation Modal ─────────────────────
++function openMentorRequestSentModal(mentorName) {
++  const bodyEl = $('mentorRequestSentBody');
++  if (bodyEl) {
++    bodyEl.innerHTML = mentorName
++      ? t('request_sent_body_named', { name: `<strong>${escapeHtml(mentorName)}</strong>` })
++      : t('request_sent_body');
++  }
++  $('mentorRequestSentModal')?.classList.add('open');
++}
++
++function closeMentorRequestSentModal() {
++  $('mentorRequestSentModal')?.classList.remove('open');
++}
++
+ // ─── Mentorship Requests ──────────────────────────────────────
+ async function loadRequests() {
+   const container = $('requestsList');
+diff --git a/frontend/index.html b/frontend/index.html
+index 72b309b..ccecde1 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -1221,6 +1221,24 @@
+     </div>
+   </div>
+ 
++  <!-- ─── Mentorship Request Sent Confirmation ──────────────────── -->
++  <div id="mentorRequestSentModal" class="modal-overlay" onclick="if(event.target===this)closeMentorRequestSentModal()">
++    <div class="modal-sheet request-sent-sheet">
++      <div class="modal-handle"></div>
++      <div class="request-sent-icon">
++        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
++          stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
++          <circle cx="12" cy="12" r="9.5" />
++          <path d="M8 12.5l2.5 2.5L16 9.5" />
++        </svg>
++      </div>
++      <div class="modal-title" data-i18n="request_sent_title">Request Sent</div>
++      <p id="mentorRequestSentBody" class="text-sm text-dim mb-16"></p>
++      <button class="btn btn-primary btn-full" onclick="closeMentorRequestSentModal()" data-i18n="btn_got_it">Got
++        it</button>
++    </div>
++  </div>
++
+   <!-- ─── Journal Entry Modal ────────────────────────────────────── -->
+   <div id="journalModal" class="modal-overlay" onclick="if(event.target===this)closeJournalModal()">
+     <div class="modal-sheet">
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 843ba1d..a361386 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -19,6 +19,12 @@ const I18N = {
+     "btn_next": "Next ▶️",
+     "btn_mark_read": "✅ Mark as Read",
+     "btn_request": "Request",
++    "btn_request_pending": "Pending",
++    "request_pending_tooltip": "Your request is waiting on this mentor's response.",
++    "request_sent_title": "Request Sent",
++    "request_sent_body_named": "Your mentorship request has been sent to {name}. You'll be notified as soon as they respond.",
++    "request_sent_body": "Your mentorship request has been sent. You'll be notified as soon as they respond.",
++    "btn_got_it": "Got it",
+     "capacity_full": "Full",
+     "capacity_full_tooltip": "This mentor has reached their capacity. Please try another mentor.",
+     "btn_join_session": "📹 Join Session",
+@@ -280,6 +286,12 @@ const I18N = {
+     "btn_next": "ቀጣይ ▶️",
+     "btn_mark_read": "እንዳነበብሁ ምልክት አድርግ",
+     "btn_request": "ጠይቅ",
++    "btn_request_pending": "በመጠባበቅ ላይ",
++    "request_pending_tooltip": "ጥያቄዎ ከዚህ አማካሪ ምላሽ በመጠባበቅ ላይ ነው።",
++    "request_sent_title": "ጥያቄ ተልኳል",
++    "request_sent_body_named": "የአማካሪነት ጥያቄዎ ለ{name} ተልኳል። እሳቸው ምላሽ እንደሰጡ ወዲያውኑ ይነገርዎታል።",
++    "request_sent_body": "የአማካሪነት ጥያቄዎ ተልኳል። ምላሽ እንደተሰጠ ወዲያውኑ ይነገርዎታል።",
++    "btn_got_it": "እሺ",
+     "capacity_full": "ክፍት ቦታ የለም",
+     "capacity_full_tooltip": "ይህ አማካሪ በአሁኑ ምንም ክፍት ቦታ የለውም። እባክዎ ሌላ አማካሪ ይሞክሩ።",
+     "btn_join_session": "ክፍለጊዜ ተቀላቀል",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index fd036ab..36ba0b3 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -1144,6 +1144,18 @@ textarea.form-control {
+   color: var(--gold-light);
+ }
+ 
++/* ─── Mentor card: request pending state ────────────────────── */
++.btn.btn-pending {
++  background: rgba(201, 168, 76, 0.1);
++  color: var(--gold-light);
++  border-color: rgba(201, 168, 76, 0.28);
++  opacity: 1;
++  cursor: default;
++  filter: none;
++}
++
++.btn.btn-pending svg { display: inline-block; vertical-align: -2px; }
++
+ /* ─── Star Rating (small, inline) ───────────────────────────── */
+ .rating-row {
+   display: flex;
+@@ -2305,6 +2317,39 @@ textarea.form-control {
+   margin-bottom: 16px;
+ }
+ 
++/* ─── Request-sent confirmation modal ───────────────────────── */
++.request-sent-sheet {
++  text-align: center;
++}
++
++.request-sent-sheet .modal-title,
++.request-sent-sheet p {
++  text-align: center;
++}
++
++.request-sent-icon {
++  width: 56px;
++  height: 56px;
++  margin: 4px auto 14px;
++  border-radius: 50%;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  background: rgba(91, 173, 122, 0.14);
++  color: var(--success);
++  box-shadow: 0 0 0 1px rgba(91, 173, 122, 0.25);
++  animation: requestSentPop 0.45s var(--ease-spring);
++}
++
++@keyframes requestSentPop {
++  0% { transform: scale(0.5); opacity: 0; }
++  100% { transform: scale(1); opacity: 1; }
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .request-sent-icon { animation: none; }
++}
++
+ /* ─── Modal (center style for schedule) ────────────────────── */
+ .modal {
+   background: var(--bg2);
+diff --git a/routes/mentors.js b/routes/mentors.js
+index 955ce40..d586965 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -73,6 +73,16 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
+ 
+     if (error) return res.status(500).json({ error: error.message });
+ 
++    // So the frontend can render "Pending" instead of "Request" for mentors
++    // this user has already messaged — including after a page refresh, not
++    // just right after clicking (client-side-only state would reset on reload).
++    const { data: pendingRows } = await supabase
++      .from('mentorship_requests')
++      .select('mentor_id')
++      .eq('user_id', req.telegramUser.id)
++      .eq('status', 'pending');
++    const pendingMentorIds = new Set((pendingRows || []).map(r => r.mentor_id));
++
+     // Enrich with mentee counts and expertise topics
+     const enriched = await Promise.all((data || []).map(async (mentor) => {
+       const { count } = await supabase.from('mentorship_assignments')
+@@ -98,6 +108,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
+         ...mentor,
+         mentee_count: count || 0,
+         expertise_topics,
++        request_pending: pendingMentorIds.has(mentor.telegram_id),
+       };
+     }));
+ 

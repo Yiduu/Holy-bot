@@ -1221,6 +1221,24 @@
     </div>
   </div>
 
+  <!-- ─── Mentorship Request Sent Confirmation ──────────────────── -->
+  <div id="mentorRequestSentModal" class="modal-overlay" onclick="if(event.target===this)closeMentorRequestSentModal()">
+    <div class="modal-sheet request-sent-sheet">
+      <div class="modal-handle"></div>
+      <div class="request-sent-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9.5" />
+          <path d="M8 12.5l2.5 2.5L16 9.5" />
+        </svg>
+      </div>
+      <div class="modal-title" data-i18n="request_sent_title">Request Sent</div>
+      <p id="mentorRequestSentBody" class="text-sm text-dim mb-16"></p>
+      <button class="btn btn-primary btn-full" onclick="closeMentorRequestSentModal()" data-i18n="btn_got_it">Got
+        it</button>
+    </div>
+  </div>
+
   <!-- ─── Journal Entry Modal ────────────────────────────────────── -->
   <div id="journalModal" class="modal-overlay" onclick="if(event.target===this)closeJournalModal()">
     <div class="modal-sheet">

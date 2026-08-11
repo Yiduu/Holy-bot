@@ -73,6 +73,16 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
 
     if (error) return res.status(500).json({ error: error.message });
 
+    // So the frontend can render "Pending" instead of "Request" for mentors
+    // this user has already messaged — including after a page refresh, not
+    // just right after clicking (client-side-only state would reset on reload).
+    const { data: pendingRows } = await supabase
+      .from('mentorship_requests')
+      .select('mentor_id')
+      .eq('user_id', req.telegramUser.id)
+      .eq('status', 'pending');
+    const pendingMentorIds = new Set((pendingRows || []).map(r => r.mentor_id));
+
     // Enrich with mentee counts and expertise topics
     const enriched = await Promise.all((data || []).map(async (mentor) => {
       const { count } = await supabase.from('mentorship_assignments')
@@ -98,6 +108,7 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
         ...mentor,
         mentee_count: count || 0,
         expertise_topics,
+        request_pending: pendingMentorIds.has(mentor.telegram_id),
       };
     }));
 
