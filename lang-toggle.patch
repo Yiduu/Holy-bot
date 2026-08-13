@@ -1,0 +1,78 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index cefc4eb..3a86442 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -3900,8 +3900,9 @@ function applyLanguage() {
+   const langSelect = $('settingLanguage');
+   if (langSelect) langSelect.value = currentLanguage;
+ 
+-  const obLangBtn = $('obLangBtn');
+-  if (obLangBtn) obLangBtn.textContent = currentLanguage.toUpperCase();
++  document.querySelectorAll('.lang-toggle-btn').forEach(btn => {
++    btn.textContent = currentLanguage.toUpperCase();
++  });
+ 
+   const toggleBtn = $('journalViewToggle');
+   if (toggleBtn) {
+@@ -3921,12 +3922,18 @@ function changeLanguage(lang) {
+   loadDashboard();
+ }
+ 
+-function toggleOnboardingLanguage() {
++function toggleLanguage() {
+   haptic('selection');
+   const next = currentLanguage === 'en' ? 'am' : 'en';
+   currentLanguage = next;
+   localStorage.setItem('language', next);
+   applyLanguage();
++  loadDashboard();
++}
++
++// Kept for backward compatibility with any existing inline onclick handlers.
++function toggleOnboardingLanguage() {
++  toggleLanguage();
+ }
+ 
+ // ─── Mentor Management ────────────────────────────────────────
+diff --git a/frontend/index.html b/frontend/index.html
+index ccecde1..80dac24 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -66,7 +66,7 @@
+         <span class="ob-step-count" id="obStepCount">1/7</span>
+ 
+         <div class="ob-quick-controls">
+-          <button id="obLangBtn" class="lang-toggle-btn" onclick="toggleOnboardingLanguage()"
++          <button id="obLangBtn" class="lang-toggle-btn" onclick="toggleLanguage()"
+             aria-label="Switch language">EN</button>
+           <button class="theme-btn" onclick="toggleTheme()" aria-label="Toggle dark/light theme"><span
+               class="theme-icon-svg">
+@@ -481,6 +481,8 @@
+         <div class="header-actions">
+           <button id="adminBtn" class="btn btn-sm btn-outline hidden" data-i18n="btn_admin"
+             onclick="window.location='/admin.html'">Admin</button>
++          <button id="langBtnDash" class="lang-toggle-btn" onclick="toggleLanguage()"
++            aria-label="Switch language">EN</button>
+           <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon" class="theme-icon-svg">
+               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+@@ -620,7 +622,10 @@
+     <div id="page-mentors" class="page">
+       <div class="app-header">
+         <h2 data-i18n="Find a Mentor">Find a Mentor</h2>
+-        <button class="theme-btn" onclick="toggleTheme()"><span id="themeIconMentors" class="theme-icon-svg">
++        <div class="header-actions">
++          <button id="langBtnMentors" class="lang-toggle-btn" onclick="toggleLanguage()"
++            aria-label="Switch language">EN</button>
++          <button class="theme-btn" onclick="toggleTheme()"><span id="themeIconMentors" class="theme-icon-svg">
+             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+               <circle cx="12" cy="12" r="4.2" />
+@@ -628,6 +633,7 @@
+                 d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" />
+             </svg>
+           </span></button>
++        </div>
+       </div>
+       <div class="page-content">
+         <div class="page-intro mb-12 stagger-fade">

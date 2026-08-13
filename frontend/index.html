@@ -66,7 +66,7 @@
         <span class="ob-step-count" id="obStepCount">1/7</span>
 
         <div class="ob-quick-controls">
-          <button id="obLangBtn" class="lang-toggle-btn" onclick="toggleOnboardingLanguage()"
+          <button id="obLangBtn" class="lang-toggle-btn" onclick="toggleLanguage()"
             aria-label="Switch language">EN</button>
           <button class="theme-btn" onclick="toggleTheme()" aria-label="Toggle dark/light theme"><span
               class="theme-icon-svg">
@@ -481,6 +481,8 @@
         <div class="header-actions">
           <button id="adminBtn" class="btn btn-sm btn-outline hidden" data-i18n="btn_admin"
             onclick="window.location='/admin.html'">Admin</button>
+          <button id="langBtnDash" class="lang-toggle-btn" onclick="toggleLanguage()"
+            aria-label="Switch language">EN</button>
           <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon" class="theme-icon-svg">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -620,7 +622,10 @@
     <div id="page-mentors" class="page">
       <div class="app-header">
         <h2 data-i18n="Find a Mentor">Find a Mentor</h2>
-        <button class="theme-btn" onclick="toggleTheme()"><span id="themeIconMentors" class="theme-icon-svg">
+        <div class="header-actions">
+          <button id="langBtnMentors" class="lang-toggle-btn" onclick="toggleLanguage()"
+            aria-label="Switch language">EN</button>
+          <button class="theme-btn" onclick="toggleTheme()"><span id="themeIconMentors" class="theme-icon-svg">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="4.2" />
@@ -628,6 +633,7 @@
                 d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" />
             </svg>
           </span></button>
+        </div>
       </div>
       <div class="page-content">
         <div class="page-intro mb-12 stagger-fade">

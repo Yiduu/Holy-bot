@@ -3900,8 +3900,9 @@ function applyLanguage() {
   const langSelect = $('settingLanguage');
   if (langSelect) langSelect.value = currentLanguage;
 
-  const obLangBtn = $('obLangBtn');
-  if (obLangBtn) obLangBtn.textContent = currentLanguage.toUpperCase();
+  document.querySelectorAll('.lang-toggle-btn').forEach(btn => {
+    btn.textContent = currentLanguage.toUpperCase();
+  });
 
   const toggleBtn = $('journalViewToggle');
   if (toggleBtn) {
@@ -3921,12 +3922,18 @@ function changeLanguage(lang) {
   loadDashboard();
 }
 
-function toggleOnboardingLanguage() {
+function toggleLanguage() {
   haptic('selection');
   const next = currentLanguage === 'en' ? 'am' : 'en';
   currentLanguage = next;
   localStorage.setItem('language', next);
   applyLanguage();
+  loadDashboard();
+}
+
+// Kept for backward compatibility with any existing inline onclick handlers.
+function toggleOnboardingLanguage() {
+  toggleLanguage();
 }
 
 // ─── Mentor Management ────────────────────────────────────────
