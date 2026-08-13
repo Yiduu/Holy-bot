@@ -29,6 +29,17 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .eq('role', 'mentor')
       .eq('is_banned', false);
 
+    // Hide mentors an admin has suspended (Mentor Control System) from
+    // mentee-facing discovery, without touching their role or history.
+    const { data: suspendedRows } = await supabase
+      .from('mentors')
+      .select('telegram_id')
+      .eq('suspended_by_admin', true);
+    const suspendedIds = (suspendedRows || []).map(r => r.telegram_id);
+    if (suspendedIds.length) {
+      query = query.not('telegram_id', 'in', `(${suspendedIds.join(',')})`);
+    }
+
     // Visibility rules (applied when the mentee has a known sex):
     //   preferred_mentee_sex = 'M'          → only male mentees see this mentor
     //   preferred_mentee_sex = 'F'          → only female mentees see this mentor

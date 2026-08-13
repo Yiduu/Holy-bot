@@ -1903,6 +1903,14 @@
                     </svg>
                     Mentorship
                 </div>
+                <div class="nav-item" onclick="showTab('mentor-control')" id="nav-mentor-control">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 2l8 3.2v6c0 5-3.4 8.7-8 10.8-4.6-2.1-8-5.8-8-10.8v-6z" />
+                        <path d="m9 12 2 2 4-4" />
+                    </svg>
+                    Mentor Control
+                    <span id="suspendedBadge" class="nav-badge" style="display:none;background:var(--danger)">0</span>
+                </div>
                 <div class="nav-item" onclick="showTab('applications')" id="nav-applications">
                     <svg viewBox="0 0 24 24">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -2225,6 +2233,68 @@
                     <div class="pagination" id="mentorshipPager"></div>
                 </div>
 
+                <!-- ── Mentor Control ────────────────────────────────── -->
+                <div class="pane" id="pane-mentor-control">
+                    <div class="stats-grid" id="mcStatsGrid" style="margin-bottom:18px">
+                        <div class="stat-card">
+                            <div class="stat-icon gold"><svg viewBox="0 0 24 24">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                </svg></div>
+                            <div class="stat-num" id="mc-total">–</div>
+                            <div class="stat-label">Total Mentors</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon red"><svg viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="4.9" y1="4.9" x2="19.1" y2="19.1" />
+                                </svg></div>
+                            <div class="stat-num" id="mc-suspended">–</div>
+                            <div class="stat-label">Suspended</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon warn"><svg viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="9" />
+                                    <path d="M12 7v5l3.3 2" />
+                                </svg></div>
+                            <div class="stat-num" id="mc-paused">–</div>
+                            <div class="stat-label">Paused by Self</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon blue"><svg viewBox="0 0 24 24">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                                    <circle cx="9" cy="7" r="4" />
+                                </svg></div>
+                            <div class="stat-num" id="mc-mentees">–</div>
+                            <div class="stat-label">Active Mentees</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon green"><svg viewBox="0 0 24 24">
+                                    <path d="M12 2l8 3.2v6c0 5-3.4 8.7-8 10.8-4.6-2.1-8-5.8-8-10.8v-6z" />
+                                    <path d="m9 12 2 2 4-4" />
+                                </svg></div>
+                            <div class="stat-num" id="mc-rating">–</div>
+                            <div class="stat-label">Avg. Rating</div>
+                        </div>
+                    </div>
+                    <div class="toolbar">
+                        <input class="search-box" id="mcSearch" placeholder="Search mentors by anonymous ID…"
+                            oninput="debounceMc()" />
+                        <select class="form-control" id="mcStatusFilter" style="max-width:170px"
+                            onchange="loadMentorControl(1)">
+                            <option value="all">All Mentors</option>
+                            <option value="active">Active</option>
+                            <option value="suspended">Suspended</option>
+                            <option value="paused">Paused by Self</option>
+                            <option value="full">At Capacity</option>
+                        </select>
+                        <button class="btn btn-ghost" onclick="clearMcFilter()">Clear</button>
+                    </div>
+                    <div id="mcContainer" class="mentorship-grid">
+                        <div class="loading">Loading…</div>
+                    </div>
+                    <div class="pagination" id="mcPager"></div>
+                </div>
+
                 <!-- ── Applications ──────────────────────────────────── -->
                 <div class="pane" id="pane-applications">
                     <div class="toolbar">
@@ -2464,6 +2534,65 @@
         </div>
     </div>
 
+    <!-- ── Mentor Control: Detail Modal ──────────────────────────── -->
+    <div class="modal-overlay" id="mcDetailModal">
+        <div class="modal" style="max-width:560px;display:flex;flex-direction:column;max-height:90vh">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-shrink:0">
+                <div class="modal-title" id="mcDetailTitle" style="margin-bottom:0">Mentor</div>
+                <button class="btn btn-ghost btn-sm btn-icon" onclick="closeMcDetail()">
+                    <svg viewBox="0 0 24 24"
+                        style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="detail-tabs">
+                <div class="detail-tab active" onclick="showMcDetailTab('info')">Info</div>
+                <div class="detail-tab" onclick="showMcDetailTab('mentees')">Mentees</div>
+                <div class="detail-tab" onclick="showMcDetailTab('notes')">Admin Notes</div>
+                <div class="detail-tab" onclick="showMcDetailTab('activity')">Activity</div>
+            </div>
+            <div style="overflow-y:auto;flex:1">
+                <div class="detail-pane active" id="mcdetail-info">
+                    <div id="mcDetailInfoContent" class="loading">Loading…</div>
+                </div>
+                <div class="detail-pane" id="mcdetail-mentees">
+                    <div id="mcDetailMenteesContent" class="loading">Loading…</div>
+                </div>
+                <div class="detail-pane" id="mcdetail-notes">
+                    <div class="form-group">
+                        <label class="form-label">Private notes (never shown to the mentor)</label>
+                        <textarea id="mcNotesText" class="form-control" rows="8"
+                            placeholder="Internal notes about this mentor…"></textarea>
+                    </div>
+                    <button class="btn btn-primary btn-full" id="mcNotesSaveBtn" onclick="saveMcNotes()">Save
+                        Notes</button>
+                </div>
+                <div class="detail-pane" id="mcdetail-activity">
+                    <div id="mcDetailActivityContent" class="loading">Loading…</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Mentor Control: Quick Action Modal (suspend / capacity / message) ── -->
+    <div class="modal-overlay" id="mcActionModal">
+        <div class="modal">
+            <div class="modal-title" id="mcActionTitle">Action</div>
+            <div class="form-group">
+                <label class="form-label" id="mcActionLabel">Details</label>
+                <textarea id="mcActionText" class="form-control" rows="4"></textarea>
+                <input type="number" id="mcActionNumber" class="form-control" style="display:none" min="0" max="100" />
+            </div>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-primary btn-full" id="mcActionSubmitBtn"
+                    onclick="submitMcAction()">Confirm</button>
+                <button class="btn btn-ghost btn-full" onclick="closeMcAction()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ── Contact Applicant Modal ──────────────────────────────── -->
     <div class="modal-overlay" id="contactModal">
         <div class="modal">
@@ -2681,7 +2810,7 @@
 
         /* ── Tab nav ────────────────────────────────────────────────── */
         const TITLES = {
-            overview: 'Overview', users: 'Users', conversations: 'Conversations', 'live-sessions': 'Live Sessions', mentorship: 'Mentorship', applications: 'Mentor Applications',
+            overview: 'Overview', users: 'Users', conversations: 'Conversations', 'live-sessions': 'Live Sessions', mentorship: 'Mentorship', 'mentor-control': 'Mentor Control', applications: 'Mentor Applications',
             messages: 'Message Moderation', tickets: 'Support Requests', topics: 'Counseling Topics',
             'mentorship-requests': 'Request Log',
             broadcast: 'Broadcast', audit: 'Audit Log'
@@ -2695,7 +2824,7 @@
             document.getElementById('topbarTitle').textContent = TITLES[tab] || tab;
             activeTab = tab; closeSidebar();
             const loaders = {
-                overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), 'live-sessions': () => switchSessionsView(currentSessionsView), mentorship: () => loadMentorship(1), applications: () => loadApps(1),
+                overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), 'live-sessions': () => switchSessionsView(currentSessionsView), mentorship: () => loadMentorship(1), 'mentor-control': () => { loadMentorControl(1); loadMcStats(); }, applications: () => loadApps(1),
                 messages: () => loadMessages(1), tickets: loadTickets, topics: loadTopics,
                 'mentorship-requests': () => loadMentorshipRequests(1),
                 broadcast: () => { }, audit: () => loadAudit(1)
@@ -4084,9 +4213,332 @@
             }
         }
 
+        /* ── Mentor Control System ─────────────────────────────────────── */
+        let mcPage = 1;
+        let mcTimer = null;
+        let mcCurrentId = null;
+        let mcActionType = null; // 'suspend' | 'capacity' | 'message'
+        let mcActionTargetId = null;
+
+        function debounceMc() {
+            clearTimeout(mcTimer);
+            mcTimer = setTimeout(() => loadMentorControl(1), 400);
+        }
+        function clearMcFilter() {
+            document.getElementById('mcSearch').value = '';
+            document.getElementById('mcStatusFilter').value = 'all';
+            loadMentorControl(1);
+        }
+
+        async function loadMcStats() {
+            try {
+                const d = await api('/api/admin/mentor-control/overview');
+                document.getElementById('mc-total').textContent = d.total_mentors;
+                document.getElementById('mc-suspended').textContent = d.suspended_mentors;
+                document.getElementById('mc-paused').textContent = d.paused_by_self;
+                document.getElementById('mc-mentees').textContent = d.active_mentees;
+                document.getElementById('mc-rating').textContent = d.avg_rating !== null ? `★ ${d.avg_rating}` : '–';
+                const badge = document.getElementById('suspendedBadge');
+                if (d.suspended_mentors > 0) {
+                    badge.style.display = 'inline-flex';
+                    badge.textContent = d.suspended_mentors;
+                } else {
+                    badge.style.display = 'none';
+                }
+            } catch (e) { /* non-fatal */ }
+        }
+
+        async function loadMentorControl(page = 1) {
+            mcPage = page;
+            const search = document.getElementById('mcSearch').value;
+            const status = document.getElementById('mcStatusFilter').value;
+            const container = document.getElementById('mcContainer');
+
+            container.innerHTML = Array.from({ length: 6 }).map(() => `
+                <div class="skeleton-card">
+                    <div class="skeleton-line title"></div>
+                    <div class="skeleton-line badge"></div>
+                    <div class="skeleton-line text"></div>
+                    <div class="skeleton-line text" style="width: 60%"></div>
+                    <div class="skeleton-line button"></div>
+                </div>
+            `).join('');
+
+            try {
+                let url = `/api/admin/mentor-control/mentors?page=${page}&status=${status}`;
+                if (search) url += `&search=${encodeURIComponent(search)}`;
+                const d = await api(url);
+
+                if (!d.mentors?.length) {
+                    container.innerHTML = `<div class="empty">No mentors found</div>`;
+                    document.getElementById('mcPager').innerHTML = '';
+                    return;
+                }
+
+                container.innerHTML = d.mentors.map(m => {
+                    const statusChip = m.suspended_by_admin
+                        ? `<span class="chip chip-red">Suspended</span>`
+                        : (m.accepting_requests ? `<span class="chip chip-green">Active</span>` : `<span class="chip chip-gray">Paused</span>`);
+                    const capacityChip = m.at_capacity ? `<span class="chip chip-gold">Full</span>` : '';
+
+                    return `
+                        <div class="mentor-card">
+                            <div class="mentor-header">
+                                <div class="mentor-info">
+                                    <span class="mentor-name">${esc(m.display_name || m.anonymous_id)}</span>
+                                    <div style="font-family:var(--font-mono);font-size:10.5px;color:var(--text3);margin-top:2px">${esc(m.anonymous_id)}</div>
+                                </div>
+                                <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                                    ${statusChip}${capacityChip}
+                                </div>
+                            </div>
+                            <div class="mentor-bio ${m.bio ? '' : 'none'}">
+                                ${m.bio ? esc(m.bio) : 'No bio available'}
+                            </div>
+                            <div style="display:flex;gap:14px;font-size:11.5px;color:var(--text2);margin:8px 0">
+                                <span>👥 ${m.mentee_count}/${m.max_mentees} mentees</span>
+                                <span>★ ${m.rating ? m.rating.toFixed(1) : '–'} (${m.rating_count})</span>
+                                ${m.has_admin_notes ? '<span title="Has admin notes">📝 notes</span>' : ''}
+                            </div>
+                            ${m.suspended_by_admin && m.suspended_reason ? `<div style="font-size:11.5px;color:var(--danger);margin-bottom:8px">Reason: ${esc(m.suspended_reason)}</div>` : ''}
+                            <div style="display:flex;gap:6px;flex-wrap:wrap">
+                                <button class="btn btn-ghost btn-sm" onclick="openMcDetail(${m.telegram_id})">View</button>
+                                ${m.suspended_by_admin
+                            ? `<button class="btn btn-success btn-sm" onclick="mcReactivate(${m.telegram_id})">Reactivate</button>`
+                            : `<button class="btn btn-danger btn-sm" onclick="openMcAction('suspend', ${m.telegram_id})">Suspend</button>`}
+                                <button class="btn btn-ghost btn-sm" onclick="openMcAction('capacity', ${m.telegram_id}, ${m.max_mentees})">Capacity</button>
+                                <button class="btn btn-ghost btn-sm" onclick="openMcAction('message', ${m.telegram_id})">Message</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                pager('mcPager', page, d.pages, 'loadMentorControl');
+            } catch (e) {
+                container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${e.message}</div>`;
+                document.getElementById('mcPager').innerHTML = '';
+            }
+        }
+
+        async function mcReactivate(tid) {
+            if (!confirm('Reactivate this mentor? They will reappear in mentor search and can receive new requests.')) return;
+            try {
+                await api(`/api/admin/mentor-control/mentors/${tid}/reactivate`, { method: 'PATCH' });
+                toast('Mentor reactivated', 'success');
+                loadMentorControl(mcPage); loadMcStats();
+                if (mcCurrentId === tid) openMcDetail(tid);
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        /* ── Quick action modal (suspend reason / capacity / message) ──── */
+        function openMcAction(type, tid, currentValue) {
+            mcActionType = type;
+            mcActionTargetId = tid;
+            const textEl = document.getElementById('mcActionText');
+            const numEl = document.getElementById('mcActionNumber');
+            textEl.style.display = 'block';
+            numEl.style.display = 'none';
+            textEl.value = '';
+
+            if (type === 'suspend') {
+                document.getElementById('mcActionTitle').textContent = '⚠️ Suspend Mentor';
+                document.getElementById('mcActionLabel').textContent = 'Reason (sent to the mentor, optional)';
+                document.getElementById('mcActionSubmitBtn').textContent = 'Suspend';
+            } else if (type === 'capacity') {
+                document.getElementById('mcActionTitle').textContent = 'Edit Mentee Capacity';
+                document.getElementById('mcActionLabel').textContent = 'Maximum mentees';
+                textEl.style.display = 'none';
+                numEl.style.display = 'block';
+                numEl.value = currentValue ?? 3;
+                document.getElementById('mcActionSubmitBtn').textContent = 'Save';
+            } else if (type === 'message') {
+                document.getElementById('mcActionTitle').textContent = '✉️ Message Mentor';
+                document.getElementById('mcActionLabel').textContent = 'Message (sent on Telegram)';
+                document.getElementById('mcActionSubmitBtn').textContent = 'Send';
+            }
+            document.getElementById('mcActionModal').classList.add('open');
+        }
+        function closeMcAction() {
+            document.getElementById('mcActionModal').classList.remove('open');
+            mcActionType = null; mcActionTargetId = null;
+        }
+        async function submitMcAction() {
+            const type = mcActionType, tid = mcActionTargetId;
+            if (!type || !tid) return;
+            const btn = document.getElementById('mcActionSubmitBtn');
+            btn.disabled = true;
+            try {
+                if (type === 'suspend') {
+                    const reason = document.getElementById('mcActionText').value.trim();
+                    if (!confirm('Suspend this mentor? They will be hidden from mentee search until reactivated.')) { btn.disabled = false; return; }
+                    await api(`/api/admin/mentor-control/mentors/${tid}/suspend`, { method: 'PATCH', body: { reason } });
+                    toast('Mentor suspended', 'success');
+                } else if (type === 'capacity') {
+                    const max_mentees = parseInt(document.getElementById('mcActionNumber').value);
+                    if (!Number.isInteger(max_mentees) || max_mentees < 0) { toast('Enter a valid number', 'error'); btn.disabled = false; return; }
+                    await api(`/api/admin/mentor-control/mentors/${tid}/capacity`, { method: 'PATCH', body: { max_mentees } });
+                    toast('Capacity updated', 'success');
+                } else if (type === 'message') {
+                    const message = document.getElementById('mcActionText').value.trim();
+                    if (!message) { toast('Please enter a message', 'error'); btn.disabled = false; return; }
+                    await api(`/api/admin/mentor-control/mentors/${tid}/message`, { method: 'POST', body: { message } });
+                    toast('Message sent', 'success');
+                }
+                closeMcAction();
+                loadMentorControl(mcPage); loadMcStats();
+                if (mcCurrentId === tid) openMcDetail(tid);
+            } catch (e) {
+                toast(e.message, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        /* ── Mentor detail modal ─────────────────────────────────────── */
+        function openMcDetail(tid) {
+            mcCurrentId = tid;
+            document.querySelectorAll('#mcDetailModal .detail-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('#mcDetailModal .detail-pane').forEach(p => p.classList.remove('active'));
+            document.querySelector('#mcDetailModal .detail-tab').classList.add('active');
+            document.getElementById('mcdetail-info').classList.add('active');
+            document.getElementById('mcDetailModal').classList.add('open');
+            loadMcDetail(tid);
+        }
+        function closeMcDetail() {
+            document.getElementById('mcDetailModal').classList.remove('open');
+            mcCurrentId = null;
+        }
+        function showMcDetailTab(t) {
+            document.querySelectorAll('#mcDetailModal .detail-tab').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('#mcDetailModal .detail-pane').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById(`mcdetail-${t}`).classList.add('active');
+        }
+
+        let mcDetailCache = null;
+        async function loadMcDetail(tid) {
+            const infoC = document.getElementById('mcDetailInfoContent');
+            const menteesC = document.getElementById('mcDetailMenteesContent');
+            const activityC = document.getElementById('mcDetailActivityContent');
+            infoC.innerHTML = '<div class="loading">Loading…</div>';
+            menteesC.innerHTML = '<div class="loading">Loading…</div>';
+            activityC.innerHTML = '<div class="loading">Loading…</div>';
+            document.getElementById('mcNotesText').value = '';
+
+            try {
+                const m = await api(`/api/admin/mentor-control/mentors/${tid}`);
+                mcDetailCache = m;
+                document.getElementById('mcDetailTitle').textContent = m.display_name || m.anonymous_id;
+                document.getElementById('mcNotesText').value = m.admin_notes || '';
+
+                infoC.innerHTML = `
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12.5px">
+                        ${row('Anonymous ID', m.anonymous_id)}
+                        ${row('Telegram ID', m.telegram_id)}
+                        ${row('Status', m.suspended_by_admin ? 'Suspended by admin' : (m.accepting_requests ? 'Active' : 'Paused (self)'))}
+                        ${row('Rating', `★ ${m.rating ? m.rating.toFixed(1) : '–'} (${m.rating_count})`)}
+                        ${row('Mentees', `${m.mentee_count}/${m.max_mentees} active · ${m.past_mentee_count} past`)}
+                        ${row('Joined', m.joined_at ? ago(m.joined_at) : '–')}
+                        ${row('Last Active', m.last_active ? ago(m.last_active) : '–')}
+                        ${row('Specialization', m.specialization || '–')}
+                    </div>
+                    ${m.expertise_topics?.length ? `<div style="margin-top:10px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Topics</div><div style="display:flex;gap:6px;flex-wrap:wrap">${m.expertise_topics.map(t => `<span class="chip chip-blue">${esc(t)}</span>`).join('')}</div></div>` : ''}
+                    ${m.bio ? `<div style="margin-top:10px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Bio</div><div style="font-size:12.5px">${esc(m.bio)}</div></div>` : ''}
+                    ${m.suspended_by_admin ? `<div style="margin-top:10px;padding:10px;border-radius:8px;background:rgba(224,82,82,.1);font-size:12px">
+                        <strong>Suspended</strong> ${m.suspended_at ? ago(m.suspended_at) : ''}${m.suspended_reason ? `<br>Reason: ${esc(m.suspended_reason)}` : ''}
+                    </div>` : ''}
+                    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+                        ${m.suspended_by_admin
+                        ? `<button class="btn btn-success btn-sm" onclick="mcReactivate(${m.telegram_id})">Reactivate</button>`
+                        : `<button class="btn btn-danger btn-sm" onclick="openMcAction('suspend', ${m.telegram_id})">Suspend</button>`}
+                        <button class="btn btn-ghost btn-sm" onclick="openMcAction('capacity', ${m.telegram_id}, ${m.max_mentees})">Edit Capacity</button>
+                        <button class="btn btn-ghost btn-sm" onclick="openMcAction('message', ${m.telegram_id})">Message</button>
+                        <button class="btn btn-danger btn-sm" onclick="mcDisqualify(${m.telegram_id})">Disqualify (Permanent)</button>
+                    </div>
+                `;
+
+                if (!m.mentees?.length) {
+                    menteesC.innerHTML = `<div class="empty" style="padding:10px 0">No active mentees</div>`;
+                } else {
+                    menteesC.innerHTML = m.mentees.map(me => `
+                        <div class="mentee-row">
+                            <div class="mentee-row-header">
+                                <span class="mentee-name" style="font-family:var(--font-mono);font-size:11.5px;color:var(--accent)">${esc(me.anonymous_id)}</span>
+                                <button class="btn btn-danger btn-sm" onclick="mcUnassign(${m.telegram_id}, ${me.telegram_id})">Unassign</button>
+                            </div>
+                            <div class="mentee-details">
+                                <div class="mentee-detail-item">
+                                    <span class="mentee-detail-label">Assigned</span>
+                                    <span class="mentee-detail-value">${ago(me.assigned_at)}</span>
+                                </div>
+                                <div class="mentee-detail-item">
+                                    <span class="mentee-detail-label">Last Active</span>
+                                    <span class="mentee-detail-value">${me.last_active ? ago(me.last_active) : 'Never'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                if (!m.recent_actions?.length) {
+                    activityC.innerHTML = `<div class="empty" style="padding:10px 0">No recorded admin actions</div>`;
+                } else {
+                    activityC.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px">${m.recent_actions.map(a => `
+                        <div style="font-size:12px;padding:8px 10px;border-radius:8px;background:var(--bg3)">
+                            <div style="display:flex;justify-content:space-between">
+                                <strong>${esc(a.action)}</strong>
+                                <span style="color:var(--text3)">${ago(a.created_at)}</span>
+                            </div>
+                            ${a.details && Object.keys(a.details).length ? `<div style="color:var(--text2);margin-top:2px">${esc(JSON.stringify(a.details))}</div>` : ''}
+                        </div>
+                    `).join('')}</div>`;
+                }
+            } catch (e) {
+                infoC.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${e.message}</div>`;
+                menteesC.innerHTML = ''; activityC.innerHTML = '';
+            }
+        }
+
+        async function saveMcNotes() {
+            if (!mcCurrentId) return;
+            const notes = document.getElementById('mcNotesText').value;
+            const btn = document.getElementById('mcNotesSaveBtn');
+            btn.disabled = true; btn.textContent = 'Saving…';
+            try {
+                await api(`/api/admin/mentor-control/mentors/${mcCurrentId}/notes`, { method: 'PUT', body: { notes } });
+                toast('Notes saved', 'success');
+                loadMentorControl(mcPage);
+            } catch (e) {
+                toast(e.message, 'error');
+            } finally {
+                btn.disabled = false; btn.textContent = 'Save Notes';
+            }
+        }
+
+        async function mcUnassign(mentorId, menteeId) {
+            if (!confirm('End this specific mentor–mentee pairing? Both parties will be notified.')) return;
+            try {
+                await api(`/api/admin/mentor-control/mentors/${mentorId}/mentees/${menteeId}/unassign`, { method: 'PATCH' });
+                toast('Mentee unassigned', 'success');
+                if (mcCurrentId === mentorId) loadMcDetail(mentorId);
+                loadMentorControl(mcPage); loadMcStats();
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
+        async function mcDisqualify(tid) {
+            if (!confirm('Permanently disqualify this mentor? Their role reverts to a regular user and ALL active mentees are unassigned. This cannot be undone from here.')) return;
+            try {
+                await api(`/api/admin/mentors/${tid}/disqualify`, { method: 'PATCH' });
+                toast('Mentor disqualified', 'success');
+                closeMcDetail();
+                loadMentorControl(mcPage); loadMcStats(); loadStats();
+            } catch (e) { toast(e.message, 'error'); }
+        }
+
         /* ── Init ───────────────────────────────────────────────────── */
         window.Telegram?.WebApp?.ready();
         loadStats();
+        loadMcStats();
         refreshLiveSessionsBadge();
         setInterval(refreshLiveSessionsBadge, 15000);
     </script>
