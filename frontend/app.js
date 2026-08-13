@@ -2933,6 +2933,7 @@ async function sendMessage() {
 
   const originalContent = content;
   input.value = '';
+  autoResizeChatInput();
   $('emojiPicker')?.classList.add('hidden');
   const counter = $('charCounter');
   if (counter) { counter.textContent = '0 / 2000'; counter.classList.remove('danger'); }
@@ -3076,10 +3077,25 @@ function resetChatView() {
   showToast('Chat view reset', 'info');
 }
 
+function handleChatInputKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResizeChatInput() {
+  const input = $('chatInput');
+  if (!input) return;
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 132) + 'px';
+}
+
 function handleChatTyping() {
   if (socket && window.chatState.with) {
     socket.emit('typing', { to_id: window.chatState.with });
   }
+  autoResizeChatInput();
   // Update live character counter
   const input = $('chatInput');
   const counter = $('charCounter');

@@ -780,8 +780,9 @@
           <button class="reply-cancel" onclick="cancelReply()">✖</button>
         </div>
         <div class="chat-input-wrapper">
-          <input id="chatInput" class="chat-input" placeholder="Type a message…" data-i18n="chat_placeholder"
-            oninput="handleChatTyping()" onkeydown="if(event.key==='Enter')sendMessage()" />
+          <textarea id="chatInput" class="chat-input" rows="1" placeholder="Type a message…"
+            data-i18n="chat_placeholder" oninput="handleChatTyping()"
+            onkeydown="handleChatInputKeydown(event)"></textarea>
           <button class="emoji-btn" onclick="toggleEmojiPicker()">😊</button>
           <button class="chat-send-btn" onclick="sendMessage()">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
