@@ -626,13 +626,13 @@
           <button id="langBtnMentors" class="lang-toggle-btn" onclick="toggleLanguage()"
             aria-label="Switch language">EN</button>
           <button class="theme-btn" onclick="toggleTheme()"><span id="themeIconMentors" class="theme-icon-svg">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="4.2" />
-              <path
-                d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" />
-            </svg>
-          </span></button>
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="4.2" />
+                <path
+                  d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7" />
+              </svg>
+            </span></button>
         </div>
       </div>
       <div class="page-content">
@@ -780,8 +780,8 @@
           <button class="reply-cancel" onclick="cancelReply()">✖</button>
         </div>
         <div class="chat-input-wrapper">
-          <input id="chatInput" class="chat-input" placeholder="Type a message…" data-i18n="chat_placeholder" oninput="handleChatTyping()"
-            onkeydown="if(event.key==='Enter')sendMessage()" />
+          <input id="chatInput" class="chat-input" placeholder="Type a message…" data-i18n="chat_placeholder"
+            oninput="handleChatTyping()" onkeydown="if(event.key==='Enter')sendMessage()" />
           <button class="emoji-btn" onclick="toggleEmojiPicker()">😊</button>
           <button class="chat-send-btn" onclick="sendMessage()">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -908,7 +908,8 @@
         <div class="card mb-16">
           <div class="form-group">
             <label class="form-label" data-i18n="Display Name (still anonymous)">Display Name (still anonymous)</label>
-            <input id="settingDisplayName" class="form-control" placeholder="Custom nickname…" data-i18n="display_name_placeholder" />
+            <input id="settingDisplayName" class="form-control" placeholder="Custom nickname…"
+              data-i18n="display_name_placeholder" />
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="Language">Language</label>
@@ -954,8 +955,26 @@
           <div class="card mb-16">
             <div class="form-group">
               <label class="form-label">Bio</label>
-              <textarea id="settingBio" class="form-control" rows="3"
-                placeholder="Share a bit about your recovery journey…"></textarea>
+
+              <!-- Closed / premium display state -->
+              <div id="bioDisplayWrap" class="bio-box" onclick="enterBioEditMode()">
+                <p id="bioDisplayText" class="bio-box-text"></p>
+                <button type="button" class="bio-edit-btn" onclick="enterBioEditMode(event)" aria-label="Edit bio">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                  </svg>
+                </button>
+              </div>
+
+              <!-- Open / edit state -->
+              <div id="bioEditWrap" class="hidden">
+                <textarea id="settingBio" class="form-control" rows="4"
+                  placeholder="Share a bit about your recovery journey…"></textarea>
+                <button type="button" class="btn btn-ghost btn-sm mt-8" onclick="exitBioEditMode()"
+                  aria-label="Done editing bio">Done</button>
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">Specialization</label>
@@ -1030,7 +1049,11 @@
         </div>
 
         <div id="ticketTypingIndicator" class="ticket-typing-row" style="display:none">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3.2v6c0 5-3.4 8.7-8 10.8-4.6-2.1-8-5.8-8-10.8v-6z"/><path d="m9 12 2 2 4-4"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2l8 3.2v6c0 5-3.4 8.7-8 10.8-4.6-2.1-8-5.8-8-10.8v-6z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
           <span>Support is typing</span>
           <span class="typing-dots"><span></span><span></span><span></span></span>
         </div>
@@ -1045,7 +1068,11 @@
           </div>
           <button id="sendTicketReplyBtn" class="ticket-submit-btn" onclick="submitTicketReply()">
             <span>Send Reply</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 2 11 13" />
+              <path d="M22 2 15 22l-4-9-9-4z" />
+            </svg>
           </button>
         </div>
       </div>
@@ -1135,11 +1162,13 @@
     <div class="modal-sheet">
       <div class="modal-handle"></div>
       <div class="modal-title" data-i18n="New Support Request">New Support Request</div>
-      <p class="text-sm text-dim mb-16" data-i18n="new_support_request_desc">Describe your issue or question. Our admin team will respond shortly.</p>
+      <p class="text-sm text-dim mb-16" data-i18n="new_support_request_desc">Describe your issue or question. Our admin
+        team will respond shortly.</p>
 
       <div class="form-group">
         <label class="form-label" data-i18n="Subject">Subject</label>
-        <input id="modalTicketSubject" class="form-control" placeholder="What do you need help with?" data-i18n="ticket_subject_placeholder" />
+        <input id="modalTicketSubject" class="form-control" placeholder="What do you need help with?"
+          data-i18n="ticket_subject_placeholder" />
       </div>
       <div class="form-group">
         <label class="form-label" data-i18n="Category">Category (optional)</label>
@@ -1153,15 +1182,20 @@
       </div>
       <div class="form-group mb-16">
         <label class="form-label" data-i18n="Description">Description</label>
-        <textarea id="modalTicketDesc" class="form-control" rows="4"
-          placeholder="Describe your issue in detail..." data-i18n="ticket_desc_placeholder"></textarea>
+        <textarea id="modalTicketDesc" class="form-control" rows="4" placeholder="Describe your issue in detail..."
+          data-i18n="ticket_desc_placeholder"></textarea>
       </div>
 
       <div class="flex gap-8 mt-12">
-        <button class="btn btn-ghost flex-1" onclick="toggleNewTicketModal(false)" data-i18n="btn_cancel">Cancel</button>
+        <button class="btn btn-ghost flex-1" onclick="toggleNewTicketModal(false)"
+          data-i18n="btn_cancel">Cancel</button>
         <button class="ticket-submit-btn flex-1" style="margin-top:0" onclick="submitModalTicket()">
           <span data-i18n="btn_submit_request">Submit Request</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 2 11 13" />
+            <path d="M22 2 15 22l-4-9-9-4z" />
+          </svg>
         </button>
       </div>
     </div>

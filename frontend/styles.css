@@ -140,14 +140,29 @@ img {
 }
 
 /* Consistent, gold-tinted focus ring for keyboard users */
-.btn:focus-visible, .mood-btn:focus-visible, .toggle:focus-visible,
-.nav-item:focus-visible, .theme-toggle:focus-visible, .icon-btn:focus-visible,
-.segmented button:focus-visible, .card:focus-visible, .fab:focus-visible,
-.mentor-card:focus-visible, .session-item:focus-visible, .journal-item:focus-visible,
-.stat-card:focus-visible, .streak-card:focus-visible, .calendar-day:focus-visible,
-.topic-chip:focus-visible, .ticket-card-premium:focus-visible, .theme-btn:focus-visible,
-.chat-send-btn:focus-visible, .emoji-btn:focus-visible, .avatar-camera-btn:focus-visible,
-.form-control:focus-visible, .form-control-ob:focus-visible {
+.btn:focus-visible,
+.mood-btn:focus-visible,
+.toggle:focus-visible,
+.nav-item:focus-visible,
+.theme-toggle:focus-visible,
+.icon-btn:focus-visible,
+.segmented button:focus-visible,
+.card:focus-visible,
+.fab:focus-visible,
+.mentor-card:focus-visible,
+.session-item:focus-visible,
+.journal-item:focus-visible,
+.stat-card:focus-visible,
+.streak-card:focus-visible,
+.calendar-day:focus-visible,
+.topic-chip:focus-visible,
+.ticket-card-premium:focus-visible,
+.theme-btn:focus-visible,
+.chat-send-btn:focus-visible,
+.emoji-btn:focus-visible,
+.avatar-camera-btn:focus-visible,
+.form-control:focus-visible,
+.form-control-ob:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
@@ -805,6 +820,65 @@ textarea.form-control {
   min-height: 80px;
 }
 
+/* ─── Bio box (closed/premium display + edit toggle) ─────────── */
+.bio-box {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 40px 14px 16px;
+  background: var(--bg3);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--transition), box-shadow var(--transition), transform 0.2s var(--ease-premium);
+}
+
+.bio-box:hover {
+  border-color: var(--border);
+  box-shadow: var(--shadow-gold);
+  transform: translateY(-1px);
+}
+
+.bio-box-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bio-box-text.is-empty {
+  color: var(--text3);
+  font-style: italic;
+}
+
+.bio-edit-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border-dim);
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition);
+}
+
+.bio-edit-btn:hover {
+  border-color: var(--border);
+  color: var(--gold);
+  background: var(--gold-dim);
+}
+
 /* ─── Toggle ────────────────────────────────────────────────── */
 .toggle-wrap {
   display: flex;
@@ -833,7 +907,7 @@ textarea.form-control {
 .toggle.on {
   background: var(--gold);
   border-color: var(--gold);
-  box-shadow: 0 0 10px rgba(201,168,76,.25);
+  box-shadow: 0 0 10px rgba(201, 168, 76, .25);
 }
 
 .toggle::after {
@@ -1154,7 +1228,10 @@ textarea.form-control {
   filter: none;
 }
 
-.btn.btn-pending svg { display: inline-block; vertical-align: -2px; }
+.btn.btn-pending svg {
+  display: inline-block;
+  vertical-align: -2px;
+}
 
 /* ─── Star Rating (small, inline) ───────────────────────────── */
 .rating-row {
@@ -2342,12 +2419,21 @@ textarea.form-control {
 }
 
 @keyframes requestSentPop {
-  0% { transform: scale(0.5); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .request-sent-icon { animation: none; }
+  .request-sent-icon {
+    animation: none;
+  }
 }
 
 /* ─── Modal (center style for schedule) ────────────────────── */
@@ -2365,8 +2451,15 @@ textarea.form-control {
 }
 
 @keyframes fadeScaleIn {
-  from { opacity: 0; transform: scale(0.96) translateY(6px); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ─── Onboarding ─────────────────────────────────────────────── */
@@ -4229,6 +4322,7 @@ textarea.form-control {
   color: var(--text3);
   padding: 0 4px 8px;
 }
+
 /* ============================================================
    Organic UI Enhancements — Blobs, Stagger, Mood Picker, Ripple
    Additive layer only: no existing rule above is modified,
@@ -4498,8 +4592,15 @@ textarea.form-control {
    them for the new inner elements only.
    ============================================================ */
 
-.theme-icon-svg { display: flex; align-items: center; justify-content: center; }
-.theme-icon-svg svg { display: block; }
+.theme-icon-svg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-icon-svg svg {
+  display: block;
+}
 
 /* ─── Verse card repolish ────────────────────────────────── */
 .verse-card {
@@ -4665,7 +4766,10 @@ textarea.form-control {
   vertical-align: middle;
 }
 
-.streak-freeze-badge svg { display: block; flex-shrink: 0; }
+.streak-freeze-badge svg {
+  display: block;
+  flex-shrink: 0;
+}
 
 /* ─── Streak card: personal-best badge (replaces plain sub-label) ── */
 .streak-best-badge {
@@ -4676,7 +4780,9 @@ textarea.form-control {
   font-weight: 700;
 }
 
-.streak-best-badge svg { flex-shrink: 0; }
+.streak-best-badge svg {
+  flex-shrink: 0;
+}
 
 /* ─── Streak card: weekly progress strip ────────────────────── */
 .streak-week {
@@ -4772,8 +4878,14 @@ textarea.form-control {
   transition: background 0.15s ease, transform 0.15s ease;
 }
 
-.streak-reminder-btn:hover { background: var(--gold); color: #1a1607; }
-.streak-reminder-btn:active { transform: scale(0.94); }
+.streak-reminder-btn:hover {
+  background: var(--gold);
+  color: #1a1607;
+}
+
+.streak-reminder-btn:active {
+  transform: scale(0.94);
+}
 
 /* ─── Streak card: completed-for-today state ────────────────── */
 .streak-card.is-done-today {
@@ -4793,9 +4905,17 @@ textarea.form-control {
 }
 
 @keyframes streakCelebratePulse {
-  0% { box-shadow: var(--shadow-gold); }
-  30% { box-shadow: 0 0 0 4px rgba(201, 168, 76, 0.22), 0 0 32px rgba(201, 168, 76, 0.4); }
-  100% { box-shadow: var(--shadow-gold); }
+  0% {
+    box-shadow: var(--shadow-gold);
+  }
+
+  30% {
+    box-shadow: 0 0 0 4px rgba(201, 168, 76, 0.22), 0 0 32px rgba(201, 168, 76, 0.4);
+  }
+
+  100% {
+    box-shadow: var(--shadow-gold);
+  }
 }
 
 /* ─── Reduced motion: calm the new icon animations too ──────── */

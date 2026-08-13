@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Privacy Policy | Holy Helper</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Standalone legal-page layout — reuses the app's CSS variables/fonts
+       from styles.css but doesn't depend on app.js or the SPA shell. */
+    body {
+      overflow: auto;
+      height: auto;
+      min-height: 100vh;
+    }
+
+    .legal-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+      background: linear-gradient(180deg, var(--bg2), transparent);
+      border-bottom: 1px solid var(--border-dim);
+      backdrop-filter: blur(6px);
+    }
+
+    .legal-header-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .legal-logo {
+      height: 32px;
+      width: auto;
+      flex-shrink: 0;
+    }
+
+    .legal-header h1 {
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .legal-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .legal-wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 28px 20px 60px;
+    }
+
+    .legal-eyebrow {
+      display: block;
+      font-family: var(--font-display);
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 8px;
+    }
+
+    .legal-wrap h2 {
+      font-family: var(--font-display);
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .legal-meta {
+      font-size: 0.8rem;
+      color: var(--text3);
+      margin-bottom: 28px;
+    }
+
+    .legal-section {
+      margin-bottom: 26px;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--border-dim);
+    }
+
+    .legal-section:last-child {
+      border-bottom: none;
+    }
+
+    .legal-section h3 {
+      font-family: var(--font-display);
+      font-size: 1.02rem;
+      color: var(--gold-light);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .legal-section h3 .num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 0.7rem;
+      color: var(--gold);
+      flex-shrink: 0;
+    }
+
+    .legal-section p,
+    .legal-section li {
+      font-size: 0.9rem;
+      line-height: 1.65;
+      color: var(--text2);
+    }
+
+    .legal-section ul {
+      margin: 8px 0 0 0;
+      padding-left: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .legal-section strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .legal-contact {
+      background: var(--surface);
+      border: 1px solid var(--border-dim);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--inset-hi);
+    }
+
+    .legal-contact a {
+      color: var(--gold);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .legal-contact a:hover {
+      text-decoration: underline;
+    }
+
+    .legal-placeholder {
+      color: var(--warn);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="legal-header">
+    <div class="legal-header-title">
+      <img src="Holy%20logo1.png" alt="Holy Helper" class="legal-logo" />
+      <h1 id="pageTitle">Privacy Policy</h1>
+    </div>
+    <div class="legal-actions">
+      <button id="legalLangBtn" class="lang-toggle-btn" onclick="toggleLegalLanguage()"
+        aria-label="Switch language">EN</button>
+      <button class="theme-btn" onclick="toggleLegalTheme()"><span id="legalThemeIcon"
+          class="theme-icon-svg"></span></button>
+    </div>
+  </div>
+
+  <div class="legal-wrap">
+    <span class="legal-eyebrow" data-en="Legal" data-am="ህጋዊ">Legal</span>
+    <h2 data-en="Privacy Policy" data-am="የግላዊነት ፖሊሲ">Privacy Policy</h2>
+    <p class="legal-meta">
+      <span data-en="Effective date:" data-am="የስራ ላይ የዋለበት ቀን:">Effective date:</span>
+      <span class="legal-placeholder">[DD Month YYYY]</span>
+    </p>
+
+    <div class="legal-section">
+      <h3><span class="num">1</span><span data-en="Who we are" data-am="እኛ ማን ነን">Who we are</span></h3>
+      <p data-en="Holy Helper (&quot;the App&quot;, &quot;we&quot;, &quot;us&quot;) is an anonymous Christian accountability and peer-support platform, delivered as a Telegram Mini App by"
+        data-am="ሆሊ ሄልፐር (&quot;መተግበሪያው&quot;፣ &quot;እኛ&quot;) በቴሌግራም ሚኒ አፕ የሚቀርብ ስም-አልባ የክርስቲያናዊ ተጠያቂነት እና የአቻ ድጋፍ መድረክ ነው፣ የቀረበው በ">
+        Holy Helper (&quot;the App&quot;, &quot;we&quot;, &quot;us&quot;) is an anonymous Christian accountability
+        and peer-support platform, delivered as a Telegram Mini App by
+      </p>
+      <p><strong class="legal-placeholder">[Your name / legal entity name]</strong>,
+        <span data-en="based in" data-am="የሚገኘው በ">based in</span>
+        <strong class="legal-placeholder">[Your country/city]</strong>.
+      </p>
+    </div>
+
+    <div class="legal-section">
+      <h3><span class="num">2</span><span data-en="Information we collect" data-am="የምንሰበስበው መረጃ">Information we
+          collect</span></h3>
+      <ul>
+        <li data-en="Telegram account data: your Telegram ID, and, if provided, your first name and username, used only to identify your account."
+          data-am="የቴሌግራም መለያ መረጃ: የቴሌግራም መታወቂያዎ፣ እና ካቀረቡ፣ የመጀመሪያ ስምዎ እና የተጠቃሚ ስምዎ፣ መለያዎን ለመለየት ብቻ የሚያገለግል።">
+          Telegram account data: your Telegram ID, and, if provided, your first name and username, used only to
+          identify your account.
+        </li>
+        <li data-en="Profile and preference data you enter in the App: language, theme, notification settings, and mentorship topic selections."
+          data-am="በመተግበሪያው ውስጥ የሚያስገቡት የመገለጫ እና ምርጫ መረጃ: ቋንቋ፣ ገጽታ፣ የማሳወቂያ ቅንብሮች እና የአማካሪነት ርዕስ ምርጫዎች።">
+          Profile and preference data you enter in the App: language, theme, notification settings, and mentorship
+          topic selections.
+        </li>
+        <li data-en="Content you create: chat messages with mentors/mentees, journal entries, Bible-streak activity, and support tickets."
+          data-am="የሚፈጥሩት ይዘት: ከአማካሪዎች/ተማሪዎች ጋር የሚደረጉ የውይይት መልዕክቶች፣ የማስታወሻ ማስገቢያዎች፣ የመጽሐፍ ቅዱስ ተከታታይ እንቅስቃሴ እና የድጋፍ ጥያቄዎች።">
+          Content you create: chat messages with mentors/mentees, journal entries, Bible-streak activity, and
+          support tickets.
+        </li>
+        <li data-en="Session metadata: when a video counseling session is started via Jitsi Meet, we record that a session took place and its duration, not its audio/video content."
+          data-am="የክፍለ-ጊዜ ሜታዳታ: በጂትሲ ሚት በኩል የቪዲዮ ምክር ክፍለ ጊዜ ሲጀመር፣ ክፍለ ጊዜ መደረጉን እና ቆይታውን እንመዘግባለን፣ የድምጽ/ቪዲዮ ይዘቱን አይደለም።">
+          Session metadata: when a video counseling session is started via Jitsi Meet, we record that a session took
+          place and its duration, not its audio/video content.
+        </li>
+      </ul>
+    </div>
+
+    <div class="legal-section">
+      <h3><span class="num">3</span><span data-en="How we use your information"
+          data-am="መረጃዎን እንዴት እንደምንጠቀም">How we use your information</span></h3>
+      <ul>
+        <li data-en="To operate core features: matching you with a mentor, powering real-time chat, tracking streaks and journaling."
+          data-am="ዋና ተግባራትን ለማንቀሳቀስ: ከአማካሪ ጋር ለማገናኘት፣ የቅጽበታዊ ውይይትን ለማንቀሳቀስ፣ ተከታታይነቶችን እና ማስታወሻ ማስገቢያዎችን ለመከታተል።">
+          To operate core features: matching you with a mentor, powering real-time chat, tracking streaks and
+          journaling.
+        </li>
+        <li data-en="To keep the community safe: message moderation, handling reports, and support tickets."
+          data-am="ማህበረሰቡን ደህንነት ለመጠበቅ: የመልዕክት ቁጥጥር፣ ሪፖርቶችን መያዝ እና የድጋፍ ጥያቄዎች።">
+          To keep the community safe: message moderation, handling reports, and support tickets.
+        </li>
+        <li data-en="To send the notifications you've opted into (new messages, session reminders, daily verse, streak reminders)."
+          data-am="የመረጡትን ማሳወቂያዎች ለመላክ (አዲስ መልዕክቶች፣ የክፍለ-ጊዜ ማስታወሻዎች፣ የዕለት ጥቅስ፣ የተከታታይ ማስታወሻዎች)።">
+          To send the notifications you've opted into (new messages, session reminders, daily verse, streak
+          reminders).
+        </li>
+        <li data-en="We do not sell your data, and we do not use it for advertising."
+          data-am="መረጃዎን አንሸጥም፣ ለማስታወቂያም አንጠቀምበትም።">
+          We do not sell your data, and we do not use it for advertising.
+        </li>
+      </ul>
+    </div>
+
+    <div class="legal-section">
+      <h3><span class="num">4</span><span data-en="Anonymity between members" data-am="በአባላት መካከል ስም-አልባነት">Anonymity
+          between members</span></h3>
+      <p data-en="Mentors and mentees are matched and chat without seeing each other's real Telegram name or username inside the App's peer-support features, unless you choose to share it yourself. We still retain your Telegram ID internally for moderation and safety purposes."
+        data-am="አማካሪዎች እና ተማሪዎች እርስ በርስ የቴሌግራም ስማቸውን ወይም የተጠቃሚ ስማቸውን ሳያዩ በመተግበሪያው የአቻ ድጋፍ ባህሪያት ውስጥ ይገናኛሉ እና ይወያያሉ፣ እርስዎ ራስዎ ካላካፈሉ በስተቀር። ለቁጥጥር እና ደህንነት ዓላማዎች የቴሌግራም መታወቂያዎን በውስጣችን እናቆያለን።">
+        Mentors and mentees are matched and chat without seeing each other's real Telegram name or username inside
+        the App's peer-support features, unless you choose to share it yourself. We still retain your Telegram ID
+        internally for moderation and safety purposes.
+      </p>
+    </div>
+
+    <div class="legal-section">
+      <h3><span class="num">5</span><span data-en="Who we share data with" data-am="ከማን ጋር መረጃ እናጋራለን">Who we share
+          data with</span></h3>
+      <ul>
+        <li data-en="Telegram — as the messaging platform the Mini App runs on."
+          data-am="ቴሌግራም — ሚኒ አፕ የሚሰራበት የመልዕክት መድረክ እንደመሆኑ።">
+          Telegram — as the messaging platform the Mini App runs on.
+        </li>
+        <li data-en="Supabase — our database provider, which stores App data on our behalf."
+          data-am="ሱፓቤዝ — በእኛ ስም የመተግበሪያ መረጃን የሚያከማች የመረጃ ቋት አቅራቢያችን።">
+          Supabase — our database provider, which stores App data on our behalf.
+        </li>
+        <li data-en="Jitsi Meet — used to host video counseling sessions."
+          data-am="ጂትሲ ሚት — የቪዲዮ ምክር ክፍለ ጊዜዎችን ለማስተናገድ ጥቅም ላይ ይውላል።">
+          Jitsi Meet — used to host video counseling sessions.
+        </li>
+        <li data-en="Render — our hosting provider."
+          data-am="ሬንደር — የእኛ አስተናጋጅ አቅራቢ።">
+          Render — our hosting provider.
+        </li>
+        <li data-en="We do not share your data with advertisers or data brokers."
+          data-am="መረጃዎን ከማስታወቂያ ወኪሎች ወይም ከመረጃ ደላሎች ጋር አናጋራም።">
+          We do not share your data with advertisers or data brokers.
+        </li>
+      </ul>
+    </div>
+
+    <div class="legal-section">
+      <h3><span class="num">6</span><span data-en="Data retention" data-am="የመረጃ ማቆያ ጊዜ">Data retention</span></h3>
+      <p data-en="We retain your account and content data for as long as your account is active. You can request deletion of your account and associated data at any time through Settings or by contacting us below."
+        data-am="መለያዎ ንቁ እስከሆነ ድረስ የመለያዎን እና የይዘት መረጃዎን እናቆያለን። በማንኛውም ጊዜ ከቅንብሮች ወይም ከታች በማነጋገር መለያዎን እና ተያያዥ መረጃዎችን እንዲሰረዙ መጠየቅ ይችላሉ።">
+        We retain your account and content data for as long as your account is active. You can request deletion of
+        your account and associated data at any time through Settings or by contacting us below.
+      </p>
+    </div>
+
+    <div class="legal-section">
+      <h3><span class="num">7</span><span data-en="Your rights" data-am="መብቶችዎ">Your rights</span></h3>
+      <p data-en="Depending on where you live, you may have the right to access, correct, export, or delete your personal data, and to withdraw consent for notifications at any time. To exercise any of these rights, contact us using the details below."
+        data-am="በሚኖሩበት ቦታ ላይ በመመስረት፣ የግል መረጃዎን የመድረስ፣ የማረም፣ የመላክ ወይም የመሰረዝ መብት፣ እና በማንኛውም ጊዜ ለማሳወቂያዎች የሰጡትን ፈቃድ የመሰረዝ መብት ሊኖርዎት ይችላል። ከእነዚህ መብቶች አንዱን ለመጠቀም ከታች ባሉት ዝርዝሮች ያግኙን።">
+        Depending on where you live, you may have the right to access, correct, export, or delete your personal
+        data, and to withdraw consent for notifications at any time. To exercise any of these rights, contact us
+        using the details below.
+      </p>
+    </div>
+
+    <div class="legal-section">
+      <h3><span class="num">8</span><span data-en="Children" data-am="ልጆች">Children</span></h3>
+      <p data-en="The App is not directed at children under 13 (or the minimum age required by your country), and we do not knowingly collect data from them."
+        data-am="መተግበሪያው ከ13 ዓመት በታች ለሆኑ ልጆች (ወይም በሀገርዎ በሚጠየቀው ዝቅተኛ ዕድሜ) አልተዘጋጀም፣ እናም ከእነሱ መረጃ ሆን ብለን አንሰበስብም።">
+        The App is not directed at children under 13 (or the minimum age required by your country), and we do not
+        knowingly collect data from them.
+      </p>
+    </div>
+
+    <div class="legal-section">
+      <h3><span class="num">9</span><span data-en="Changes to this policy" data-am="ለዚህ ፖሊሲ ለውጦች">Changes to this
+          policy</span></h3>
+      <p data-en="We may update this Privacy Policy from time to time. We'll update the effective date above when we do, and significant changes will be announced inside the App."
+        data-am="ይህንን የግላዊነት ፖሊሲ ከጊዜ ወደ ጊዜ ልናዘምነው እንችላለን። ስናደርግ ከላይ ያለውን የስራ ላይ የዋለበት ቀን እናዘምናለን፣ ጉልህ ለውጦችም በመተግበሪያው ውስጥ ይገለጻሉ።">
+        We may update this Privacy Policy from time to time. We'll update the effective date above when we do, and
+        significant changes will be announced inside the App.
+      </p>
+    </div>
+
+    <div class="legal-section">
+      <h3><span class="num">10</span><span data-en="Contact us" data-am="ያግኙን">Contact us</span></h3>
+      <div class="legal-contact">
+        <p data-en="Questions about this policy or your data? Reach us at:" data-am="ስለዚህ ፖሊሲ ወይም ስለ መረጃዎ ጥያቄዎች አሉዎት? ያግኙን:">
+          Questions about this policy or your data? Reach us at:
+        </p>
+        <p style="margin-top:6px;">
+          <a href="mailto:support@example.com" class="legal-placeholder">[your-support-email@example.com]</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Standalone theme/language handling — independent of app.js since this
+    // page can be opened outside the SPA shell (e.g. straight from Telegram's
+    // Settings menu, before the Mini App has fully loaded).
+    const THEME_ICON_SUN = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>';
+    const THEME_ICON_MOON = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.4A8.4 8.4 0 1 1 9.6 3.5a6.8 6.8 0 0 0 10.9 10.9z"/></svg>';
+
+    function applyLegalTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('theme', theme);
+      document.getElementById('legalThemeIcon').innerHTML = theme === 'light' ? THEME_ICON_MOON : THEME_ICON_SUN;
+    }
+    function toggleLegalTheme() {
+      const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+      applyLegalTheme(cur === 'dark' ? 'light' : 'dark');
+    }
+    applyLegalTheme(localStorage.getItem('theme') || 'dark');
+
+    function applyLegalLanguage(lang) {
+      document.querySelectorAll('[data-en]').forEach(el => {
+        el.textContent = el.getAttribute(lang === 'am' ? 'data-am' : 'data-en');
+      });
+      document.getElementById('legalLangBtn').textContent = lang.toUpperCase();
+      document.documentElement.lang = lang;
+    }
+    function toggleLegalLanguage() {
+      const next = (localStorage.getItem('language') || 'en') === 'en' ? 'am' : 'en';
+      localStorage.setItem('language', next);
+      applyLegalLanguage(next);
+    }
+    applyLegalLanguage(localStorage.getItem('language') || 'en');
+  </script>
+</body>
+
+</html>

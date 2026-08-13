@@ -3206,6 +3206,7 @@ async function loadSettings() {
     if (currentUser?.role === 'mentor') {
       $('mentorSettings').classList.remove('hidden');
       $('settingBio').value = s.bio || '';
+      renderBioDisplay(s.bio || '');
       $('settingSpecialization').value = s.specialization || '';
       $('settingMaxMentees').value = s.max_mentees || 5;
       $('settingMenteeSex').value = s.preferred_mentee_sex || 'prefer_not';
@@ -3445,6 +3446,38 @@ async function removeAvatar() {
     haptic('error');
     showToast(e.message, 'error');
   }
+}
+
+function renderBioDisplay(bio) {
+  const textEl = $('bioDisplayText');
+  if (!textEl) return;
+  const trimmed = (bio || '').trim();
+  if (trimmed) {
+    textEl.textContent = trimmed;
+    textEl.classList.remove('is-empty');
+  } else {
+    textEl.textContent = t('bio_empty_placeholder') !== 'bio_empty_placeholder'
+      ? t('bio_empty_placeholder')
+      : 'No bio yet — tap to share a bit about your journey.';
+    textEl.classList.add('is-empty');
+  }
+}
+
+function enterBioEditMode(event) {
+  if (event) event.stopPropagation();
+  haptic('selection');
+  $('bioDisplayWrap').classList.add('hidden');
+  $('bioEditWrap').classList.remove('hidden');
+  const textarea = $('settingBio');
+  textarea.focus();
+  textarea.selectionStart = textarea.value.length;
+}
+
+function exitBioEditMode() {
+  haptic('selection');
+  renderBioDisplay($('settingBio').value);
+  $('bioEditWrap').classList.add('hidden');
+  $('bioDisplayWrap').classList.remove('hidden');
 }
 
 async function saveSettings() {
