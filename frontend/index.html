@@ -99,7 +99,7 @@
           </div>
 
           <h1 class="onboarding-title ob-fade-up" style="--d:0">Holy Helper</h1>
-          <p class="onboarding-tagline ob-fade-up" style="--d:1">A safe space for your journey</p>
+          <p class="onboarding-tagline ob-fade-up" style="--d:1" data-i18n="ob_tagline">A safe space for your journey</p>
 
           <div class="ob-values-row ob-fade-up" style="--d:2" aria-hidden="true">
             <span class="ob-value-icon" title="Safe">
@@ -124,7 +124,7 @@
           </div>
 
           <button class="btn btn-primary btn-full ob-btn-next ob-fade-up" style="--d:3" onclick="showStep(1)">
-            <span>Begin My Journey</span>
+            <span data-i18n="ob_begin_journey">Begin My Journey</span>
             <span class="btn-arrow">→</span>
           </button>
         </div>
@@ -141,8 +141,8 @@
               </svg>
             </div>
             <div>
-              <h3 class="step-intro-title ob-fade-up" style="--d:0">What's your sex?</h3>
-              <p class="step-intro-desc ob-fade-up" style="--d:1">Helps us match you with the right mentor</p>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0" data-i18n="ob_sex_question">What's your sex?</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1" data-i18n="ob_sex_helper">Helps us match you with the right mentor</p>
             </div>
           </div>
 
@@ -157,7 +157,7 @@
                   <polyline points="15 4 20 4 20 9"></polyline>
                 </svg>
               </span>
-              <span class="sex-label">Male</span>
+              <span class="sex-label" data-i18n="sex_male">Male</span>
             </button>
             <button type="button" class="sex-option-btn ob-fade-up" style="--d:3" data-value="F"
               onclick="selectSex('F')">
@@ -169,15 +169,15 @@
                   <line x1="8.5" y1="18.5" x2="15.5" y2="18.5"></line>
                 </svg>
               </span>
-              <span class="sex-label">Female</span>
+              <span class="sex-label" data-i18n="sex_female">Female</span>
             </button>
           </div>
           <input type="hidden" id="regSex" value="" />
 
           <div class="button-group-ob">
-            <button class="btn-ob-ghost" onclick="prevStep()">← Back</button>
+            <button class="btn-ob-ghost" onclick="prevStep()">← <span data-i18n="Back">Back</span></button>
             <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(1)">
-              <span>Continue</span>
+              <span data-i18n="btn_continue">Continue</span>
               <span class="btn-arrow">→</span>
             </button>
           </div>
@@ -196,8 +196,8 @@
               </svg>
             </div>
             <div>
-              <h3 class="step-intro-title ob-fade-up" style="--d:0">What's your age range?</h3>
-              <p class="step-intro-desc ob-fade-up" style="--d:1">Just a range — nothing exact needed</p>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0" data-i18n="ob_age_question">What's your age range?</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1" data-i18n="ob_age_helper">Just a range — nothing exact needed</p>
             </div>
           </div>
 
@@ -254,9 +254,9 @@
           <input type="hidden" id="regAge" value="" />
 
           <div class="button-group-ob">
-            <button class="btn-ob-ghost" onclick="prevStep()">← Back</button>
+            <button class="btn-ob-ghost" onclick="prevStep()">← <span data-i18n="Back">Back</span></button>
             <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(2)">
-              <span>Continue</span>
+              <span data-i18n="btn_continue">Continue</span>
               <span class="btn-arrow">→</span>
             </button>
           </div>
@@ -273,15 +273,15 @@
               </svg>
             </div>
             <div>
-              <h3 class="step-intro-title ob-fade-up" style="--d:0">What's your education level?</h3>
-              <p class="step-intro-desc ob-fade-up" style="--d:1">Helps us tailor how we support you</p>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0" data-i18n="ob_edu_question">What's your education level?</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1" data-i18n="ob_edu_helper">Helps us tailor how we support you</p>
             </div>
           </div>
 
           <div class="segmented-list" id="group-regEdu">
             <button type="button" class="segmented-option ob-fade-up" style="--d:2" data-value="none"
               onclick="selectEdu('none')">
-              <span class="segmented-label">None</span>
+              <span class="segmented-label" data-i18n="edu_none">None</span>
               <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
                   stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="20 6 9 17 4 12"></polyline>
@@ -289,7 +289,7 @@
             </button>
             <button type="button" class="segmented-option ob-fade-up" style="--d:2" data-value="primary"
               onclick="selectEdu('primary')">
-              <span class="segmented-label">Primary</span>
+              <span class="segmented-label" data-i18n="edu_primary">Primary</span>
               <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
                   stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="20 6 9 17 4 12"></polyline>
@@ -297,7 +297,7 @@
             </button>
             <button type="button" class="segmented-option ob-fade-up" style="--d:3" data-value="secondary"
               onclick="selectEdu('secondary')">
-              <span class="segmented-label">Secondary / High School</span>
+              <span class="segmented-label" data-i18n="edu_secondary_hs">Secondary / High School</span>
               <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
                   stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="20 6 9 17 4 12"></polyline>
@@ -305,7 +305,7 @@
             </button>
             <button type="button" class="segmented-option ob-fade-up" style="--d:3" data-value="undergraduate"
               onclick="selectEdu('undergraduate')">
-              <span class="segmented-label">Undergraduate</span>
+              <span class="segmented-label" data-i18n="edu_undergraduate">Undergraduate</span>
               <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
                   stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="20 6 9 17 4 12"></polyline>
@@ -313,7 +313,7 @@
             </button>
             <button type="button" class="segmented-option ob-fade-up" style="--d:4" data-value="graduate"
               onclick="selectEdu('graduate')">
-              <span class="segmented-label">Graduate</span>
+              <span class="segmented-label" data-i18n="edu_graduate">Graduate</span>
               <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
                   stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="20 6 9 17 4 12"></polyline>
@@ -321,7 +321,7 @@
             </button>
             <button type="button" class="segmented-option ob-fade-up" style="--d:4" data-value="postgraduate"
               onclick="selectEdu('postgraduate')">
-              <span class="segmented-label">Postgraduate</span>
+              <span class="segmented-label" data-i18n="edu_postgraduate">Postgraduate</span>
               <span class="segmented-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
                   stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="20 6 9 17 4 12"></polyline>
@@ -331,9 +331,9 @@
           <input type="hidden" id="regEdu" value="" />
 
           <div class="button-group-ob">
-            <button class="btn-ob-ghost" onclick="prevStep()">← Back</button>
+            <button class="btn-ob-ghost" onclick="prevStep()">← <span data-i18n="Back">Back</span></button>
             <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(3)">
-              <span>Continue</span>
+              <span data-i18n="btn_continue">Continue</span>
               <span class="btn-arrow">→</span>
             </button>
           </div>
@@ -350,25 +350,25 @@
               </svg>
             </div>
             <div>
-              <h3 class="step-intro-title ob-fade-up" style="--d:0">Choose your nickname</h3>
-              <p class="step-intro-desc ob-fade-up" style="--d:1">A name only you will know — kept anonymous</p>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0" data-i18n="ob_nickname_question">Choose your nickname</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1" data-i18n="ob_nickname_helper">A name only you will know — kept anonymous</p>
             </div>
           </div>
 
           <div class="form-group-ob ob-fade-up" style="--d:2" id="group-regNickname">
-            <label class="form-label-ob">Nickname</label>
-            <input id="regNickname" class="form-control-ob" placeholder="e.g. HopeSeeker" maxlength="20"
+            <label class="form-label-ob" data-i18n="nickname_label">Nickname</label>
+            <input id="regNickname" class="form-control-ob" data-i18n="nickname_placeholder" placeholder="e.g. HopeSeeker" maxlength="20"
               oninput="onNicknameInput()" autocomplete="off" />
             <div class="nickname-meta-row">
-              <p class="form-helper-ob">Letters, numbers, and underscores only</p>
+              <p class="form-helper-ob" data-i18n="nickname_hint">Letters, numbers, and underscores only</p>
               <span class="char-counter" id="nicknameCounter">0/20</span>
             </div>
           </div>
 
           <div class="button-group-ob">
-            <button class="btn-ob-ghost" onclick="prevStep()">← Back</button>
+            <button class="btn-ob-ghost" onclick="prevStep()">← <span data-i18n="Back">Back</span></button>
             <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(4)">
-              <span>Continue</span>
+              <span data-i18n="btn_continue">Continue</span>
               <span class="btn-arrow">→</span>
             </button>
           </div>
@@ -387,8 +387,8 @@
               </svg>
             </div>
             <div>
-              <h3 class="step-intro-title ob-fade-up" style="--d:0">What brings you here?</h3>
-              <p class="step-intro-desc ob-fade-up" style="--d:1">Select all topics you'd like support with</p>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0" data-i18n="ob_topics_question">What brings you here?</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1" data-i18n="ob_topics_helper">Select all topics you'd like support with</p>
             </div>
           </div>
 
@@ -400,7 +400,7 @@
                 <circle cx="11" cy="11" r="7" />
                 <path d="m21 21-4.35-4.35" />
               </svg>
-              <input type="text" id="regTopicsSearch" class="topic-search-input" placeholder="Search topics…"
+              <input type="text" id="regTopicsSearch" class="topic-search-input" data-i18n="topics_search_placeholder" placeholder="Search topics…"
                 oninput="filterOnboardingTopics(this.value)" autocomplete="off" />
             </div>
 
@@ -421,15 +421,15 @@
                 <circle cx="12" cy="12" r="9" />
                 <path d="M9.5 9.5a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 2-2.4 3.7M12 17h.01" />
               </svg>
-              <span id="regTopicsEmptyText">No topics available right now.</span>
-              <button type="button" class="btn-ob-ghost" onclick="loadOnboardingTopics()">Retry</button>
+              <span id="regTopicsEmptyText" data-i18n="topics_none_available">No topics available right now.</span>
+              <button type="button" class="btn-ob-ghost" data-i18n="btn_retry" onclick="loadOnboardingTopics()">Retry</button>
             </div>
           </div>
 
           <div class="button-group-ob">
-            <button class="btn-ob-ghost" onclick="prevStep()">← Back</button>
+            <button class="btn-ob-ghost" onclick="prevStep()">← <span data-i18n="Back">Back</span></button>
             <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(5)">
-              <span>Continue</span>
+              <span data-i18n="btn_continue">Continue</span>
               <span class="btn-arrow">→</span>
             </button>
           </div>
@@ -446,22 +446,22 @@
               </svg>
             </div>
             <div>
-              <h3 class="step-intro-title ob-fade-up" style="--d:0">You're all set</h3>
-              <p class="step-intro-desc ob-fade-up" style="--d:1">Review and join the community</p>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0" data-i18n="ob_review_question">You're all set</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1" data-i18n="ob_review_helper">Review and join the community</p>
             </div>
           </div>
 
           <div class="agree-summary-card ob-fade-up" style="--d:2">
-            <p class="agree-summary-text">
+            <p class="agree-summary-text" data-i18n="ob_agree_summary_text">
               By joining, you agree to treat others with respect, keep this space confidential, and pursue your
               journey with honesty. Your identity stays anonymous.
             </p>
           </div>
 
           <div class="button-group-ob">
-            <button class="btn-ob-ghost" onclick="prevStep()">← Back</button>
+            <button class="btn-ob-ghost" onclick="prevStep()">← <span data-i18n="Back">Back</span></button>
             <button id="regBtn" class="btn btn-primary flex-1 ob-btn-next" onclick="completeRegistration()">
-              <span>Agree &amp; Join</span>
+              <span data-i18n="btn_agree_join">Agree &amp; Join</span>
               <span class="btn-arrow">→</span>
             </button>
           </div>

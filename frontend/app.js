@@ -1346,7 +1346,7 @@ async function showOnboarding() {
     chipsContainer.innerHTML = `
       <div class="topics-loading-state">
         <span class="loading-spinner" style="width:20px;height:20px;margin:0"></span>
-        <span>Loading topics…</span>
+        <span>${t('topics_loading')}</span>
       </div>`;
   }
 
@@ -1365,7 +1365,7 @@ async function loadOnboardingTopics() {
   chipsContainer.innerHTML = `
     <div class="topics-loading-state">
       <span class="loading-spinner" style="width:20px;height:20px;margin:0"></span>
-      <span>Loading topics…</span>
+      <span>${t('topics_loading')}</span>
     </div>`;
 
   try {
@@ -1381,7 +1381,7 @@ async function loadOnboardingTopics() {
     if (!onboardingTopicsCache.length) {
       chipsContainer.classList.add('hidden');
       if (emptyState) {
-        $('regTopicsEmptyText').textContent = 'No topics have been set up yet.';
+        $('regTopicsEmptyText').textContent = t('topics_none_setup');
         emptyState.classList.remove('hidden');
       }
       return;
@@ -1393,7 +1393,7 @@ async function loadOnboardingTopics() {
     console.error('Failed to load topics for onboarding:', e);
     chipsContainer.classList.add('hidden');
     if (emptyState) {
-      $('regTopicsEmptyText').textContent = e.message || 'Could not load topics. Check your connection.';
+      $('regTopicsEmptyText').textContent = e.message || t('topics_none_available');
       emptyState.classList.remove('hidden');
     }
   }
@@ -1584,27 +1584,27 @@ function validateAndGoNext(step) {
 
   if (step === 1) {
     if (!$('regSex').value) {
-      showInlineError('group-regSex', 'Please select your sex');
+      showInlineError('group-regSex', t('err_select_sex'));
       ok = false;
     }
   } else if (step === 2) {
     if (!$('regAge').value) {
-      showInlineError('group-regAge', 'Please select your age range');
+      showInlineError('group-regAge', t('err_select_age'));
       ok = false;
     }
   } else if (step === 3) {
     if (!$('regEdu').value) {
-      showInlineError('group-regEdu', 'Please select your education level');
+      showInlineError('group-regEdu', t('err_select_edu'));
       ok = false;
     }
   } else if (step === 4) {
     const nickname = $('regNickname').value.trim();
     const nickRegex = /^[a-zA-Z0-9_]{3,20}$/;
     if (!nickname) {
-      showInlineError('regNickname', 'Please choose a nickname');
+      showInlineError('regNickname', t('err_nickname_required'));
       ok = false;
     } else if (!nickRegex.test(nickname)) {
-      showInlineError('regNickname', '3-20 characters: letters, numbers, and underscores only');
+      showInlineError('regNickname', t('err_nickname_format'));
       ok = false;
     }
   }
@@ -1636,21 +1636,21 @@ async function completeRegistration() {
   if (hasError) {
     haptic('error');
     showStep(firstErrorStep);
-    if (!sex) showInlineError('group-regSex', 'Sex selection is required');
-    if (!age_range) showInlineError('group-regAge', 'Age range is required');
-    if (!education_level) showInlineError('group-regEdu', 'Education level is required');
+    if (!sex) showInlineError('group-regSex', t('err_sex_required'));
+    if (!age_range) showInlineError('group-regAge', t('err_age_required'));
+    if (!education_level) showInlineError('group-regEdu', t('err_edu_required'));
     if (!nickname) {
-      showInlineError('regNickname', 'Anonymous nickname is required');
+      showInlineError('regNickname', t('err_nickname_required_anon'));
     } else if (!nickRegex.test(nickname)) {
-      showInlineError('regNickname', '3-20 characters: letters, numbers, and underscores only');
+      showInlineError('regNickname', t('err_nickname_format'));
     }
-    showToast('Please correct the errors below', 'error');
+    showToast(t('err_correct_below'), 'error');
     return;
   }
 
   const regBtn = $('regBtn');
   regBtn.disabled = true;
-  regBtn.innerHTML = '<span>Joining…</span>';
+  regBtn.innerHTML = `<span>${t('btn_joining')}</span>`;
 
   try {
     const data = await apiFetch('/api/auth/register', {
@@ -1668,19 +1668,19 @@ async function completeRegistration() {
     currentUser = data.user;
     $('onboarding').style.display = 'none';
     startApp();
-    showToast('Welcome! You are now registered', 'success');
+    showToast(t('registration_success'), 'success');
   } catch (e) {
     haptic('error');
     if (e.message.toLowerCase().includes('taken')) {
       showStep(4);
-      showInlineError('regNickname', 'This nickname is already taken. Please try another.');
+      showInlineError('regNickname', t('err_nickname_taken'));
     } else {
       showToast(e.message, 'error');
     }
   } finally {
     if (regBtn) {
       regBtn.disabled = false;
-      regBtn.innerHTML = '<span>Agree &amp; Join</span><span class="btn-arrow">→</span>';
+      regBtn.innerHTML = `<span>${t('btn_agree_join')}</span><span class="btn-arrow">→</span>`;
     }
   }
 }
