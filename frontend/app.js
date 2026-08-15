@@ -3658,29 +3658,31 @@ async function loadUserTickets() {
       const lastSenderLabel = t.last_reply_sender === 'admin'
         ? `${ticketIcon('shield', 12)} Admin:`
         : (t.last_reply_sender === 'user' ? 'You:' : '');
-      const resolvedTag = t.resolved_by === 'user'
-        ? `<span class="chip chip-solved">${ticketIcon('check', 11)} You marked solved</span>`
+      const categoryLabel = t.category
+        ? `<span class="ticket-cat-label">${escapeHtml(t.category)}</span>`
+        : '<span></span>';
+      const resolvedStrip = t.resolved_by === 'user'
+        ? `<div class="ticket-resolved-strip">${ticketIcon('check', 14)} <span>You marked this solved</span></div>`
         : '';
 
       return `
         <div class="ticket-card-premium status-${status}" onclick="openTicketDetail('${t.id}')">
-          <div class="flex justify-between items-center mb-8">
-            <h4 class="font-bold text-sm" style="margin:0;color:var(--text);font-size:0.95rem">${escapeHtml(t.subject)}</h4>
+          <div class="ticket-card-top">
+            ${categoryLabel}
             <span class="status-pill status-pill-${status}">
               <span class="status-dot"></span>
               ${status.replace('_', ' ')}
             </span>
           </div>
-          <p class="text-xs text-dim mb-12" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45">
-            <strong style="color:var(--text2);display:inline-flex;align-items:center;gap:3px">${lastSenderLabel}</strong> ${previewText}
+          <h4 class="ticket-card-title">${escapeHtml(t.subject)}</h4>
+          <p class="ticket-card-preview">
+            <strong>${lastSenderLabel}</strong> ${previewText}
           </p>
-          <div class="flex justify-between items-center text-xs text-dim pt-8" style="border-top:1px solid rgba(255,255,255,0.06);gap:8px">
-            <span style="font-size:0.75rem;display:inline-flex;align-items:center;gap:4px">${ticketIcon('calendar', 12)} Submitted ${timeAgo(t.created_at)}</span>
-            <span style="display:flex;align-items:center;gap:6px">
-              ${resolvedTag}
-              <span class="chip" style="background:rgba(201,168,76,0.1);color:var(--gold-light);font-size:0.72rem;padding:2px 8px;border-radius:12px;border:1px solid rgba(201,168,76,0.2);display:inline-flex;align-items:center;gap:4px">${ticketIcon('chat', 11)} ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
-            </span>
+          <div class="ticket-card-meta">
+            <span class="ticket-meta-item">${ticketIcon('calendar', 12)} Submitted ${timeAgo(t.created_at)}</span>
+            <span class="ticket-meta-replies">${ticketIcon('chat', 11)} ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
           </div>
+          ${resolvedStrip}
         </div>`;
     }).join('');
   } catch (e) {
