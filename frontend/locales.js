@@ -178,6 +178,9 @@ const I18N = {
     "err_nickname_taken": "This nickname is already taken. Please try another.",
     "err_correct_below": "Please correct the errors below",
     "registration_success": "Welcome! You are now registered",
+    "ob_momentum_badge": "Day 1 begins",
+    "ob_nickname_tip": "Nicknames with a bit of hope in them help mentors open the conversation warmly.",
+    "ob_topics_reassure": "You can always change these later in Settings.",
     // ========== ADDED MISSING ENGLISH KEYS (for completeness) ==========
     "Save": "Save",
     "Delete": "Delete",
@@ -486,6 +489,9 @@ const I18N = {
     "err_nickname_taken": "ይህ ቅጽል ስም ተይዟል። እባክዎ ሌላ ይሞክሩ።",
     "err_correct_below": "እባክዎ ከታች ያሉትን ስህተቶች ያስተካክሉ",
     "registration_success": "እንኳን ደህና መጡ! ተመዝግበዋል",
+    "ob_momentum_badge": "ቀን 1 ጀምሯል",
+    "ob_nickname_tip": "ተስፋ ያለበት ቅጽል ስም አማካሪዎች ውይይቱን በደግነት እንዲጀምሩ ይረዳል።",
+    "ob_topics_reassure": "እነዚህን ኋላ ላይ በማስተካከያዎች ውስጥ መቀየር ይችላሉ።",
     // ========== ADDED MISSING AMHARIC TRANSLATIONS ==========
     "Save": "አስቀምጥ",
     "Delete": "ሰርዝ",

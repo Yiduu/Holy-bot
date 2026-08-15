@@ -5341,7 +5341,7 @@ textarea.form-control {
 .sex-option-btn {
   background: var(--surface);
   border: 2px solid var(--border);
-  border-radius: 16px;
+  border-radius: 20px;
   padding: 24px 16px;
   display: flex;
   flex-direction: column;
@@ -5378,7 +5378,8 @@ textarea.form-control {
 
 .sex-option-btn.active {
   border-color: var(--gold);
-  background: rgba(201, 168, 76, 0.05);
+  background: rgba(201, 168, 76, 0.08);
+  transform: scale(1.02);
 }
 
 .sex-option-btn.active .sex-icon-wrap {
@@ -5401,7 +5402,7 @@ textarea.form-control {
   justify-content: space-between;
   background: var(--surface);
   border: 2px solid var(--border);
-  border-radius: 12px;
+  border-radius: 18px;
   padding: 16px 20px;
   cursor: pointer;
   transition: all 0.2s;
@@ -5417,7 +5418,7 @@ textarea.form-control {
 
 .segmented-option.active {
   border-color: var(--gold);
-  background: rgba(201, 168, 76, 0.05);
+  background: rgba(201, 168, 76, 0.08);
 }
 
 .segmented-check {
@@ -5603,7 +5604,7 @@ textarea.form-control {
   padding: 14px 20px;
   background: transparent;
   border: 1px solid var(--border-dim);
-  border-radius: 12px;
+  border-radius: 100px;
   color: var(--text2);
   font-weight: 600;
   cursor: pointer;
@@ -5614,6 +5615,79 @@ textarea.form-control {
   background: var(--surface);
   color: var(--text);
   border-color: var(--border);
+}
+
+/* ── "Companion" pass: friendlier, more rounded primary CTA + visible
+   momentum/reassurance touches. Same gold/dark brand tokens throughout. ── */
+.onboarding-card .ob-btn-next.btn-primary {
+  border-radius: 100px;
+  padding: 16px 22px;
+  font-size: 0.88rem;
+}
+
+.onboarding-card .ob-btn-next.btn-primary:hover {
+  transform: translateY(-1px);
+}
+
+/* ── Momentum badge: previews the streak feature during onboarding so the
+   journey already feels underway, per the "Companion" direction. ── */
+.ob-momentum-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 8px;
+  border-radius: 100px;
+  background: var(--gold-dim);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  color: var(--gold-light);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
+}
+
+.ob-momentum-badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ── Tip card: warm, encouraging aside used on a couple of steps ── */
+.ob-tip-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--gold-dim);
+  border: 1px solid rgba(201, 168, 76, 0.22);
+}
+
+.ob-tip-card svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--gold);
+}
+
+.ob-tip-card p {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text2);
+  margin: 0;
+}
+
+.ob-tip-card strong {
+  color: var(--gold-light);
+  font-weight: 700;
+}
+
+/* ── Reassurance microcopy under a selection group ── */
+.ob-reassure {
+  font-size: 0.76rem;
+  color: var(--text3);
+  margin-top: 10px;
 }
 
 /* ── Inline error styling overrides for groups ── */
