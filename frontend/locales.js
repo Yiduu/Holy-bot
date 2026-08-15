@@ -17,7 +17,7 @@ const I18N = {
     "btn_back": "🔙 Back",
     "btn_prev": "◀️ Previous",
     "btn_next": "Next ▶️",
-    "btn_mark_read": "✅ Mark as Read",
+    "btn_mark_read": "Mark as Read",
     "btn_request": "Request",
     "btn_request_pending": "Pending",
     "request_pending_tooltip": "Your request is waiting on this mentor's response.",
