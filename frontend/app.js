@@ -1319,7 +1319,7 @@ function navigate(page) {
       loadMentors();        // load mentors (filter will work)
       break;
     case 'sessions': loadSessions(); break;
-    case 'chat': loadChat(); break;
+    case 'chat': loadChat(); requestAnimationFrame(syncChatInputHeight); break;
     case 'support': loadUserTickets(); break;
     case 'requests': loadRequests(); break;
     case 'settings': loadSettings(); break;
@@ -1343,7 +1343,25 @@ function toggleChatInput(visible) {
     row.classList.add('hidden');
     row.style.display = 'none';
   }
+  syncChatInputHeight();
 }
+
+// ─── Chat input height sync ──────────────────────────────────
+// .chat-input-row is position:fixed (see styles.css), so #chatMessages
+// needs its own bottom padding to avoid the last message(s) sitting
+// underneath it. That padding is driven by the --chat-input-h CSS var,
+// updated here from the row's *actual* rendered height (reply banner
+// shown/hidden, multi-line message typed, hidden entirely, etc) rather
+// than a guessed constant, so it always exactly matches.
+function syncChatInputHeight() {
+  const row = $('chatInputRow');
+  const messages = $('chatMessages');
+  if (!row || !messages) return;
+  const h = row.classList.contains('hidden') ? 0 : row.offsetHeight;
+  messages.style.setProperty('--chat-input-h', h + 'px');
+}
+window.addEventListener('resize', syncChatInputHeight);
+window.visualViewport?.addEventListener('resize', syncChatInputHeight);
 
 // ─── Onboarding ───────────────────────────────────────────────
 const ONBOARDING_TOTAL_STEPS = 7;
@@ -3099,6 +3117,7 @@ function cancelReply() {
   document.getElementById('replyIndicator')?.classList.add('hidden');
   const replyText = document.getElementById('replyText');
   if (replyText) replyText.textContent = '';
+  syncChatInputHeight();
 }
 
 function resetChatView() {
@@ -3109,6 +3128,7 @@ function resetChatView() {
   if (replyText) replyText.textContent = '';
   loadMessages(window.chatState.with);
   showToast('Chat view reset', 'info');
+  syncChatInputHeight();
 }
 
 function handleChatInputKeydown(event) {
@@ -3123,6 +3143,7 @@ function autoResizeChatInput() {
   if (!input) return;
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, 132) + 'px';
+  syncChatInputHeight();
 }
 
 function handleChatTyping() {

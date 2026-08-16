@@ -1379,6 +1379,14 @@ textarea.form-control {
   min-height: 0;
   overflow-y: auto;
   padding: 16px 14px 10px;
+  /* .chat-input-row is now position:fixed (see its own comment) and no
+     longer takes up flex-flow space, so the message list needs its own
+     reserved space to avoid the last messages/the load-more spinner
+     sitting underneath it. --chat-input-h is kept up to date by
+     syncChatInputHeight() in app.js since the input row's real height
+     varies (reply banner shown, multi-line message typed, etc). The
+     `90px` fallback covers the moment before that JS has run once. */
+  padding-bottom: calc(var(--chat-input-h, 90px) + var(--nav-h) + env(safe-area-inset-bottom, 0px) + 12px);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -2060,6 +2068,20 @@ textarea.form-control {
 }
 
 /* ── Chat input area ────────────────────────────────────────── */
+/* Was `position: sticky; bottom: 0` inside a flex column whose total
+   height depended on --app-height being exactly right. In practice
+   (confirmed by a real device screenshot) Telegram's reported viewport
+   height doesn't always match the WebView's actual visible area closely
+   enough, so the sticky row could rest below the true screen edge —
+   mostly hidden behind the bottom nav. Anchoring it with `position: fixed`
+   directly off the *real* viewport (the same technique .bottom-nav already
+   uses successfully) removes that dependency entirely: this row is now
+   guaranteed to sit exactly `nav height + safe area` above the bottom of
+   the screen no matter what --app-height/#page-chat's own height compute
+   to. It's a descendant of #page-chat, so it still only renders while
+   that page is .active (the ancestor's `display:none` otherwise hides it
+   like any other descendant). #chatMessages gets matching bottom padding
+   (kept in sync by JS via --chat-input-h) so messages never sit under it. */
 .chat-input-row {
   display: flex;
   flex-direction: column;
@@ -2067,9 +2089,11 @@ textarea.form-control {
   padding: 10px 12px 10px;
   border-top: 1px solid var(--border-dim);
   background: var(--bg2);
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+  z-index: 500;
   flex-shrink: 0;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.18);
 }

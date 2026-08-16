@@ -1,5 +1,5 @@
---- repo_orig/frontend/index.html	2026-08-16 08:52:28.000000000 +0000
-+++ Holy-bot-main/frontend/index.html	2026-08-16 09:06:03.694076817 +0000
+--- /home/claude/repo_orig/frontend/index.html	2026-08-16 08:52:28.000000000 +0000
++++ index.html	2026-08-16 09:06:03.694076817 +0000
 @@ -1047,8 +1047,7 @@
          </div>
          <span id="ticketDetailStatus" class="status-pill status-pill-open"><span class="status-dot"></span>open</span>
@@ -10,8 +10,8 @@
          <div id="ticketDetailMeta" class="card mb-12"
            style="background:linear-gradient(135deg, rgba(var(--bg3-rgb),0.5), rgba(var(--bg2-rgb),0.8));border-radius:14px;border:1px solid rgba(201,168,76,0.18)">
            <div class="text-xs text-dim mb-4" id="ticketDetailDate" style="color:var(--gold-light);font-weight:600">
---- repo_orig/frontend/styles.css	2026-08-16 08:52:28.000000000 +0000
-+++ Holy-bot-main/frontend/styles.css	2026-08-16 09:06:12.599168480 +0000
+--- /home/claude/repo_orig/frontend/styles.css	2026-08-16 08:52:28.000000000 +0000
++++ styles.css	2026-08-16 09:13:14.552176830 +0000
 @@ -41,8 +41,13 @@
  
    --nav-h: 68px;
@@ -88,7 +88,7 @@
  }
  
  .bottom-nav::-webkit-scrollbar {
-@@ -1346,6 +1372,11 @@
+@@ -1346,8 +1372,21 @@
  
  .chat-messages {
    flex: 1;
@@ -99,8 +99,18 @@
 +  min-height: 0;
    overflow-y: auto;
    padding: 16px 14px 10px;
++  /* .chat-input-row is now position:fixed (see its own comment) and no
++     longer takes up flex-flow space, so the message list needs its own
++     reserved space to avoid the last messages/the load-more spinner
++     sitting underneath it. --chat-input-h is kept up to date by
++     syncChatInputHeight() in app.js since the input row's real height
++     varies (reply banner shown, multi-line message typed, etc). The
++     `90px` fallback covers the moment before that JS has run once. */
++  padding-bottom: calc(var(--chat-input-h, 90px) + var(--nav-h) + env(safe-area-inset-bottom, 0px) + 12px);
    display: flex;
-@@ -1358,7 +1389,9 @@
+   flex-direction: column;
+   gap: 14px;
+@@ -1358,7 +1397,9 @@
  #page-chat.active {
    display: flex;
    flex-direction: column;
@@ -111,7 +121,43 @@
    overflow: hidden;
  }
  
-@@ -3038,17 +3071,17 @@
+@@ -2027,6 +2068,20 @@
+ }
+ 
+ /* ── Chat input area ────────────────────────────────────────── */
++/* Was `position: sticky; bottom: 0` inside a flex column whose total
++   height depended on --app-height being exactly right. In practice
++   (confirmed by a real device screenshot) Telegram's reported viewport
++   height doesn't always match the WebView's actual visible area closely
++   enough, so the sticky row could rest below the true screen edge —
++   mostly hidden behind the bottom nav. Anchoring it with `position: fixed`
++   directly off the *real* viewport (the same technique .bottom-nav already
++   uses successfully) removes that dependency entirely: this row is now
++   guaranteed to sit exactly `nav height + safe area` above the bottom of
++   the screen no matter what --app-height/#page-chat's own height compute
++   to. It's a descendant of #page-chat, so it still only renders while
++   that page is .active (the ancestor's `display:none` otherwise hides it
++   like any other descendant). #chatMessages gets matching bottom padding
++   (kept in sync by JS via --chat-input-h) so messages never sit under it. */
+ .chat-input-row {
+   display: flex;
+   flex-direction: column;
+@@ -2034,9 +2089,11 @@
+   padding: 10px 12px 10px;
+   border-top: 1px solid var(--border-dim);
+   background: var(--bg2);
+-  position: sticky;
+-  bottom: 0;
+-  z-index: 10;
++  position: fixed;
++  left: 0;
++  right: 0;
++  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
++  z-index: 500;
+   flex-shrink: 0;
+   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.18);
+ }
+@@ -3038,17 +3095,17 @@
    align-items: center;
    /* center vertically instead of bottom-anchored */
    padding: 16px;
@@ -132,7 +178,7 @@
  }
  
  /* ─── Premium Onboarding Styles ─────────────────────────── */
-@@ -4308,6 +4341,21 @@
+@@ -4308,6 +4365,21 @@
    word-break: break-word;
  }
  
@@ -154,8 +200,8 @@
  /* Floating Input Panel */
  .ticket-reply-panel {
    background: rgba(var(--bg2-rgb), 0.9);
---- repo_orig/frontend/app.js	2026-08-16 08:52:28.000000000 +0000
-+++ Holy-bot-main/frontend/app.js	2026-08-16 09:04:53.766234086 +0000
+--- /home/claude/repo_orig/frontend/app.js	2026-08-16 08:52:28.000000000 +0000
++++ app.js	2026-08-16 09:13:43.882453187 +0000
 @@ -27,7 +27,9 @@
  applyAppHeight();
  window.Telegram?.WebApp?.onEvent?.('viewportChanged', applyAppHeight);
@@ -183,3 +229,63 @@
  
    try {
      const data = await apiFetch('/api/auth/me');
+@@ -1307,7 +1319,7 @@
+       loadMentors();        // load mentors (filter will work)
+       break;
+     case 'sessions': loadSessions(); break;
+-    case 'chat': loadChat(); break;
++    case 'chat': loadChat(); requestAnimationFrame(syncChatInputHeight); break;
+     case 'support': loadUserTickets(); break;
+     case 'requests': loadRequests(); break;
+     case 'settings': loadSettings(); break;
+@@ -1331,8 +1343,26 @@
+     row.classList.add('hidden');
+     row.style.display = 'none';
+   }
++  syncChatInputHeight();
+ }
+ 
++// ─── Chat input height sync ──────────────────────────────────
++// .chat-input-row is position:fixed (see styles.css), so #chatMessages
++// needs its own bottom padding to avoid the last message(s) sitting
++// underneath it. That padding is driven by the --chat-input-h CSS var,
++// updated here from the row's *actual* rendered height (reply banner
++// shown/hidden, multi-line message typed, hidden entirely, etc) rather
++// than a guessed constant, so it always exactly matches.
++function syncChatInputHeight() {
++  const row = $('chatInputRow');
++  const messages = $('chatMessages');
++  if (!row || !messages) return;
++  const h = row.classList.contains('hidden') ? 0 : row.offsetHeight;
++  messages.style.setProperty('--chat-input-h', h + 'px');
++}
++window.addEventListener('resize', syncChatInputHeight);
++window.visualViewport?.addEventListener('resize', syncChatInputHeight);
++
+ // ─── Onboarding ───────────────────────────────────────────────
+ const ONBOARDING_TOTAL_STEPS = 7;
+ let onboardingStep = 0;
+@@ -3087,6 +3117,7 @@
+   document.getElementById('replyIndicator')?.classList.add('hidden');
+   const replyText = document.getElementById('replyText');
+   if (replyText) replyText.textContent = '';
++  syncChatInputHeight();
+ }
+ 
+ function resetChatView() {
+@@ -3097,6 +3128,7 @@
+   if (replyText) replyText.textContent = '';
+   loadMessages(window.chatState.with);
+   showToast('Chat view reset', 'info');
++  syncChatInputHeight();
+ }
+ 
+ function handleChatInputKeydown(event) {
+@@ -3111,6 +3143,7 @@
+   if (!input) return;
+   input.style.height = 'auto';
+   input.style.height = Math.min(input.scrollHeight, 132) + 'px';
++  syncChatInputHeight();
+ }
+ 
+ function handleChatTyping() {
