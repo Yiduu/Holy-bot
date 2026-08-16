@@ -1,0 +1,185 @@
+--- repo_orig/frontend/index.html	2026-08-16 08:52:28.000000000 +0000
++++ Holy-bot-main/frontend/index.html	2026-08-16 09:06:03.694076817 +0000
+@@ -1047,8 +1047,7 @@
+         </div>
+         <span id="ticketDetailStatus" class="status-pill status-pill-open"><span class="status-dot"></span>open</span>
+       </div>
+-      <div class="page-content"
+-        style="display:flex;flex-direction:column;min-height:calc(100vh - 140px);padding-bottom:20px">
++      <div class="page-content ticket-detail-content">
+         <div id="ticketDetailMeta" class="card mb-12"
+           style="background:linear-gradient(135deg, rgba(var(--bg3-rgb),0.5), rgba(var(--bg2-rgb),0.8));border-radius:14px;border:1px solid rgba(201,168,76,0.18)">
+           <div class="text-xs text-dim mb-4" id="ticketDetailDate" style="color:var(--gold-light);font-weight:600">
+--- repo_orig/frontend/styles.css	2026-08-16 08:52:28.000000000 +0000
++++ Holy-bot-main/frontend/styles.css	2026-08-16 09:06:12.599168480 +0000
+@@ -41,8 +41,13 @@
+ 
+   --nav-h: 68px;
+   /* Real visible viewport height, kept in sync with Telegram's WebApp by
+-     app.js (applyAppHeight). Falls back to 100vh before JS runs / outside
+-     Telegram, so nothing breaks if the JS hasn't executed yet. */
++     app.js (applyAppHeight). Falls back to 100dvh (the *dynamic* small
++     viewport, which already excludes mobile browser chrome like the
++     address bar) before JS runs / outside Telegram, so nothing breaks if
++     the JS hasn't executed yet — this is a strictly safer fallback than
++     100vh, which can report taller than what's actually visible on
++     mobile and push content (like the chat input row) below the fold,
++     under the fixed bottom nav. */
+   --app-height: 100vh;
+   --font-display: 'Cinzel', serif;
+   --font-body: 'Lato', sans-serif;
+@@ -77,6 +82,15 @@
+   --inset-hi-gold: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+ }
+ 
++/* Upgrade the viewport-height fallback to the dynamic small viewport unit
++   on browsers that support it (guarded via @supports so browsers without
++   `dvh` keep the plain 100vh above instead of getting an invalid value). */
++@supports (height: 100dvh) {
++  :root {
++    --app-height: 100dvh;
++  }
++}
++
+ /* ─── Reset ────────────────────────────────────────────────── */
+ *,
+ *::before,
+@@ -217,7 +231,7 @@
+ .page-content {
+   flex: 1;
+   overflow-y: auto;
+-  padding: 16px 16px calc(16px + var(--nav-h)) 16px;
++  padding: 16px 16px calc(16px + var(--nav-h) + env(safe-area-inset-bottom, 0px)) 16px;
+   -webkit-overflow-scrolling: touch;
+ }
+ 
+@@ -474,12 +488,24 @@
+ }
+ 
+ /* ─── Bottom Nav ────────────────────────────────────────────── */
++/* The nav's total on-screen footprint is --nav-h *plus* whatever the
++   device's home-indicator/safe-area needs at the bottom (iPhone notch
++   devices, gesture-nav Android, etc). Previously the safe-area inset was
++   added as `padding-bottom` while `height` stayed pinned to --nav-h — with
++   box-sizing:border-box that squeezes the nav's own icons/labels into a
++   shorter box instead of growing the nav, but anything elsewhere that
++   reserved space using only --nav-h (like the chat page) still ended up
++   short by exactly the safe-area amount, so the last few pixels of
++   content — the chat input row's emoji/send buttons — sat behind the
++   fixed nav. Growing the nav by the safe-area amount and reserving that
++   same combined amount everywhere (see #page-chat.active, .page-content)
++   keeps the two in sync. */
+ .bottom-nav {
+   position: fixed;
+   bottom: 0;
+   left: 0;
+   right: 0;
+-  height: var(--nav-h);
++  height: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px));
+   background: var(--bg2);
+   border-top: 1px solid var(--border-dim);
+   box-shadow: var(--shadow-lg);
+@@ -495,7 +521,7 @@
+   scrollbar-width: thin;
+   gap: 4px;
+   padding: 0 8px;
+-  padding-bottom: env(safe-area-inset-bottom);
++  padding-bottom: env(safe-area-inset-bottom, 0px);
+ }
+ 
+ .bottom-nav::-webkit-scrollbar {
+@@ -1346,6 +1372,11 @@
+ 
+ .chat-messages {
+   flex: 1;
++  /* Explicit min-height:0 so this flex item can actually shrink below its
++     content size when the input row grows (multi-line message / reply
++     banner) instead of forcing the row — and its emoji/send buttons —
++     past the bottom of the fixed-height page. */
++  min-height: 0;
+   overflow-y: auto;
+   padding: 16px 14px 10px;
+   display: flex;
+@@ -1358,7 +1389,9 @@
+ #page-chat.active {
+   display: flex;
+   flex-direction: column;
+-  height: calc(var(--app-height) - var(--nav-h));
++  /* Must reserve the nav's *real* footprint, including the safe-area
++     inset it grows by — see the .bottom-nav comment above. */
++  height: calc(var(--app-height) - var(--nav-h) - env(safe-area-inset-bottom, 0px));
+   overflow: hidden;
+ }
+ 
+@@ -3038,17 +3071,17 @@
+   align-items: center;
+   /* center vertically instead of bottom-anchored */
+   padding: 16px;
+-  padding-bottom: calc(16px + var(--nav-h));
++  padding-bottom: calc(16px + var(--nav-h) + env(safe-area-inset-bottom, 0px));
+ }
+ 
+ #scheduleModal .modal {
+-  max-height: calc(85vh - var(--nav-h));
++  max-height: calc(85vh - var(--nav-h) - env(safe-area-inset-bottom, 0px));
+   overflow-y: auto;
+ }
+ 
+ /* ─── Fix: All bottom-sheet modals clear bottom nav ─────────── */
+ .modal-sheet {
+-  padding-bottom: calc(20px + var(--nav-h));
++  padding-bottom: calc(20px + var(--nav-h) + env(safe-area-inset-bottom, 0px));
+ }
+ 
+ /* ─── Premium Onboarding Styles ─────────────────────────── */
+@@ -4308,6 +4341,21 @@
+   word-break: break-word;
+ }
+ 
++/* ── Ticket detail page content ───────────────────────────────
++   Was inline `min-height:calc(100vh - 140px); padding-bottom:20px`,
++   which (a) used raw 100vh instead of the safe-area/Telegram-aware
++   --app-height, and (b) hardcoded a 20px bottom clearance that doesn't
++   account for the fixed bottom nav (--nav-h) or the device safe-area
++   inset at all — so the "Send Reply" button, which sits at the bottom
++   of this flex column via .ticket-reply-panel's `margin-top:auto`,
++   could end up rendered behind the nav, same as the chat page bug. */
++.ticket-detail-content {
++  display: flex;
++  flex-direction: column;
++  min-height: calc(var(--app-height) - var(--nav-h) - 140px);
++  padding-bottom: calc(20px + var(--nav-h) + env(safe-area-inset-bottom, 0px));
++}
++
+ /* Floating Input Panel */
+ .ticket-reply-panel {
+   background: rgba(var(--bg2-rgb), 0.9);
+--- repo_orig/frontend/app.js	2026-08-16 08:52:28.000000000 +0000
++++ Holy-bot-main/frontend/app.js	2026-08-16 09:04:53.766234086 +0000
+@@ -27,7 +27,9 @@
+ applyAppHeight();
+ window.Telegram?.WebApp?.onEvent?.('viewportChanged', applyAppHeight);
+ window.addEventListener('resize', applyAppHeight);
++window.addEventListener('orientationchange', applyAppHeight);
+ window.visualViewport?.addEventListener('resize', applyAppHeight);
++window.visualViewport?.addEventListener('scroll', applyAppHeight);
+ 
+ // ─── Helpers ──────────────────────────────────────────────────
+ const $ = id => document.getElementById(id);
+@@ -909,6 +911,16 @@
+   const tg = window.Telegram?.WebApp;
+   if (tg) { tg.ready(); tg.expand(); }
+   applyAppHeight();
++  // tg.expand() doesn't resize the WebView synchronously — Telegram
++  // reports the new viewportStableHeight a little later via its own
++  // 'viewportChanged' event (already listened for above), but that event
++  // isn't guaranteed on every client/version. Re-measuring a couple of
++  // frames later catches the post-expand size even when it isn't, so the
++  // chat input row's reserved space (#page-chat.active) doesn't stay
++  // pinned to the pre-expand (shorter) height and end up hidden behind
++  // the bottom nav.
++  requestAnimationFrame(() => requestAnimationFrame(applyAppHeight));
++  setTimeout(applyAppHeight, 300);
+ 
+   try {
+     const data = await apiFetch('/api/auth/me');

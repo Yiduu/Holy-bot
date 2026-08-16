@@ -27,7 +27,9 @@ function applyAppHeight() {
 applyAppHeight();
 window.Telegram?.WebApp?.onEvent?.('viewportChanged', applyAppHeight);
 window.addEventListener('resize', applyAppHeight);
+window.addEventListener('orientationchange', applyAppHeight);
 window.visualViewport?.addEventListener('resize', applyAppHeight);
+window.visualViewport?.addEventListener('scroll', applyAppHeight);
 
 // ─── Helpers ──────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -909,6 +911,16 @@ async function init() {
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
   applyAppHeight();
+  // tg.expand() doesn't resize the WebView synchronously — Telegram
+  // reports the new viewportStableHeight a little later via its own
+  // 'viewportChanged' event (already listened for above), but that event
+  // isn't guaranteed on every client/version. Re-measuring a couple of
+  // frames later catches the post-expand size even when it isn't, so the
+  // chat input row's reserved space (#page-chat.active) doesn't stay
+  // pinned to the pre-expand (shorter) height and end up hidden behind
+  // the bottom nav.
+  requestAnimationFrame(() => requestAnimationFrame(applyAppHeight));
+  setTimeout(applyAppHeight, 300);
 
   try {
     const data = await apiFetch('/api/auth/me');
