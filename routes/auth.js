@@ -84,11 +84,17 @@ module.exports = function authRoutes(supabase, requireAuth) {
 
   // GET /api/auth/verse – today's daily verse
   router.get('/verse', async (req, res) => {
-    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+    // IMPORTANT: this must use the exact same "which day is it" and "which
+    // row is today's" formulas as bot.js (handleDailyVerse / the hourly
+    // verse scheduler), or the mini app and the bot will show two
+    // different verses on the same day. bot.js uses days-since-epoch, not
+    // day-of-year, so that's what we use here too.
+    const dayIndex = Math.floor(Date.now() / 86400000);
     let { data, error } = await supabase
       .from('daily_verses')
       .select('*')
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .order('id', { ascending: true });
 
     // Auto-migrate database records if English references are detected
     if (!error && data && data.length > 0) {
@@ -115,7 +121,7 @@ module.exports = function authRoutes(supabase, requireAuth) {
           if (verses.length > 0) {
             await supabase.from('daily_verses').delete().neq('theme', 'non-existent-theme-to-delete-all');
             await supabase.from('daily_verses').insert(verses);
-            const refetched = await supabase.from('daily_verses').select('*').eq('is_active', true);
+            const refetched = await supabase.from('daily_verses').select('*').eq('is_active', true).order('id', { ascending: true });
             if (refetched.data && refetched.data.length > 0) {
               data = refetched.data;
             }
@@ -128,7 +134,7 @@ module.exports = function authRoutes(supabase, requireAuth) {
 
     if (error || !data?.length) return res.json({ reference: 'ፊልጵ 4:13', text: 'ኃይልን በሚሰጠኝ በክርስቶስ ሁሉን እችላለሁ።' });
 
-    const verse = data[dayOfYear % data.length];
+    const verse = data[dayIndex % data.length];
     res.json(verse);
   });
 

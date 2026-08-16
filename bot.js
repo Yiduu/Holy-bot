@@ -910,7 +910,7 @@ async function getAmharicVerse(verseText) {
 
 async function handleDailyVerse(chatId) {
   const lang = await getUserLang(chatId);
-  const { data: vs } = await supabase.from('daily_verses').select('*').eq('is_active', true);
+  const { data: vs } = await supabase.from('daily_verses').select('*').eq('is_active', true).order('id', { ascending: true });
   const v = vs?.[Math.floor(Date.now() / 86400000) % (vs.length || 1)];
   if (!v) return safeSend(chatId, tSync(lang, 'no_verse'));
 
@@ -928,7 +928,7 @@ async function handleStreakFlow(chatId) {
   const lang = await getUserLang(chatId);
   let [{ data: s }, { data: vs }] = await Promise.all([
     supabase.from('bible_streaks').select('*').eq('telegram_id', chatId).single(),
-    supabase.from('daily_verses').select('*').eq('is_active', true)
+    supabase.from('daily_verses').select('*').eq('is_active', true).order('id', { ascending: true })
   ]);
 
   const v = vs?.[Math.floor(Date.now() / 86400000) % (vs?.length || 1)] || { reference: '...', text: '...' };
@@ -2317,7 +2317,7 @@ setInterval(async () => {
   const currentHour = now.getHours();
   const { data: opted } = await supabase.from('user_settings')
     .select('telegram_id, language').eq('notify_daily_verse', true).eq('verse_time', currentHour);
-  const { data: vs } = await supabase.from('daily_verses').select('*').eq('is_active', true);
+  const { data: vs } = await supabase.from('daily_verses').select('*').eq('is_active', true).order('id', { ascending: true });
   const v = vs?.[Math.floor(Date.now() / 86400000) % (vs?.length || 1)];
 
   if (v && opted?.length) {
@@ -2390,6 +2390,113 @@ setInterval(async () => {
     if (ok) sent++;
   }
   if (sent) console.log(`[Scheduler] Sent ${sent} streak reminder(s).`);
+}, 60 * 1000);
+
+// Reminder for mentees who ARE matched with a mentor but have gone quiet.
+// Waits until the mentee has been inactive for 5+ days (checked against
+// users.last_active, which both the bot and the mini app's /api/auth/login
+// keep up to date), then nudges them once a day at a fixed hour. Because
+// the query is re-run fresh every day against current last_active, anyone
+// who becomes active again simply stops matching it — no separate
+// "cancel" step needed, this naturally satisfies "remind until active
+// again."
+setInterval(async () => {
+  const now = getEthiopiaNow();
+  if (now.getHours() !== 10 || now.getMinutes() !== 0) return;
+
+  const cutoff = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: assignments, error: aErr } = await supabase
+    .from('mentorship_assignments')
+    .select('user_id')
+    .eq('is_active', true);
+  if (aErr) { console.error('[Scheduler] Inactive-mentee query failed:', aErr.message); return; }
+  if (!assignments?.length) return;
+
+  const menteeIds = [...new Set(assignments.map(a => a.user_id))];
+
+  const { data: inactiveMentees, error: uErr } = await supabase
+    .from('users')
+    .select('telegram_id, chat_id, anonymous_id, last_active')
+    .in('telegram_id', menteeIds)
+    .eq('is_banned', false)
+    .lte('last_active', cutoff);
+  if (uErr) { console.error('[Scheduler] Inactive-mentee user fetch failed:', uErr.message); return; }
+  if (!inactiveMentees?.length) return;
+
+  const ids = inactiveMentees.map(u => u.telegram_id);
+  const { data: settingsRows } = await supabase
+    .from('user_settings')
+    .select('telegram_id, display_name, language')
+    .in('telegram_id', ids);
+  const settingsMap = new Map((settingsRows || []).map(r => [String(r.telegram_id), r]));
+
+  let sent = 0;
+  for (const u of inactiveMentees) {
+    const settings = settingsMap.get(String(u.telegram_id));
+    const lang = settings?.language || 'en';
+    const name = settings?.display_name || u.anonymous_id;
+    const chatId = u.chat_id || u.telegram_id;
+    const ok = await safeSend(chatId, tSync(lang, 'mentee_inactive_reminder', { name: mdEscape(name) }));
+    if (ok) sent++;
+  }
+  if (sent) console.log(`[Scheduler] Sent ${sent} inactive-mentee reminder(s).`);
+}, 60 * 1000);
+
+// Reminder for users who registered but are NOT matched with a mentor and
+// have no pending request in flight (i.e. they never asked, or their last
+// attempt didn't go anywhere and they haven't tried again). Same 5-day
+// last_active gate and daily re-evaluation as the reminder above, so it
+// stops as soon as the user sends a request or gets matched.
+setInterval(async () => {
+  const now = getEthiopiaNow();
+  if (now.getHours() !== 15 || now.getMinutes() !== 0) return;
+
+  const cutoff = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
+
+  const [{ data: assignments, error: aErr }, { data: pendingReqs, error: rErr }] = await Promise.all([
+    supabase.from('mentorship_assignments').select('user_id').eq('is_active', true),
+    supabase.from('mentorship_requests').select('user_id').eq('status', 'pending'),
+  ]);
+  if (aErr || rErr) {
+    console.error('[Scheduler] Unmatched-user query failed:', (aErr || rErr)?.message);
+    return;
+  }
+
+  const excludeIds = [...new Set([
+    ...(assignments || []).map(a => a.user_id),
+    ...(pendingReqs || []).map(r => r.user_id),
+  ])];
+
+  let query = supabase
+    .from('users')
+    .select('telegram_id, chat_id, anonymous_id, last_active')
+    .eq('role', 'user')
+    .eq('is_banned', false)
+    .lte('last_active', cutoff);
+  if (excludeIds.length) query = query.not('telegram_id', 'in', `(${excludeIds.join(',')})`);
+
+  const { data: unmatched, error: uErr } = await query;
+  if (uErr) { console.error('[Scheduler] Unmatched-user fetch failed:', uErr.message); return; }
+  if (!unmatched?.length) return;
+
+  const ids = unmatched.map(u => u.telegram_id);
+  const { data: settingsRows } = await supabase
+    .from('user_settings')
+    .select('telegram_id, display_name, language')
+    .in('telegram_id', ids);
+  const settingsMap = new Map((settingsRows || []).map(r => [String(r.telegram_id), r]));
+
+  let sent = 0;
+  for (const u of unmatched) {
+    const settings = settingsMap.get(String(u.telegram_id));
+    const lang = settings?.language || 'en';
+    const name = settings?.display_name || u.anonymous_id;
+    const chatId = u.chat_id || u.telegram_id;
+    const ok = await safeSend(chatId, tSync(lang, 'unmatched_mentor_reminder', { name: mdEscape(name) }));
+    if (ok) sent++;
+  }
+  if (sent) console.log(`[Scheduler] Sent ${sent} unmatched-user reminder(s).`);
 }, 60 * 1000);
 
 // Mentor application review polling

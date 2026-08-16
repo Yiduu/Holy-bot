@@ -156,6 +156,8 @@
   "please_use_buttons": "❌ እባክዎን ከላይ ያሉትን ቁልፎች በመጠቀም ይምረጡ።",
   "help_text": "📖 *Holy Helper — Commands*\n\n`/start` — ዋና ማውጫ\n`/menu` — ዋና ማውጫ\n`/apply` — አማካሪ ለመሆን አመልክት\n`/settopics` — የሚፈልጓቸውን ርዕሶች ያዘምኑ\n`/reply @nick msg` — ለተለየ አጋር መልስ ይስጡ\n`/end` — የአሁኑን አማካሪነት ያቋርጡ\n\nከአጋርዎ ጋር ለመወያየት በተለመደው ሁኔታ ይጻፉ。",
   "mentorship_request_cancelled_elsewhere": "📋 የ *{nick}* የምክር አገልግሎት ጥያቄ በሌላ አማካሪ ስለተያዘ አሁን አይገኝም።",
+  "mentee_inactive_reminder": "ሰላም {name}፣ አማካሪዎ እየጠበቀዎት ነው። እባክዎን ይመለሱ። እግዚአብሔር ይባርክዎ 🙏",
+  "unmatched_mentor_reminder": "ሰላም {name}፣ ወደዚህ አገልግሎት ስለተመዘገቡ እናመሰግናለን! እስካሁን ምንም አማካሪ ጥያቄ አልላኩም — እባክዎን ሁሉም አማካሪዎች ከመያዛቸው በፊት ወደ አማካሪዎች ገጽ በመሄድ የመረጡትን አማካሪ ይጠይቁ። እናመሰግናለን፣ እግዚአብሔር ይባርክዎ 🙏",
   "book_mapping": {
     "Psalm": "መዝሙረ ዳዊት",
     "Romans": "ሮሜ",

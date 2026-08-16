@@ -1579,7 +1579,11 @@
   `;
     const bottomNav = document.querySelector('.bottom-nav');
     if (bottomNav) {
-      bottomNav.style.position = 'relative';
+      // NOTE: .bottom-nav is already `position: fixed` in styles.css, which
+      // is itself a valid positioning context for the absolutely-positioned
+      // indicator below. Forcing it to `position: relative` here used to
+      // override that fixed positioning via inline style (inline style
+      // always wins over the stylesheet), so it has been removed.
       bottomNav.appendChild(navIndicator);
 
       function updateNavIndicator() {
@@ -1591,12 +1595,35 @@
         navIndicator.style.width = itemRect.width + 'px';
       }
 
+      // .bottom-nav scrolls horizontally on phones (more tabs than fit on
+      // screen), and navigate() below triggers a `smooth` scrollIntoView
+      // whose duration depends on how far the tab is and how fast the
+      // device is. A single fixed-delay measurement (previously 50ms) goes
+      // stale mid-scroll, which is exactly why the indicator landed in the
+      // wrong spot for tabs further along the row — Journal, Mentees,
+      // Requests, Settings — after scrolling past Support. Instead, keep
+      // re-measuring on every animation frame for a bit after any
+      // navigation or scroll, so the indicator always lands on the tab's
+      // final resting position.
+      let navSyncRAF = null;
+      function trackNavIndicator(durationMs) {
+        const stopAt = performance.now() + durationMs;
+        if (navSyncRAF) cancelAnimationFrame(navSyncRAF);
+        const step = (now) => {
+          updateNavIndicator();
+          if (now < stopAt) navSyncRAF = requestAnimationFrame(step);
+        };
+        navSyncRAF = requestAnimationFrame(step);
+      }
+      // Also stay in sync if the user manually swipes the nav bar itself.
+      bottomNav.addEventListener('scroll', () => trackNavIndicator(150), { passive: true });
+
       const _origNav = window.navigate;
       window.navigate = function (page) {
         if (_origNav) _origNav(page);
-        setTimeout(updateNavIndicator, 50);
+        trackNavIndicator(500);
       };
-      setTimeout(updateNavIndicator, 300);
+      trackNavIndicator(500);
     }
 
     /* ── Pull-to-refresh ─────────────────────────────────────── */

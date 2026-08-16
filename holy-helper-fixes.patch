@@ -1,0 +1,269 @@
+diff --git a/bot.js b/bot.js
+index ca69149..56de2d1 100644
+--- a/bot.js
++++ b/bot.js
+@@ -910,7 +910,7 @@ async function getAmharicVerse(verseText) {
+ 
+ async function handleDailyVerse(chatId) {
+   const lang = await getUserLang(chatId);
+-  const { data: vs } = await supabase.from('daily_verses').select('*').eq('is_active', true);
++  const { data: vs } = await supabase.from('daily_verses').select('*').eq('is_active', true).order('id', { ascending: true });
+   const v = vs?.[Math.floor(Date.now() / 86400000) % (vs.length || 1)];
+   if (!v) return safeSend(chatId, tSync(lang, 'no_verse'));
+ 
+@@ -928,7 +928,7 @@ async function handleStreakFlow(chatId) {
+   const lang = await getUserLang(chatId);
+   let [{ data: s }, { data: vs }] = await Promise.all([
+     supabase.from('bible_streaks').select('*').eq('telegram_id', chatId).single(),
+-    supabase.from('daily_verses').select('*').eq('is_active', true)
++    supabase.from('daily_verses').select('*').eq('is_active', true).order('id', { ascending: true })
+   ]);
+ 
+   const v = vs?.[Math.floor(Date.now() / 86400000) % (vs?.length || 1)] || { reference: '...', text: '...' };
+@@ -2317,7 +2317,7 @@ setInterval(async () => {
+   const currentHour = now.getHours();
+   const { data: opted } = await supabase.from('user_settings')
+     .select('telegram_id, language').eq('notify_daily_verse', true).eq('verse_time', currentHour);
+-  const { data: vs } = await supabase.from('daily_verses').select('*').eq('is_active', true);
++  const { data: vs } = await supabase.from('daily_verses').select('*').eq('is_active', true).order('id', { ascending: true });
+   const v = vs?.[Math.floor(Date.now() / 86400000) % (vs?.length || 1)];
+ 
+   if (v && opted?.length) {
+@@ -2392,6 +2392,113 @@ setInterval(async () => {
+   if (sent) console.log(`[Scheduler] Sent ${sent} streak reminder(s).`);
+ }, 60 * 1000);
+ 
++// Reminder for mentees who ARE matched with a mentor but have gone quiet.
++// Waits until the mentee has been inactive for 5+ days (checked against
++// users.last_active, which both the bot and the mini app's /api/auth/login
++// keep up to date), then nudges them once a day at a fixed hour. Because
++// the query is re-run fresh every day against current last_active, anyone
++// who becomes active again simply stops matching it — no separate
++// "cancel" step needed, this naturally satisfies "remind until active
++// again."
++setInterval(async () => {
++  const now = getEthiopiaNow();
++  if (now.getHours() !== 10 || now.getMinutes() !== 0) return;
++
++  const cutoff = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
++
++  const { data: assignments, error: aErr } = await supabase
++    .from('mentorship_assignments')
++    .select('user_id')
++    .eq('is_active', true);
++  if (aErr) { console.error('[Scheduler] Inactive-mentee query failed:', aErr.message); return; }
++  if (!assignments?.length) return;
++
++  const menteeIds = [...new Set(assignments.map(a => a.user_id))];
++
++  const { data: inactiveMentees, error: uErr } = await supabase
++    .from('users')
++    .select('telegram_id, chat_id, anonymous_id, last_active')
++    .in('telegram_id', menteeIds)
++    .eq('is_banned', false)
++    .lte('last_active', cutoff);
++  if (uErr) { console.error('[Scheduler] Inactive-mentee user fetch failed:', uErr.message); return; }
++  if (!inactiveMentees?.length) return;
++
++  const ids = inactiveMentees.map(u => u.telegram_id);
++  const { data: settingsRows } = await supabase
++    .from('user_settings')
++    .select('telegram_id, display_name, language')
++    .in('telegram_id', ids);
++  const settingsMap = new Map((settingsRows || []).map(r => [String(r.telegram_id), r]));
++
++  let sent = 0;
++  for (const u of inactiveMentees) {
++    const settings = settingsMap.get(String(u.telegram_id));
++    const lang = settings?.language || 'en';
++    const name = settings?.display_name || u.anonymous_id;
++    const chatId = u.chat_id || u.telegram_id;
++    const ok = await safeSend(chatId, tSync(lang, 'mentee_inactive_reminder', { name: mdEscape(name) }));
++    if (ok) sent++;
++  }
++  if (sent) console.log(`[Scheduler] Sent ${sent} inactive-mentee reminder(s).`);
++}, 60 * 1000);
++
++// Reminder for users who registered but are NOT matched with a mentor and
++// have no pending request in flight (i.e. they never asked, or their last
++// attempt didn't go anywhere and they haven't tried again). Same 5-day
++// last_active gate and daily re-evaluation as the reminder above, so it
++// stops as soon as the user sends a request or gets matched.
++setInterval(async () => {
++  const now = getEthiopiaNow();
++  if (now.getHours() !== 15 || now.getMinutes() !== 0) return;
++
++  const cutoff = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000).toISOString();
++
++  const [{ data: assignments, error: aErr }, { data: pendingReqs, error: rErr }] = await Promise.all([
++    supabase.from('mentorship_assignments').select('user_id').eq('is_active', true),
++    supabase.from('mentorship_requests').select('user_id').eq('status', 'pending'),
++  ]);
++  if (aErr || rErr) {
++    console.error('[Scheduler] Unmatched-user query failed:', (aErr || rErr)?.message);
++    return;
++  }
++
++  const excludeIds = [...new Set([
++    ...(assignments || []).map(a => a.user_id),
++    ...(pendingReqs || []).map(r => r.user_id),
++  ])];
++
++  let query = supabase
++    .from('users')
++    .select('telegram_id, chat_id, anonymous_id, last_active')
++    .eq('role', 'user')
++    .eq('is_banned', false)
++    .lte('last_active', cutoff);
++  if (excludeIds.length) query = query.not('telegram_id', 'in', `(${excludeIds.join(',')})`);
++
++  const { data: unmatched, error: uErr } = await query;
++  if (uErr) { console.error('[Scheduler] Unmatched-user fetch failed:', uErr.message); return; }
++  if (!unmatched?.length) return;
++
++  const ids = unmatched.map(u => u.telegram_id);
++  const { data: settingsRows } = await supabase
++    .from('user_settings')
++    .select('telegram_id, display_name, language')
++    .in('telegram_id', ids);
++  const settingsMap = new Map((settingsRows || []).map(r => [String(r.telegram_id), r]));
++
++  let sent = 0;
++  for (const u of unmatched) {
++    const settings = settingsMap.get(String(u.telegram_id));
++    const lang = settings?.language || 'en';
++    const name = settings?.display_name || u.anonymous_id;
++    const chatId = u.chat_id || u.telegram_id;
++    const ok = await safeSend(chatId, tSync(lang, 'unmatched_mentor_reminder', { name: mdEscape(name) }));
++    if (ok) sent++;
++  }
++  if (sent) console.log(`[Scheduler] Sent ${sent} unmatched-user reminder(s).`);
++}, 60 * 1000);
++
+ // Mentor application review polling
+ let lastAppCheck = new Date().toISOString();
+ setInterval(async () => {
+diff --git a/frontend/index.html b/frontend/index.html
+index f31fc6f..7426131 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -1579,7 +1579,11 @@
+   `;
+     const bottomNav = document.querySelector('.bottom-nav');
+     if (bottomNav) {
+-      bottomNav.style.position = 'relative';
++      // NOTE: .bottom-nav is already `position: fixed` in styles.css, which
++      // is itself a valid positioning context for the absolutely-positioned
++      // indicator below. Forcing it to `position: relative` here used to
++      // override that fixed positioning via inline style (inline style
++      // always wins over the stylesheet), so it has been removed.
+       bottomNav.appendChild(navIndicator);
+ 
+       function updateNavIndicator() {
+@@ -1591,12 +1595,35 @@
+         navIndicator.style.width = itemRect.width + 'px';
+       }
+ 
++      // .bottom-nav scrolls horizontally on phones (more tabs than fit on
++      // screen), and navigate() below triggers a `smooth` scrollIntoView
++      // whose duration depends on how far the tab is and how fast the
++      // device is. A single fixed-delay measurement (previously 50ms) goes
++      // stale mid-scroll, which is exactly why the indicator landed in the
++      // wrong spot for tabs further along the row — Journal, Mentees,
++      // Requests, Settings — after scrolling past Support. Instead, keep
++      // re-measuring on every animation frame for a bit after any
++      // navigation or scroll, so the indicator always lands on the tab's
++      // final resting position.
++      let navSyncRAF = null;
++      function trackNavIndicator(durationMs) {
++        const stopAt = performance.now() + durationMs;
++        if (navSyncRAF) cancelAnimationFrame(navSyncRAF);
++        const step = (now) => {
++          updateNavIndicator();
++          if (now < stopAt) navSyncRAF = requestAnimationFrame(step);
++        };
++        navSyncRAF = requestAnimationFrame(step);
++      }
++      // Also stay in sync if the user manually swipes the nav bar itself.
++      bottomNav.addEventListener('scroll', () => trackNavIndicator(150), { passive: true });
++
+       const _origNav = window.navigate;
+       window.navigate = function (page) {
+         if (_origNav) _origNav(page);
+-        setTimeout(updateNavIndicator, 50);
++        trackNavIndicator(500);
+       };
+-      setTimeout(updateNavIndicator, 300);
++      trackNavIndicator(500);
+     }
+ 
+     /* ── Pull-to-refresh ─────────────────────────────────────── */
+diff --git a/local/am.json b/local/am.json
+index 4b17186..a2776e6 100644
+--- a/local/am.json
++++ b/local/am.json
+@@ -156,6 +156,8 @@
+   "please_use_buttons": "❌ እባክዎን ከላይ ያሉትን ቁልፎች በመጠቀም ይምረጡ።",
+   "help_text": "📖 *Holy Helper — Commands*\n\n`/start` — ዋና ማውጫ\n`/menu` — ዋና ማውጫ\n`/apply` — አማካሪ ለመሆን አመልክት\n`/settopics` — የሚፈልጓቸውን ርዕሶች ያዘምኑ\n`/reply @nick msg` — ለተለየ አጋር መልስ ይስጡ\n`/end` — የአሁኑን አማካሪነት ያቋርጡ\n\nከአጋርዎ ጋር ለመወያየት በተለመደው ሁኔታ ይጻፉ。",
+   "mentorship_request_cancelled_elsewhere": "📋 የ *{nick}* የምክር አገልግሎት ጥያቄ በሌላ አማካሪ ስለተያዘ አሁን አይገኝም።",
++  "mentee_inactive_reminder": "ሰላም {name}፣ አማካሪዎ እየጠበቀዎት ነው። እባክዎን ይመለሱ። እግዚአብሔር ይባርክዎ 🙏",
++  "unmatched_mentor_reminder": "ሰላም {name}፣ ወደዚህ አገልግሎት ስለተመዘገቡ እናመሰግናለን! እስካሁን ምንም አማካሪ ጥያቄ አልላኩም — እባክዎን ሁሉም አማካሪዎች ከመያዛቸው በፊት ወደ አማካሪዎች ገጽ በመሄድ የመረጡትን አማካሪ ይጠይቁ። እናመሰግናለን፣ እግዚአብሔር ይባርክዎ 🙏",
+   "book_mapping": {
+     "Psalm": "መዝሙረ ዳዊት",
+     "Romans": "ሮሜ",
+diff --git a/local/en.json b/local/en.json
+index 91ebfc3..3ec7905 100644
+--- a/local/en.json
++++ b/local/en.json
+@@ -155,5 +155,7 @@
+     "application_cancelled": "❌ Application cancelled.",
+     "please_use_buttons": "❌ Please select an option using the buttons provided above.",
+     "help_text": "📖 *Holy Helper — Commands*\n\n`/start` — Main menu\n`/menu` — Main menu\n`/apply` — Apply to become a mentor\n`/settopics` — Update your topics\n`/reply @nick msg` — Reply to a specific partner\n`/end` — End current mentorship\n\nJust type normally to chat with your partner.",
+-    "mentorship_request_cancelled_elsewhere": "📋 The mentorship request from *{nick}* is no longer available because they have been matched with another mentor."
++    "mentorship_request_cancelled_elsewhere": "📋 The mentorship request from *{nick}* is no longer available because they have been matched with another mentor.",
++    "mentee_inactive_reminder": "Hello {name}, your mentor is waiting for you. Please be back. God bless you 🙏",
++    "unmatched_mentor_reminder": "Hello {name}, thank you for registering with Holy Counseling! You haven't sent a request to get a mentor yet — please request one before all mentors become fully occupied. Thank you, God bless you 🙏"
+ }
+\ No newline at end of file
+diff --git a/routes/auth.js b/routes/auth.js
+index 3988150..9e86ac8 100644
+--- a/routes/auth.js
++++ b/routes/auth.js
+@@ -84,11 +84,17 @@ module.exports = function authRoutes(supabase, requireAuth) {
+ 
+   // GET /api/auth/verse – today's daily verse
+   router.get('/verse', async (req, res) => {
+-    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
++    // IMPORTANT: this must use the exact same "which day is it" and "which
++    // row is today's" formulas as bot.js (handleDailyVerse / the hourly
++    // verse scheduler), or the mini app and the bot will show two
++    // different verses on the same day. bot.js uses days-since-epoch, not
++    // day-of-year, so that's what we use here too.
++    const dayIndex = Math.floor(Date.now() / 86400000);
+     let { data, error } = await supabase
+       .from('daily_verses')
+       .select('*')
+-      .eq('is_active', true);
++      .eq('is_active', true)
++      .order('id', { ascending: true });
+ 
+     // Auto-migrate database records if English references are detected
+     if (!error && data && data.length > 0) {
+@@ -115,7 +121,7 @@ module.exports = function authRoutes(supabase, requireAuth) {
+           if (verses.length > 0) {
+             await supabase.from('daily_verses').delete().neq('theme', 'non-existent-theme-to-delete-all');
+             await supabase.from('daily_verses').insert(verses);
+-            const refetched = await supabase.from('daily_verses').select('*').eq('is_active', true);
++            const refetched = await supabase.from('daily_verses').select('*').eq('is_active', true).order('id', { ascending: true });
+             if (refetched.data && refetched.data.length > 0) {
+               data = refetched.data;
+             }
+@@ -128,7 +134,7 @@ module.exports = function authRoutes(supabase, requireAuth) {
+ 
+     if (error || !data?.length) return res.json({ reference: 'ፊልጵ 4:13', text: 'ኃይልን በሚሰጠኝ በክርስቶስ ሁሉን እችላለሁ።' });
+ 
+-    const verse = data[dayOfYear % data.length];
++    const verse = data[dayIndex % data.length];
+     res.json(verse);
+   });
+ 
