@@ -40,6 +40,10 @@
   --shadow-gold: 0 0 20px rgba(201, 168, 76, 0.15);
 
   --nav-h: 68px;
+  /* Real visible viewport height, kept in sync with Telegram's WebApp by
+     app.js (applyAppHeight). Falls back to 100vh before JS runs / outside
+     Telegram, so nothing breaks if the JS hasn't executed yet. */
+  --app-height: 100vh;
   --font-display: 'Cinzel', serif;
   --font-body: 'Lato', sans-serif;
 
@@ -85,6 +89,7 @@
 html {
   font-size: 18px;
   height: 100%;
+  height: var(--app-height);
   -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -95,6 +100,7 @@ body {
   background: var(--bg);
   color: var(--text);
   height: 100%;
+  height: var(--app-height);
   overflow: hidden;
   transition: background var(--transition), color var(--transition);
   font-weight: 400;
@@ -535,13 +541,13 @@ h3 {
 .nav-item.active::after {
   content: '';
   position: absolute;
-  top: 0;
+  bottom: 0;
   left: 50%;
   transform: translateX(-50%);
   width: 40px;
   height: 2px;
   background: linear-gradient(90deg, transparent, var(--gold), transparent);
-  border-radius: 0 0 4px 4px;
+  border-radius: 4px 4px 0 0;
 }
 
 .nav-badge {
@@ -1335,7 +1341,7 @@ textarea.form-control {
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--nav-h) - 60px);
+  height: calc(var(--app-height) - var(--nav-h) - 60px);
 }
 
 .chat-messages {
@@ -1352,7 +1358,7 @@ textarea.form-control {
 #page-chat.active {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--nav-h));
+  height: calc(var(--app-height) - var(--nav-h));
   overflow: hidden;
 }
 

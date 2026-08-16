@@ -143,61 +143,164 @@ index ca69149..56de2d1 100644
  // Mentor application review polling
  let lastAppCheck = new Date().toISOString();
  setInterval(async () => {
+diff --git a/frontend/app.js b/frontend/app.js
+index eaae915..cc5cfb1 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -8,6 +8,27 @@ let currentUser = null;
+ let currentPage = 'dashboard';
+ let jitsiApi = null;
+ 
++// ─── Viewport height (Telegram-aware) ───────────────────────────
++// Raw `100vh` is what was driving the chat input box under the bottom
++// nav: Telegram's WebView visible area (viewportStableHeight) is often
++// shorter than the CSS layout viewport (100vh) — most obviously once the
++// on-screen keyboard opens for typing, but also just from Telegram's own
++// header/safe-area chrome. Every place in styles.css that sized the app
++// shell off `100vh` computed against the wrong, taller number, so the
++// fixed bottom nav (anchored to the *real* viewport bottom) ended up
++// drawn on top of content — including the chat input — that assumed it
++// had that extra space. `--app-height` tracks the real visible height and
++// updates live as Telegram resizes it (keyboard open/close, etc).
++function applyAppHeight() {
++  const tg = window.Telegram?.WebApp;
++  const h = tg?.viewportStableHeight || tg?.viewportHeight || window.visualViewport?.height || window.innerHeight;
++  document.documentElement.style.setProperty('--app-height', h + 'px');
++}
++applyAppHeight();
++window.Telegram?.WebApp?.onEvent?.('viewportChanged', applyAppHeight);
++window.addEventListener('resize', applyAppHeight);
++window.visualViewport?.addEventListener('resize', applyAppHeight);
++
+ // ─── Helpers ──────────────────────────────────────────────────
+ const $ = id => document.getElementById(id);
+ const $$ = sel => document.querySelectorAll(sel);
+@@ -887,6 +908,7 @@ setTheme(localStorage.getItem('theme') || 'dark');
+ async function init() {
+   const tg = window.Telegram?.WebApp;
+   if (tg) { tg.ready(); tg.expand(); }
++  applyAppHeight();
+ 
+   try {
+     const data = await apiFetch('/api/auth/me');
 diff --git a/frontend/index.html b/frontend/index.html
-index f31fc6f..7426131 100644
+index f31fc6f..6ba44c5 100644
 --- a/frontend/index.html
 +++ b/frontend/index.html
-@@ -1579,7 +1579,11 @@
-   `;
+@@ -1571,33 +1571,22 @@
+       btn.addEventListener('click', () => HF?.notificationOccurred('warning'));
+     });
+ 
+-    /* ── Smooth bottom nav slide indicator ───────────────────── */
+-    const navIndicator = document.createElement('div');
+-    navIndicator.style.cssText = `
+-    position:absolute;bottom:0;height:2px;background:var(--gold);
+-    border-radius:2px 2px 0 0;transition:left .25s ease,width .25s ease;
+-  `;
++    /* ── Bottom nav active-tab indicator ─────────────────────────
++       Previously this was a JS-computed sliding bar measured via
++       getBoundingClientRect() + a timed re-check loop. That approach kept
++       landing in the wrong place on phones because .bottom-nav scrolls
++       horizontally (more tabs than fit on screen) and navigate() triggers
++       a `smooth` scrollIntoView of unpredictable duration — no fixed delay
++       or animation-frame window was ever reliably long enough to catch
++       the tab's true resting position. Rather than continue chasing that
++       timing, the indicator is just the CSS `.nav-item.active::after`
++       rule in styles.css: it's drawn per-item, purely from the `.active`
++       class, so it is always correctly placed under (well, over — see
++       styles.css) whichever tab is actually active, on any screen size,
++       with no measurement or timing involved at all. Scroll the active
++       tab into view so it's visible after navigating.
++       ────────────────────────────────────────────────────────── */
      const bottomNav = document.querySelector('.bottom-nav');
-     if (bottomNav) {
+-    if (bottomNav) {
 -      bottomNav.style.position = 'relative';
-+      // NOTE: .bottom-nav is already `position: fixed` in styles.css, which
-+      // is itself a valid positioning context for the absolutely-positioned
-+      // indicator below. Forcing it to `position: relative` here used to
-+      // override that fixed positioning via inline style (inline style
-+      // always wins over the stylesheet), so it has been removed.
-       bottomNav.appendChild(navIndicator);
- 
-       function updateNavIndicator() {
-@@ -1591,12 +1595,35 @@
-         navIndicator.style.width = itemRect.width + 'px';
-       }
- 
-+      // .bottom-nav scrolls horizontally on phones (more tabs than fit on
-+      // screen), and navigate() below triggers a `smooth` scrollIntoView
-+      // whose duration depends on how far the tab is and how fast the
-+      // device is. A single fixed-delay measurement (previously 50ms) goes
-+      // stale mid-scroll, which is exactly why the indicator landed in the
-+      // wrong spot for tabs further along the row — Journal, Mentees,
-+      // Requests, Settings — after scrolling past Support. Instead, keep
-+      // re-measuring on every animation frame for a bit after any
-+      // navigation or scroll, so the indicator always lands on the tab's
-+      // final resting position.
-+      let navSyncRAF = null;
-+      function trackNavIndicator(durationMs) {
-+        const stopAt = performance.now() + durationMs;
-+        if (navSyncRAF) cancelAnimationFrame(navSyncRAF);
-+        const step = (now) => {
-+          updateNavIndicator();
-+          if (now < stopAt) navSyncRAF = requestAnimationFrame(step);
-+        };
-+        navSyncRAF = requestAnimationFrame(step);
-+      }
-+      // Also stay in sync if the user manually swipes the nav bar itself.
-+      bottomNav.addEventListener('scroll', () => trackNavIndicator(150), { passive: true });
-+
-       const _origNav = window.navigate;
-       window.navigate = function (page) {
-         if (_origNav) _origNav(page);
+-      bottomNav.appendChild(navIndicator);
+-
+-      function updateNavIndicator() {
+-        const active = bottomNav.querySelector('.nav-item.active');
+-        if (!active) return;
+-        const navRect = bottomNav.getBoundingClientRect();
+-        const itemRect = active.getBoundingClientRect();
+-        navIndicator.style.left = (itemRect.left - navRect.left) + 'px';
+-        navIndicator.style.width = itemRect.width + 'px';
+-      }
+-
+-      const _origNav = window.navigate;
+-      window.navigate = function (page) {
+-        if (_origNav) _origNav(page);
 -        setTimeout(updateNavIndicator, 50);
-+        trackNavIndicator(500);
-       };
+-      };
 -      setTimeout(updateNavIndicator, 300);
-+      trackNavIndicator(500);
-     }
+-    }
  
      /* ── Pull-to-refresh ─────────────────────────────────────── */
+     let ptStartY = 0, ptPulling = false;
+diff --git a/frontend/styles.css b/frontend/styles.css
+index d29a774..95fbccb 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -40,6 +40,10 @@
+   --shadow-gold: 0 0 20px rgba(201, 168, 76, 0.15);
+ 
+   --nav-h: 68px;
++  /* Real visible viewport height, kept in sync with Telegram's WebApp by
++     app.js (applyAppHeight). Falls back to 100vh before JS runs / outside
++     Telegram, so nothing breaks if the JS hasn't executed yet. */
++  --app-height: 100vh;
+   --font-display: 'Cinzel', serif;
+   --font-body: 'Lato', sans-serif;
+ 
+@@ -85,6 +89,7 @@
+ html {
+   font-size: 18px;
+   height: 100%;
++  height: var(--app-height);
+   -webkit-text-size-adjust: 100%;
+   -webkit-font-smoothing: antialiased;
+   text-rendering: optimizeLegibility;
+@@ -95,6 +100,7 @@ body {
+   background: var(--bg);
+   color: var(--text);
+   height: 100%;
++  height: var(--app-height);
+   overflow: hidden;
+   transition: background var(--transition), color var(--transition);
+   font-weight: 400;
+@@ -535,13 +541,13 @@ h3 {
+ .nav-item.active::after {
+   content: '';
+   position: absolute;
+-  top: 0;
++  bottom: 0;
+   left: 50%;
+   transform: translateX(-50%);
+   width: 40px;
+   height: 2px;
+   background: linear-gradient(90deg, transparent, var(--gold), transparent);
+-  border-radius: 0 0 4px 4px;
++  border-radius: 4px 4px 0 0;
+ }
+ 
+ .nav-badge {
+@@ -1335,7 +1341,7 @@ textarea.form-control {
+ .chat-container {
+   display: flex;
+   flex-direction: column;
+-  height: calc(100vh - var(--nav-h) - 60px);
++  height: calc(var(--app-height) - var(--nav-h) - 60px);
+ }
+ 
+ .chat-messages {
+@@ -1352,7 +1358,7 @@ textarea.form-control {
+ #page-chat.active {
+   display: flex;
+   flex-direction: column;
+-  height: calc(100vh - var(--nav-h));
++  height: calc(var(--app-height) - var(--nav-h));
+   overflow: hidden;
+ }
+ 
 diff --git a/local/am.json b/local/am.json
 index 4b17186..a2776e6 100644
 --- a/local/am.json

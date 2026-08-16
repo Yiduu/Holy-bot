@@ -8,6 +8,27 @@ let currentUser = null;
 let currentPage = 'dashboard';
 let jitsiApi = null;
 
+// ─── Viewport height (Telegram-aware) ───────────────────────────
+// Raw `100vh` is what was driving the chat input box under the bottom
+// nav: Telegram's WebView visible area (viewportStableHeight) is often
+// shorter than the CSS layout viewport (100vh) — most obviously once the
+// on-screen keyboard opens for typing, but also just from Telegram's own
+// header/safe-area chrome. Every place in styles.css that sized the app
+// shell off `100vh` computed against the wrong, taller number, so the
+// fixed bottom nav (anchored to the *real* viewport bottom) ended up
+// drawn on top of content — including the chat input — that assumed it
+// had that extra space. `--app-height` tracks the real visible height and
+// updates live as Telegram resizes it (keyboard open/close, etc).
+function applyAppHeight() {
+  const tg = window.Telegram?.WebApp;
+  const h = tg?.viewportStableHeight || tg?.viewportHeight || window.visualViewport?.height || window.innerHeight;
+  document.documentElement.style.setProperty('--app-height', h + 'px');
+}
+applyAppHeight();
+window.Telegram?.WebApp?.onEvent?.('viewportChanged', applyAppHeight);
+window.addEventListener('resize', applyAppHeight);
+window.visualViewport?.addEventListener('resize', applyAppHeight);
+
 // ─── Helpers ──────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
@@ -887,6 +908,7 @@ setTheme(localStorage.getItem('theme') || 'dark');
 async function init() {
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
+  applyAppHeight();
 
   try {
     const data = await apiFetch('/api/auth/me');
