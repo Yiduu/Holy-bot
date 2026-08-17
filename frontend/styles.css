@@ -3199,6 +3199,7 @@ textarea.form-control {
   pointer-events: none;
   z-index: 0;
   filter: blur(100px);
+  will-change: transform;
 }
 
 .ob-orb1 {
@@ -3250,21 +3251,41 @@ textarea.form-control {
   justify-content: center;
   margin-bottom: 16px;
   background: rgba(201, 168, 76, 0.04);
-  box-shadow: var(--shadow-gold), 0 0 30px rgba(201, 168, 76, 0.12);
-  animation: obLogoPulse 4s ease-in-out infinite;
+  box-shadow: var(--shadow-gold);
+  position: relative;
+  isolation: isolate;
 }
 
-@keyframes obLogoPulse {
+.onboarding-logo-ring::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(201, 168, 76, 0.3) 0%, transparent 72%);
+  opacity: 0.5;
+  animation: obLogoGlow 4s ease-in-out infinite;
+  will-change: opacity, transform;
+  z-index: -1;
+  pointer-events: none;
+}
+
+@keyframes obLogoGlow {
 
   0%,
   100% {
-    box-shadow: var(--shadow-gold), 0 0 30px rgba(201, 168, 76, 0.12);
+    opacity: 0.35;
     transform: scale(1);
   }
 
   50% {
-    box-shadow: 0 0 30px rgba(201, 168, 76, 0.25), 0 0 50px rgba(201, 168, 76, 0.2);
-    transform: scale(1.03);
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-logo-ring::after {
+    animation: none;
   }
 }
 
@@ -3879,7 +3900,24 @@ textarea.form-control {
   margin-top: 8px;
   max-height: 320px;
   overflow-y: auto;
-  padding: 3px;
+  overflow-x: hidden;
+  padding: 3px 10px 3px 3px;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-dim) transparent;
+}
+
+.topics-chips-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.topics-chips-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.topics-chips-list::-webkit-scrollbar-thumb {
+  background: var(--gold-dim);
+  border-radius: 3px;
 }
 
 .topic-chip {
@@ -5354,17 +5392,14 @@ textarea.form-control {
 
   0%,
   100% {
-    border-radius: 50%;
     transform: translate(0, 0) scale(1);
   }
 
   33% {
-    border-radius: 60% 40% 55% 45% / 45% 55% 40% 60%;
     transform: translate(24px, -18px) scale(1.06);
   }
 
   66% {
-    border-radius: 45% 55% 40% 60% / 60% 40% 55% 45%;
     transform: translate(-16px, 12px) scale(0.96);
   }
 }
@@ -5373,13 +5408,19 @@ textarea.form-control {
 
   0%,
   100% {
-    border-radius: 50%;
     transform: translate(0, 0) scale(1);
   }
 
   50% {
-    border-radius: 42% 58% 63% 37% / 48% 44% 56% 52%;
     transform: translate(-26px, -14px) scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .ob-orb1,
+  .ob-orb2 {
+    animation: none;
   }
 }
 
