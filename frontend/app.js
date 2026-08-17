@@ -1451,6 +1451,34 @@ async function loadOnboardingTopics() {
   }
 }
 
+/* ── Topic icons (Halo Grid) ────────────────────────────────────
+   Keyed by the topics.slug column (see database/migrations/04_add_topics.sql).
+   Kept in the same stroke-based visual language as the rest of the app's
+   icon set. Falls back to a generic "more" glyph for any topic added
+   later without a matching slug, so new admin-created topics never
+   render blank. */
+const TOPIC_ICONS = {
+  identity_crisis: '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M8 12l2.5 2.5L16 9"/>',
+  depression_anxiety: '<path d="M8 16c1.2-2 2.3-2 3-2s1.8 0 3 2"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="9" r="1"/><circle cx="12" cy="12" r="9"/>',
+  alcohol_drug_addiction: '<path d="M12 2.5S6 9 6 13.5a6 6 0 0 0 12 0C18 9 12 2.5 12 2.5z"/>',
+  alcohol_drug_addition: '<path d="M12 2.5S6 9 6 13.5a6 6 0 0 0 12 0C18 9 12 2.5 12 2.5z"/>',
+  pre_marital_sexual_issues: '<path d="M12 21s-7-4.6-9.3-9C1 8 2.4 4.8 5.6 4.2 8 3.7 10.3 5 12 7c1.7-2 4-3.3 6.4-2.8 3.2.6 4.6 3.8 2.9 7.8C19 16.4 12 21 12 21z"/><path d="M9 11l2 2 4-4"/>',
+  porn_masterbation: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><line x1="3" y1="3" x2="21" y2="21"/>',
+  social_media_addiction: '<rect x="6" y="2" width="12" height="20" rx="2.5"/><line x1="10" y1="19" x2="14" y2="19"/>',
+  losing_faith_spiritual_life: '<line x1="12" y1="2.5" x2="12" y2="21.5"/><line x1="6" y1="8" x2="18" y2="8"/>',
+  time_management: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  loneliness: '<circle cx="12" cy="8" r="4"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/>',
+  family_issues: '<path d="M3 11l9-7 9 7"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>',
+  relationship_issues: '<path d="M12.5 19s-5.5-3.5-7.6-7C3.5 9.6 4.4 7 6.7 6.6c1.7-.3 3.1.6 4 1.9.9-1.3 2.3-2.2 4-1.9 2.3.4 3.2 3 1.8 5.4-2.1 3.5-4 4.7-4 4.7"/><path d="M17 3.3c1.3.3 2.1 1.8 1.6 3.2"/>',
+  academic_counseling: '<path d="M2 5.5C4 4 8 4 10 5.5v13C8 17 4 17 2 18.5z"/><path d="M22 5.5C20 4 16 4 14 5.5v13c2-1.5 6-1.5 8 0z"/>',
+  other: '<circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/>'
+};
+const TOPIC_ICON_FALLBACK = TOPIC_ICONS.other;
+function topicIconSvg(slug) {
+  const path = TOPIC_ICONS[slug] || TOPIC_ICON_FALLBACK;
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+}
+
 function renderOnboardingTopicChips(topics) {
   const chipsContainer = $('regTopicsChips');
   const select = $('regTopicsSelect');
@@ -1459,16 +1487,17 @@ function renderOnboardingTopicChips(topics) {
   const selectedIds = new Set(Array.from(select.selectedOptions).map(o => Number(o.value)));
 
   if (!topics.length) {
-    chipsContainer.innerHTML = '<p class="form-helper-ob" style="margin:4px 0">No topics match your search.</p>';
+    chipsContainer.innerHTML = '<p class="form-helper-ob" style="margin:4px 0;grid-column:1/-1">No topics match your search.</p>';
     return;
   }
 
   chipsContainer.innerHTML = topics.map(t => `
     <div class="topic-chip${selectedIds.has(t.id) ? ' active' : ''}" id="onb-topic-${t.id}"
       onclick="toggleOnboardingTopicChip(${t.id})">
-      <span class="chip-icon">
+      <span class="chip-check-badge">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
       </span>
+      <span class="chip-icon">${topicIconSvg(t.slug)}</span>
       <span class="chip-name">${escapeHtml(t.name)}</span>
     </div>
   `).join('');
@@ -1517,6 +1546,7 @@ function toggleOnboardingTopicChip(id) {
   const chip = $(`onb-topic-${id}`);
   chip?.classList.toggle('active', option.selected);
   renderOnboardingSelectedTags();
+  if (select.selectedOptions.length > 0) clearFieldError('group-regTopics');
 }
 
 function showStep(step) {
@@ -1659,6 +1689,13 @@ function validateAndGoNext(step) {
       showInlineError('regNickname', t('err_nickname_format'));
       ok = false;
     }
+  } else if (step === 5) {
+    const select = $('regTopicsSelect');
+    const selectedCount = select ? select.selectedOptions.length : 0;
+    if (selectedCount === 0) {
+      showInlineError('group-regTopics', t('err_select_topic'));
+      ok = false;
+    }
   }
 
   if (!ok) {
@@ -1684,6 +1721,8 @@ async function completeRegistration() {
   if (!age_range) { hasError = true; firstErrorStep = firstErrorStep ?? 2; }
   if (!education_level) { hasError = true; firstErrorStep = firstErrorStep ?? 3; }
   if (!nickname || !nickRegex.test(nickname)) { hasError = true; firstErrorStep = firstErrorStep ?? 4; }
+  const selectedTopicCount = $('regTopicsSelect')?.selectedOptions.length || 0;
+  if (selectedTopicCount === 0) { hasError = true; firstErrorStep = firstErrorStep ?? 5; }
 
   if (hasError) {
     haptic('error');
@@ -1696,6 +1735,7 @@ async function completeRegistration() {
     } else if (!nickRegex.test(nickname)) {
       showInlineError('regNickname', t('err_nickname_format'));
     }
+    if (selectedTopicCount === 0) showInlineError('group-regTopics', t('err_select_topic'));
     showToast(t('err_correct_below'), 'error');
     return;
   }
