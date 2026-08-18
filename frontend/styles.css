@@ -2523,6 +2523,144 @@ textarea.form-control {
   color: var(--text3);
 }
 
+.btn-outline.sort-active {
+  background: var(--gold-dim);
+  border-color: var(--gold);
+  color: var(--gold-light);
+}
+
+/* ─── Mentee activity status (My Mentees page) ─────────────────── */
+.mentee-status-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+.mentee-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text3);
+}
+
+.mentee-status-dot.online {
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+}
+
+.mentee-status-dot.offline {
+  background: var(--text3);
+}
+
+.mentee-status-dot.stale {
+  background: var(--danger);
+}
+
+/* ─── Follow-up goals checklist ─────────────────────────────────── */
+.goal-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: 1px dashed rgba(201, 168, 76, 0.35);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: var(--gold-light);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.goal-toggle-btn:active {
+  opacity: 0.7;
+}
+
+.goal-toggle-caret {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--gold-light);
+}
+
+.goal-panel {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.goal-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.goal-item:last-child {
+  border-bottom: none;
+}
+
+.goal-item input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: var(--gold);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.goal-item-title {
+  flex: 1;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.goal-item.done .goal-item-title {
+  text-decoration: line-through;
+  color: var(--text3);
+}
+
+.goal-item-due {
+  font-size: 0.65rem;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+.goal-item-delete {
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 2px 4px;
+  flex-shrink: 0;
+}
+
+.goal-item-delete:hover {
+  color: var(--danger);
+}
+
+.goal-add-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.goal-add-row input[type="text"] {
+  flex: 1;
+}
+
+.goal-add-row input[type="date"] {
+  flex: 0 0 auto;
+  width: 110px;
+}
+
 /* ─── Session time labels ────────────────────────────────────── */
 .session-time-label {
   display: inline-flex;

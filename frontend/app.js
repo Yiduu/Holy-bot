@@ -208,6 +208,21 @@ function ticketIcon(name, size = 15) {
   const body = TICKET_ICONS[name] || '';
   return `<svg class="ticket-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 }
+
+// ─── Mentee Follow-up Icon Set ──────────────────────────────────────────────
+// Same stroke-based, single-color SVG technique as TICKET_ICONS above — used
+// in place of emoji on the My Mentees page (goal checklist, nudge button).
+const MENTEE_ICONS = {
+  target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>',
+  chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  chevronUp: '<path d="m18 15-6-6-6 6"/>',
+  trash: '<path d="M4 7h16"/><path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+};
+function menteeIcon(name, size = 14) {
+  const body = MENTEE_ICONS[name] || '';
+  return `<svg class="ticket-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+}
 // ─── Voice / File Attachment Rendering ─────────────────────────────────────
 
 function formatDuration(seconds) {
@@ -4342,58 +4357,266 @@ function toggleOnboardingLanguage() {
 }
 
 // ─── Mentor Management ────────────────────────────────────────
+// Mentees inactive for at least this long are flagged as "needs follow-up".
+const MENTEE_INACTIVITY_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+
+// Persist the last chosen sort mode for the session ('recent' | 'followup').
+let menteeSortMode = 'recent';
+let _myMenteesCache = [];
+let _myMenteesFollowupCache = {};
+
+/** Builds the small "● Online now / Active 2h ago" status line + optional follow-up chip for a mentee. */
+function renderMenteeStatusLine(user) {
+  const lastActive = user.last_active;
+  const online = isUserOnline(lastActive);
+  const staleMs = lastActive ? Date.now() - new Date(lastActive).getTime() : Infinity;
+  const needsFollowup = !online && staleMs >= MENTEE_INACTIVITY_THRESHOLD_MS;
+
+  let dotClass = 'offline';
+  let label;
+  if (online) {
+    dotClass = 'online';
+    label = t('mentee_status_online');
+  } else if (needsFollowup) {
+    dotClass = 'stale';
+    label = lastActive ? t('mentee_status_active_ago', { time: timeAgo(lastActive) }) : t('mentee_status_never_active');
+  } else {
+    label = lastActive ? t('mentee_status_active_ago', { time: timeAgo(lastActive) }) : t('mentee_status_never_active');
+  }
+
+  const chip = needsFollowup
+    ? `<span class="chip chip-red" style="margin-left:6px">${t('mentee_needs_followup')}</span>`
+    : '';
+
+  return `<div class="mentee-status-line"><span class="mentee-status-dot ${dotClass}"></span>${escapeHtml(label)}${chip}</div>`;
+}
+
+function menteeIsStale(user) {
+  const lastActive = user.last_active;
+  if (isUserOnline(lastActive)) return false;
+  const staleMs = lastActive ? Date.now() - new Date(lastActive).getTime() : Infinity;
+  return staleMs >= MENTEE_INACTIVITY_THRESHOLD_MS;
+}
+
+function setMenteeSort(mode) {
+  menteeSortMode = mode;
+  $('menteeSortRecentBtn')?.classList.toggle('sort-active', mode === 'recent');
+  $('menteeSortFollowupBtn')?.classList.toggle('sort-active', mode === 'followup');
+  renderMenteesList();
+}
+
+function sortedMentees() {
+  const list = _myMenteesCache.slice();
+  if (menteeSortMode === 'followup') {
+    // Most-inactive first (never-active mentees sort to the very top).
+    list.sort((a, b) => {
+      const aTime = a.user.last_active ? new Date(a.user.last_active).getTime() : -Infinity;
+      const bTime = b.user.last_active ? new Date(b.user.last_active).getTime() : -Infinity;
+      return aTime - bTime;
+    });
+  } else {
+    // Most recently active first.
+    list.sort((a, b) => {
+      const aTime = a.user.last_active ? new Date(a.user.last_active).getTime() : -Infinity;
+      const bTime = b.user.last_active ? new Date(b.user.last_active).getTime() : -Infinity;
+      return bTime - aTime;
+    });
+  }
+  return list;
+}
+
 async function loadMyMentees() {
   const container = $('menteesList');
   container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
   try {
-    const mentees = await apiFetch('/api/mentors/my-mentees');
-    const stats = await apiFetch('/api/mentors/my-mentees/stats');
+    const [mentees, stats, followup] = await Promise.all([
+      apiFetch('/api/mentors/my-mentees'),
+      apiFetch('/api/mentors/my-mentees/stats'),
+      apiFetch('/api/mentors/my-mentees/followup').catch(() => ({})),
+    ]);
 
-    $('activeMenteeCount').textContent = mentees.length;
-    if (!mentees.length) {
+    _myMenteesCache = mentees || [];
+    _myMenteesFollowupCache = followup || {};
+    window._myMenteesStats = stats || {};
+
+    $('activeMenteeCount').textContent = _myMenteesCache.length;
+    const followupCount = _myMenteesCache.filter(m => menteeIsStale(m.user)).length;
+    const summaryEl = $('menteeFollowupSummary');
+    if (summaryEl) {
+      summaryEl.style.display = followupCount > 0 ? 'flex' : 'none';
+      $('menteeFollowupCount').textContent = followupCount;
+    }
+    $('menteeSortRecentBtn')?.classList.toggle('sort-active', menteeSortMode === 'recent');
+    $('menteeSortFollowupBtn')?.classList.toggle('sort-active', menteeSortMode === 'followup');
+
+    if (!_myMenteesCache.length) {
       container.innerHTML = `<div class="empty-state"><span>${t('no_active_mentees_yet')}</span></div>`;
       return;
     }
 
-    let html = '';
-    for (const m of mentees) {
-      const { user, assigned_at, id: assignId } = m;
-      const sessionCount = stats[user.telegram_id] || 0;
-      const displayName = user.user_settings?.display_name || user.anonymous_id;
-      const letter = (displayName || '?').charAt(0).toUpperCase();
+    renderMenteesList();
 
-      html += `
-        <div class="card mb-12">
-          <div class="flex justify-between items-start mb-8">
-            <div class="flex items-center gap-8">
-              ${renderAvatar(user, letter)}
-              <div>
-                <div class="font-bold" style="color:var(--gold)">${escapeHtml(displayName)}</div>
-                <div class="text-xs text-dim">${t('Joined')} ${new Date(assigned_at).toLocaleDateString()}</div>
-                <div class="text-xs text-dim">${t('Sessions:')} ${sessionCount}</div>
-              </div>
-            </div>
-            <button class="btn btn-ghost btn-sm" onclick="endMentorship('${assignId}')">${t('btn_end')}</button>
-          </div>
-          <div class="flex gap-8 mb-8">
-            <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${user.telegram_id}')">${t('btn_message')}</button>
-            <button class="btn btn-outline btn-sm flex-1" onclick="createSession(false, '${user.telegram_id}')">${t('btn_session')}</button>
-            <!-- Transfer button: opens the Transfer Mentee modal -->
-            <button class="btn btn-outline btn-sm" style="flex:0 0 auto;" onclick="openTransferModal('${assignId}', '${user.telegram_id}', '${escapeHtml(displayName)}')">Transfer</button>
-          </div>
-          <div class="form-group mb-0">
-            <textarea id="note-${user.telegram_id}" class="form-control text-sm" data-i18n="Private note about this mentee..." placeholder="${t('Private note about this mentee...')}" rows="2" onblur="saveMentorNote('${user.telegram_id}')"></textarea>
-          </div>
-        </div>`;
-    }
-    container.innerHTML = html;
-    hydrateAvatars(container);
-
-    for (const m of mentees) {
+    for (const m of _myMenteesCache) {
       const note = await apiFetch(`/api/mentors/notes/${m.user.telegram_id}`);
-      if (note.content) $(`note-${m.user.telegram_id}`).value = note.content;
+      if (note.content) { const el = $(`note-${m.user.telegram_id}`); if (el) el.value = note.content; }
     }
   } catch (e) { showToast(e.message, 'error'); }
+}
+
+function renderMenteesList() {
+  const container = $('menteesList');
+  const stats = window._myMenteesStats || {};
+  const mentees = sortedMentees();
+
+  let html = '';
+  for (const m of mentees) {
+    const { user, assigned_at, id: assignId } = m;
+    const sessionCount = stats[user.telegram_id] || 0;
+    const displayName = user.user_settings?.display_name || user.anonymous_id;
+    const letter = (displayName || '?').charAt(0).toUpperCase();
+    const fu = _myMenteesFollowupCache[user.telegram_id] || { open_goals: 0, total_goals: 0, last_nudge_sent_at: null };
+    const nudgeCooldownActive = fu.last_nudge_sent_at && (Date.now() - new Date(fu.last_nudge_sent_at).getTime()) < 12 * 60 * 60 * 1000;
+    const goalsLabel = fu.total_goals > 0
+      ? t('mentee_goals_progress', { done: fu.total_goals - fu.open_goals, total: fu.total_goals })
+      : t('mentee_goals_add');
+
+    html += `
+      <div class="card mb-12">
+        <div class="flex justify-between items-start mb-8">
+          <div class="flex items-center gap-8">
+            ${renderAvatar(user, letter)}
+            <div>
+              <div class="font-bold" style="color:var(--gold)">${escapeHtml(displayName)}</div>
+              <div class="text-xs text-dim">${t('Joined')} ${new Date(assigned_at).toLocaleDateString()}</div>
+              <div class="text-xs text-dim">${t('Sessions:')} ${sessionCount}</div>
+              ${renderMenteeStatusLine(user)}
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="endMentorship('${assignId}')">${t('btn_end')}</button>
+        </div>
+        <div class="flex gap-8 mb-8" style="flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${user.telegram_id}')">${t('btn_message')}</button>
+          <button class="btn btn-outline btn-sm flex-1" onclick="createSession(false, '${user.telegram_id}')">${t('btn_session')}</button>
+          <button class="btn btn-outline btn-sm" style="flex:0 0 auto;display:flex;align-items:center;gap:5px;" ${nudgeCooldownActive ? 'disabled title="' + t('mentee_nudge_cooldown') + '"' : ''} onclick="sendMenteeNudge('${user.telegram_id}', this)">${ticketIcon('bell', 14)}${t('mentee_nudge_btn')}</button>
+          <!-- Transfer button: opens the Transfer Mentee modal -->
+          <button class="btn btn-outline btn-sm" style="flex:0 0 auto;" onclick="openTransferModal('${assignId}', '${user.telegram_id}', '${escapeHtml(displayName)}')">Transfer</button>
+        </div>
+        <button class="goal-toggle-btn" onclick="toggleMenteeGoals('${user.telegram_id}', this)">
+          <span style="display:flex;align-items:center;gap:6px;">${menteeIcon('target', 14)}${goalsLabel}</span>
+          <span class="goal-toggle-caret">${menteeIcon('chevronDown', 14)}</span>
+        </button>
+        <div id="goalPanel-${user.telegram_id}" class="goal-panel" style="display:none"></div>
+        <div class="form-group mb-0" style="margin-top:8px">
+          <textarea id="note-${user.telegram_id}" class="form-control text-sm" data-i18n="Private note about this mentee..." placeholder="${t('Private note about this mentee...')}" rows="2" onblur="saveMentorNote('${user.telegram_id}')"></textarea>
+        </div>
+      </div>`;
+  }
+  container.innerHTML = html;
+  hydrateAvatars(container);
+}
+
+// ─── Follow-up goals checklist ────────────────────────────────
+async function toggleMenteeGoals(menteeId, btnEl) {
+  const panel = $(`goalPanel-${menteeId}`);
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  if (isOpen) {
+    panel.style.display = 'none';
+    if (btnEl) btnEl.querySelector('.goal-toggle-caret').innerHTML = menteeIcon('chevronDown', 14);
+    return;
+  }
+  panel.style.display = 'block';
+  if (btnEl) btnEl.querySelector('.goal-toggle-caret').innerHTML = menteeIcon('chevronUp', 14);
+  await refreshMenteeGoals(menteeId);
+}
+
+async function refreshMenteeGoals(menteeId) {
+  const panel = $(`goalPanel-${menteeId}`);
+  if (!panel) return;
+  panel.innerHTML = '<div class="loading-spinner" style="margin:12px auto;width:20px;height:20px"></div>';
+  try {
+    const goals = await apiFetch(`/api/mentors/goals/${menteeId}`);
+    let itemsHtml = '';
+    if (!goals.length) {
+      itemsHtml = `<div class="text-xs text-dim" style="padding:4px 0">${t('mentee_goals_empty')}</div>`;
+    } else {
+      for (const g of goals) {
+        const due = g.due_date ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}</div>` : '';
+        itemsHtml += `
+          <div class="goal-item ${g.is_done ? 'done' : ''}">
+            <input type="checkbox" ${g.is_done ? 'checked' : ''} onchange="toggleMenteeGoalDone('${g.id}', '${menteeId}', this.checked)">
+            <div class="goal-item-title">${escapeHtml(g.title)}${due}</div>
+            <button class="goal-item-delete" onclick="deleteMenteeGoal('${g.id}', '${menteeId}')" title="${t('mentee_goal_delete')}">${menteeIcon('trash', 13)}</button>
+          </div>`;
+      }
+    }
+
+    panel.innerHTML = `
+      ${itemsHtml}
+      <div class="goal-add-row">
+        <input type="text" id="goalInput-${menteeId}" class="form-control text-sm" placeholder="${t('mentee_goal_placeholder')}" maxlength="200">
+        <input type="date" id="goalDate-${menteeId}" class="form-control text-sm">
+        <button class="btn btn-outline btn-sm" style="display:flex;align-items:center;gap:4px;" onclick="addMenteeGoal('${menteeId}')">${menteeIcon('plus', 13)}${t('mentee_goal_add_btn')}</button>
+      </div>`;
+
+    // Keep the goal-progress label on the toggle button in sync.
+    const total = goals.length;
+    const open = goals.filter(g => !g.is_done).length;
+    _myMenteesFollowupCache[menteeId] = { ..._myMenteesFollowupCache[menteeId], open_goals: open, total_goals: total };
+    const toggleBtn = panel.previousElementSibling;
+    if (toggleBtn?.classList.contains('goal-toggle-btn')) {
+      const label = total > 0 ? t('mentee_goals_progress', { done: total - open, total }) : t('mentee_goals_add');
+      toggleBtn.querySelector('span').innerHTML = `${menteeIcon('target', 14)}${escapeHtml(label)}`;
+    }
+  } catch (e) {
+    panel.innerHTML = `<div class="text-xs" style="color:var(--danger)">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function addMenteeGoal(menteeId) {
+  const input = $(`goalInput-${menteeId}`);
+  const dateInput = $(`goalDate-${menteeId}`);
+  const title = input?.value.trim();
+  if (!title) return;
+  try {
+    await apiFetch('/api/mentors/goals', { method: 'POST', body: { mentee_id: menteeId, title, due_date: dateInput?.value || null } });
+    haptic('light');
+    await refreshMenteeGoals(menteeId);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function toggleMenteeGoalDone(goalId, menteeId, isDone) {
+  try {
+    await apiFetch(`/api/mentors/goals/${goalId}`, { method: 'PATCH', body: { is_done: isDone } });
+    haptic('light');
+    await refreshMenteeGoals(menteeId);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function deleteMenteeGoal(goalId, menteeId) {
+  try {
+    await apiFetch(`/api/mentors/goals/${goalId}`, { method: 'DELETE' });
+    await refreshMenteeGoals(menteeId);
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+// ─── Quick nudge ───────────────────────────────────────────────
+async function sendMenteeNudge(menteeId, btnEl) {
+  if (btnEl?.disabled) return;
+  const custom = window.prompt(t('mentee_nudge_prompt'), '');
+  if (custom === null) return; // cancelled
+  try {
+    if (btnEl) btnEl.disabled = true;
+    await apiFetch('/api/mentors/nudge', { method: 'POST', body: { mentee_id: menteeId, message: custom || undefined } });
+    haptic('light');
+    showToast(t('mentee_nudge_sent'), 'success');
+    if (!_myMenteesFollowupCache[menteeId]) _myMenteesFollowupCache[menteeId] = { open_goals: 0, total_goals: 0 };
+    _myMenteesFollowupCache[menteeId].last_nudge_sent_at = new Date().toISOString();
+    if (btnEl) { btnEl.title = t('mentee_nudge_cooldown'); }
+  } catch (e) {
+    if (btnEl) btnEl.disabled = false;
+    showToast(e.message, 'error');
+  }
 }
 
 async function saveMentorNote(menteeId) {

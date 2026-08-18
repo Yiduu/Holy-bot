@@ -393,6 +393,39 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     res.json(stats);
   });
 
+  // GET /api/mentors/my-mentees/followup – per-mentee follow-up snapshot:
+  // open/total goal counts + when the mentor last nudged them. Powers the
+  // follow-up indicators on the My Mentees page without an N+1 query per card.
+  router.get('/my-mentees/followup', requireAuth, async (req, res) => {
+    const { id: mentor_id } = req.telegramUser;
+    const { data: assignments } = await supabase
+      .from('mentorship_assignments')
+      .select('user_id')
+      .eq('mentor_id', mentor_id)
+      .eq('is_active', true);
+    const menteeIds = (assignments || []).map(a => a.user_id);
+    const followup = {};
+    menteeIds.forEach(id => { followup[id] = { open_goals: 0, total_goals: 0, last_nudge_sent_at: null }; });
+    if (!menteeIds.length) return res.json(followup);
+
+    const [{ data: goals }, { data: notes }] = await Promise.all([
+      supabase.from('mentor_mentee_goals').select('mentee_id, is_done').eq('mentor_id', mentor_id).in('mentee_id', menteeIds),
+      supabase.from('mentor_notes').select('mentee_id, last_nudge_sent_at').eq('mentor_id', mentor_id).in('mentee_id', menteeIds),
+    ]);
+
+    (goals || []).forEach(g => {
+      const bucket = followup[g.mentee_id];
+      if (!bucket) return;
+      bucket.total_goals += 1;
+      if (!g.is_done) bucket.open_goals += 1;
+    });
+    (notes || []).forEach(n => {
+      if (followup[n.mentee_id]) followup[n.mentee_id].last_nudge_sent_at = n.last_nudge_sent_at || null;
+    });
+
+    res.json(followup);
+  });
+
   // POST /api/mentors/notes – add/update private note
   router.post('/notes', requireAuth, async (req, res) => {
     const { id: mentor_id } = req.telegramUser;
@@ -416,6 +449,159 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .eq('mentee_id', req.params.mentee_id)
       .single();
     res.json(data || { content: '' });
+  });
+
+  // ─── Follow-up goals ─────────────────────────────────────────
+  // A lightweight per-mentee checklist mentors can use to set and track
+  // concrete action items ("Read Psalm 23 this week", "Journal 3x") — a
+  // guided follow-up tool that sits alongside free-text notes.
+
+  // GET /api/mentors/goals/:mentee_id – list follow-up goals for a mentee
+  router.get('/goals/:mentee_id', requireAuth, async (req, res) => {
+    const { id: mentor_id } = req.telegramUser;
+    const mentee_id = req.params.mentee_id;
+
+    const { data: assignment } = await supabase
+      .from('mentorship_assignments')
+      .select('id')
+      .eq('mentor_id', mentor_id)
+      .eq('user_id', mentee_id)
+      .eq('is_active', true)
+      .single();
+    if (!assignment) return res.status(403).json({ error: 'No active assignment found for this mentee.' });
+
+    const { data, error } = await supabase
+      .from('mentor_mentee_goals')
+      .select('*')
+      .eq('mentor_id', mentor_id)
+      .eq('mentee_id', mentee_id)
+      .order('is_done', { ascending: true })
+      .order('created_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  });
+
+  // POST /api/mentors/goals – create a follow-up goal for a mentee
+  router.post('/goals', requireAuth, async (req, res) => {
+    const { id: mentor_id } = req.telegramUser;
+    const { mentee_id, title, due_date } = req.body;
+    if (!mentee_id || !title?.trim()) return res.status(400).json({ error: 'mentee_id and title are required' });
+    if (title.trim().length > 200) return res.status(400).json({ error: 'Title is too long (max 200 characters)' });
+
+    const { data: assignment } = await supabase
+      .from('mentorship_assignments')
+      .select('id')
+      .eq('mentor_id', mentor_id)
+      .eq('user_id', mentee_id)
+      .eq('is_active', true)
+      .single();
+    if (!assignment) return res.status(403).json({ error: 'No active assignment found for this mentee.' });
+
+    const { data, error } = await supabase
+      .from('mentor_mentee_goals')
+      .insert({ mentor_id, mentee_id, title: title.trim(), due_date: due_date || null })
+      .select()
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.status(201).json(data);
+  });
+
+  // PATCH /api/mentors/goals/:id – toggle done / edit a goal
+  router.patch('/goals/:id', requireAuth, async (req, res) => {
+    const { id: mentor_id } = req.telegramUser;
+    const { is_done, title, due_date } = req.body;
+
+    const { data: goal } = await supabase.from('mentor_mentee_goals').select('mentor_id').eq('id', req.params.id).single();
+    if (!goal || goal.mentor_id !== mentor_id) return res.status(404).json({ error: 'Goal not found' });
+
+    const updates = {};
+    if (typeof is_done === 'boolean') {
+      updates.is_done = is_done;
+      updates.completed_at = is_done ? new Date().toISOString() : null;
+    }
+    if (typeof title === 'string' && title.trim()) updates.title = title.trim().substring(0, 200);
+    if (due_date !== undefined) updates.due_date = due_date || null;
+
+    const { data, error } = await supabase.from('mentor_mentee_goals').update(updates).eq('id', req.params.id).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  });
+
+  // DELETE /api/mentors/goals/:id – remove a goal
+  router.delete('/goals/:id', requireAuth, async (req, res) => {
+    const { id: mentor_id } = req.telegramUser;
+    const { data: goal } = await supabase.from('mentor_mentee_goals').select('mentor_id').eq('id', req.params.id).single();
+    if (!goal || goal.mentor_id !== mentor_id) return res.status(404).json({ error: 'Goal not found' });
+
+    const { error } = await supabase.from('mentor_mentee_goals').delete().eq('id', req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  });
+
+  // POST /api/mentors/nudge – send a quick, templated check-in message to a
+  // mentee (great for the "hasn't been active in a while" case). Reuses the
+  // existing messages table/notification path so it shows up in the normal
+  // chat thread, and is rate-limited so mentors can't spam a mentee.
+  router.post('/nudge', requireAuth, async (req, res) => {
+    const { id: mentor_id } = req.telegramUser;
+    const { mentee_id, message } = req.body;
+    if (!mentee_id) return res.status(400).json({ error: 'mentee_id is required' });
+
+    const { data: assignment } = await supabase
+      .from('mentorship_assignments')
+      .select('id')
+      .eq('mentor_id', mentor_id)
+      .eq('user_id', mentee_id)
+      .eq('is_active', true)
+      .single();
+    if (!assignment) return res.status(403).json({ error: 'No active assignment found for this mentee.' });
+
+    const { data: noteRow } = await supabase
+      .from('mentor_notes')
+      .select('content, last_nudge_sent_at')
+      .eq('mentor_id', mentor_id)
+      .eq('mentee_id', mentee_id)
+      .single();
+
+    const NUDGE_COOLDOWN_MS = 12 * 60 * 60 * 1000; // one nudge per mentee per 12h
+    if (noteRow?.last_nudge_sent_at && Date.now() - new Date(noteRow.last_nudge_sent_at).getTime() < NUDGE_COOLDOWN_MS) {
+      return res.status(429).json({ error: 'You already checked in with this mentee recently. Try again later.' });
+    }
+
+    const DEFAULT_NUDGE = "Hi! Just checking in \u2014 I haven't heard from you in a bit and wanted to see how you're doing. I'm here whenever you'd like to talk. \ud83d\ude4f";
+    const content = (message?.trim() || DEFAULT_NUDGE).substring(0, 500);
+
+    const { data: msg, error } = await supabase
+      .from('messages')
+      .insert({ from_id: mentor_id, to_id: mentee_id, content })
+      .select()
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    await supabase
+      .from('mentor_notes')
+      .upsert(
+        { mentor_id, mentee_id, content: noteRow?.content ?? '', last_nudge_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        { onConflict: 'mentor_id,mentee_id' }
+      );
+
+    // Real-time push + Telegram notification, mirroring routes/messages.js
+    try {
+      const io = req.app.get('io');
+      const onlineUsers = req.app.get('onlineUsers');
+      const recipientSocket = onlineUsers?.get(String(mentee_id));
+      if (recipientSocket && io) io.to(recipientSocket).emit('new_message', msg);
+
+      if (!onlineUsers?.has(String(mentee_id))) {
+        const { data: sender } = await supabase.from('users').select('anonymous_id').eq('telegram_id', mentor_id).single();
+        const { notifyMessage } = require('../bot');
+        await notifyMessage(mentee_id, sender?.anonymous_id, content, mentor_id);
+      }
+    } catch (notifyErr) {
+      console.error('[mentors] nudge notify error (non-fatal):', notifyErr.message);
+    }
+
+    res.status(201).json({ success: true, message: msg });
   });
 
   // GET /api/mentors/mentee-topics/:mentee_id

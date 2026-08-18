@@ -841,6 +841,14 @@
             <span class="text-sm" data-i18n="Active Clients">Active Clients</span>
             <span id="activeMenteeCount" class="stat-num" style="font-size:1.5rem">0</span>
           </div>
+          <div id="menteeFollowupSummary" class="flex justify-between items-center" style="margin-top:6px;display:none">
+            <span class="text-sm" style="color:var(--danger)" data-i18n="mentee_followup_summary_label">Need a follow-up</span>
+            <span id="menteeFollowupCount" class="stat-num" style="font-size:1.1rem;color:var(--danger)">0</span>
+          </div>
+        </div>
+        <div class="flex gap-8 mb-12" style="flex-wrap:wrap">
+          <button id="menteeSortRecentBtn" class="btn btn-outline btn-sm" onclick="setMenteeSort('recent')" data-i18n="mentee_sort_recent">Sort: Recently Active</button>
+          <button id="menteeSortFollowupBtn" class="btn btn-outline btn-sm" onclick="setMenteeSort('followup')" data-i18n="mentee_sort_followup">Sort: Needs Follow-up</button>
         </div>
         <div id="menteesList" style="display:flex;flex-direction:column;gap:12px">
           <div class="loading-spinner" style="margin:40px auto"></div>
