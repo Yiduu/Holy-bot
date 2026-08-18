@@ -426,6 +426,38 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
     res.json(followup);
   });
 
+  // GET /api/mentors/my-mentees/streaks – Bible-reading streak snapshot per
+  // mentee (current streak, longest streak, last read date). Powers the
+  // "Bible Streak" indicator on the My Mentees page.
+  router.get('/my-mentees/streaks', requireAuth, async (req, res) => {
+    const { id: mentor_id } = req.telegramUser;
+    const { data: assignments } = await supabase
+      .from('mentorship_assignments')
+      .select('user_id')
+      .eq('mentor_id', mentor_id)
+      .eq('is_active', true);
+    const menteeIds = (assignments || []).map(a => a.user_id);
+    const streaks = {};
+    menteeIds.forEach(id => { streaks[id] = { current_streak: 0, longest_streak: 0, last_read_date: null }; });
+    if (!menteeIds.length) return res.json(streaks);
+
+    const { data: rows, error } = await supabase
+      .from('bible_streaks')
+      .select('telegram_id, current_streak, longest_streak, last_read_date')
+      .in('telegram_id', menteeIds);
+    if (error) return res.status(500).json({ error: error.message });
+
+    (rows || []).forEach(r => {
+      streaks[r.telegram_id] = {
+        current_streak: r.current_streak || 0,
+        longest_streak: r.longest_streak || 0,
+        last_read_date: r.last_read_date || null,
+      };
+    });
+
+    res.json(streaks);
+  });
+
   // POST /api/mentors/notes – add/update private note
   router.post('/notes', requireAuth, async (req, res) => {
     const { id: mentor_id } = req.telegramUser;

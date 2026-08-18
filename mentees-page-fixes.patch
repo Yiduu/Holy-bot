@@ -1,0 +1,330 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index b98584c..cbb9df5 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -211,7 +211,7 @@ function ticketIcon(name, size = 15) {
+ 
+ // ─── Mentee Follow-up Icon Set ──────────────────────────────────────────────
+ // Same stroke-based, single-color SVG technique as TICKET_ICONS above — used
+-// in place of emoji on the My Mentees page (goal checklist, nudge button).
++// in place of emoji on the My Mentees page (goal checklist).
+ const MENTEE_ICONS = {
+   target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>',
+   chevronDown: '<path d="m6 9 6 6 6-6"/>',
+@@ -4364,6 +4364,7 @@ const MENTEE_INACTIVITY_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+ let menteeSortMode = 'recent';
+ let _myMenteesCache = [];
+ let _myMenteesFollowupCache = {};
++let _myMenteesStreakCache = {};
+ 
+ /** Builds the small "● Online now / Active 2h ago" status line + optional follow-up chip for a mentee. */
+ function renderMenteeStatusLine(user) {
+@@ -4391,6 +4392,26 @@ function renderMenteeStatusLine(user) {
+   return `<div class="mentee-status-line"><span class="mentee-status-dot ${dotClass}"></span>${escapeHtml(label)}${chip}</div>`;
+ }
+ 
++// Small flame glyph, same gradient language as the mentee's own Bible Streak
++// card, sized down for use as an inline badge on the My Mentees list.
++const MENTEE_STREAK_FLAME = `<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
++  <path fill="currentColor" d="M12.5 2c.6 2.4-.4 3.9-1.8 5.4C9 9.2 7 11 7 14a5 5 0 0 0 10 0c0-1.7-.7-2.7-1.4-3.7-.3 1.6-1.1 2.4-1.9 2.9.4-2.1-.3-3.6-1.6-5-1-1.1-1.3-2.3.4-4-.7 1.6.1 2.4 1 3.2C15 8.8 16 10.4 16 12.6a4.7 4.7 0 0 1-.4 1.9c1-1 1.4-2.3 1.4-3.8 0-3-2-4.6-3.4-6.4C13 3.5 12.8 2.8 12.5 2z"/>
++</svg>`;
++
++/** Builds a compact "🔥 5 day streak · best 12" badge for a mentee, or a muted no-streak state. */
++function renderMenteeStreakBadge(menteeId) {
++  const s = _myMenteesStreakCache[menteeId] || { current_streak: 0, longest_streak: 0 };
++  const active = s.current_streak > 0;
++  const best = s.longest_streak > s.current_streak
++    ? `<span class="mentee-streak-best">${t('mentee_streak_best', { count: s.longest_streak })}</span>`
++    : '';
++  return `<div class="mentee-streak-badge ${active ? 'is-active' : 'is-idle'}">
++    <span class="mentee-streak-flame">${MENTEE_STREAK_FLAME}</span>
++    <span class="mentee-streak-count">${active ? t('mentee_streak_count', { count: s.current_streak }) : t('mentee_streak_none')}</span>
++    ${best}
++  </div>`;
++}
++
+ function menteeIsStale(user) {
+   const lastActive = user.last_active;
+   if (isUserOnline(lastActive)) return false;
+@@ -4429,15 +4450,15 @@ async function loadMyMentees() {
+   const container = $('menteesList');
+   container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
+   try {
+-    const [mentees, stats, followup] = await Promise.all([
++    const [mentees, followup, streaks] = await Promise.all([
+       apiFetch('/api/mentors/my-mentees'),
+-      apiFetch('/api/mentors/my-mentees/stats'),
+       apiFetch('/api/mentors/my-mentees/followup').catch(() => ({})),
++      apiFetch('/api/mentors/my-mentees/streaks').catch(() => ({})),
+     ]);
+ 
+     _myMenteesCache = mentees || [];
+     _myMenteesFollowupCache = followup || {};
+-    window._myMenteesStats = stats || {};
++    _myMenteesStreakCache = streaks || {};
+ 
+     $('activeMenteeCount').textContent = _myMenteesCache.length;
+     const followupCount = _myMenteesCache.filter(m => menteeIsStale(m.user)).length;
+@@ -4465,17 +4486,14 @@ async function loadMyMentees() {
+ 
+ function renderMenteesList() {
+   const container = $('menteesList');
+-  const stats = window._myMenteesStats || {};
+   const mentees = sortedMentees();
+ 
+   let html = '';
+   for (const m of mentees) {
+     const { user, assigned_at, id: assignId } = m;
+-    const sessionCount = stats[user.telegram_id] || 0;
+     const displayName = user.user_settings?.display_name || user.anonymous_id;
+     const letter = (displayName || '?').charAt(0).toUpperCase();
+-    const fu = _myMenteesFollowupCache[user.telegram_id] || { open_goals: 0, total_goals: 0, last_nudge_sent_at: null };
+-    const nudgeCooldownActive = fu.last_nudge_sent_at && (Date.now() - new Date(fu.last_nudge_sent_at).getTime()) < 12 * 60 * 60 * 1000;
++    const fu = _myMenteesFollowupCache[user.telegram_id] || { open_goals: 0, total_goals: 0 };
+     const goalsLabel = fu.total_goals > 0
+       ? t('mentee_goals_progress', { done: fu.total_goals - fu.open_goals, total: fu.total_goals })
+       : t('mentee_goals_add');
+@@ -4488,16 +4506,14 @@ function renderMenteesList() {
+             <div>
+               <div class="font-bold" style="color:var(--gold)">${escapeHtml(displayName)}</div>
+               <div class="text-xs text-dim">${t('Joined')} ${new Date(assigned_at).toLocaleDateString()}</div>
+-              <div class="text-xs text-dim">${t('Sessions:')} ${sessionCount}</div>
+               ${renderMenteeStatusLine(user)}
++              ${renderMenteeStreakBadge(user.telegram_id)}
+             </div>
+           </div>
+           <button class="btn btn-ghost btn-sm" onclick="endMentorship('${assignId}')">${t('btn_end')}</button>
+         </div>
+         <div class="flex gap-8 mb-8" style="flex-wrap:wrap">
+           <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${user.telegram_id}')">${t('btn_message')}</button>
+-          <button class="btn btn-outline btn-sm flex-1" onclick="createSession(false, '${user.telegram_id}')">${t('btn_session')}</button>
+-          <button class="btn btn-outline btn-sm" style="flex:0 0 auto;display:flex;align-items:center;gap:5px;" ${nudgeCooldownActive ? 'disabled title="' + t('mentee_nudge_cooldown') + '"' : ''} onclick="sendMenteeNudge('${user.telegram_id}', this)">${ticketIcon('bell', 14)}${t('mentee_nudge_btn')}</button>
+           <!-- Transfer button: opens the Transfer Mentee modal -->
+           <button class="btn btn-outline btn-sm" style="flex:0 0 auto;" onclick="openTransferModal('${assignId}', '${user.telegram_id}', '${escapeHtml(displayName)}')">Transfer</button>
+         </div>
+@@ -4554,9 +4570,11 @@ async function refreshMenteeGoals(menteeId) {
+     panel.innerHTML = `
+       ${itemsHtml}
+       <div class="goal-add-row">
+-        <input type="text" id="goalInput-${menteeId}" class="form-control text-sm" placeholder="${t('mentee_goal_placeholder')}" maxlength="200">
+-        <input type="date" id="goalDate-${menteeId}" class="form-control text-sm">
+-        <button class="btn btn-outline btn-sm" style="display:flex;align-items:center;gap:4px;" onclick="addMenteeGoal('${menteeId}')">${menteeIcon('plus', 13)}${t('mentee_goal_add_btn')}</button>
++        <textarea id="goalInput-${menteeId}" class="form-control text-sm goal-add-input" placeholder="${t('mentee_goal_placeholder')}" maxlength="200" rows="2"></textarea>
++        <div class="goal-add-row-bottom">
++          <input type="date" id="goalDate-${menteeId}" class="form-control text-sm goal-add-date">
++          <button class="btn btn-outline btn-sm goal-add-btn" onclick="addMenteeGoal('${menteeId}')">${menteeIcon('plus', 13)}${t('mentee_goal_add_btn')}</button>
++        </div>
+       </div>`;
+ 
+     // Keep the goal-progress label on the toggle button in sync.
+@@ -4600,24 +4618,7 @@ async function deleteMenteeGoal(goalId, menteeId) {
+   } catch (e) { showToast(e.message, 'error'); }
+ }
+ 
+-// ─── Quick nudge ───────────────────────────────────────────────
+-async function sendMenteeNudge(menteeId, btnEl) {
+-  if (btnEl?.disabled) return;
+-  const custom = window.prompt(t('mentee_nudge_prompt'), '');
+-  if (custom === null) return; // cancelled
+-  try {
+-    if (btnEl) btnEl.disabled = true;
+-    await apiFetch('/api/mentors/nudge', { method: 'POST', body: { mentee_id: menteeId, message: custom || undefined } });
+-    haptic('light');
+-    showToast(t('mentee_nudge_sent'), 'success');
+-    if (!_myMenteesFollowupCache[menteeId]) _myMenteesFollowupCache[menteeId] = { open_goals: 0, total_goals: 0 };
+-    _myMenteesFollowupCache[menteeId].last_nudge_sent_at = new Date().toISOString();
+-    if (btnEl) { btnEl.title = t('mentee_nudge_cooldown'); }
+-  } catch (e) {
+-    if (btnEl) btnEl.disabled = false;
+-    showToast(e.message, 'error');
+-  }
+-}
++
+ 
+ async function saveMentorNote(menteeId) {
+   const content = $(`note-${menteeId}`).value.trim();
+diff --git a/frontend/locales.js b/frontend/locales.js
+index a6719cc..8987830 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -322,10 +322,9 @@ const I18N = {
+     "mentee_goal_delete": "Delete goal",
+     "mentee_goal_placeholder": "e.g. Read Psalm 23 this week",
+     "mentee_goal_add_btn": "Add",
+-    "mentee_nudge_btn": "Nudge",
+-    "mentee_nudge_cooldown": "You checked in with this mentee recently",
+-    "mentee_nudge_prompt": "Send a check-in message (leave blank for the default message):",
+-    "mentee_nudge_sent": "Check-in sent to your mentee",
++    "mentee_streak_count": "{count}-day streak",
++    "mentee_streak_none": "No active streak",
++    "mentee_streak_best": "best {count}",
+     "no_support_requests_found": "No support requests found",
+     "no_support_requests_desc": "You have not submitted any support requests yet. Need help? Create one anytime.",
+     "new_request_btn": "+ New Request",
+@@ -652,10 +651,9 @@ const I18N = {
+     "mentee_goal_delete": "ግቡን ሰርዝ",
+     "mentee_goal_placeholder": "ለምሳሌ፦ በዚህ ሳምንት መዝሙር 23ን ያንብቡ",
+     "mentee_goal_add_btn": "ጨምር",
+-    "mentee_nudge_btn": "አስታውሱ",
+-    "mentee_nudge_cooldown": "በቅርቡ ከዚህ ተመካሪ ጋር ተገናኝተዋል",
+-    "mentee_nudge_prompt": "የማረጋገጫ መልእክት ይላኩ (ባዶ ከተውት ነባሪው መልእክት ይላካል)፡",
+-    "mentee_nudge_sent": "ማረጋገጫ መልእክት ለተመካሪዎ ተልኳል",
++    "mentee_streak_count": "የ{count}-ቀን ሪከርድ",
++    "mentee_streak_none": "ንቁ ሪከርድ የለም",
++    "mentee_streak_best": "ከፍተኛው {count}",
+     "no_support_requests_found": "ምንም የድጋፍ ጥያቄዎች አልተገኙም",
+     "no_support_requests_desc": "እስካሁን ምንም የድጋፍ ጥያቄ አላስገቡም። እርዳታ ይፈልጋሉ? ማንኛውም ጊዜ ይፍጠሩ።",
+     "new_request_btn": "+ አዲስ ጥያቄ",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 15c357d..2160509 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -2560,6 +2560,49 @@ textarea.form-control {
+   background: var(--danger);
+ }
+ 
++/* ─── Mentee Bible Streak badge (My Mentees page) ───────────────── */
++.mentee-streak-badge {
++  display: inline-flex;
++  align-items: center;
++  gap: 5px;
++  margin-top: 5px;
++  padding: 3px 9px 3px 7px;
++  border-radius: 999px;
++  font-size: 0.7rem;
++  font-weight: 600;
++  line-height: 1.3;
++}
++
++.mentee-streak-badge.is-active {
++  background: var(--gold-dim);
++  border: 1px solid rgba(201, 168, 76, 0.35);
++  color: var(--gold-light);
++}
++
++.mentee-streak-badge.is-idle {
++  background: rgba(255, 255, 255, 0.03);
++  border: 1px solid var(--border-dim);
++  color: var(--text3);
++  font-weight: 500;
++}
++
++.mentee-streak-flame {
++  display: inline-flex;
++  align-items: center;
++  flex-shrink: 0;
++}
++
++.mentee-streak-badge.is-active .mentee-streak-flame {
++  color: var(--gold);
++}
++
++.mentee-streak-best {
++  color: var(--text3);
++  font-weight: 500;
++  padding-left: 5px;
++  border-left: 1px solid rgba(255, 255, 255, 0.12);
++}
++
+ /* ─── Follow-up goals checklist ─────────────────────────────────── */
+ .goal-toggle-btn {
+   display: flex;
+@@ -2648,17 +2691,49 @@ textarea.form-control {
+ 
+ .goal-add-row {
+   display: flex;
+-  gap: 6px;
+-  margin-top: 8px;
++  flex-direction: column;
++  gap: 8px;
++  margin-top: 10px;
+ }
+ 
+-.goal-add-row input[type="text"] {
+-  flex: 1;
++.goal-add-input {
++  width: 100%;
++  min-height: 56px;
++  resize: vertical;
++  line-height: 1.4;
++}
++
++.goal-add-row-bottom {
++  display: flex;
++  align-items: stretch;
++  gap: 8px;
++}
++
++/* Native date input renders with a browser-default (light) calendar icon
++   and text color; without an explicit color-scheme it goes invisible
++   against this app's dark surfaces. */
++.goal-add-date {
++  flex: 1 1 150px;
++  min-width: 0;
++  color-scheme: dark;
++  min-height: 38px;
++}
++
++[data-theme="light"] .goal-add-date {
++  color-scheme: light;
+ }
+ 
+-.goal-add-row input[type="date"] {
++.goal-add-date::-webkit-calendar-picker-indicator {
++  opacity: 0.75;
++  cursor: pointer;
++}
++
++.goal-add-btn {
+   flex: 0 0 auto;
+-  width: 110px;
++  display: flex;
++  align-items: center;
++  gap: 4px;
++  white-space: nowrap;
+ }
+ 
+ /* ─── Session time labels ────────────────────────────────────── */
+diff --git a/routes/mentors.js b/routes/mentors.js
+index e6ff0bf..ae08106 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -426,6 +426,38 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
+     res.json(followup);
+   });
+ 
++  // GET /api/mentors/my-mentees/streaks – Bible-reading streak snapshot per
++  // mentee (current streak, longest streak, last read date). Powers the
++  // "Bible Streak" indicator on the My Mentees page.
++  router.get('/my-mentees/streaks', requireAuth, async (req, res) => {
++    const { id: mentor_id } = req.telegramUser;
++    const { data: assignments } = await supabase
++      .from('mentorship_assignments')
++      .select('user_id')
++      .eq('mentor_id', mentor_id)
++      .eq('is_active', true);
++    const menteeIds = (assignments || []).map(a => a.user_id);
++    const streaks = {};
++    menteeIds.forEach(id => { streaks[id] = { current_streak: 0, longest_streak: 0, last_read_date: null }; });
++    if (!menteeIds.length) return res.json(streaks);
++
++    const { data: rows, error } = await supabase
++      .from('bible_streaks')
++      .select('telegram_id, current_streak, longest_streak, last_read_date')
++      .in('telegram_id', menteeIds);
++    if (error) return res.status(500).json({ error: error.message });
++
++    (rows || []).forEach(r => {
++      streaks[r.telegram_id] = {
++        current_streak: r.current_streak || 0,
++        longest_streak: r.longest_streak || 0,
++        last_read_date: r.last_read_date || null,
++      };
++    });
++
++    res.json(streaks);
++  });
++
+   // POST /api/mentors/notes – add/update private note
+   router.post('/notes', requireAuth, async (req, res) => {
+     const { id: mentor_id } = req.telegramUser;
