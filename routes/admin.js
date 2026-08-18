@@ -881,6 +881,41 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     }
   });
 
+  // Sessions that have been scheduled but haven't started yet — lets admins
+  // see what's coming up (host, invited participants, and whether the
+  // 10-minute "starting soon" reminder has gone out), not just what's live.
+  router.get('/sessions/pending', async (req, res) => {
+    try {
+      const { data: sessions, error } = await supabase
+        .from('video_sessions')
+        .select(`
+          id, room_name, title, is_group, scheduled_at, reminder_sent,
+          host:host_id(telegram_id, anonymous_id),
+          session_participants(telegram_id, user:telegram_id(anonymous_id))
+        `)
+        .eq('status', 'scheduled')
+        .order('scheduled_at', { ascending: true });
+
+      if (error) return res.status(500).json({ error: error.message });
+
+      const formatted = (sessions || []).map(s => ({
+        id: s.id,
+        title: s.title,
+        is_group: s.is_group,
+        host: s.host?.anonymous_id || 'Unknown',
+        host_id: s.host?.telegram_id || null,
+        scheduled_at: s.scheduled_at,
+        reminder_sent: s.reminder_sent,
+        participant_count: (s.session_participants || []).length,
+        participants: (s.session_participants || []).map(p => p.user?.anonymous_id || 'Unknown'),
+      }));
+
+      res.json({ sessions: formatted, count: formatted.length });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Paginated session history — all past (and current) sessions with total
   // duration and, once ended, who ended them (the host mentor, or an admin
   // via the force-end action below). Defaults to non-scheduled sessions.

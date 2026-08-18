@@ -2207,6 +2207,7 @@
                     <div class="toolbar">
                         <div style="display:flex;gap:6px">
                             <button class="btn btn-sm" id="liveSessTabLive" onclick="switchSessionsView('live')">Live</button>
+                            <button class="btn btn-ghost btn-sm" id="liveSessTabPending" onclick="switchSessionsView('pending')">Pending<span id="pendingSessionsBadge" class="nav-badge" style="display:none;margin-left:4px">0</span></button>
                             <button class="btn btn-ghost btn-sm" id="liveSessTabHistory" onclick="switchSessionsView('history')">History</button>
                         </div>
                         <div style="font-size:12px;color:var(--text2);flex:1">
@@ -3972,9 +3973,11 @@
         function switchSessionsView(view) {
             currentSessionsView = view;
             document.getElementById('liveSessTabLive').classList.toggle('btn-ghost', view !== 'live');
+            document.getElementById('liveSessTabPending').classList.toggle('btn-ghost', view !== 'pending');
             document.getElementById('liveSessTabHistory').classList.toggle('btn-ghost', view !== 'history');
             document.getElementById('sessionsHistoryPager').innerHTML = '';
             if (view === 'live') loadLiveSessions();
+            else if (view === 'pending') loadPendingSessions();
             else loadSessionsHistory(1);
         }
 
@@ -4045,6 +4048,76 @@
                                     End Session
                                 </button>
                             </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${e.message}</div>`;
+            }
+        }
+
+        // Scheduled sessions that haven't started yet — who's hosting, who's
+        // invited, when it's due, and whether the 10-min "starting soon"
+        // reminder has already gone out to the host + participants.
+        async function refreshPendingSessionsBadge() {
+            try {
+                const d = await api('/api/admin/sessions/pending');
+                const badge = document.getElementById('pendingSessionsBadge');
+                if (d.count > 0) {
+                    badge.textContent = d.count;
+                    badge.style.display = 'inline-block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            } catch { /* non-fatal */ }
+        }
+
+        async function loadPendingSessions() {
+            const container = document.getElementById('liveSessionsContainer');
+            container.innerHTML = '<div class="loading">Loading…</div>';
+            try {
+                const d = await api('/api/admin/sessions/pending');
+                refreshPendingSessionsBadge();
+
+                if (!d.sessions?.length) {
+                    container.innerHTML = `<div class="empty">No pending schedules</div>`;
+                    return;
+                }
+
+                container.innerHTML = d.sessions.map(s => {
+                    const startsMs = new Date(s.scheduled_at).getTime();
+                    const minsAway = Math.round((startsMs - Date.now()) / 60000);
+                    const etaLabel = minsAway <= 0 ? 'Starting now' : (minsAway < 60 ? `in ${minsAway} min` : `in ${Math.round(minsAway / 60)} hr`);
+                    const participantsHtml = (s.participants || []).map(name => `
+                        <div class="mentee-row">
+                            <div class="mentee-row-header">
+                                <span class="mentee-name" style="font-family:var(--font-mono);font-size:11.5px;color:var(--accent);">${esc(name)}</span>
+                            </div>
+                        </div>
+                    `).join('');
+
+                    return `
+                        <div class="mentor-card">
+                            <div class="mentor-header">
+                                <div class="mentor-info">
+                                    <span class="mentor-name">${esc(s.title)}</span>
+                                </div>
+                                <span class="chip chip-gold">🕒 ${esc(etaLabel)}</span>
+                            </div>
+                            <div class="mentor-bio">
+                                ${s.is_group ? '👥 Group session' : '💬 1‑on‑1 session'} · Host: ${esc(s.host)} · ${s.participant_count} invited · Starts ${new Date(s.scheduled_at).toLocaleString()}
+                            </div>
+                            <div class="mentor-bio" style="margin-top:2px">
+                                ${s.reminder_sent
+                            ? '<span class="chip chip-green" style="font-size:10px">✓ Reminder sent</span>'
+                            : '<span class="chip" style="font-size:10px">Reminder pending</span>'}
+                            </div>
+                            ${participantsHtml ? `
+                            <div class="mentees-section">
+                                <div class="mentees-list" style="display:flex;">
+                                    ${participantsHtml}
+                                </div>
+                            </div>` : ''}
                         </div>
                     `;
                 }).join('');

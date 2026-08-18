@@ -100,6 +100,7 @@
   "streak_already_read": "✅ ዛሬ አስቀድሞ ተመዝግቧል",
   "streak_reminder": "🔥 የ*{streak} ቀናት streak*ዎ ዛሬ እየጠበቀዎት ነው። ጥቂት ደቂቃዎች በቃሉ ውስጥ streak እንዲቀጥል ያደርገዋል — Holy ን ይክፈቱና Mark Read ን ይንኩ።",
   "streak_reminder_with_freeze": "🔥 የ*{streak} ቀናት streak*ዎ እየጠበቀዎት ነው። መልካም ዜና — አንድ Streak Saver ተቀምጦልዎታል፣ ስለዚህ ዛሬ ቢያልፍም streak ተጠብቆ ይቆያል። ቢሆንም ዛሬ ማንበብ እድገትዎን ይቀጥላል 🙏",
+  "live_session_reminder": "⏰ የ ቀጥታ ውይይት ቀጠርዎ እየደረሰ ነው 10 ደቂቃ ይቀረዋል ተዘጋጁ ተባረኩ",
   "verse_title": "የዕለቱ ጥቅስ",
   "no_verse": "ዛሬ ጥቅስ አልተገኘም።",
   "amharic_translation": "የአማርኛ ትርጉም",

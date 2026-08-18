@@ -142,11 +142,13 @@ CREATE TABLE IF NOT EXISTS video_sessions (
   started_at      TIMESTAMPTZ,
   ended_at        TIMESTAMPTZ,
   status          TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','active','ended','cancelled')),
+  reminder_sent   BOOLEAN NOT NULL DEFAULT false,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_sessions_host ON video_sessions(host_id, status);
 CREATE INDEX idx_sessions_scheduled ON video_sessions(scheduled_at, status);
+CREATE INDEX idx_sessions_reminder ON video_sessions(status, reminder_sent, scheduled_at);
 
 -- Session participants
 CREATE TABLE IF NOT EXISTS session_participants (

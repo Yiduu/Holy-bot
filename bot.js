@@ -1247,6 +1247,22 @@ async function notifySessionInvite(chatId, sessionInfo) {
   });
 }
 
+// "Starting soon" reminder — sent to the host and every invited participant
+// roughly 10 minutes before a scheduled live session begins. See the
+// scheduler at the bottom of this file for when it fires.
+async function notifySessionReminder(chatId, sessionInfo) {
+  const lang = await getUserLang(chatId);
+  const text = `${tSync(lang, 'live_session_reminder')}${sessionInfo.title ? `\n\n*${mdEscape(sessionInfo.title)}*` : ''}`;
+  await safeSend(chatId, text, {
+    reply_markup: {
+      inline_keyboard: [[{
+        text: tSync(lang, 'btn_join_session'),
+        web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` }
+      }]]
+    }
+  });
+}
+
 async function notifyMentorshipRequest(mentorId, requesterId, requesterName, requesterSex, requesterAge, topicName) {
   const lang = await getUserLang(mentorId);
   const text = lang === 'am'
@@ -2499,6 +2515,42 @@ setInterval(async () => {
   if (sent) console.log(`[Scheduler] Sent ${sent} unmatched-user reminder(s).`);
 }, 60 * 1000);
 
+// Live-session "starting soon" reminder — fires once per session, to the
+// host and every invited participant, when the session is due to start
+// within the next 10 minutes.
+//
+// Uses the `reminder_sent` flag rather than an exact time-window match:
+// once a session's scheduled_at falls inside the 10-minute lookahead, it's
+// picked up on the next tick, the reminder goes out, and the flag is set —
+// so it can't be re-sent on a later tick no matter how the minute boundary
+// lines up against the actual scheduled_at second.
+setInterval(async () => {
+  const nowIso = new Date().toISOString();
+  const windowEndIso = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+  const { data: dueSessions, error } = await supabase
+    .from('video_sessions')
+    .select('id, title, host_id, scheduled_at, session_participants(telegram_id)')
+    .eq('status', 'scheduled')
+    .eq('reminder_sent', false)
+    .gt('scheduled_at', nowIso)
+    .lte('scheduled_at', windowEndIso);
+
+  if (error) { console.error('[Scheduler] Session reminder query failed:', error.message); return; }
+  if (!dueSessions?.length) return;
+
+  let sent = 0;
+  for (const s of dueSessions) {
+    const recipientIds = new Set([s.host_id, ...(s.session_participants || []).map(p => p.telegram_id)]);
+    for (const chatId of recipientIds) {
+      await notifySessionReminder(chatId, { session_id: s.id, title: s.title });
+      sent++;
+    }
+    await supabase.from('video_sessions').update({ reminder_sent: true }).eq('id', s.id);
+  }
+  console.log(`[Scheduler] Sent starting-soon reminder for ${dueSessions.length} session(s), ${sent} message(s).`);
+}, 60 * 1000);
+
 // Mentor application review polling
 let lastAppCheck = new Date().toISOString();
 setInterval(async () => {
@@ -2529,6 +2581,7 @@ module.exports = {
   notifyMentorRejected,
   broadcastToAll,
   notifySessionInvite,
+  notifySessionReminder,
   notifyMentorshipRequest,
   notifyMentorshipAccepted,
   notifyMentorshipRejected,
