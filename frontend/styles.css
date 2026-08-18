@@ -2710,22 +2710,52 @@ textarea.form-control {
 }
 
 /* Native date input renders with a browser-default (light) calendar icon
-   and text color; without an explicit color-scheme it goes invisible
-   against this app's dark surfaces. */
+   and text color. Desktop browsers honor color-scheme reliably, but many
+   mobile in-app WebViews (Telegram's Android/iOS WebView, older mobile
+   Safari/Chrome) ignore it for the internal date-field text, leaving the
+   value/placeholder invisible against this app's dark surfaces — hence
+   explicit colors on the -webkit-datetime-edit sub-parts below, not just
+   color-scheme, so it renders correctly on mobile too. */
 .goal-add-date {
   flex: 1 1 150px;
   min-width: 0;
+  min-height: 42px;
   color-scheme: dark;
-  min-height: 38px;
+  background-color: var(--bg3) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border-dim);
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 [data-theme="light"] .goal-add-date {
   color-scheme: light;
 }
 
+/* Force visible text on the individual day/month/year segments and the
+   unfilled placeholder — the part that actually goes invisible on mobile. */
+.goal-add-date::-webkit-datetime-edit,
+.goal-add-date::-webkit-datetime-edit-fields-wrapper,
+.goal-add-date::-webkit-datetime-edit-text,
+.goal-add-date::-webkit-datetime-edit-month-field,
+.goal-add-date::-webkit-datetime-edit-day-field,
+.goal-add-date::-webkit-datetime-edit-year-field {
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+  opacity: 1 !important;
+}
+
 .goal-add-date::-webkit-calendar-picker-indicator {
-  opacity: 0.75;
+  opacity: 0.85;
   cursor: pointer;
+  /* Invert the browser's default dark glyph so it stays visible on our
+     dark background regardless of whether color-scheme was honored. */
+  filter: invert(0.85) brightness(1.3);
+  background: transparent;
+}
+
+[data-theme="light"] .goal-add-date::-webkit-calendar-picker-indicator {
+  filter: none;
 }
 
 .goal-add-btn {

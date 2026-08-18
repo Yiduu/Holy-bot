@@ -158,10 +158,10 @@ function viewAvatar(el) {
 
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  return `${Math.floor(diff / 86400000)}d ago`;
+  if (diff < 60000) return t('time_just_now');
+  if (diff < 3600000) return t('time_minutes_ago', { count: Math.floor(diff / 60000) });
+  if (diff < 86400000) return t('time_hours_ago', { count: Math.floor(diff / 3600000) });
+  return t('time_days_ago', { count: Math.floor(diff / 86400000) });
 }
 
 function formatTime(dateStr) {
@@ -4515,7 +4515,7 @@ function renderMenteesList() {
         <div class="flex gap-8 mb-8" style="flex-wrap:wrap">
           <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${user.telegram_id}')">${t('btn_message')}</button>
           <!-- Transfer button: opens the Transfer Mentee modal -->
-          <button class="btn btn-outline btn-sm" style="flex:0 0 auto;" onclick="openTransferModal('${assignId}', '${user.telegram_id}', '${escapeHtml(displayName)}')">Transfer</button>
+          <button class="btn btn-outline btn-sm" style="flex:0 0 auto;" onclick="openTransferModal('${assignId}', '${user.telegram_id}', '${escapeHtml(displayName)}')">${t('btn_transfer')}</button>
         </div>
         <button class="goal-toggle-btn" onclick="toggleMenteeGoals('${user.telegram_id}', this)">
           <span style="display:flex;align-items:center;gap:6px;">${menteeIcon('target', 14)}${goalsLabel}</span>
