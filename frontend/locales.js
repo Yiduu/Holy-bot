@@ -27,7 +27,7 @@ const I18N = {
     "btn_got_it": "Got it",
     "capacity_full": "Full",
     "capacity_full_tooltip": "This mentor has reached their capacity. Please try another mentor.",
-    "btn_join_session": "📹 Join Session",
+    "btn_join_session": "Join Session",
     "btn_join_waitlist": "🔔 Notify Me When Available",
     "btn_new_entry": "✍️ New Entry",
     "btn_view_entries": "📜 View Entries",

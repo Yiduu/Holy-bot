@@ -1184,7 +1184,7 @@ function connectSocket() {
 
   socket.on('session_invite', (session) => {
     haptic('success');
-    showToast(`📹 ${t('session_invite_toast')}: ${session.title}`, 'info');
+    showToast(`${t('session_invite_toast')}: ${session.title}`, 'info');
     updateSessionsBadge();
     if (confirm('A new session has been scheduled. Go to Sessions page to join?')) {
       navigate('sessions');
@@ -2317,14 +2317,14 @@ function refreshSessionLabels() {
         if (isJoinable) {
           actionEl.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:6px;">
-              <button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${t('btn_join_session')}</button>
+              <button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${joinSessionBtnLabel()}</button>
               <button class="btn btn-outline btn-sm"  onclick="openSessionInBrowser('${sid}')">Join via Browser</button>
             </div>`;
         } else if (labelClass === 'chip chip-muted session-not-yet') {
           // Scheduled but too early — show disabled buttons + "Starts at" text
           actionEl.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:6px;">
-              <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
+              <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinSessionBtnLabel()}</button>
               <button class="btn btn-outline btn-sm"  disabled style="opacity:.45;cursor:not-allowed;">Join via Browser</button>
               <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
             </div>`;
@@ -2355,12 +2355,12 @@ function refreshSessionLabels() {
       if (actionEl) {
         const sid = item.dataset.sessionId;
         if (isJoinable) {
-          actionEl.innerHTML = `<button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${t('btn_join_session')}</button>`;
+          actionEl.innerHTML = `<button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${joinSessionBtnLabel()}</button>`;
         } else if (labelClass === 'chip chip-muted session-not-yet') {
           // Scheduled but too early — show disabled button + "Starts at" text
           actionEl.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:6px;">
-              <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
+              <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinSessionBtnLabel()}</button>
               <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
             </div>`;
         } else {
@@ -2406,13 +2406,13 @@ async function loadSessions() {
 
           const actionHtml = isJoinable
             ? `<div style="display:flex; flex-direction:column; gap:6px;">
-                <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${t('btn_join_session')}</button>
+                <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${joinSessionBtnLabel()}</button>
                 <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">Join via Browser</button>
                 ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${session.id}')">End Session</button>` : ''}
               </div>`
             : (labelClass === 'chip chip-muted session-not-yet'
               ? `<div style="display:flex; flex-direction:column; gap:6px;">
-                  <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
+                  <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinSessionBtnLabel()}</button>
                   <button class="btn btn-outline btn-sm" disabled style="opacity:.45;cursor:not-allowed;">Join via Browser</button>
                   ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${session.id}')">End Session</button>` : ''}
                   <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
@@ -2459,12 +2459,12 @@ async function loadSessions() {
           let actionHtml;
           if (isJoinable) {
             actionHtml = `<div style="display:flex; flex-direction:column; gap:6px;">
-                <button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${t('btn_join_session')}</button>
+                <button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${joinSessionBtnLabel()}</button>
                 ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')">End Session</button>` : ''}
               </div>`;
           } else if (labelClass === 'chip chip-muted session-not-yet') {
             actionHtml = `<div style="display:flex; flex-direction:column; gap:6px;">
-                <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${t('btn_join_session')}</button>
+                <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinSessionBtnLabel()}</button>
                 ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')">End Session</button>` : ''}
                 <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
               </div>`;
@@ -2527,8 +2527,36 @@ function detectUnreliableSessionEnvironment() {
   return isKnownUnreliableWrapper || !hasWebRTC || !hasRTCPeerConnection;
 }
 
+function isIOSDevice() {
+  const ua = navigator.userAgent || '';
+  // Modern iPadOS reports as "Mac" UA with touch support — distinguish
+  // it from an actual Mac laptop/desktop.
+  return /iPad|iPhone|iPod/.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1);
+}
+
+// Builds the fallback URL used when we send someone to open the session in
+// their phone's own browser instead of our embedded mini-app view.
+//
+// Jitsi's web client hides the screen-share ("desktop") toolbar button on
+// mobile browsers by default and nudges people to install the native app
+// instead — that's why "share screen" previously looked unavailable on
+// mobile even when the browser itself could technically support it. These
+// URL-hash config overrides force the button to show and disable that
+// app-install nudge, so screen sharing actually works in-browser wherever
+// the underlying platform supports it (modern Android Chrome/Firefox; iOS
+// Safari only from iOS 17 onward — that's an Apple platform limitation no
+// config can work around).
 function buildExternalSessionUrl(data) {
-  return `https://${data.jitsi_domain}/${data.room_name}#config.disableDeepLinking=true&userInfo.displayName=${encodeURIComponent(data.display_name)}${data.jitsi_token ? `&jwt=${data.jitsi_token}` : ''}`;
+  const forcedToolbarButtons = ['microphone', 'camera', 'desktop', 'chat', 'raisehand', 'tileview', 'fullscreen', 'hangup', 'security'];
+  const params = [
+    'config.disableDeepLinking=true',
+    `config.toolbarButtons=${encodeURIComponent(JSON.stringify(forcedToolbarButtons))}`,
+    'interfaceConfig.MOBILE_APP_PROMO=false',
+    'interfaceConfig.SHOW_JITSI_WATERMARK=false',
+    `userInfo.displayName=${encodeURIComponent(data.display_name)}`,
+  ];
+  if (data.jitsi_token) params.push(`jwt=${data.jitsi_token}`);
+  return `https://${data.jitsi_domain}/${data.room_name}#${params.join('&')}`;
 }
 
 async function joinSession(session_id) {
@@ -2635,7 +2663,7 @@ function showScheduleModal(is_group, mentee_id = null) {
   titleField.classList.remove('hidden');
   const titleInput = document.getElementById('scheduleTitle');
   if (titleInput) {
-    titleInput.placeholder = is_group ? 'e.g. Weekly Group Study' : 'e.g. Career Check-in (optional)';
+    titleInput.placeholder = is_group ? 'e.g. Weekly Group Study' : 'e.g. Bible Study (optional)';
     titleInput.value = '';
   }
   participantField.classList.toggle('hidden', !is_group);
@@ -2934,8 +2962,16 @@ function toggleScreenShare() {
   haptic('medium');
   if (!supportsScreenShare()) {
     const joinData = window.activeSession?.joinData;
+    if (isIOSDevice()) {
+      // Screen sharing over the web is an Apple platform limitation on
+      // iOS below version 17 — no config or fallback link can work
+      // around that, so be upfront about it instead of offering a link
+      // that won't actually help.
+      showToast('Screen sharing over the web needs iOS 17 or later on iPhone/iPad. Camera and mic still work fine.', 'info');
+      return;
+    }
     if (joinData && confirm(
-      "⚠️ This browser may not support screen sharing on mobile.\nOpen the session in your phone's browser to share your screen instead?"
+      "⚠️ This browser may not support screen sharing here.\nOpen the session in your phone's browser to share your screen instead?"
     )) {
       window.open(buildExternalSessionUrl(joinData), '_blank');
       return;
@@ -2945,7 +2981,12 @@ function toggleScreenShare() {
     window.jitsiApi.executeCommand('toggleShareScreen');
   } catch (e) {
     console.error('Screen share failed:', e);
-    showToast('Could not start screen sharing on this device.', 'error');
+    const joinData = window.activeSession?.joinData;
+    if (joinData && confirm('Could not start screen sharing here.\nOpen the session in your phone\u2019s browser instead?')) {
+      window.open(buildExternalSessionUrl(joinData), '_blank');
+    } else {
+      showToast('Could not start screen sharing on this device.', 'error');
+    }
   }
 }
 
@@ -3323,6 +3364,15 @@ function handleChatInputKeydown(event) {
     event.preventDefault();
     sendMessage();
   }
+}
+
+// Premium SVG "join session" video icon — replaces the 📹 emoji, which
+// renders inconsistently (or as a blank box) across devices. Reused by
+// every "Join Session" button so its icon always looks identical.
+const ICON_JOIN_SESSION_SVG = '<svg class="btn-icon-video" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
+
+function joinSessionBtnLabel() {
+  return `${ICON_JOIN_SESSION_SVG}<span>${t('btn_join_session')}</span>`;
 }
 
 function autoResizeChatInput() {

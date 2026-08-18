@@ -2355,6 +2355,12 @@ textarea.form-control {
   pointer-events: none;
 }
 
+/* ── Premium "join session" video icon on buttons ─────────────────── */
+.btn-icon-video {
+  display: block;
+  flex-shrink: 0;
+}
+
 /* ── Options button (legacy modal trigger, kept for fallback) ─ */
 .more-options-btn {
   background: none;

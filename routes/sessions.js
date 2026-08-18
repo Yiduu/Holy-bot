@@ -43,6 +43,15 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     const roomName = `holy-${uuidv4()}`;
     const roomPassword = generateRoomPassword();
 
+    // If the session is scheduled to start in under 10 minutes, the
+    // "starting soon — within 10 minutes" reminder wouldn't have any real
+    // lead time to give anyway (it would fire almost immediately after
+    // creation), so skip it outright rather than send a confusing,
+    // effectively-useless notification.
+    const scheduledDate = scheduled_at ? new Date(scheduled_at) : new Date();
+    const msUntilStart = scheduledDate.getTime() - Date.now();
+    const skipStartingSoonReminder = msUntilStart < 10 * 60 * 1000;
+
     const { data: session, error } = await supabase.from('video_sessions').insert({
       room_name: roomName,
       room_password: roomPassword,
@@ -50,8 +59,9 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       is_group: !!is_group,
       max_participants: is_group ? 10 : 2,
       title: title || (is_group ? 'Group Session' : '1-on-1 Session'),
-      scheduled_at: scheduled_at ? new Date(scheduled_at).toISOString() : new Date().toISOString(),
+      scheduled_at: scheduledDate.toISOString(),
       status: 'scheduled',
+      reminder_sent: skipStartingSoonReminder,
     }).select().single();
 
     if (error) return res.status(500).json({ error: error.message });

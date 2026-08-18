@@ -1235,8 +1235,8 @@ async function notifySessionInvite(chatId, sessionInfo) {
     : 'TBD';
 
   const text = lang === 'am'
-    ? `🙏 አዲስ ስብሰባ ታቅዷል!\n\nአስተናጋጅ: ${sessionInfo.host}\nርዕስ: ${sessionInfo.title}\nሰዓት: ${timeStr}`
-    : `🙏 New Session Scheduled!\n\nHost: ${sessionInfo.host}\nTitle: ${sessionInfo.title}\nTime: ${timeStr}`;
+    ? `አዲስ ስብሰባ ታቅዷል!\n\nአስተናጋጅ: ${sessionInfo.host}\nርዕስ: ${sessionInfo.title}\nሰዓት: ${timeStr}`
+    : `New Session Scheduled!\n\nHost: ${sessionInfo.host}\nTitle: ${sessionInfo.title}\nTime: ${timeStr}`;
   await bot.sendMessage(chatId, text, {
     reply_markup: {
       inline_keyboard: [[{
