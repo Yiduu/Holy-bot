@@ -1263,6 +1263,25 @@ async function notifySessionReminder(chatId, sessionInfo) {
   });
 }
 
+// "Session has started" ping — sent the moment a session actually goes
+// live (first join flips it from 'scheduled'/'active' start), to every
+// other invited participant who hasn't joined yet. This is distinct from
+// notifySessionReminder above (which fires ~10 min *before* the scheduled
+// time); this one fires the instant the room is actually live so people
+// know it's time to jump in right now.
+async function notifySessionStarted(chatId, sessionInfo) {
+  const lang = await getUserLang(chatId);
+  const text = `${tSync(lang, 'live_session_started')}${sessionInfo.title ? `\n\n*${mdEscape(sessionInfo.title)}*` : ''}`;
+  await safeSend(chatId, text, {
+    reply_markup: {
+      inline_keyboard: [[{
+        text: tSync(lang, 'btn_join_session'),
+        web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` }
+      }]]
+    }
+  });
+}
+
 async function notifyMentorshipRequest(mentorId, requesterId, requesterName, requesterSex, requesterAge, topicName) {
   const lang = await getUserLang(mentorId);
   const text = lang === 'am'
@@ -2582,6 +2601,7 @@ module.exports = {
   broadcastToAll,
   notifySessionInvite,
   notifySessionReminder,
+  notifySessionStarted,
   notifyMentorshipRequest,
   notifyMentorshipAccepted,
   notifyMentorshipRejected,

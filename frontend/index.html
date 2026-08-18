@@ -680,7 +680,25 @@
     <div id="page-video" class="page">
       <div class="app-header">
         <h2>Live Session</h2>
-        <button class="btn btn-sm btn-danger" onclick="leaveCurrentSession()">Leave</button>
+        <div class="flex gap-8">
+          <!-- Always-visible screen-share control for the host — Jitsi's own
+               "desktop" toolbar button can get buried under an overflow menu
+               on small phone screens, so this gives the host one obvious tap
+               target that works on mobile too. Hidden for non-hosts. -->
+          <button id="shareScreenBtn" class="btn btn-sm btn-outline hidden" onclick="toggleScreenShare()"
+            title="Share your screen">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+              <path d="M8 12l4-4 4 4" />
+              <line x1="12" y1="8" x2="12" y2="14" />
+            </svg>
+            <span>Share Screen</span>
+          </button>
+          <button class="btn btn-sm btn-danger" onclick="leaveCurrentSession()">Leave</button>
+        </div>
       </div>
       <div class="page-content">
         <div id="jitsiContainer" style="height:55vh;border-radius:14px;overflow:hidden;background:#000"></div>

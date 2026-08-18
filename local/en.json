@@ -101,6 +101,7 @@
     "streak_reminder": "🔥 Your *{streak}-day streak* is still waiting on you today. A couple of minutes in the Word keeps it alive — open Holy and tap Mark Read.",
     "streak_reminder_with_freeze": "🔥 Your *{streak}-day streak* is waiting. Good news — you have a Streak Saver banked, so even if today slips by, the streak is protected. Still, reading today keeps you growing 🙏",
     "live_session_reminder": "⏰ Your live session is coming up within 10 minutes, be ready!",
+    "live_session_started": "🔴 The session has started — join the session please!",
     "verse_title": "Daily Verse",
     "no_verse": "No verse available today.",
     "amharic_translation": "Amharic",

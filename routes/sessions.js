@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
 // FIX: Moved require() calls to the top of the file (out of route handlers)
 // and corrected the relative path from routes/sessions.js → bot.js at project root.
-const { notifySessionInvite } = require('../bot');
+const { notifySessionInvite, notifySessionStarted } = require('../bot');
 const { generateJitsiJWT } = require('../utils');
 // Default to the public Jitsi server if no domain is set
 const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.jit.si';
@@ -209,12 +209,38 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     // Mark joined
     await supabase.from('session_participants').update({ joined_at: new Date().toISOString() }).eq('session_id', session.id).eq('telegram_id', telegram_id);
 
-    // Activate session if not already
-    if (session.status === 'scheduled') {
+    // Activate session if not already, and let everyone else invited know
+    // it's live right now — this is distinct from the bot's "starting soon"
+    // reminder, which only fires up to 10 minutes *before* the scheduled
+    // time and says nothing once the room actually goes live.
+    const isFirstJoin = session.status === 'scheduled';
+    if (isFirstJoin) {
       await supabase.from('video_sessions').update({ status: 'active', started_at: new Date().toISOString() }).eq('id', session.id);
     }
 
     const { data: user } = await supabase.from('users').select('anonymous_id').eq('telegram_id', telegram_id).single();
+
+    if (isFirstJoin) {
+      const { data: participants } = await supabase
+        .from('session_participants')
+        .select('telegram_id')
+        .eq('session_id', session.id);
+
+      const recipientIds = new Set([session.host_id, ...(participants || []).map(p => p.telegram_id)]);
+      recipientIds.delete(telegram_id); // don't notify the person who just joined
+
+      for (const pid of recipientIds) {
+        // In-app toast for anyone currently online in the mini app
+        const sock = onlineUsers.get(String(pid));
+        if (sock) {
+          io.to(sock).emit('session_started', { session_id: session.id, title: session.title });
+        }
+        // Telegram push so it reaches them even if the app isn't open
+        notifySessionStarted(pid, { session_id: session.id, title: session.title }).catch(e => {
+          console.error('[Sessions] Failed to send session-started notification:', e.message);
+        });
+      }
+    }
 
     // Let the admin dashboard's Live Sessions view update in real time
     io.emit('admin:session_activity', {
@@ -231,6 +257,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       jitsiToken = generateJitsiJWT(session.room_name, { displayName: user?.anonymous_id || 'Anonymous', moderator: isModerator });
     }
     res.json({
+      session_id: session.id,
       room_name: session.room_name,
       room_password: session.room_password,
       // Include token only for custom Jitsi domains

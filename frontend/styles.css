@@ -2339,6 +2339,22 @@ textarea.form-control {
   transform: scale(1.2);
 }
 
+/* ── Premium SVG emoji (replaces relying on the OS's emoji font, which
+   renders inconsistently — or as blank boxes — on some Android WebViews
+   and older Telegram in-app browsers) ─────────────────────────────── */
+.emoji-picker button.premium-emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+}
+
+.emoji-picker button.premium-emoji svg {
+  display: block;
+  pointer-events: none;
+}
+
 /* ── Options button (legacy modal trigger, kept for fallback) ─ */
 .more-options-btn {
   background: none;

@@ -1265,6 +1265,18 @@ function connectSocket() {
     }
   });
 
+  // Fired the instant a session actually goes live (first participant/host
+  // joins). Pings everyone else invited so they know it's time to hop in —
+  // separate from the bot's 10-minutes-before reminder.
+  socket.on('session_started', ({ session_id, title } = {}) => {
+    haptic('success');
+    showToast(`🔴 The session has started${title ? `: ${title}` : ''} — join please!`, 'success');
+    updateSessionsBadge();
+    if (currentPage === 'sessions') {
+      loadSessions();
+    }
+  });
+
   // Fired by the server when the host ends a session — refresh the sessions
   // page immediately so the Join button disappears for all participants.
   socket.on('session_ended', ({ session_id } = {}) => {
@@ -2500,25 +2512,39 @@ async function clearSessionHistory() {
   } catch (e) { haptic('error'); showToast(e.message, 'error'); }
 }
 
+// ── Live-session compatibility guard ────────────────────────────────
+// Some in-app browsers (Plus Messenger, Nicegram, older Telegram WebViews,
+// some embedded Android WebViews) either lack WebRTC entirely or block it,
+// which is what causes Jitsi's own "your browser doesn't support..." error
+// page and silent video/audio failures. Rather than embed the call and let
+// that fail, we check up front and — whenever the current environment
+// looks unreliable — offer the external-browser link, which always works.
+function detectUnreliableSessionEnvironment() {
+  const ua = navigator.userAgent || '';
+  const isKnownUnreliableWrapper = /Plus|TelegramPlus|Nicegram|OWM|Bookmarks/i.test(ua);
+  const hasWebRTC = !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+  const hasRTCPeerConnection = typeof window.RTCPeerConnection === 'function';
+  return isKnownUnreliableWrapper || !hasWebRTC || !hasRTCPeerConnection;
+}
+
+function buildExternalSessionUrl(data) {
+  return `https://${data.jitsi_domain}/${data.room_name}#config.disableDeepLinking=true&userInfo.displayName=${encodeURIComponent(data.display_name)}${data.jitsi_token ? `&jwt=${data.jitsi_token}` : ''}`;
+}
+
 async function joinSession(session_id) {
   haptic('medium');
   try {
     const data = await apiFetch(`/api/sessions/${session_id}/join`);
 
-    // Detect Plus Messenger (also covers Telegram Plus, Nicegram, etc.)
-    const ua = navigator.userAgent;
-    const isPlus = ua.includes('Plus') || ua.includes('TelegramPlus') || ua.includes('Nicegram');
-
-    if (isPlus) {
-      if (confirm("⚠️ Your current app may not support video calls.\nOpen in your phone's browser instead?")) {
-        // Build the external URL (same room, same name, disable deep linking)
-        const externalUrl = `https://${data.jitsi_domain}/${data.room_name}#config.disableDeepLinking=true&userInfo.displayName=${encodeURIComponent(data.display_name)}${data.jitsi_token ? `&jwt=${data.jitsi_token}` : ''}`;
-        window.open(externalUrl, '_blank');
+    if (detectUnreliableSessionEnvironment()) {
+      if (confirm("⚠️ Your current app may not support video calls reliably.\nOpen in your phone's browser instead? (Recommended)")) {
+        window.open(buildExternalSessionUrl(data), '_blank');
         return;
       }
+      // User chose to try anyway — fall through and attempt the embedded call.
     }
 
-    launchJitsi(data.room_name, data.room_password, data.display_name, data.jitsi_token, data.is_moderator);
+    launchJitsi(data.room_name, data.room_password, data.display_name, data.jitsi_token, data.is_moderator, data.session_id || null, data);
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
@@ -2562,7 +2588,13 @@ async function createSession(is_group = false, mentee_id = null, scheduled_at = 
     showToast(is_group ? 'Group session created!' : 'Private session created!', 'success');
     if (new Date(finalScheduled) <= new Date()) {
       // Creator is always the host/moderator when launching immediately
-      launchJitsi(data.room_name, data.room_password, currentUser.anonymous_id, data.jitsi_token, true, data.session.id);
+      const joinData = {
+        room_name: data.room_name,
+        jitsi_domain: data.jitsi_domain,
+        jitsi_token: data.jitsi_token,
+        display_name: currentUser.anonymous_id,
+      };
+      launchJitsi(data.room_name, data.room_password, currentUser.anonymous_id, data.jitsi_token, true, data.session.id, joinData);
     } else {
       loadSessions();
     }
@@ -2598,7 +2630,14 @@ function showScheduleModal(is_group, mentee_id = null) {
   if (!modal) return;
 
   modalTitle.textContent = is_group ? 'Schedule Group Session' : 'Schedule 1-on-1 Session';
-  titleField.classList.toggle('hidden', !is_group);
+  // The title field now applies to both session types — the host can name
+  // a 1-on-1 session too (e.g. "Career Check-in"), not just group sessions.
+  titleField.classList.remove('hidden');
+  const titleInput = document.getElementById('scheduleTitle');
+  if (titleInput) {
+    titleInput.placeholder = is_group ? 'e.g. Weekly Group Study' : 'e.g. Career Check-in (optional)';
+    titleInput.value = '';
+  }
   participantField.classList.toggle('hidden', !is_group);
 
   if (is_group && menteeList) {
@@ -2726,7 +2765,16 @@ async function openPrivateSessionFlow() {
   }
 }
 
-function launchJitsi(roomName, roomPassword, displayName, token, isModerator = false, sessionId = null) {
+// Detects whether the current browser/WebView can plausibly do screen
+// sharing (getDisplayMedia). Even when it can't, we still show the button
+// for the host — Jitsi itself will tell them if it fails — but we use this
+// to decide whether to proactively suggest the "open in browser" fallback
+// instead of a silent/broken attempt.
+function supportsScreenShare() {
+  return !!(navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function');
+}
+
+function launchJitsi(roomName, roomPassword, displayName, token, isModerator = false, sessionId = null, joinData = null) {
   navigate('video');
   const container = $('jitsiContainer');
   if (!container) return;
@@ -2734,8 +2782,12 @@ function launchJitsi(roomName, roomPassword, displayName, token, isModerator = f
 
   window.activeSession = {
     sessionId,
-    isModerator
+    isModerator,
+    joinData,
+    connected: false,
   };
+
+  toggleShareScreenButtonVisibility(isModerator);
 
   const initJitsi = () => {
     const options = {
@@ -2744,6 +2796,15 @@ function launchJitsi(roomName, roomPassword, displayName, token, isModerator = f
       height: '100%',
       parentNode: container,
       userInfo: { displayName },
+      // Explicitly grant the embedded iframe camera/mic/screen-share
+      // permission delegation. Without this, some mobile WebViews (where
+      // the host page never explicitly requests these permissions) never
+      // pass them down to the Jitsi iframe, which is one of the ways
+      // video/audio joining silently fails on mobile.
+      iframeAttributes: {
+        allow: 'camera; microphone; display-capture; autoplay; clipboard-write; fullscreen',
+        allowFullScreen: true,
+      },
       configOverwrite: {
         startWithAudioMuted: !isModerator,   // mentor joins unmuted by default
         startWithVideoMuted: !isModerator,   // mentor's video on by default
@@ -2758,6 +2819,10 @@ function launchJitsi(roomName, roomPassword, displayName, token, isModerator = f
         // Prevent participants from kicking / muting others
         disableRemoteMute: !isModerator,
         disableKick: !isModerator,
+        // Let the host's screen-share attempt use the full desktop/tab
+        // picker on platforms that support it (mainly helps on mobile
+        // Chrome, which supports tab/whole-screen capture).
+        desktopSharingFrameRate: { min: 5, max: 15 },
         ...(roomPassword ? { password: roomPassword } : {}),
       },
       interfaceConfigOverwrite: {
@@ -2775,7 +2840,49 @@ function launchJitsi(roomName, roomPassword, displayName, token, isModerator = f
     }
 
     window.jitsiApi = new JitsiMeetExternalAPI('meet.opensuse.org', options);
+
+    // ── Join watchdog ──────────────────────────────────────────────
+    // If the call hasn't actually connected within 18s, don't leave the
+    // user staring at a stuck/blank frame — this is what "sometimes video
+    // or audio just fails" usually looks like from their side. Offer the
+    // working external-browser fallback instead.
+    const joinTimeout = setTimeout(() => {
+      if (window.activeSession && !window.activeSession.connected) {
+        haptic('error');
+        const openExternally = joinData && confirm(
+          "⚠️ The session is taking too long to connect — this browser may not support it well.\nOpen in your phone's browser instead? (Recommended)"
+        );
+        if (openExternally) {
+          window.open(buildExternalSessionUrl(joinData), '_blank');
+        } else {
+          showToast('Still connecting… if audio/video doesn\u2019t start, try "Open in Browser".', 'info');
+        }
+      }
+    }, 18000);
+
+    window.jitsiApi.addEventListener('videoConferenceJoined', () => {
+      if (window.activeSession) window.activeSession.connected = true;
+      clearTimeout(joinTimeout);
+      // If this user is the moderator, set the password so the room is
+      // locked for anyone who doesn't already have it (extra guard on
+      // public servers).
+      if (isModerator && roomPassword) {
+        window.jitsiApi.executeCommand('password', roomPassword);
+      }
+    });
+
+    // Surfaces hard Jitsi-side failures (e.g. connection dropped, media
+    // permission denied) with an actionable fallback instead of leaving
+    // the call silently broken.
+    window.jitsiApi.addEventListener('errorOccurred', (err) => {
+      console.error('[Jitsi] errorOccurred:', err);
+      haptic('error');
+      const msg = err?.error?.message || err?.type || 'A connection problem occurred.';
+      showToast(`Session issue: ${msg}. Try "Open in Browser" if this continues.`, 'error');
+    });
+
     window.jitsiApi.addEventListener('videoConferenceLeft', async () => {
+      clearTimeout(joinTimeout);
       if (isModerator && sessionId) {
         try {
           await apiFetch(`/api/sessions/${sessionId}/end`, { method: 'PATCH' });
@@ -2784,6 +2891,7 @@ function launchJitsi(roomName, roomPassword, displayName, token, isModerator = f
         }
       }
       window.activeSession = null;
+      toggleShareScreenButtonVisibility(false);
       if (window.jitsiApi) {
         try { window.jitsiApi.dispose(); window.jitsiApi = null; } catch (e) { }
       }
@@ -2792,14 +2900,6 @@ function launchJitsi(roomName, roomPassword, displayName, token, isModerator = f
     window.jitsiApi.addEventListener('passwordRequired', () => {
       if (roomPassword) window.jitsiApi.executeCommand('password', roomPassword);
     });
-
-    // If this user is the moderator, set the password so the room is locked
-    // for anyone who doesn't already have it (extra guard on public servers).
-    if (isModerator && roomPassword) {
-      window.jitsiApi.addEventListener('videoConferenceJoined', () => {
-        window.jitsiApi.executeCommand('password', roomPassword);
-      });
-    }
   };
 
   if (window.JitsiMeetExternalAPI) {
@@ -2808,10 +2908,45 @@ function launchJitsi(roomName, roomPassword, displayName, token, isModerator = f
     const script = document.createElement('script');
     script.src = 'https://meet.jit.si/external_api.js';
     script.onload = initJitsi;
+    script.onerror = () => {
+      haptic('error');
+      showToast('Could not load the video engine. Check your connection and try again.', 'error');
+    };
     document.head.appendChild(script);
   }
 
   $('sessionPasswordDisplay').textContent = roomPassword ? `Password: ${roomPassword}` : '';
+}
+
+// ── Dedicated mobile-friendly "Share Screen" control ────────────────
+// Jitsi's own screen-share ("desktop") toolbar button can end up buried
+// under a "more options" overflow menu on small screens, making it hard
+// for a host to find on a phone. This gives the host one obvious, always-
+// visible button for it instead.
+function toggleShareScreenButtonVisibility(show) {
+  const btn = $('shareScreenBtn');
+  if (!btn) return;
+  btn.classList.toggle('hidden', !show);
+}
+
+function toggleScreenShare() {
+  if (!window.jitsiApi) return;
+  haptic('medium');
+  if (!supportsScreenShare()) {
+    const joinData = window.activeSession?.joinData;
+    if (joinData && confirm(
+      "⚠️ This browser may not support screen sharing on mobile.\nOpen the session in your phone's browser to share your screen instead?"
+    )) {
+      window.open(buildExternalSessionUrl(joinData), '_blank');
+      return;
+    }
+  }
+  try {
+    window.jitsiApi.executeCommand('toggleShareScreen');
+  } catch (e) {
+    console.error('Screen share failed:', e);
+    showToast('Could not start screen sharing on this device.', 'error');
+  }
 }
 
 async function leaveCurrentSession() {
@@ -3218,13 +3353,75 @@ function handleChatTyping() {
   }
 }
 
+// ── Premium SVG emoji set ──────────────────────────────────────────
+// Native emoji glyphs render inconsistently (or as blank "tofu" boxes)
+// across older Android WebViews / Telegram's in-app browsers, which is
+// exactly the kind of "sometimes just fails" inconsistency we want to
+// eliminate from anything session/reaction related. These are custom,
+// theme-matched SVG icons instead of relying on the OS's emoji font —
+// they always look the same everywhere. The underlying value inserted
+// into the message is still the plain unicode character, so sending,
+// storing, searching and rendering messages elsewhere is unaffected.
+const PREMIUM_EMOJI_ICONS = [
+  { ch: '😊', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><circle cx="8.5" cy="10.5" r="1.1" fill="#2a2114"/><circle cx="15.5" cy="10.5" r="1.1" fill="#2a2114"/><path d="M7.5 14c1 1.6 2.9 2.4 4.5 2.4s3.5-.8 4.5-2.4" fill="none" stroke="#2a2114" stroke-width="1.4" stroke-linecap="round"/>' },
+  { ch: '😂', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><path d="M7 9.5c.6-1 1.6-1.5 2.5-1.2M17 9.5c-.6-1-1.6-1.5-2.5-1.2" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/><path d="M7.5 13.5c1.2 2 3 3 4.5 3s3.3-1 4.5-3" fill="none" stroke="#2a2114" stroke-width="1.6" stroke-linecap="round"/><path d="M5.5 12c-.8 1-1 2.4-.6 3.4M18.5 12c.8 1 1 2.4.6 3.4" stroke="#8fd3ff" stroke-width="1.3" stroke-linecap="round"/>' },
+  { ch: '🤣', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)" transform="rotate(-8 12 12)"/><path d="M6.5 9.8c.7-.9 1.7-1.2 2.4-.9M17.5 9.8c-.7-.9-1.7-1.2-2.4-.9" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/><path d="M7 13.5c1.3 2.2 3.1 3.2 5 3.2s3.7-1 5-3.2" fill="none" stroke="#2a2114" stroke-width="1.6" stroke-linecap="round"/><path d="M4.8 11.5c-.7 1.1-.8 2.6-.3 3.6M19.2 11.5c.7 1.1.8 2.6.3 3.6" stroke="#8fd3ff" stroke-width="1.3" stroke-linecap="round"/>' },
+  { ch: '❤️', svg: '<path d="M12 19.2 4.9 12.4a4.6 4.6 0 0 1 0-6.6 4.9 4.9 0 0 1 7 0l.1.1.1-.1a4.9 4.9 0 0 1 7 0 4.6 4.6 0 0 1 0 6.6z" fill="#E05C5C"/>' },
+  { ch: '👍', svg: '<path d="M9 21H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3m0 9V9m0 12 6.2-.1a2 2 0 0 0 1.9-1.4l2-6a1.5 1.5 0 0 0-1.4-2H14l.5-3.4A1.8 1.8 0 0 0 12.8 5c-.4 0-.7.2-.9.5L9 12" fill="none" stroke="var(--gold-light)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>' },
+  { ch: '🙏', svg: '<path d="M12 5v6m-4-4 4 4 4-4M8.5 12c-.5 3 .3 6 3.5 8 3.2-2 4-5 3.5-8" fill="none" stroke="var(--gold-light)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>' },
+  { ch: '🔥', svg: '<path d="M12 3c1 3-3 4-3 7.5A3.5 3.5 0 0 0 12 14a3.5 3.5 0 0 0 3-5.4c1.4 1 2 2.7 2 4.4a5 5 0 1 1-10 0C7 9.5 9.5 7.5 12 3z" fill="url(#fg)"/>' },
+  { ch: '😍', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><path d="M6.6 10.8a2 1.4 0 1 0 4 0 2 1.4 0 1 0-4 0Zm6.8 0a2 1.4 0 1 0 4 0 2 1.4 0 1 0-4 0Z" fill="#E05C5C"/><path d="M7.5 14c1 1.6 2.9 2.4 4.5 2.4s3.5-.8 4.5-2.4" fill="none" stroke="#2a2114" stroke-width="1.4" stroke-linecap="round"/>' },
+  { ch: '😭', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><path d="M8.5 10.8c0-1 .7-1.7 1.5-1.7s1.5.7 1.5 1.7M12.5 10.8c0-1 .7-1.7 1.5-1.7s1.5.7 1.5 1.7" fill="none" stroke="#2a2114" stroke-width="1.3"/><path d="M8 15.5c1.3-1.2 2.6-1.2 4-1.2s2.7 0 4 1.2" fill="none" stroke="#2a2114" stroke-width="1.4" stroke-linecap="round"/><path d="M7.8 12.5c-.6 1.6-.4 3 .3 4.3M16.2 12.5c.6 1.6.4 3-.3 4.3" stroke="#8fd3ff" stroke-width="1.4" stroke-linecap="round"/>' },
+  { ch: '😘', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><path d="M6.5 10.3c.6-.8 1.5-1 2.2-.7" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/><path d="M13.5 10.5c1.5-.6 3 .6 3 1.8-1 .4-2.3.2-3-1" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/><ellipse cx="8.6" cy="14.4" rx="1.3" ry="1" fill="#f4a3a3"/><path d="M7.5 14.5c1.4 1.6 3.2 2.1 4.5 2.1" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/>' },
+  { ch: '😎', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><rect x="5.8" y="9.6" width="5" height="3" rx="1" fill="#2a2114"/><rect x="13.2" y="9.6" width="5" height="3" rx="1" fill="#2a2114"/><path d="M10.8 11h2.4" stroke="#2a2114" stroke-width="1.2"/><path d="M8 15.4c1.2 1 2.6 1.4 4 1.4s2.8-.4 4-1.4" fill="none" stroke="#2a2114" stroke-width="1.4" stroke-linecap="round"/>' },
+  { ch: '😢', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><circle cx="8.5" cy="10.4" r="1" fill="#2a2114"/><circle cx="15.5" cy="10.4" r="1" fill="#2a2114"/><path d="M8.5 15.6c1-.8 2.2-1.1 3.5-1.1s2.5.3 3.5 1.1" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/><path d="M8.7 12.5c-.5 1.4-.3 2.7.3 3.9" stroke="#8fd3ff" stroke-width="1.3" stroke-linecap="round"/>' },
+  { ch: '😡', svg: '<circle cx="12" cy="12" r="9" fill="url(#ag)"/><path d="M7 9.6 9.4 10.7M17 9.6 14.6 10.7" stroke="#3a1414" stroke-width="1.4" stroke-linecap="round"/><path d="M8.3 16c1.1-1.3 2.4-1.8 3.7-1.8s2.6.5 3.7 1.8" fill="none" stroke="#3a1414" stroke-width="1.4" stroke-linecap="round"/>' },
+  { ch: '😱', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><circle cx="8.6" cy="10.6" r="1.5" fill="#2a2114"/><circle cx="15.4" cy="10.6" r="1.5" fill="#2a2114"/><ellipse cx="12" cy="15.6" rx="2.2" ry="2.6" fill="#2a2114"/><path d="M6.2 8.4c.7-1 1.7-1.3 2.6-1M17.8 8.4c-.7-1-1.7-1.3-2.6-1" fill="none" stroke="#2a2114" stroke-width="1.2" stroke-linecap="round"/>' },
+  { ch: '🤔', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><circle cx="9" cy="10.8" r="1" fill="#2a2114"/><path d="M13.5 10.6c1-.8 2.6-.6 3 .6M9 15c1.3.9 3.6 1 5.2-.6" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/><path d="M13 7.6c.8-.9 2.3-.9 2.6.4.2 1-.7 1.3-1.2 2" fill="none" stroke="var(--gold-light)" stroke-width="1.1" stroke-linecap="round"/>' },
+  { ch: '🙌', svg: '<path d="M7 10 5.6 6.4a1.1 1.1 0 1 1 2.1-.7L9 9M17 10l1.4-3.6a1.1 1.1 0 1 0-2.1-.7L15 9M7 10c0 3.5 2.2 6 5 6s5-2.5 5-6" fill="none" stroke="var(--gold-light)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' },
+  { ch: '👏', svg: '<path d="M9 6.5 15 12l-2.4 2.4a2 2 0 0 1-2.8 0L6.4 11c-.7-.7-.7-1.9 0-2.6.8-.7 2-.7 2.7.1zM15 12l3.2 3.2c1.2 1.2 1.2 3.1 0 4.3-1.2 1.2-3.1 1.2-4.3 0L10.5 16" fill="none" stroke="var(--gold-light)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' },
+  { ch: '🎉', svg: '<path d="M5 19 14 6l4 4L5 19Z" fill="url(#fg)"/><circle cx="17.5" cy="5" r="1" fill="var(--gold-light)"/><circle cx="20" cy="8.5" r="1" fill="var(--gold-light)"/><circle cx="6" cy="6" r=".9" fill="var(--gold-light)"/><path d="M10 4.5 10.7 6" stroke="var(--gold-light)" stroke-width="1.1" stroke-linecap="round"/>' },
+  { ch: '🌟', svg: '<path d="M12 3.5 14 9l5.8.3-4.5 3.7 1.6 5.5L12 15.6l-4.9 2.9 1.6-5.5-4.5-3.7L10 9z" fill="url(#fg)"/>' },
+  { ch: '💡', svg: '<path d="M9 15.5a5 5 0 1 1 6 0c-.6.5-1 1.2-1 2v.5H10v-.5c0-.8-.4-1.5-1-2Z" fill="url(#fg)"/><path d="M10 20.5h4" stroke="var(--gold-light)" stroke-width="1.4" stroke-linecap="round"/>' },
+  { ch: '💯', svg: '<text x="12" y="15.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="url(#fg)" font-family="Arial, sans-serif">100</text><path d="M4 18.5 20 5.5" stroke="var(--gold-light)" stroke-width="1.3" stroke-linecap="round"/>' },
+  { ch: '🤝', svg: '<path d="M3 12h4l3-2 2 1.5M21 12h-4l-3-2-2 1.5M9.5 11.5l-2 2a1.3 1.3 0 0 0 1.8 1.8l1-1M12.5 12l-2.3 2.3a1.3 1.3 0 0 0 1.8 1.8l1-1" fill="none" stroke="var(--gold-light)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' },
+  { ch: '🙄', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><circle cx="8.7" cy="9" r="1.1" fill="#2a2114"/><circle cx="15.3" cy="9" r="1.1" fill="#2a2114"/><path d="M8 15c1.2-.9 2.6-1.2 4-1.2s2.8.3 4 1.2" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/>' },
+  { ch: '💔', svg: '<path d="M12 19.2 4.9 12.4a4.6 4.6 0 0 1 0-6.6 4.9 4.9 0 0 1 7 0l.1.1.1-.1a4.9 4.9 0 0 1 7 0 4.6 4.6 0 0 1 0 6.6z" fill="none" stroke="#E05C5C" stroke-width="1.4"/><path d="M12 6.5 10 11l3 1.5-2 5" stroke="#E05C5C" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>' },
+];
+
+// Shared gradient defs (gold "face" gradient, warm "flame" gradient, and
+// an angry-red gradient) reused by every icon above via url(#id) refs.
+const PREMIUM_EMOJI_DEFS = `<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="eg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="var(--gold-light)"/><stop offset="1" stop-color="var(--gold)"/>
+    </linearGradient>
+    <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="var(--gold-light)"/><stop offset="1" stop-color="#E07B3A"/>
+    </linearGradient>
+    <linearGradient id="ag" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f0a4a4"/><stop offset="1" stop-color="var(--danger)"/>
+    </linearGradient>
+  </defs>
+</svg>`;
+
 function toggleEmojiPicker() {
   const picker = $('emojiPicker');
   if (!picker) return;
 
   if (picker.children.length === 0) {
-    const emojis = ['😊', '😂', '🤣', '❤️', '👍', '🙏', '🔥', '😍', '😭', '😘', '😎', '😢', '😡', '😱', '🤔', '🙌', '👏', '🎉', '🌟', '💡', '💯', '🤝', '🙄', '💔'];
-    picker.innerHTML = emojis.map(emoji => `<button onclick="insertEmoji('${emoji}')">${emoji}</button>`).join('');
+    const defsHolder = document.getElementById('premiumEmojiDefs');
+    if (!defsHolder) {
+      const div = document.createElement('div');
+      div.id = 'premiumEmojiDefs';
+      div.innerHTML = PREMIUM_EMOJI_DEFS;
+      document.body.appendChild(div);
+    }
+    picker.innerHTML = PREMIUM_EMOJI_ICONS.map(({ ch, svg }) =>
+      `<button class="premium-emoji" onclick="insertEmoji('${ch}')" aria-label="${ch}" title="${ch}">
+         <svg viewBox="0 0 24 24" width="22" height="22">${svg}</svg>
+       </button>`
+    ).join('');
   }
 
   picker.classList.toggle('hidden');
