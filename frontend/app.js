@@ -1955,6 +1955,8 @@ async function enableStreakReminder(event) {
   } catch (e) { showToast(e.message, 'error'); }
 }
 
+const MENTOR_ICON_AGE = '<svg class="mentor-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><path d="M2 21h20"/><line x1="7" y1="8" x2="7" y2="4"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="17" y1="8" x2="17" y2="4"/></svg>';
+
 // ─── Mentors ──────────────────────────────────────────────────
 async function loadMentors() {
   const container = $('mentorsList');
@@ -1977,6 +1979,11 @@ async function loadMentors() {
           const bio = m.user_settings?.bio || 'No bio provided';
           const letter = name.charAt(0).toUpperCase();
           const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
+          const pillsHtml = (sexLabel || m.age_range) ? `
+              <div class="mentor-pill-row">
+                ${sexLabel ? `<span class="mentor-pill">${escapeHtml(sexLabel)}</span>` : ''}
+                ${m.age_range ? `<span class="mentor-pill mentor-pill-age">${MENTOR_ICON_AGE} ${escapeHtml(m.age_range)}</span>` : ''}
+              </div>` : '';
           activeMentorHtml = `
             <div class="card gold-border mb-16" style="border: 2px solid var(--gold);">
               <div class="text-xs font-bold uppercase tracking-wider mb-8" style="color:var(--gold)" data-i18n="your_active_mentor">
@@ -1986,7 +1993,7 @@ async function loadMentors() {
                 ${renderAvatar(m, letter)}
                 <div class="mentor-header-info">
                   <div class="mentor-id">${escapeHtml(name)}</div>
-                  ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
+                  ${pillsHtml}
                 </div>
               </div>
               <div class="mentor-bio mb-12">${escapeHtml(bio)}</div>
@@ -2025,6 +2032,11 @@ async function loadMentors() {
         const spec = m.user_settings?.specialization || '';
         const letter = name.charAt(0).toUpperCase();
         const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
+        const pillsHtml = (sexLabel || m.age_range) ? `
+              <div class="mentor-pill-row">
+                ${sexLabel ? `<span class="mentor-pill">${escapeHtml(sexLabel)}</span>` : ''}
+                ${m.age_range ? `<span class="mentor-pill mentor-pill-age">${MENTOR_ICON_AGE} ${escapeHtml(m.age_range)}</span>` : ''}
+              </div>` : '';
         const mentees = m.mentee_count || 0;
         const max = m.user_settings?.max_mentees || 5;
         const canRequest = !hasActiveMentor && mentees < max;
@@ -2039,7 +2051,7 @@ async function loadMentors() {
               <div class="mentor-header-info">
                 <div class="mentor-id">${escapeHtml(name)}</div>
                 ${renderStars(m.rating, m.rating_count)}
-                ${sexLabel ? `<div class="mentor-sex">${sexLabel}</div>` : ''}
+                ${pillsHtml}
               </div>
             </div>
             <div class="mentor-bio">${escapeHtml(bio)}</div>

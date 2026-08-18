@@ -138,7 +138,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
     const { id: telegram_id } = req.telegramUser;
     const { data, error } = await supabase
       .from('mentorship_assignments')
-      .select('*, mentor:mentor_id(telegram_id, anonymous_id, photo_file_id, photo_updated_at, user_settings(bio, specialization, display_name))')
+      .select('*, mentor:mentor_id(telegram_id, anonymous_id, sex, age_range, photo_file_id, photo_updated_at, user_settings(bio, specialization, display_name))')
       .eq('user_id', telegram_id)
       .eq('is_active', true)
       .single();

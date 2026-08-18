@@ -1217,6 +1217,40 @@ textarea.form-control {
   font-weight: 700;
 }
 
+/* ─── Mentor card: sex / age pills ──────────────────────────── */
+.mentor-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.mentor-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 9px 3px 8px;
+  border-radius: 999px;
+  background: rgba(201, 168, 76, 0.09);
+  color: var(--gold-light);
+  border: 1px solid var(--border-dim);
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+.mentor-pill-age {
+  background: rgba(201, 168, 76, 0.14);
+}
+
+.mentor-pill-icon {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
 .mentor-bio {
   font-size: 0.8rem;
   color: var(--text2);
