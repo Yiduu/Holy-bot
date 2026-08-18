@@ -75,7 +75,9 @@ async function apiFetch(path, opts = {}) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
+    const e = new Error(err.error || `HTTP ${res.status}`);
+    if (err.nickname_taken) e.nickname_taken = true;
+    throw e;
   }
   const ct = res.headers.get('content-type') || '';
   if (ct.includes('text/csv')) return res.blob();
@@ -3580,6 +3582,11 @@ async function updateSessionsBadge(directCount = null) {
 
 // ─── Settings ─────────────────────────────────────────────────
 async function loadSettings() {
+  const nameInput = $('settingDisplayName');
+  if (nameInput && !nameInput.dataset.errClearBound) {
+    nameInput.dataset.errClearBound = '1';
+    nameInput.addEventListener('input', () => clearFieldError('settingDisplayName'));
+  }
   try {
     const s = await apiFetch('/api/users/settings');
     $('settingDisplayName').value = s.display_name || '';
@@ -3867,6 +3874,7 @@ function exitBioEditMode() {
 
 async function saveSettings() {
   haptic('medium');
+  clearFieldError('settingDisplayName');
   const body = {
     display_name: $('settingDisplayName').value,
     notify_messages: $('toggleMessages').classList.contains('on'),
@@ -3887,7 +3895,11 @@ async function saveSettings() {
     showToast('Settings saved', 'success');
   } catch (e) {
     haptic('error');
-    showToast(e.message, 'error');
+    if (e.nickname_taken) {
+      showInlineError('settingDisplayName', t('err_nickname_taken'));
+    } else {
+      showToast(e.message, 'error');
+    }
   }
 }
 
