@@ -565,7 +565,9 @@
           <div class="my-goals-progress-track">
             <div id="myGoalsProgressFill" class="my-goals-progress-fill" style="width:0%"></div>
           </div>
-          <div id="myGoalsList" class="my-goals-list"></div>
+          <div class="my-goals-viewport">
+            <div id="myGoalsList" class="my-goals-list"></div>
+          </div>
         </div>
 
         <div class="section-title" data-i18n="Community">Community</div>
@@ -1435,6 +1437,32 @@
       </div>
       <div style="display: flex; justify-content: center; margin-top: 20px;">
         <button class="btn btn-primary" style="min-width: 120px;" onclick="saveTopics()" data-i18n="Save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: Edit Goal (mentor only) ───────────────────────
+       Lets the mentor change a follow-up goal's title/due date.
+       Saves via the existing PATCH /api/mentors/goals/:id endpoint,
+       which already syncs both sides over Socket.IO. -->
+  <div id="editGoalModal" class="modal-overlay" onclick="if(event.target===this)closeEditGoalModal()">
+    <div class="modal-sheet" style="max-width:420px;margin:0 auto;">
+      <div class="modal-handle"></div>
+      <div class="modal-title" data-i18n="mentee_goal_edit_title">Edit Goal</div>
+
+      <div class="form-group">
+        <label class="form-label" data-i18n="mentee_goal_title_label">Goal title</label>
+        <textarea id="editGoalTitle" class="form-control text-sm" maxlength="200" rows="2"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" data-i18n="mentee_goal_due_date_placeholder">Due date (optional)</label>
+        <input type="date" id="editGoalDate" class="form-control text-sm">
+      </div>
+
+      <div class="flex gap-8 mt-16">
+        <button class="btn btn-ghost flex-1" onclick="closeEditGoalModal()" data-i18n="btn_cancel">Cancel</button>
+        <button id="editGoalSaveBtn" class="btn btn-primary flex-1" onclick="saveEditGoal()" data-i18n="btn_save">Save</button>
       </div>
     </div>
   </div>

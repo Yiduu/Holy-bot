@@ -160,6 +160,11 @@
   "mentorship_request_cancelled_elsewhere": "📋 የ *{nick}* የምክር አገልግሎት ጥያቄ በሌላ አማካሪ ስለተያዘ አሁን አይገኝም።",
   "mentee_inactive_reminder": "ሰላም {name}፣ አማካሪዎ እየጠበቀዎት ነው። እባክዎን ይመለሱ። እግዚአብሔር ይባርክዎ 🙏",
   "unmatched_mentor_reminder": "ሰላም {name}፣ ወደዚህ አገልግሎት ስለተመዘገቡ እናመሰግናለን! እስካሁን ምንም አማካሪ ጥያቄ አልላኩም — እባክዎን ሁሉም አማካሪዎች ከመያዛቸው በፊት ወደ አማካሪዎች ገጽ በመሄድ የመረጡትን አማካሪ ይጠይቁ። እናመሰግናለን፣ እግዚአብሔር ይባርክዎ 🙏",
+  "btn_mark_goal_done": "✅ ተጠናቅቋል ብዬ ምልክት አድርግ",
+  "goal_marked_done_label": "✅ ተጠናቋል",
+  "goal_marked_done_confirm": "🎉 ጎበዝ — እንደ ተጠናቀቀ ምልክት ተደርጓል!",
+  "goal_already_done": "ይህ ቀድሞውኑ ተጠናቅቋል ✅",
+  "goal_not_found": "ያ ግብ አልተገኘም — ተነስቶ ሊሆን ይችላል።",
   "book_mapping": {
     "Psalm": "መዝሙረ ዳዊት",
     "Romans": "ሮሜ",

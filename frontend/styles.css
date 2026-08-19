@@ -2689,6 +2689,40 @@ textarea.form-control {
   color: var(--danger);
 }
 
+.goal-item-edit {
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 2px 4px;
+  flex-shrink: 0;
+}
+
+.goal-item-edit:hover {
+  color: var(--gold-light);
+}
+
+.goal-missed-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--danger);
+  background: rgba(220, 80, 80, 0.14);
+  border: 1px solid rgba(220, 80, 80, 0.3);
+}
+
+.goal-item.missed .goal-item-title,
+.my-goal-item.missed .my-goal-item-title {
+  color: var(--danger);
+}
+
 .goal-add-row {
   display: flex;
   flex-direction: column;
@@ -2863,27 +2897,51 @@ textarea.form-control {
   transition: width 0.5s var(--ease-premium);
 }
 
-.my-goals-list {
-  max-height: 240px;
+/* ─── Live-ticker viewports ───────────────────────────────────────
+   The VIEWPORT is the element that actually scrolls (fixed height,
+   overflow hidden, scrollbar hidden entirely per spec). Its content
+   child (.my-goals-list / .goal-panel-items) stays a plain flex list —
+   GoalTicker mirrors that content into a hidden clone appended right
+   after it inside the viewport, so the auto-scroll can loop forever
+   with no visible seam and no "return to top" bounce. */
+.my-goals-viewport,
+.goal-panel-viewport {
   overflow-y: auto;
   overscroll-behavior: contain;
   scroll-behavior: auto;
+  scrollbar-width: none;      /* Firefox */
+  -ms-overflow-style: none;   /* old Edge/IE */
+}
+
+.my-goals-viewport::-webkit-scrollbar,
+.goal-panel-viewport::-webkit-scrollbar {
+  display: none;              /* Chrome/Safari/WebView */
+}
+
+.my-goals-viewport {
+  max-height: 240px;
+}
+
+/* Mentor "My Mentees" panel — same live-ticker treatment as the mentee
+   widget, kept separate from .goal-add-row below it so the add form
+   never scrolls out of view. */
+.goal-panel-viewport {
+  max-height: 220px;
+}
+
+.my-goals-list,
+.goal-panel-items {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-/* Mentor "My Mentees" panel — same scrollable ticker treatment as the
-   mentee widget, kept separate from .goal-add-row below it so the add
-   form never scrolls out of view. */
-.goal-panel-items {
-  max-height: 220px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scroll-behavior: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+/* Hidden mirror of the content, used purely so the ticker's downward
+   scroll can wrap seamlessly — never interactive, never announced. */
+.goal-ticker-clone {
+  margin-top: 2px;
+  pointer-events: none;
+  user-select: none;
 }
 
 .my-goal-item {

@@ -568,6 +568,18 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     emitToUser(data.mentee_id, 'goal_created', data);
     emitToUser(data.mentor_id, 'goal_created', data);
 
+    // Telegram push — lets the mentee know even if the mini app isn't
+    // open right now. Best-effort: a failed/undeliverable message should
+    // never fail the goal-creation request itself.
+    try {
+      const { notifyNewGoal } = require('../bot');
+      const { data: mentorSettings } = await supabase
+        .from('user_settings').select('display_name').eq('telegram_id', mentor_id).single();
+      await notifyNewGoal(data.mentee_id, data, mentorSettings?.display_name);
+    } catch (e) {
+      console.error('[Goals] Failed to send new-goal notification:', e.message);
+    }
+
     res.status(201).json(data);
   });
 
@@ -590,10 +602,21 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     if (typeof is_done === 'boolean') {
       updates.is_done = is_done;
       updates.completed_at = is_done ? new Date().toISOString() : null;
+      // Completing a goal clears any "missed" flag it had picked up —
+      // late is still done.
+      if (is_done) { updates.is_missed = false; updates.missed_flagged_at = null; }
     }
     if (isMentor) {
       if (typeof title === 'string' && title.trim()) updates.title = title.trim().substring(0, 200);
-      if (due_date !== undefined) updates.due_date = due_date || null;
+      if (due_date !== undefined) {
+        updates.due_date = due_date || null;
+        // A mentor editing the due date supersedes whatever "missed"/
+        // reminder state was based on the old date — recomputed fresh
+        // by the daily scheduler against the new date going forward.
+        updates.is_missed = false;
+        updates.missed_flagged_at = null;
+        updates.last_reminder_sent_on = null;
+      }
     }
     if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
 

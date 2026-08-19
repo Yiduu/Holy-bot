@@ -53,5 +53,27 @@ async function supabaseQuery(fn, retries = 3, delay = 1000) {
   }
 }
 
-module.exports = { generateJitsiJWT, supabaseQuery };
+/**
+ * Push a Socket.IO event to a specific user, if they currently have a
+ * live connection. Reads `global.io` / `global.onlineUsers`, which
+ * server.js sets up once at startup — this lets modules that don't
+ * receive `io` directly (e.g. bot.js, whose scheduler and callback-query
+ * handler run outside the Express request lifecycle) still push
+ * real-time updates without a circular require on server.js.
+ *
+ * Best-effort: silently no-ops if the socket layer isn't ready yet or
+ * the user isn't currently connected (their next page load / reconnect
+ * will simply fetch the fresh row via the REST endpoint instead).
+ *
+ * @param {string|number} telegram_id
+ * @param {string} event
+ * @param {object} payload
+ */
+function emitToUser(telegram_id, event, payload) {
+  if (!global.io || !global.onlineUsers || !telegram_id) return;
+  const socketId = global.onlineUsers.get(String(telegram_id));
+  if (socketId) global.io.to(socketId).emit(event, payload);
+}
+
+module.exports = { generateJitsiJWT, supabaseQuery, emitToUser };
 

@@ -221,6 +221,7 @@ const MENTEE_ICONS = {
   trash: '<path d="M4 7h16"/><path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   calendar: '<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18"/><path d="M8 3v3"/><path d="M16 3v3"/>',
+  pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
 };
 function menteeIcon(name, size = 14) {
   const body = MENTEE_ICONS[name] || '';
@@ -981,6 +982,11 @@ function handleDeepLink() {
       }, 100);
       return;
     }
+    if (startParam.startsWith('goal_')) {
+      const goalId = startParam.replace('goal_', '');
+      setTimeout(() => openGoalDeepLink(goalId), 100);
+      return;
+    }
   }
 
   // Fallback for direct browser testing
@@ -996,7 +1002,29 @@ function handleDeepLink() {
         window.pendingChatPartner = partnerId;
         navigate('chat');
       }, 100);
+    } else if (browserStart.startsWith('goal_')) {
+      const goalId = browserStart.replace('goal_', '');
+      setTimeout(() => openGoalDeepLink(goalId), 100);
     }
+  }
+}
+
+// Deep link from a goal Telegram notification (new goal / due reminder) —
+// jumps to the dashboard and gives the specific goal a brief highlight
+// pulse so the mentee can find it immediately in the (possibly scrolling)
+// ticker list rather than hunting for it.
+async function openGoalDeepLink(goalId) {
+  navigate('dashboard');
+  await loadMyGoalsWidget();
+  const item = document.querySelector(`#myGoalsList [data-goal-id="${goalId}"]`);
+  if (item) {
+    myGoalsTicker?.stop();
+    item.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    item.classList.add('goal-pulse');
+    setTimeout(() => {
+      item.classList.remove('goal-pulse');
+      myGoalsTicker?.start();
+    }, 1600);
   }
 }
 
@@ -2064,48 +2092,75 @@ async function enableStreakReminder(event) {
 }
 
 // ─── Goal list "live ticker" auto-scroll ────────────────────────
-// Slow, continuous auto-scroll for a goals list — gives the widget a
-// "live leaderboard" feel even when nothing has changed recently.
-// Scrolls down slowly, pauses briefly at the bottom, glides back up,
-// pauses at the top, repeats. Pauses on hover/touch and briefly after
-// a new item is inserted so the user actually gets to see it land.
-// Respects prefers-reduced-motion (never autoplays) and skips work
-// entirely while its element isn't visible (e.g. a different page/tab
-// of the mini app is showing) or the document is backgrounded.
+// Continuous, one-directional auto-scroll for a goals list — a real
+// stock-ticker loop, not a bounce. `el` is the CONTENT element (the
+// real, still-queryable `.my-goals-list` / `.goal-panel-items` node —
+// every other function in this file keeps reading/writing it exactly
+// as before). Its immediate parent is the fixed-height, overflow:hidden
+// "viewport" that actually scrolls.
+//
+// The trick: a hidden clone of the content is mirrored directly below
+// it inside the viewport, so the viewport's scrollable height is
+// exactly 2x the real content. We scroll straight down forever; the
+// instant we've scrolled past one full content-height, we subtract
+// that height back off scrollTop. Because the clone is pixel-identical
+// to the content it follows, that wrap is invisible — the list just
+// keeps gliding, no snap-back, no pause-and-reverse.
+//
+// Pauses on hover/touch, and briefly (resetting to the top) whenever a
+// new item lands so the user actually sees it arrive. Respects
+// prefers-reduced-motion (never autoplays) and skips work entirely
+// while its element isn't visible (a different page/tab of the mini
+// app is showing) or the document is backgrounded.
 const GOAL_TICKER_REDUCED_MOTION = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 class GoalTicker {
   constructor(el, opts = {}) {
-    this.el = el;
-    this.speed = opts.speed ?? 0.28;          // px per animation frame (~60fps)
-    this.edgePauseMs = opts.edgePauseMs ?? 1100;  // pause when it hits top/bottom
-    this.newItemPauseMs = opts.newItemPauseMs ?? 2400; // pause after a goal is added
+    this.content = el;
+    this.viewport = el.parentElement;
+    this.speed = opts.speed ?? 1;              // ~1px per frame at 60fps
+    this.newItemPauseMs = opts.newItemPauseMs ?? 2000; // pause after a goal is added
     this.minItemsToRun = opts.minItemsToRun ?? 2;
-    this.direction = 1; // 1 = scrolling down, -1 = scrolling up
     this.hovered = false;
     this.pausedUntil = 0;
     this._raf = null;
+    this.clone = null;
+
     this._onEnter = () => { this.hovered = true; };
     this._onLeave = () => { this.hovered = false; };
     this._onTouchStart = () => { this.hovered = true; };
     this._onTouchEnd = () => { setTimeout(() => { this.hovered = false; }, 500); };
-    el.addEventListener('mouseenter', this._onEnter);
-    el.addEventListener('mouseleave', this._onLeave);
-    el.addEventListener('touchstart', this._onTouchStart, { passive: true });
-    el.addEventListener('touchend', this._onTouchEnd, { passive: true });
-    el.addEventListener('touchcancel', this._onTouchEnd, { passive: true });
+    this.viewport.addEventListener('mouseenter', this._onEnter);
+    this.viewport.addEventListener('mouseleave', this._onLeave);
+    this.viewport.addEventListener('touchstart', this._onTouchStart, { passive: true });
+    this.viewport.addEventListener('touchend', this._onTouchEnd, { passive: true });
+    this.viewport.addEventListener('touchcancel', this._onTouchEnd, { passive: true });
+
+    this.refresh();
   }
 
-  // Call after any DOM mutation to the list (add/update/delete) so a
-  // shrunken list doesn't leave scrollTop stranded past the new max.
+  // Call after any DOM mutation to the content (add/update/delete) so
+  // the mirrored clone stays pixel-identical and scrollTop stays sane.
   refresh() {
-    const max = Math.max(0, this.el.scrollHeight - this.el.clientHeight);
-    if (this.el.scrollTop > max) this.el.scrollTop = max;
+    if (!this.clone) {
+      this.clone = document.createElement('div');
+      this.clone.className = `${this.content.className} goal-ticker-clone`;
+      this.clone.setAttribute('aria-hidden', 'true');
+      this.viewport.appendChild(this.clone);
+    }
+    this.clone.innerHTML = this.content.innerHTML;
+    const contentH = this.content.scrollHeight;
+    if (contentH > 0 && this.viewport.scrollTop >= contentH) {
+      this.viewport.scrollTop = this.viewport.scrollTop % contentH;
+    }
   }
 
-  // Call right after a new item is inserted — briefly holds the ticker
-  // still so the slide-in animation isn't fighting with auto-scroll.
+  // Call right after a new item is inserted — snaps back to the top so
+  // the arrival is visible, then briefly holds the ticker still before
+  // resuming its downward glide.
   notifyNewItem() {
+    this.refresh();
+    this.viewport.scrollTop = 0;
     this.pausedUntil = Date.now() + this.newItemPauseMs;
   }
 
@@ -2113,23 +2168,16 @@ class GoalTicker {
     if (this._raf || GOAL_TICKER_REDUCED_MOTION) return;
     const step = () => {
       this._raf = requestAnimationFrame(step);
-      if (document.hidden || this.hovered || this.el.offsetParent === null) return;
+      if (document.hidden || this.hovered || this.viewport.offsetParent === null) return;
       if (Date.now() < this.pausedUntil) return;
 
-      const itemCount = this.el.children.length;
-      const max = this.el.scrollHeight - this.el.clientHeight;
-      if (itemCount < this.minItemsToRun || max <= 4) return; // nothing worth scrolling
+      const itemCount = this.content.children.length;
+      const contentH = this.content.scrollHeight;
+      if (itemCount < this.minItemsToRun || contentH <= this.viewport.clientHeight + 4) return; // nothing worth looping
 
-      this.el.scrollTop += this.speed * this.direction;
-
-      if (this.direction === 1 && this.el.scrollTop >= max - 1) {
-        this.el.scrollTop = max;
-        this.direction = -1;
-        this.pausedUntil = Date.now() + this.edgePauseMs;
-      } else if (this.direction === -1 && this.el.scrollTop <= 1) {
-        this.el.scrollTop = 0;
-        this.direction = 1;
-        this.pausedUntil = Date.now() + this.edgePauseMs;
+      this.viewport.scrollTop += this.speed;
+      if (this.viewport.scrollTop >= contentH) {
+        this.viewport.scrollTop -= contentH; // seamless wrap — clone picks up exactly where content left off
       }
     };
     this._raf = requestAnimationFrame(step);
@@ -2142,11 +2190,13 @@ class GoalTicker {
 
   destroy() {
     this.stop();
-    this.el.removeEventListener('mouseenter', this._onEnter);
-    this.el.removeEventListener('mouseleave', this._onLeave);
-    this.el.removeEventListener('touchstart', this._onTouchStart);
-    this.el.removeEventListener('touchend', this._onTouchEnd);
-    this.el.removeEventListener('touchcancel', this._onTouchEnd);
+    this.viewport.removeEventListener('mouseenter', this._onEnter);
+    this.viewport.removeEventListener('mouseleave', this._onLeave);
+    this.viewport.removeEventListener('touchstart', this._onTouchStart);
+    this.viewport.removeEventListener('touchend', this._onTouchEnd);
+    this.viewport.removeEventListener('touchcancel', this._onTouchEnd);
+    this.clone?.remove();
+    this.clone = null;
   }
 }
 
@@ -2178,9 +2228,12 @@ function myGoalsProgress() {
 }
 
 function renderMyGoalItem(g) {
-  const due = g.due_date ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}</div>` : '';
+  const missed = !g.is_done && g.is_missed;
+  const due = g.due_date
+    ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}${missed ? ` <span class="goal-missed-badge">${t('mentee_goal_missed')}</span>` : ''}</div>`
+    : '';
   return `
-    <div class="my-goal-item ${g.is_done ? 'done' : ''}" data-goal-id="${g.id}">
+    <div class="my-goal-item ${g.is_done ? 'done' : ''} ${missed ? 'missed' : ''}" data-goal-id="${g.id}">
       <label class="premium-checkbox">
         <input type="checkbox" ${g.is_done ? 'checked' : ''} onchange="toggleMyGoalDone('${g.id}', this.checked)">
         <span class="premium-checkbox-box">
@@ -4908,7 +4961,7 @@ function syncMentorGoalTicker(menteeId) {
     _mentorGoalTickers[menteeId]?.stop();
     return;
   }
-  if (!_mentorGoalTickers[menteeId] || _mentorGoalTickers[menteeId].el !== itemsWrap) {
+  if (!_mentorGoalTickers[menteeId] || _mentorGoalTickers[menteeId].content !== itemsWrap) {
     _mentorGoalTickers[menteeId]?.destroy();
     _mentorGoalTickers[menteeId] = new GoalTicker(itemsWrap);
   }
@@ -4917,9 +4970,12 @@ function syncMentorGoalTicker(menteeId) {
 }
 
 function renderMentorGoalItem(g, menteeId) {
-  const due = g.due_date ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}</div>` : '';
+  const missed = !g.is_done && g.is_missed;
+  const due = g.due_date
+    ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}${missed ? ` <span class="goal-missed-badge">${t('mentee_goal_missed')}</span>` : ''}</div>`
+    : '';
   return `
-    <div class="goal-item ${g.is_done ? 'done' : ''}" data-goal-id="${g.id}">
+    <div class="goal-item ${g.is_done ? 'done' : ''} ${missed ? 'missed' : ''}" data-goal-id="${g.id}">
       <label class="premium-checkbox">
         <input type="checkbox" ${g.is_done ? 'checked' : ''} onchange="toggleMenteeGoalDone('${g.id}', '${menteeId}', this.checked)">
         <span class="premium-checkbox-box">
@@ -4927,6 +4983,7 @@ function renderMentorGoalItem(g, menteeId) {
         </span>
       </label>
       <div class="goal-item-title">${escapeHtml(g.title)}${due}</div>
+      <button class="goal-item-edit" onclick="openEditGoalModal('${g.id}', '${menteeId}')" title="${t('mentee_goal_edit')}">${menteeIcon('pencil', 13)}</button>
       <button class="goal-item-delete" onclick="deleteMenteeGoal('${g.id}', '${menteeId}')" title="${t('mentee_goal_delete')}">${menteeIcon('trash', 13)}</button>
     </div>`;
 }
@@ -4978,7 +5035,9 @@ async function refreshMenteeGoals(menteeId) {
       : `<div class="text-xs text-dim goal-panel-empty" style="padding:4px 0">${t('mentee_goals_empty')}</div>`;
 
     panel.innerHTML = `
-      <div class="goal-panel-items">${itemsHtml}</div>
+      <div class="goal-panel-viewport">
+        <div class="goal-panel-items">${itemsHtml}</div>
+      </div>
       <div class="goal-add-row">
         <textarea id="goalInput-${menteeId}" class="form-control text-sm goal-add-input" placeholder="${t('mentee_goal_placeholder')}" maxlength="200" rows="2"></textarea>
         <div class="goal-add-row-bottom">
@@ -5077,6 +5136,7 @@ function applyMentorGoalRealtime(type, payload, menteeId) {
   }
 
   updateMenteeGoalsBadge(menteeId);
+  if (isOpen) _mentorGoalTickers[menteeId]?.refresh();
 }
 
 async function addMenteeGoal(menteeId) {
@@ -5132,6 +5192,58 @@ async function deleteMenteeGoal(goalId, menteeId) {
   } catch (e) {
     showToast(e.message, 'error');
     if (removedGoal) applyMentorGoalRealtime('added', removedGoal, menteeId);
+  }
+}
+
+// ─── Edit Goal (mentor only) ─────────────────────────────────────
+// Reads the goal straight out of the already-loaded cache rather than
+// threading its title/date through the onclick attribute — keeps quotes
+// and unicode in goal titles from ever needing escaping in inline HTML.
+let _editingGoal = null; // { id, menteeId }
+
+function openEditGoalModal(goalId, menteeId) {
+  const goal = _mentorGoalsCache[menteeId]?.find(g => String(g.id) === String(goalId));
+  if (!goal) return;
+  _editingGoal = { id: goalId, menteeId };
+  haptic('selection');
+
+  const titleInput = $('editGoalTitle');
+  const dateInput = $('editGoalDate');
+  if (titleInput) titleInput.value = goal.title || '';
+  if (dateInput) dateInput.value = goal.due_date ? goal.due_date.substring(0, 10) : '';
+
+  $('editGoalModal')?.classList.add('open');
+  setTimeout(() => titleInput?.focus(), 150);
+}
+
+function closeEditGoalModal() {
+  haptic('light');
+  $('editGoalModal')?.classList.remove('open');
+  _editingGoal = null;
+}
+
+async function saveEditGoal() {
+  if (!_editingGoal) return;
+  const { id: goalId, menteeId } = _editingGoal;
+  const title = $('editGoalTitle')?.value.trim();
+  const due_date = $('editGoalDate')?.value || null;
+  if (!title) {
+    haptic('error');
+    showToast(t('mentee_goal_placeholder'), 'error');
+    return;
+  }
+
+  const btn = $('editGoalSaveBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const goal = await apiFetch(`/api/mentors/goals/${goalId}`, { method: 'PATCH', body: { title, due_date } });
+    haptic('medium');
+    applyMentorGoalRealtime('updated', goal, menteeId);
+    closeEditGoalModal();
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 

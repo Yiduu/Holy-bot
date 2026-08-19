@@ -159,5 +159,10 @@
     "help_text": "📖 *Holy Helper — Commands*\n\n`/start` — Main menu\n`/menu` — Main menu\n`/apply` — Apply to become a mentor\n`/settopics` — Update your topics\n`/reply @nick msg` — Reply to a specific partner\n`/end` — End current mentorship\n\nJust type normally to chat with your partner.",
     "mentorship_request_cancelled_elsewhere": "📋 The mentorship request from *{nick}* is no longer available because they have been matched with another mentor.",
     "mentee_inactive_reminder": "Hello {name}, your mentor is waiting for you. Please be back. God bless you 🙏",
-    "unmatched_mentor_reminder": "Hello {name}, thank you for registering with Holy Counseling! You haven't sent a request to get a mentor yet — please request one before all mentors become fully occupied. Thank you, God bless you 🙏"
+    "unmatched_mentor_reminder": "Hello {name}, thank you for registering with Holy Counseling! You haven't sent a request to get a mentor yet — please request one before all mentors become fully occupied. Thank you, God bless you 🙏",
+    "btn_mark_goal_done": "✅ Mark as Done",
+    "goal_marked_done_label": "✅ Done",
+    "goal_marked_done_confirm": "🎉 Nice work — marked as done!",
+    "goal_already_done": "This one's already checked off ✅",
+    "goal_not_found": "Couldn't find that goal — it may have been removed."
 }
