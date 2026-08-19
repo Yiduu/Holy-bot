@@ -1169,7 +1169,11 @@ function stopGlobalRefresh() {
   }
 }
 
+let _socketInitialized = false;
+
 function connectSocket() {
+  if (socket || _socketInitialized) return;
+  _socketInitialized = true;
   socket = io(API, { transports: ['websocket', 'polling'] });
 
   socket.on('connect', () => {
@@ -1179,6 +1183,7 @@ function connectSocket() {
     $('reconnectBanner')?.classList.remove('show');
     // Stop polling fallback — socket is live
     stopChatPolling();
+    stopGlobalRefresh();
     setGoalsLiveStatus(true);
     console.log('[Socket] Connected, authed as', userId);
   });
@@ -1191,16 +1196,6 @@ function connectSocket() {
     setGoalsLiveStatus(false);
   });
 
-  socket.on('connect', () => {
-    const userId = String(currentUser?.telegram_id || getTelegramData().user?.id || '');
-    socket.emit('auth', userId);
-    $('reconnectBanner')?.classList.remove('show');
-    stopChatPolling();
-    stopGlobalRefresh();     // 👈 new: stop fallback when connected
-    setGoalsLiveStatus(true);
-    console.log('[Socket] Connected, authed as', userId);
-  });
-
   socket.on('reconnect', () => {
     console.log('[Socket] Reconnected');
     stopChatPolling();
@@ -1211,11 +1206,6 @@ function connectSocket() {
     socket.emit('auth', userId);
     if (currentPage === 'chat' && window.chatState?.with) {
       loadMessages(window.chatState.with);
-    }
-    // Goal lists may have drifted while offline — reconcile with the server.
-    if (currentUser?.role === 'user') loadMyGoalsWidget();
-    for (const menteeId of Object.keys(_mentorGoalPanelOpen)) {
-      if (_mentorGoalPanelOpen[menteeId]) refreshMenteeGoals(menteeId);
     }
   });
 
@@ -1369,6 +1359,7 @@ function connectSocket() {
   // current user just triggered themselves (the HTTP response already
   // patched the DOM; the echoed socket event is a no-op reconciliation).
   socket.on('goal_created', (goal) => {
+    if (document.querySelector(`.goal-item[data-goal-id="${goal.id}"], .my-goal-item[data-goal-id="${goal.id}"]`)) return;
     if (String(goal.mentee_id) === String(currentUser?.telegram_id)) {
       haptic('light');
       applyMyGoalRealtime('added', goal);
@@ -2114,6 +2105,25 @@ async function enableStreakReminder(event) {
 // app is showing) or the document is backgrounded.
 const GOAL_TICKER_REDUCED_MOTION = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+window.tickerPaused = false;
+window._tickerResumeTimeout = null;
+
+function pauseTicker() {
+  window.tickerPaused = true;
+  if (window._tickerResumeTimeout) {
+    clearTimeout(window._tickerResumeTimeout);
+    window._tickerResumeTimeout = null;
+  }
+}
+
+function resumeTicker() {
+  if (window._tickerResumeTimeout) {
+    clearTimeout(window._tickerResumeTimeout);
+    window._tickerResumeTimeout = null;
+  }
+  window.tickerPaused = false;
+}
+
 class GoalTicker {
   constructor(el, opts = {}) {
     this.content = el;
@@ -2161,14 +2171,16 @@ class GoalTicker {
   notifyNewItem() {
     this.refresh();
     this.viewport.scrollTop = 0;
-    this.pausedUntil = Date.now() + this.newItemPauseMs;
+    pauseTicker();
+    if (window._tickerResumeTimeout) clearTimeout(window._tickerResumeTimeout);
+    window._tickerResumeTimeout = setTimeout(resumeTicker, this.newItemPauseMs ?? 2000);
   }
 
   start() {
     if (this._raf || GOAL_TICKER_REDUCED_MOTION) return;
     const step = () => {
       this._raf = requestAnimationFrame(step);
-      if (document.hidden || this.hovered || this.viewport.offsetParent === null) return;
+      if (document.hidden || this.hovered || this.viewport.offsetParent === null || window.tickerPaused) return;
       if (Date.now() < this.pausedUntil) return;
 
       const itemCount = this.content.children.length;
@@ -2313,7 +2325,7 @@ function applyMyGoalRealtime(type, payload) {
   if (!card || !list) return;
 
   if (type === 'added') {
-    if (myGoalsCache.some(g => String(g.id) === String(payload.id))) return; // already applied
+    if (myGoalsCache.some(g => String(g.id) === String(payload.id)) || list.querySelector(`[data-goal-id="${payload.id}"]`)) return; // already applied
     myGoalsCache.unshift(payload);
     card.classList.remove('hidden');
     list.insertAdjacentHTML('afterbegin', renderMyGoalItem(payload));
@@ -5082,6 +5094,7 @@ function applyMentorGoalRealtime(type, payload, menteeId) {
       cache.unshift(payload);
     }
     if (isOpen && itemsWrap) {
+      if (itemsWrap.querySelector(`[data-goal-id="${payload.id}"]`)) return;
       itemsWrap.querySelector('.goal-panel-empty')?.remove();
       itemsWrap.insertAdjacentHTML('afterbegin', renderMentorGoalItem(payload, menteeId));
       const el = itemsWrap.firstElementChild;
