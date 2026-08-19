@@ -220,6 +220,7 @@ const MENTEE_ICONS = {
   chevronUp: '<path d="m18 15-6-6-6 6"/>',
   trash: '<path d="M4 7h16"/><path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  calendar: '<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18"/><path d="M8 3v3"/><path d="M16 3v3"/>',
 };
 function menteeIcon(name, size = 14) {
   const body = MENTEE_ICONS[name] || '';
@@ -2062,6 +2063,93 @@ async function enableStreakReminder(event) {
   } catch (e) { showToast(e.message, 'error'); }
 }
 
+// ─── Goal list "live ticker" auto-scroll ────────────────────────
+// Slow, continuous auto-scroll for a goals list — gives the widget a
+// "live leaderboard" feel even when nothing has changed recently.
+// Scrolls down slowly, pauses briefly at the bottom, glides back up,
+// pauses at the top, repeats. Pauses on hover/touch and briefly after
+// a new item is inserted so the user actually gets to see it land.
+// Respects prefers-reduced-motion (never autoplays) and skips work
+// entirely while its element isn't visible (e.g. a different page/tab
+// of the mini app is showing) or the document is backgrounded.
+const GOAL_TICKER_REDUCED_MOTION = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+class GoalTicker {
+  constructor(el, opts = {}) {
+    this.el = el;
+    this.speed = opts.speed ?? 0.28;          // px per animation frame (~60fps)
+    this.edgePauseMs = opts.edgePauseMs ?? 1100;  // pause when it hits top/bottom
+    this.newItemPauseMs = opts.newItemPauseMs ?? 2400; // pause after a goal is added
+    this.minItemsToRun = opts.minItemsToRun ?? 2;
+    this.direction = 1; // 1 = scrolling down, -1 = scrolling up
+    this.hovered = false;
+    this.pausedUntil = 0;
+    this._raf = null;
+    this._onEnter = () => { this.hovered = true; };
+    this._onLeave = () => { this.hovered = false; };
+    this._onTouchStart = () => { this.hovered = true; };
+    this._onTouchEnd = () => { setTimeout(() => { this.hovered = false; }, 500); };
+    el.addEventListener('mouseenter', this._onEnter);
+    el.addEventListener('mouseleave', this._onLeave);
+    el.addEventListener('touchstart', this._onTouchStart, { passive: true });
+    el.addEventListener('touchend', this._onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', this._onTouchEnd, { passive: true });
+  }
+
+  // Call after any DOM mutation to the list (add/update/delete) so a
+  // shrunken list doesn't leave scrollTop stranded past the new max.
+  refresh() {
+    const max = Math.max(0, this.el.scrollHeight - this.el.clientHeight);
+    if (this.el.scrollTop > max) this.el.scrollTop = max;
+  }
+
+  // Call right after a new item is inserted — briefly holds the ticker
+  // still so the slide-in animation isn't fighting with auto-scroll.
+  notifyNewItem() {
+    this.pausedUntil = Date.now() + this.newItemPauseMs;
+  }
+
+  start() {
+    if (this._raf || GOAL_TICKER_REDUCED_MOTION) return;
+    const step = () => {
+      this._raf = requestAnimationFrame(step);
+      if (document.hidden || this.hovered || this.el.offsetParent === null) return;
+      if (Date.now() < this.pausedUntil) return;
+
+      const itemCount = this.el.children.length;
+      const max = this.el.scrollHeight - this.el.clientHeight;
+      if (itemCount < this.minItemsToRun || max <= 4) return; // nothing worth scrolling
+
+      this.el.scrollTop += this.speed * this.direction;
+
+      if (this.direction === 1 && this.el.scrollTop >= max - 1) {
+        this.el.scrollTop = max;
+        this.direction = -1;
+        this.pausedUntil = Date.now() + this.edgePauseMs;
+      } else if (this.direction === -1 && this.el.scrollTop <= 1) {
+        this.el.scrollTop = 0;
+        this.direction = 1;
+        this.pausedUntil = Date.now() + this.edgePauseMs;
+      }
+    };
+    this._raf = requestAnimationFrame(step);
+  }
+
+  stop() {
+    if (this._raf) cancelAnimationFrame(this._raf);
+    this._raf = null;
+  }
+
+  destroy() {
+    this.stop();
+    this.el.removeEventListener('mouseenter', this._onEnter);
+    this.el.removeEventListener('mouseleave', this._onLeave);
+    this.el.removeEventListener('touchstart', this._onTouchStart);
+    this.el.removeEventListener('touchend', this._onTouchEnd);
+    this.el.removeEventListener('touchcancel', this._onTouchEnd);
+  }
+}
+
 // ─── My Goals (mentee dashboard widget) ─────────────────────────
 // Read-only follow-up goals set by the mentee's mentor — the mentee
 // can toggle completion here, but adding/editing/removing a goal is
@@ -2070,6 +2158,7 @@ async function enableStreakReminder(event) {
 // wired up in connectSocket() above, so this widget never needs to
 // poll or be manually refreshed.
 let myGoalsCache = [];
+let myGoalsTicker = null;
 
 // Green/red pulsing dot next to the "My Goals" title — reflects the
 // live socket.io connection state. Also touches the mentor-side "My
@@ -2119,6 +2208,7 @@ async function loadMyGoalsWidget() {
     myGoalsCache = goals || [];
     if (!myGoalsCache.length) {
       card.classList.add('hidden');
+      myGoalsTicker?.stop();
       return;
     }
     card.classList.remove('hidden');
@@ -2131,6 +2221,10 @@ async function loadMyGoalsWidget() {
       el.addEventListener('animationend', () => { el.classList.remove('goal-enter'); el.style.animationDelay = ''; }, { once: true });
     });
     updateMyGoalsProgressBar();
+
+    if (!myGoalsTicker) myGoalsTicker = new GoalTicker(list);
+    myGoalsTicker.refresh();
+    myGoalsTicker.start();
   } catch (e) {
     console.error('My Goals load error:', e);
   }
@@ -2173,6 +2267,9 @@ function applyMyGoalRealtime(type, payload) {
     const el = list.firstElementChild;
     el?.classList.add('goal-enter');
     el?.addEventListener('animationend', () => el.classList.remove('goal-enter'), { once: true });
+    if (!myGoalsTicker) myGoalsTicker = new GoalTicker(list);
+    myGoalsTicker.notifyNewItem();
+    myGoalsTicker.start();
   }
 
   if (type === 'updated') {
@@ -2202,11 +2299,13 @@ function applyMyGoalRealtime(type, payload) {
       el.classList.add('goal-exit');
       el.addEventListener('animationend', () => {
         el.remove();
-        if (!myGoalsCache.length) card.classList.add('hidden');
+        myGoalsTicker?.refresh();
+        if (!myGoalsCache.length) { card.classList.add('hidden'); myGoalsTicker?.stop(); }
       }, { once: true });
     }
   }
 
+  myGoalsTicker?.refresh();
   updateMyGoalsProgressBar();
 }
 
@@ -4733,6 +4832,14 @@ function renderMenteesList() {
   const container = $('menteesList');
   const mentees = sortedMentees();
 
+  // The list below is a full innerHTML rebuild, which detaches any
+  // existing goal-panel DOM — destroy their tickers first so we don't
+  // leak rAF loops pointed at nodes that no longer exist. Panels stay
+  // closed after a rebuild (matches prior behavior); re-opening will
+  // recreate a fresh ticker via toggleMenteeGoals -> refreshMenteeGoals.
+  Object.keys(_mentorGoalTickers).forEach(id => { _mentorGoalTickers[id]?.destroy(); delete _mentorGoalTickers[id]; });
+  Object.keys(_mentorGoalPanelOpen).forEach(id => { _mentorGoalPanelOpen[id] = false; });
+
   let html = '';
   for (const m of mentees) {
     const { user, assigned_at, id: assignId } = m;
@@ -4785,6 +4892,29 @@ const _mentorGoalPanelOpen = {};
 // live socket handlers do idempotent inserts/updates/removals instead of
 // re-fetching and flashing a loading spinner on every change.
 const _mentorGoalsCache = {};
+// One GoalTicker per open mentee panel, keyed by mentee id.
+const _mentorGoalTickers = {};
+
+// Starts/stops/re-targets the auto-scroll ticker for a mentee's goal panel
+// based on current state: only runs while that panel is open AND has more
+// than one goal (per spec — a single item has nothing to scroll to anyway).
+function syncMentorGoalTicker(menteeId) {
+  const panel = $(`goalPanel-${menteeId}`);
+  const itemsWrap = panel?.querySelector('.goal-panel-items');
+  const isOpen = !!(panel && panel.style.display !== 'none' && _mentorGoalPanelOpen[menteeId]);
+  const count = _mentorGoalsCache[menteeId]?.length || 0;
+
+  if (!isOpen || !itemsWrap || count < 2) {
+    _mentorGoalTickers[menteeId]?.stop();
+    return;
+  }
+  if (!_mentorGoalTickers[menteeId] || _mentorGoalTickers[menteeId].el !== itemsWrap) {
+    _mentorGoalTickers[menteeId]?.destroy();
+    _mentorGoalTickers[menteeId] = new GoalTicker(itemsWrap);
+  }
+  _mentorGoalTickers[menteeId].refresh();
+  _mentorGoalTickers[menteeId].start();
+}
 
 function renderMentorGoalItem(g, menteeId) {
   const due = g.due_date ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}</div>` : '';
@@ -4821,6 +4951,7 @@ async function toggleMenteeGoals(menteeId, btnEl) {
   if (isOpen) {
     panel.style.display = 'none';
     _mentorGoalPanelOpen[menteeId] = false;
+    _mentorGoalTickers[menteeId]?.stop();
     if (btnEl) btnEl.querySelector('.goal-toggle-caret').innerHTML = menteeIcon('chevronDown', 14);
     return;
   }
@@ -4851,7 +4982,10 @@ async function refreshMenteeGoals(menteeId) {
       <div class="goal-add-row">
         <textarea id="goalInput-${menteeId}" class="form-control text-sm goal-add-input" placeholder="${t('mentee_goal_placeholder')}" maxlength="200" rows="2"></textarea>
         <div class="goal-add-row-bottom">
-          <input type="date" id="goalDate-${menteeId}" class="form-control text-sm goal-add-date">
+          <div class="goal-date-field">
+            <input type="date" id="goalDate-${menteeId}" class="form-control text-sm goal-add-date" oninput="this.classList.toggle('has-value', !!this.value)">
+            <span class="goal-date-placeholder">${menteeIcon('calendar', 13)}<span>${t('mentee_goal_due_date_placeholder')}</span></span>
+          </div>
           <button class="btn btn-outline btn-sm goal-add-btn" onclick="addMenteeGoal('${menteeId}')">${menteeIcon('plus', 13)}${t('mentee_goal_add_btn')}</button>
         </div>
       </div>`;
@@ -4865,6 +4999,7 @@ async function refreshMenteeGoals(menteeId) {
     });
 
     updateMenteeGoalsBadge(menteeId);
+    syncMentorGoalTicker(menteeId);
   } catch (e) {
     panel.innerHTML = `<div class="text-xs" style="color:var(--danger)">${escapeHtml(e.message)}</div>`;
   }
@@ -4893,6 +5028,8 @@ function applyMentorGoalRealtime(type, payload, menteeId) {
       const el = itemsWrap.firstElementChild;
       el?.classList.add('goal-enter');
       el?.addEventListener('animationend', () => el.classList.remove('goal-enter'), { once: true });
+      syncMentorGoalTicker(menteeId);
+      _mentorGoalTickers[menteeId]?.notifyNewItem();
     }
   }
 
@@ -4953,7 +5090,7 @@ async function addMenteeGoal(menteeId) {
     const goal = await apiFetch('/api/mentors/goals', { method: 'POST', body: { mentee_id: menteeId, title, due_date: dateInput?.value || null } });
     haptic('light');
     if (input) input.value = '';
-    if (dateInput) dateInput.value = '';
+    if (dateInput) { dateInput.value = ''; dateInput.classList.remove('has-value'); }
     applyMentorGoalRealtime('added', goal, menteeId);
   } catch (e) {
     showToast(e.message, 'error');

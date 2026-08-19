@@ -2712,13 +2712,19 @@ textarea.form-control {
 /* Native date input renders with a browser-default (light) calendar icon
    and text color. Desktop browsers honor color-scheme reliably, but many
    mobile in-app WebViews (Telegram's Android/iOS WebView, older mobile
-   Safari/Chrome) ignore it for the internal date-field text, leaving the
-   value/placeholder invisible against this app's dark surfaces — hence
-   explicit colors on the -webkit-datetime-edit sub-parts below, not just
-   color-scheme, so it renders correctly on mobile too. */
-.goal-add-date {
+   Safari/Chrome) ignore it — and some don't implement the -webkit
+   datetime-edit sub-parts at all — so an empty date field looks like a
+   dead, unlabeled box until tapped. A JS-driven overlay label (below)
+   is the reliable fix; the color rules here are a harmless belt-and-
+   suspenders for browsers that DO support the sub-parts. */
+.goal-date-field {
+  position: relative;
   flex: 1 1 150px;
   min-width: 0;
+}
+
+.goal-add-date {
+  width: 100%;
   min-height: 42px;
   color-scheme: dark;
   background-color: var(--bg3) !important;
@@ -2726,6 +2732,45 @@ textarea.form-control {
   border: 1px solid var(--border-dim);
   -webkit-appearance: none;
   appearance: none;
+}
+
+/* Hide the native "mm/dd/yyyy" ghost text while empty and unfocused —
+   our own placeholder (below) takes over that job instead, consistently
+   across browsers/WebViews. Revealed again once a value is set, or while
+   the user is actively editing it (desktop). */
+.goal-add-date:not(.has-value) {
+  color: transparent !important;
+}
+
+.goal-add-date:not(.has-value):focus {
+  color: var(--text) !important;
+}
+
+/* Our own placeholder: an icon + short label, absolutely centered over
+   the input, so the field never reads as an empty dead box. Click-through
+   so tapping it still opens the native date picker underneath. */
+.goal-date-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  font-size: 0.78rem;
+  color: var(--text3);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.goal-date-placeholder svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.goal-add-date.has-value ~ .goal-date-placeholder,
+.goal-add-date:focus ~ .goal-date-placeholder {
+  display: none;
 }
 
 [data-theme="light"] .goal-add-date {
@@ -2821,6 +2866,21 @@ textarea.form-control {
 .my-goals-list {
   max-height: 240px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Mentor "My Mentees" panel — same scrollable ticker treatment as the
+   mentee widget, kept separate from .goal-add-row below it so the add
+   form never scrolls out of view. */
+.goal-panel-items {
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
