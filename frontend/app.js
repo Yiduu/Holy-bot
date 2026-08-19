@@ -4304,9 +4304,12 @@ async function saveSettings() {
     body.preferred_mentee_sex = $('settingMenteeSex')?.value;
   }
   try {
-    await apiFetch('/api/users/settings', { method: 'PATCH', body });
+    const updated = await apiFetch('/api/users/settings', { method: 'PATCH', body });
+    if (currentUser) {
+      currentUser.user_settings = { ...(currentUser.user_settings || {}), ...updated };
+    }
     haptic('success');
-    showToast('Settings saved', 'success');
+    showToast(t('settings_saved') || 'Settings saved', 'success');
   } catch (e) {
     haptic('error');
     if (e.nickname_taken) {

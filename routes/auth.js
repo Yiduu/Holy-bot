@@ -47,18 +47,21 @@ module.exports = function authRoutes(supabase, requireAuth) {
     const { data: existing } = await supabase.from('users').select('telegram_id').eq('telegram_id', telegram_id).single();
     if (existing) return res.status(409).json({ error: 'Already registered' });
 
-    // Nickname uniqueness check
-    const { data: nickCollision } = await supabase.from('users').select('anonymous_id').eq('anonymous_id', nickname).single();
-    if (nickCollision) return res.status(409).json({ error: 'Nickname already taken', nickname_taken: true });
+    const trimmedNick = typeof nickname === 'string' ? nickname.trim() : '';
+    if (!trimmedNick) {
+      return res.status(400).json({ error: 'Nickname cannot be empty' });
+    }
 
-    // FIX: Removed unused `attempts` variable. The retry loop was removed but
-    // the variable declaration was left behind. The double-check below is
-    // sufficient to guard against race conditions at registration time.
-    const anonymous_id = nickname;
+    // Nickname uniqueness check against both users.anonymous_id and user_settings.display_name
+    const [{ data: userCollision }, { data: settingsCollision }] = await Promise.all([
+      supabase.from('users').select('telegram_id').ilike('anonymous_id', trimmedNick).limit(1).maybeSingle(),
+      supabase.from('user_settings').select('telegram_id').ilike('display_name', trimmedNick).limit(1).maybeSingle()
+    ]);
+    if (userCollision || settingsCollision) {
+      return res.status(409).json({ error: 'Nickname already taken', nickname_taken: true });
+    }
 
-    // Double check for race condition
-    const { data: collision } = await supabase.from('users').select('anonymous_id').eq('anonymous_id', anonymous_id).single();
-    if (collision) return res.status(409).json({ error: 'Nickname taken', nickname_taken: true });
+    const anonymous_id = trimmedNick;
 
     const { data: user, error } = await supabase
       .from('users')

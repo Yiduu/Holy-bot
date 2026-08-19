@@ -63,6 +63,40 @@ module.exports = function userRoutes(supabase, requireAuth) {
     }
     updates.updated_at = new Date().toISOString();
 
+    // Check display_name uniqueness if updated
+    if (updates.display_name !== undefined) {
+      const trimmed = typeof updates.display_name === 'string' ? updates.display_name.trim() : '';
+      if (!trimmed) {
+        return res.status(400).json({ error: 'Display name cannot be empty' });
+      }
+      if (trimmed.length < 3 || trimmed.length > 30) {
+        return res.status(400).json({ error: 'Display name must be between 3 and 30 characters' });
+      }
+      updates.display_name = trimmed;
+
+      // Check collision in user_settings (other users) and users.anonymous_id (other users)
+      const [{ data: settingsCollision }, { data: usersCollision }] = await Promise.all([
+        supabase
+          .from('user_settings')
+          .select('telegram_id')
+          .ilike('display_name', trimmed)
+          .neq('telegram_id', id)
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('users')
+          .select('telegram_id')
+          .ilike('anonymous_id', trimmed)
+          .neq('telegram_id', id)
+          .limit(1)
+          .maybeSingle()
+      ]);
+
+      if (settingsCollision || usersCollision) {
+        return res.status(409).json({ error: 'Nickname already taken', nickname_taken: true });
+      }
+    }
+
     const promises = [
       supabase.from('user_settings').update(updates).eq('telegram_id', id).select().single()
     ];
