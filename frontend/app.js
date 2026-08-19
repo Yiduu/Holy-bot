@@ -1841,6 +1841,32 @@ window.loadDashboard = async function loadDashboard() {
     const verse = await apiFetch('/api/auth/verse');
     $('verseText').textContent = verse.text;
     $('verseRef').textContent = verse.reference;
+
+    // Once-a-day invitation to actually read the verse, gated purely
+    // on the calendar date so it never shows more than once per day.
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (verse?.text && localStorage.getItem('last_verse_popup_date') !== todayStr) {
+      localStorage.setItem('last_verse_popup_date', todayStr);
+      showEngagementPopup({
+        id: 'daily_verse_invite',
+        icon: ENGAGEMENT_ICONS.book,
+        title: t('daily_verse_invite_title'),
+        message: t('daily_verse_invite_message', { verse: escapeHtml(verse.text) }),
+        buttonText: t('btn_read_now'),
+        secondaryText: t('btn_remind_later'),
+        variant: 'info',
+        onAction: () => {
+          if (currentPage !== 'dashboard') navigate('dashboard');
+          requestAnimationFrame(() => {
+            $('verseText')?.closest('.verse-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          });
+        },
+        onSecondary: () => {
+          // Free to show again on the next dashboard load today.
+          localStorage.removeItem('last_verse_popup_date');
+        },
+      });
+    }
   } catch { }
 
   try {
@@ -1856,6 +1882,10 @@ window.loadDashboard = async function loadDashboard() {
     $('adminBtn')?.classList.remove('hidden');
   }
   updateSessionsBadge();
+
+  // Rating popup can also fire from a week of activity — left disabled
+  // for now; enable once we have a real signal for "a week of activity".
+  // checkAndShowRatingPopup();
 }
 
 // ─── Streaks ──────────────────────────────────────────────────
@@ -1953,7 +1983,15 @@ async function markStreakRead() {
     haptic('success');
 
     if (s.milestone) {
-      showToast(t('streak_milestone', { count: s.current_streak }), 'success');
+      showEngagementPopup({
+        id: `streak_milestone_${s.current_streak}`,
+        icon: ENGAGEMENT_ICONS.flame,
+        title: t('streak_milestone_title', { count: s.current_streak }),
+        message: t('streak_milestone_message', { count: s.current_streak }),
+        buttonText: t('btn_lets_go'),
+        variant: 'gold',
+        onAction: () => checkAndShowRatingPopup(),
+      });
       const card = $('streakCard');
       card.classList.add('streak-celebrate');
       setTimeout(() => card.classList.remove('streak-celebrate'), 1200);
@@ -2171,15 +2209,22 @@ async function requestMentorship(event, mentor_id, topic_id = null) {
 
 // ─── Mentorship Request Confirmation Modal ─────────────────────
 function openMentorRequestSentModal(mentorName) {
-  const bodyEl = $('mentorRequestSentBody');
-  if (bodyEl) {
-    bodyEl.innerHTML = mentorName
+  showEngagementPopup({
+    id: 'request_sent',
+    icon: ENGAGEMENT_ICONS.check,
+    title: t('request_sent_title'),
+    message: mentorName
       ? t('request_sent_body_named', { name: `<strong>${escapeHtml(mentorName)}</strong>` })
-      : t('request_sent_body');
-  }
-  $('mentorRequestSentModal')?.classList.add('open');
+      : t('request_sent_body'),
+    buttonText: t('btn_got_it'),
+    variant: 'success',
+    onAction: () => {},
+  });
 }
 
+// Kept as a no-op fallback: the old #mentorRequestSentModal markup in
+// index.html is no longer opened above, but leaving this defined means
+// nothing breaks if anything else still calls it.
 function closeMentorRequestSentModal() {
   $('mentorRequestSentModal')?.classList.remove('open');
 }
@@ -5158,6 +5203,172 @@ async function showJournalCalendar() {
   };
   renderCalendar();
 }
+// ─── Engagement Popup System ────────────────────────────────────
+// Duolingo-style celebration / nudge layer. Renders on demand (no
+// static HTML needed per popup) and sits alongside the existing
+// showToast()/modal patterns rather than replacing them — those
+// stay in place elsewhere as fallbacks. Every color comes from the
+// same CSS variables as the rest of the app, so it's theme-aware
+// for free under [data-theme].
+
+// Small reusable set of premium, stroke-style SVG icons (currentColor,
+// 24x24 viewBox) — no emoji, matching the icon language already used
+// for streaks and mentorship elsewhere in this file.
+const ENGAGEMENT_ICONS = {
+  check: '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>',
+  flame: '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.3c1.1 3-2.8 4.4-2.8 8A2.8 2.8 0 0 0 12 13a2.8 2.8 0 0 0 2.4-4.3c1.3.9 1.9 2.5 1.9 4a4.3 4.3 0 1 1-8.6 0c0-4.2 2.7-6.4 4.3-10.4z"/><path d="M9.2 16.8a2.8 2.8 0 0 0 5.6 0"/></svg>',
+  heart: '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.2s-7.4-4.6-9.9-9.3C.6 7.6 2 4 5.6 3.3c2-.4 3.9.5 5 2.1 1.1-1.6 3-2.5 5-2.1C19.2 4 20.6 7.6 19.1 10.9c-2.5 4.7-9.9 9.3-9.9 9.3z"/></svg>',
+  pray: '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14.5"/><path d="M12 5.5C10.8 3.6 8.6 2.6 7 3.4 5 4.4 4.6 7 6 9c1 1.4 1 2.8.4 4.2-1 2.3-.3 4.7 1.7 6C9.4 20.2 10.7 20.8 12 21"/><path d="M12 5.5c1.2-1.9 3.4-2.9 5-2.1 2 1 2.4 3.6 1 5.6-1 1.4-1 2.8-.4 4.2 1 2.3.3 4.7-1.7 6-1.3 1-2.6 1.6-3.9 1.6"/></svg>',
+  star: '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8l2.7 5.7 6.2.7-4.6 4.3 1.2 6.2L12 16.7l-5.5 3 1.2-6.2-4.6-4.3 6.2-.7L12 2.8z"/></svg>',
+  book: '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5.5C10.3 4.2 7.7 3.6 4 4v13.8c3.7-.4 6.3.2 8 1.5 1.7-1.3 4.3-1.9 8-1.5V4c-3.7-.4-6.3.2-8 1.5z"/><path d="M12 5.5v13.8"/></svg>',
+};
+
+// Small persisted-state helpers so individual popups (daily verse
+// invite, rating snooze, etc.) can remember cadence across sessions
+// without every call site rolling its own localStorage key by hand.
+function getPopupState(key) {
+  try {
+    const raw = localStorage.getItem(`engagement_${key}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setPopupState(key, value) {
+  try {
+    localStorage.setItem(`engagement_${key}`, JSON.stringify(value));
+  } catch {
+    // Private browsing / storage full — popup cadence just resets
+    // next load instead of hard-failing.
+  }
+}
+
+let engagementPopupKeydownHandler = null;
+
+function closeEngagementPopup() {
+  const overlay = $('engagementPopupOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('open');
+  if (engagementPopupKeydownHandler) {
+    document.removeEventListener('keydown', engagementPopupKeydownHandler);
+    engagementPopupKeydownHandler = null;
+  }
+  setTimeout(() => overlay.remove(), 250);
+}
+
+// The main pop-up renderer. config:
+//   id            – string identifying this popup (namespacing for any
+//                   getPopupState/setPopupState calls made from the
+//                   callbacks — not required to be globally unique)
+//   icon          – SVG markup string, e.g. ENGAGEMENT_ICONS.flame
+//   title         – headline text (already translated via t())
+//   message       – body text (already translated via t())
+//   buttonText    – primary button label
+//   variant       – 'gold' | 'success' | 'info' — controls icon color
+//   onAction      – called after the primary button is tapped
+//   secondaryText – optional secondary button label (omit to hide it)
+//   onSecondary   – called after the secondary button is tapped
+function showEngagementPopup(config) {
+  const {
+    id = 'engagement',
+    icon = ENGAGEMENT_ICONS.check,
+    title = '',
+    message = '',
+    buttonText = t('btn_got_it'),
+    variant = 'gold',
+    onAction = () => {},
+    secondaryText = null,
+    onSecondary = null,
+  } = config;
+
+  // Only one engagement popup at a time — a new one replaces whatever
+  // is already showing rather than stacking on top of it.
+  $('engagementPopupOverlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'engagementPopupOverlay';
+  overlay.className = 'engagement-popup-overlay';
+  overlay.dataset.popupId = id;
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', title);
+
+  overlay.innerHTML = `
+    <div class="engagement-popup">
+      <button type="button" class="engagement-popup-close" aria-label="${t('btn_close')}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+      <div class="engagement-popup-icon engagement-popup-icon--${variant}">${icon}</div>
+      <div class="engagement-popup-title">${title}</div>
+      <p class="engagement-popup-message">${message}</p>
+      <div class="engagement-popup-actions">
+        <button type="button" class="btn btn-primary btn-full engagement-popup-primary">${buttonText}</button>
+        ${secondaryText ? `<button type="button" class="btn btn-ghost btn-full engagement-popup-secondary">${secondaryText}</button>` : ''}
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('.engagement-popup-close').addEventListener('click', closeEngagementPopup);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeEngagementPopup(); });
+  overlay.querySelector('.engagement-popup-primary').addEventListener('click', () => {
+    closeEngagementPopup();
+    onAction();
+  });
+  if (secondaryText) {
+    overlay.querySelector('.engagement-popup-secondary').addEventListener('click', () => {
+      closeEngagementPopup();
+      if (onSecondary) onSecondary();
+    });
+  }
+
+  engagementPopupKeydownHandler = (e) => { if (e.key === 'Escape') closeEngagementPopup(); };
+  document.addEventListener('keydown', engagementPopupKeydownHandler);
+
+  // Add .open on the next frame so the CSS transition actually runs,
+  // then move focus onto the popup for keyboard/screen-reader users.
+  requestAnimationFrame(() => {
+    overlay.classList.add('open');
+    overlay.querySelector('.engagement-popup-close').focus();
+  });
+}
+
+// ─── App Rating Popup ────────────────────────────────────────────
+// A friendly, low-pressure invitation to rate the app. Not called
+// automatically on every load — see the (currently commented-out)
+// call in loadDashboard() below, and the call after a streak
+// milestone in markStreakRead(). Backs off for 3 days on "Maybe
+// Later", and stops asking for good once the user engages with
+// "Rate Now".
+function checkAndShowRatingPopup() {
+  if (localStorage.getItem('holy_rating_popup_shown') === 'true') return;
+
+  const snoozeUntil = getPopupState('rating_snooze');
+  if (snoozeUntil && Date.now() < snoozeUntil) return;
+
+  showEngagementPopup({
+    id: 'app_rating',
+    icon: ENGAGEMENT_ICONS.star,
+    title: t('app_rating_title'),
+    message: t('app_rating_message'),
+    buttonText: t('btn_rate_now'),
+    secondaryText: t('btn_maybe_later'),
+    variant: 'gold',
+    onAction: () => {
+      // The star-rating feedback modal isn't built yet — for now just
+      // record that the user engaged so we don't ask again, and log
+      // it for follow-up. TODO: open the real feedback modal here.
+      console.log('[rating] user tapped Rate Now — feedback modal not yet implemented');
+      localStorage.setItem('holy_rating_popup_shown', 'true');
+    },
+    onSecondary: () => {
+      setPopupState('rating_snooze', Date.now() + 3 * 24 * 60 * 60 * 1000);
+    },
+  });
+}
+
 // ─── Boot ─────────────────────────────────────────────────────
 window.loadDashboard = loadDashboard;
 document.addEventListener('DOMContentLoaded', init);

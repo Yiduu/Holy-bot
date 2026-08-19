@@ -2883,6 +2883,145 @@ textarea.form-control {
   }
 }
 
+/* ─── Engagement Popup (Duolingo-style celebrations & nudges) ─
+   Rendered on demand by showEngagementPopup() in app.js — no
+   static markup needed. Sits above regular modals and reuses the
+   same design tokens so it stays correct under [data-theme]. ─── */
+.engagement-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition);
+}
+
+.engagement-popup-overlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.engagement-popup {
+  position: relative;
+  background: var(--bg2);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg), var(--inset-hi);
+  padding: 28px 22px 22px;
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+  transform: scale(0.85) translateY(12px);
+  opacity: 0;
+  transition: transform 0.4s var(--ease-spring), opacity 0.3s ease;
+}
+
+.engagement-popup-overlay.open .engagement-popup {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+.engagement-popup-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--text3);
+  background: transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.engagement-popup-close:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.engagement-popup-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: engagementIconPop 0.5s var(--ease-spring) 0.05s both;
+}
+
+.engagement-popup-icon--gold {
+  background: var(--gold-dim);
+  color: var(--gold);
+  box-shadow: 0 0 0 1px rgba(201, 168, 76, 0.25);
+}
+
+.engagement-popup-icon--success {
+  background: rgba(91, 173, 122, 0.14);
+  color: var(--success);
+  box-shadow: 0 0 0 1px rgba(91, 173, 122, 0.25);
+}
+
+.engagement-popup-icon--info {
+  background: rgba(91, 142, 255, 0.14);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(91, 142, 255, 0.25);
+}
+
+@keyframes engagementIconPop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.engagement-popup-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.engagement-popup-message {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text2);
+  margin-bottom: 20px;
+  white-space: pre-line;
+}
+
+.engagement-popup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .engagement-popup-overlay,
+  .engagement-popup {
+    transition: none;
+  }
+
+  .engagement-popup-icon {
+    animation: none;
+  }
+}
+
 /* ─── Modal (center style for schedule) ────────────────────── */
 .modal {
   background: var(--bg2);
