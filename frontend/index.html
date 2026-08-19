@@ -803,8 +803,16 @@
       <div id="chatMessages" class="chat-messages"></div>
       <div id="chatInputRow" class="chat-input-row">
         <div id="replyIndicator" class="reply-indicator hidden">
-          <span id="replyText">Replying to...</span>
-          <button class="reply-cancel" onclick="cancelReply()">✖</button>
+          <svg class="reply-indicator-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 17 4 12 9 7" />
+            <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+          </svg>
+          <div class="reply-indicator-body">
+            <span id="replyIndicatorLabel" class="reply-indicator-label">Replying to...</span>
+            <span id="replyText" class="reply-indicator-preview"></span>
+          </div>
+          <button class="reply-cancel" onclick="cancelReply()" aria-label="Cancel reply">✖</button>
         </div>
         <div id="editIndicator" class="edit-indicator hidden">
           <svg class="edit-indicator-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

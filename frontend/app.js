@@ -588,7 +588,6 @@ function renderThread(messages, isRoot = true) {
     }
 
     const isSent = msg.from_id === currentUser?.telegram_id;
-    const replyFormId = `reply-form-${msg.id}`;
     const editedMark = msg.edited_at
       ? '<span class="msg-edited">edited</span>'
       : '';
@@ -614,14 +613,9 @@ function renderThread(messages, isRoot = true) {
                   </button>
                 </div>
               ` : ''}
-              <button class="msg-action-btn" onclick="showReplyForm('${msg.id}')" aria-label="Reply">${ICON_REPLY}</button>
+              <button class="msg-action-btn" onclick="setReplyTo('${msg.id}')" aria-label="Reply">${ICON_REPLY}</button>
             </span>
           </div>
-        </div>
-        <div id="${replyFormId}" class="reply-form">
-          <input type="text" id="reply-input-${msg.id}" class="reply-input" placeholder="Write a reply…" autocomplete="off" />
-          <button class="reply-send" onclick="sendReply('${msg.id}')">Send</button>
-          <button class="cancel-reply" onclick="hideReplyForm('${msg.id}')">✕</button>
         </div>
         ${hasReplies ? `<div class="replies-container">${renderThread(msg.replies, false)}</div>` : ''}
       </div>
@@ -886,43 +880,42 @@ async function deleteMessageInline(msgId) {
   await deleteMessage();
 }
 
-function showReplyForm(messageId) {
-  cancelEditMessage();
-  const form = document.getElementById(`reply-form-${messageId}`);
-  if (form) form.classList.add('visible');
-  document.getElementById(`reply-input-${messageId}`)?.focus();
-}
-window.setReplyTo = showReplyForm;
+// Turns the main composer into a reply box for `messageId`, Telegram-style:
+// shows the reply banner above the textarea instead of a per-message form.
+function setReplyTo(messageId) {
+  cancelEditMessage(); // reply and edit are mutually exclusive
 
-function hideReplyForm(messageId) {
-  const form = document.getElementById(`reply-form-${messageId}`);
-  if (form) form.classList.remove('visible');
-}
+  const msg = window._chatMessagesMap?.get(String(messageId));
+  if (!msg) return;
 
-async function sendReply(parentId) {
-  const input = document.getElementById(`reply-input-${parentId}`);
-  const content = input.value.trim();
-  if (!content || !window.chatState.with) return;
+  window.replyToId = messageId;
 
-  input.value = '';
-  hideReplyForm(parentId);
+  const isSent = msg.from_id === currentUser?.telegram_id;
+  const senderLabel = isSent ? 'You' : (window.chatState?.name || 'them');
 
-  try {
-    const msg = await apiFetch('/api/messages', {
-      method: 'POST',
-      body: {
-        to_id: window.chatState.with,
-        content,
-        parent_id: parentId
-      }
-    });
-    addMessageToChat(msg);
-    haptic('light');
-  } catch (e) {
-    haptic('error');
-    showToast(e.message, 'error');
+  let preview = (msg.content || '').trim();
+  if (!preview && msg.file_type) {
+    preview = msg.file_type === 'photo' ? '📷 Photo'
+      : msg.file_type === 'voice' ? '🎤 Voice message'
+      : `📎 ${msg.file_type}`;
   }
+  if (preview.length > 60) preview = preview.substring(0, 60) + '…';
+
+  const label = $('replyIndicatorLabel');
+  if (label) label.textContent = `Replying to ${senderLabel}`;
+  const replyText = $('replyText');
+  if (replyText) replyText.textContent = preview;
+
+  $('replyIndicator')?.classList.remove('hidden');
+
+  const input = $('chatInput');
+  if (input) input.focus();
+
+  syncChatInputHeight();
+  haptic('selection');
 }
+window.setReplyTo = setReplyTo;
+
 let currentMessageId = null;
 
 function showMessageOptions(messageId) {
@@ -3895,10 +3888,7 @@ function cancelReply() {
 
 function resetChatView() {
   if (!window.chatState?.with) return;
-  window.replyToId = null;
-  document.getElementById('replyIndicator')?.classList.add('hidden');
-  const replyText = document.getElementById('replyText');
-  if (replyText) replyText.textContent = '';
+  cancelReply();
   loadMessages(window.chatState.with);
   showToast('Chat view reset', 'info');
   syncChatInputHeight();

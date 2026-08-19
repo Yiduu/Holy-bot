@@ -1,0 +1,280 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 3322d29..8ed13c5 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -588,7 +588,6 @@ function renderThread(messages, isRoot = true) {
+     }
+ 
+     const isSent = msg.from_id === currentUser?.telegram_id;
+-    const replyFormId = `reply-form-${msg.id}`;
+     const editedMark = msg.edited_at
+       ? '<span class="msg-edited">edited</span>'
+       : '';
+@@ -614,15 +613,10 @@ function renderThread(messages, isRoot = true) {
+                   </button>
+                 </div>
+               ` : ''}
+-              <button class="msg-action-btn" onclick="showReplyForm('${msg.id}')" aria-label="Reply">${ICON_REPLY}</button>
++              <button class="msg-action-btn" onclick="setReplyTo('${msg.id}')" aria-label="Reply">${ICON_REPLY}</button>
+             </span>
+           </div>
+         </div>
+-        <div id="${replyFormId}" class="reply-form">
+-          <input type="text" id="reply-input-${msg.id}" class="reply-input" placeholder="Write a reply…" autocomplete="off" />
+-          <button class="reply-send" onclick="sendReply('${msg.id}')">Send</button>
+-          <button class="cancel-reply" onclick="hideReplyForm('${msg.id}')">✕</button>
+-        </div>
+         ${hasReplies ? `<div class="replies-container">${renderThread(msg.replies, false)}</div>` : ''}
+       </div>
+     `;
+@@ -886,43 +880,42 @@ async function deleteMessageInline(msgId) {
+   await deleteMessage();
+ }
+ 
+-function showReplyForm(messageId) {
+-  cancelEditMessage();
+-  const form = document.getElementById(`reply-form-${messageId}`);
+-  if (form) form.classList.add('visible');
+-  document.getElementById(`reply-input-${messageId}`)?.focus();
+-}
+-window.setReplyTo = showReplyForm;
++// Turns the main composer into a reply box for `messageId`, Telegram-style:
++// shows the reply banner above the textarea instead of a per-message form.
++function setReplyTo(messageId) {
++  cancelEditMessage(); // reply and edit are mutually exclusive
+ 
+-function hideReplyForm(messageId) {
+-  const form = document.getElementById(`reply-form-${messageId}`);
+-  if (form) form.classList.remove('visible');
+-}
++  const msg = window._chatMessagesMap?.get(String(messageId));
++  if (!msg) return;
+ 
+-async function sendReply(parentId) {
+-  const input = document.getElementById(`reply-input-${parentId}`);
+-  const content = input.value.trim();
+-  if (!content || !window.chatState.with) return;
++  window.replyToId = messageId;
+ 
+-  input.value = '';
+-  hideReplyForm(parentId);
++  const isSent = msg.from_id === currentUser?.telegram_id;
++  const senderLabel = isSent ? 'You' : (window.chatState?.name || 'them');
+ 
+-  try {
+-    const msg = await apiFetch('/api/messages', {
+-      method: 'POST',
+-      body: {
+-        to_id: window.chatState.with,
+-        content,
+-        parent_id: parentId
+-      }
+-    });
+-    addMessageToChat(msg);
+-    haptic('light');
+-  } catch (e) {
+-    haptic('error');
+-    showToast(e.message, 'error');
++  let preview = (msg.content || '').trim();
++  if (!preview && msg.file_type) {
++    preview = msg.file_type === 'photo' ? '📷 Photo'
++      : msg.file_type === 'voice' ? '🎤 Voice message'
++      : `📎 ${msg.file_type}`;
+   }
++  if (preview.length > 60) preview = preview.substring(0, 60) + '…';
++
++  const label = $('replyIndicatorLabel');
++  if (label) label.textContent = `Replying to ${senderLabel}`;
++  const replyText = $('replyText');
++  if (replyText) replyText.textContent = preview;
++
++  $('replyIndicator')?.classList.remove('hidden');
++
++  const input = $('chatInput');
++  if (input) input.focus();
++
++  syncChatInputHeight();
++  haptic('selection');
+ }
++window.setReplyTo = setReplyTo;
++
+ let currentMessageId = null;
+ 
+ function showMessageOptions(messageId) {
+@@ -3895,10 +3888,7 @@ function cancelReply() {
+ 
+ function resetChatView() {
+   if (!window.chatState?.with) return;
+-  window.replyToId = null;
+-  document.getElementById('replyIndicator')?.classList.add('hidden');
+-  const replyText = document.getElementById('replyText');
+-  if (replyText) replyText.textContent = '';
++  cancelReply();
+   loadMessages(window.chatState.with);
+   showToast('Chat view reset', 'info');
+   syncChatInputHeight();
+diff --git a/frontend/index.html b/frontend/index.html
+index e6c8133..a695016 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -803,8 +803,16 @@
+       <div id="chatMessages" class="chat-messages"></div>
+       <div id="chatInputRow" class="chat-input-row">
+         <div id="replyIndicator" class="reply-indicator hidden">
+-          <span id="replyText">Replying to...</span>
+-          <button class="reply-cancel" onclick="cancelReply()">✖</button>
++          <svg class="reply-indicator-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
++            stroke-linecap="round" stroke-linejoin="round">
++            <polyline points="9 17 4 12 9 7" />
++            <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
++          </svg>
++          <div class="reply-indicator-body">
++            <span id="replyIndicatorLabel" class="reply-indicator-label">Replying to...</span>
++            <span id="replyText" class="reply-indicator-preview"></span>
++          </div>
++          <button class="reply-cancel" onclick="cancelReply()" aria-label="Cancel reply">✖</button>
+         </div>
+         <div id="editIndicator" class="edit-indicator hidden">
+           <svg class="edit-indicator-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+diff --git a/frontend/styles.css b/frontend/styles.css
+index ae796e0..1c0e241 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -2025,72 +2025,46 @@ textarea.form-control {
+   max-width: 88%;
+ }
+ 
+-/* ── Reply inline form ──────────────────────────────────────── */
+-.reply-form {
+-  display: none;
+-  gap: 6px;
++/* ── Reply indicator bar (above input) ───────────────────────
++   The main composer becomes the reply box (Telegram-style): this bar
++   shows who/what is being replied to, with the textarea below it. */
++.reply-indicator {
++  background: var(--gold-dim);
++  border-left: 3px solid var(--gold);
++  padding: 6px 12px;
++  font-size: 0.75rem;
++  display: flex;
+   align-items: center;
+-  margin-top: 4px;
+-  padding: 0 2px;
++  gap: 8px;
++  margin: 0 0 4px;
++  border-radius: 10px;
+ }
+ 
+-.reply-form.visible {
+-  display: flex;
++.reply-indicator-icon {
++  width: 15px;
++  height: 15px;
++  flex-shrink: 0;
++  color: var(--gold);
+ }
+ 
+-.reply-input {
++.reply-indicator-body {
+   flex: 1;
+-  background: var(--bg3);
+-  border: 1px solid var(--border-dim);
+-  border-radius: 16px;
+-  padding: 7px 13px;
+-  font-size: 0.82rem;
+-  color: var(--text);
+-  transition: border-color var(--transition);
+-}
+-
+-.reply-input:focus {
+-  outline: none;
+-  border-color: var(--gold);
++  min-width: 0;
++  display: flex;
++  flex-direction: column;
++  gap: 1px;
+ }
+ 
+-.reply-send {
+-  background: linear-gradient(135deg, var(--gold), #a87a28);
+-  border: none;
+-  border-radius: 16px;
+-  padding: 6px 13px;
+-  font-size: 0.78rem;
++.reply-indicator-label {
+   font-weight: 700;
+-  color: #1a1200;
+-  cursor: pointer;
+-  transition: transform 0.12s, box-shadow 0.12s;
+-}
+-
+-.reply-send:active {
+-  transform: scale(0.95);
++  color: var(--gold);
+ }
+ 
+-.cancel-reply {
+-  background: var(--bg3);
+-  border: 1px solid var(--border-dim);
+-  border-radius: 16px;
+-  padding: 6px 11px;
+-  font-size: 0.78rem;
++.reply-indicator-preview {
+   color: var(--text2);
+-  cursor: pointer;
+-}
+-
+-/* ── Reply indicator bar (above input) ─────────────────────── */
+-.reply-indicator {
+-  background: var(--gold-dim);
+-  border-left: 3px solid var(--gold);
+-  padding: 6px 12px;
+-  font-size: 0.75rem;
+-  display: flex;
+-  justify-content: space-between;
+-  align-items: center;
+-  margin: 0 0 4px;
+-  border-radius: 10px;
++  white-space: nowrap;
++  overflow: hidden;
++  text-overflow: ellipsis;
+ }
+ 
+ .reply-cancel {
+@@ -2102,13 +2076,12 @@ textarea.form-control {
+ }
+ 
+ /* ── Edit indicator bar (above input) ─────────────────────────
+-   Mirrors .reply-indicator but uses the accent color (matching the
+-   pencil icon used elsewhere for edit) instead of gold, so it's visually
+-   distinct from a reply-in-progress at a glance — same pattern Telegram
+-   uses (blue pencil bar vs. its reply bar). */
++   Mirrors .reply-indicator but uses the lighter gold-light shade
++   instead of gold, so it stays on-brand while still reading as
++   visually distinct from a reply-in-progress at a glance. */
+ .edit-indicator {
+-  background: rgba(91, 142, 255, 0.12);
+-  border-left: 3px solid var(--accent);
++  background: rgba(232, 201, 107, 0.12);
++  border-left: 3px solid var(--gold-light);
+   padding: 6px 12px;
+   font-size: 0.75rem;
+   display: flex;
+@@ -2122,7 +2095,7 @@ textarea.form-control {
+   width: 15px;
+   height: 15px;
+   flex-shrink: 0;
+-  color: var(--accent);
++  color: var(--gold-light);
+ }
+ 
+ .edit-indicator-body {
+@@ -2135,7 +2108,7 @@ textarea.form-control {
+ 
+ .edit-indicator-label {
+   font-weight: 700;
+-  color: var(--accent);
++  color: var(--gold-light);
+ }
+ 
+ .edit-indicator-preview {

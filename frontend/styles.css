@@ -2025,72 +2025,46 @@ textarea.form-control {
   max-width: 88%;
 }
 
-/* ── Reply inline form ──────────────────────────────────────── */
-.reply-form {
-  display: none;
-  gap: 6px;
-  align-items: center;
-  margin-top: 4px;
-  padding: 0 2px;
-}
-
-.reply-form.visible {
-  display: flex;
-}
-
-.reply-input {
-  flex: 1;
-  background: var(--bg3);
-  border: 1px solid var(--border-dim);
-  border-radius: 16px;
-  padding: 7px 13px;
-  font-size: 0.82rem;
-  color: var(--text);
-  transition: border-color var(--transition);
-}
-
-.reply-input:focus {
-  outline: none;
-  border-color: var(--gold);
-}
-
-.reply-send {
-  background: linear-gradient(135deg, var(--gold), #a87a28);
-  border: none;
-  border-radius: 16px;
-  padding: 6px 13px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #1a1200;
-  cursor: pointer;
-  transition: transform 0.12s, box-shadow 0.12s;
-}
-
-.reply-send:active {
-  transform: scale(0.95);
-}
-
-.cancel-reply {
-  background: var(--bg3);
-  border: 1px solid var(--border-dim);
-  border-radius: 16px;
-  padding: 6px 11px;
-  font-size: 0.78rem;
-  color: var(--text2);
-  cursor: pointer;
-}
-
-/* ── Reply indicator bar (above input) ─────────────────────── */
+/* ── Reply indicator bar (above input) ───────────────────────
+   The main composer becomes the reply box (Telegram-style): this bar
+   shows who/what is being replied to, with the textarea below it. */
 .reply-indicator {
   background: var(--gold-dim);
   border-left: 3px solid var(--gold);
   padding: 6px 12px;
   font-size: 0.75rem;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
   margin: 0 0 4px;
   border-radius: 10px;
+}
+
+.reply-indicator-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--gold);
+}
+
+.reply-indicator-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.reply-indicator-label {
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.reply-indicator-preview {
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .reply-cancel {
@@ -2102,13 +2076,12 @@ textarea.form-control {
 }
 
 /* ── Edit indicator bar (above input) ─────────────────────────
-   Mirrors .reply-indicator but uses the accent color (matching the
-   pencil icon used elsewhere for edit) instead of gold, so it's visually
-   distinct from a reply-in-progress at a glance — same pattern Telegram
-   uses (blue pencil bar vs. its reply bar). */
+   Mirrors .reply-indicator but uses the lighter gold-light shade
+   instead of gold, so it stays on-brand while still reading as
+   visually distinct from a reply-in-progress at a glance. */
 .edit-indicator {
-  background: rgba(91, 142, 255, 0.12);
-  border-left: 3px solid var(--accent);
+  background: rgba(232, 201, 107, 0.12);
+  border-left: 3px solid var(--gold-light);
   padding: 6px 12px;
   font-size: 0.75rem;
   display: flex;
@@ -2122,7 +2095,7 @@ textarea.form-control {
   width: 15px;
   height: 15px;
   flex-shrink: 0;
-  color: var(--accent);
+  color: var(--gold-light);
 }
 
 .edit-indicator-body {
@@ -2135,7 +2108,7 @@ textarea.form-control {
 
 .edit-indicator-label {
   font-weight: 700;
-  color: var(--accent);
+  color: var(--gold-light);
 }
 
 .edit-indicator-preview {
