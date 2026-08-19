@@ -1507,7 +1507,10 @@ function syncChatInputHeight() {
   const messages = $('chatMessages');
   if (!row || !messages) return;
   const h = row.classList.contains('hidden') ? 0 : row.offsetHeight;
-  messages.style.setProperty('--chat-input-h', h + 'px');
+  if (row._lastSyncedH !== h) {
+    row._lastSyncedH = h;
+    messages.style.setProperty('--chat-input-h', h + 'px');
+  }
 }
 window.addEventListener('resize', syncChatInputHeight);
 window.visualViewport?.addEventListener('resize', syncChatInputHeight);
@@ -3926,7 +3929,8 @@ function autoResizeChatInput() {
   const input = $('chatInput');
   if (!input) return;
   input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 132) + 'px';
+  const targetH = Math.min(Math.max(input.scrollHeight, 38), 132);
+  input.style.height = targetH + 'px';
   syncChatInputHeight();
 }
 
