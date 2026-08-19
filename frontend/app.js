@@ -1132,29 +1132,20 @@ async function checkPendingRating() {
   } catch (e) { /* silent — non-critical */ }
 }
 
-function renderStars(rating, count, size = 11) {
-  const r = rating || 0;
-  const full = Math.floor(r);
-  const half = (r - full) >= 0.5;
-  let svgs = '';
-  for (let i = 0; i < 5; i++) {
-    if (i < full) {
-      svgs += `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="#C9A84C"><path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-4.045-7.416 4.045 1.48-8.279-6.064-5.828 8.332-1.151z"/></svg>`;
-    } else if (i === full && half) {
-      svgs += `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="url(#ratingHalfGrad)"><path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-4.045-7.416 4.045 1.48-8.279-6.064-5.828 8.332-1.151z"/></svg>`;
-    } else {
-      svgs += `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#867F76" stroke-width="1.5"><path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-4.045-7.416 4.045 1.48-8.279-6.064-5.828 8.332-1.151z"/></svg>`;
-    }
-  }
-  if (!count) {
-    return `<div class="rating-row"><span class="no-rating">${t('no_ratings_yet') || 'No ratings yet'}</span></div>`;
-  }
-  return `<div class="rating-row"><span class="stars">${svgs}</span><span class="rating-num">${r.toFixed(1)}</span><span class="rating-count">(${count})</span></div>`;
-}
-
 function openRatingModal(mentorId, mentorName, assignmentId) {
+  // Tear down any stale overlay first so ratingModalOpen is never stuck true
+  document.getElementById('ratingModalOverlay')?.remove();
   ratingModalOpen = true;
+
+  // Capture selected stars in a closure — DOM attribute queries are unreliable
+  // when fill is toggled between paints, so we track state here instead.
   let selected = 0;
+
+  // Safely encode the assignmentId into the onclick attribute. If it is a
+  // non-numeric value (UUID string) an un-quoted interpolation would produce
+  // broken JS like skipRating(abc-123) and the button would silently do nothing.
+  const safeAssignmentId = assignmentId != null ? JSON.stringify(assignmentId) : 'null';
+
   const overlay = document.createElement('div');
   overlay.id = 'ratingModalOverlay';
   overlay.className = 'rating-modal-overlay';
@@ -1172,7 +1163,7 @@ function openRatingModal(mentorId, mentorName, assignmentId) {
       <div class="rating-modal-sub">${(t('rate_mentor_sub') || 'Your mentorship with {name} just ended. Tap a star to rate your experience.').replace('{name}', escapeHtml(mentorName))}</div>
       <div class="big-stars" id="ratingBigStars"></div>
       <div class="card-actions" style="display:flex;gap:8px;margin-top:4px;">
-        <button class="btn btn-outline btn-sm flex-1" id="ratingSkipBtn" onclick="skipRating(${assignmentId ?? 'null'})">${t('btn_skip') || 'Skip'}</button>
+        <button class="btn btn-outline btn-sm flex-1" id="ratingSkipBtn" onclick="skipRating(${safeAssignmentId})">${t('btn_skip') || 'Skip'}</button>
         <button class="btn btn-sm flex-1" id="ratingSubmitBtn" style="background:var(--gold);color:#1a1408;border-color:var(--gold);opacity:0.5;pointer-events:none;" onclick="submitMentorRating(${mentorId})">${t('btn_submit') || 'Submit rating'}</button>
       </div>
     </div>`;
@@ -1188,12 +1179,31 @@ function openRatingModal(mentorId, mentorName, assignmentId) {
     starsWrap.querySelectorAll('svg').forEach(svg => {
       svg.style.cursor = 'pointer';
       svg.onclick = () => {
-        selected = parseInt(svg.dataset.star); paintStars(selected);
-        const btn = $('ratingSubmitBtn'); btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
+        selected = parseInt(svg.dataset.star);
+        paintStars(selected);
+        const btn = $('ratingSubmitBtn');
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'auto';
       };
     });
   };
   paintStars(0);
+
+  // Wire Submit to use the closure `selected` value — not a DOM attribute scan
+  // which can return 0 when the SVG fill hasn't propagated through layout yet.
+  overlay.querySelector('#ratingSubmitBtn').onclick = async () => {
+    if (!selected) return;
+    haptic('medium');
+    try {
+      await apiFetch('/api/mentors/rate', { method: 'POST', body: { mentor_id: mentorId, stars: selected } });
+      haptic('success');
+      showToast(t('rating_submitted') || 'Thanks for your feedback!', 'success');
+      closeRatingModal();
+    } catch (e) {
+      haptic('error');
+      showToast(e.message, 'error');
+    }
+  };
 }
 
 function closeRatingModal() {
@@ -1220,20 +1230,13 @@ async function skipRating(assignmentId) {
   }
 }
 
+// submitMentorRating is now handled entirely by the closure wired inside
+// openRatingModal, but we keep this stub so any legacy onclick="submitMentorRating(...)" 
+// attributes that may still exist in cached HTML don't throw a ReferenceError.
 async function submitMentorRating(mentorId) {
-  const overlay = document.getElementById('ratingModalOverlay');
-  const stars = overlay?.querySelectorAll('#ratingBigStars svg[fill="#C9A84C"]').length || 0;
-  if (!stars) return;
-  haptic('medium');
-  try {
-    await apiFetch('/api/mentors/rate', { method: 'POST', body: { mentor_id: mentorId, stars } });
-    haptic('success');
-    showToast(t('rating_submitted') || 'Thanks for your feedback!', 'success');
-    closeRatingModal();
-  } catch (e) {
-    haptic('error');
-    showToast(e.message, 'error');
-  }
+  // Delegate to the live Submit button's onclick if the overlay is still open
+  const btn = document.getElementById('ratingSubmitBtn');
+  if (btn) btn.onclick?.();
 }
 
 function stopGlobalRefresh() {
