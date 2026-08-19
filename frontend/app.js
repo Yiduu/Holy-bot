@@ -635,6 +635,9 @@ function addMessageToChat(msg) {
   const container = $('chatMessages');
   if (!container) return;
 
+  if (!window._chatMessagesMap) window._chatMessagesMap = new Map();
+  window._chatMessagesMap.set(String(msg.id), msg);
+
   // Check if already exists (by ID)
   const existing = container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
   if (existing) return;
@@ -804,9 +807,78 @@ function closeChatPartnerDropdown() {
 }
 
 
-async function editMessageInline(msgId) {
+function editMessageInline(msgId) {
   currentMessageId = msgId;
-  await editMessage();
+  closeMessageOptions();
+  cancelReply();
+
+  window.editingMessageId = msgId;
+
+  // Retrieve message text from cache or DOM
+  let content = '';
+  if (window._chatMessagesMap && window._chatMessagesMap.has(String(msgId))) {
+    content = window._chatMessagesMap.get(String(msgId)).content || '';
+  }
+  if (!content) {
+    const threadEl = document.querySelector(`.message-thread[data-msg-id="${msgId}"]`);
+    if (threadEl) {
+      const captionEl = threadEl.querySelector('.message-caption');
+      if (captionEl) {
+        content = captionEl.textContent;
+      } else {
+        const textEl = threadEl.querySelector('.message-text');
+        if (textEl) {
+          const clone = textEl.cloneNode(true);
+          clone.querySelectorAll('.msg-edited, .chat-attachment-card').forEach(el => el.remove());
+          content = clone.textContent.trim();
+        }
+      }
+    }
+  }
+
+  const input = $('chatInput');
+  if (input) {
+    input.value = content;
+    autoResizeChatInput();
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+
+  const editIndicator = $('editIndicator');
+  if (editIndicator) editIndicator.classList.remove('hidden');
+  const preview = $('editIndicatorPreview');
+  if (preview) {
+    preview.textContent = content.length > 60 ? content.substring(0, 60) + '…' : content;
+  }
+  document.querySelector('.chat-input-wrapper')?.classList.add('editing');
+
+  $('chatSendIcon')?.classList.add('hidden');
+  $('chatSendEditIcon')?.classList.remove('hidden');
+  $('chatSendBtn')?.setAttribute('title', 'Save edit');
+
+  syncChatInputHeight();
+  haptic('selection');
+}
+
+function cancelEditMessage() {
+  window.editingMessageId = null;
+  currentMessageId = null;
+  const editIndicator = $('editIndicator');
+  if (editIndicator) editIndicator.classList.add('hidden');
+  const preview = $('editIndicatorPreview');
+  if (preview) preview.textContent = '';
+  document.querySelector('.chat-input-wrapper')?.classList.remove('editing');
+
+  $('chatSendIcon')?.classList.remove('hidden');
+  $('chatSendEditIcon')?.classList.add('hidden');
+  $('chatSendBtn')?.removeAttribute('title');
+
+  const input = $('chatInput');
+  if (input) {
+    input.value = '';
+    autoResizeChatInput();
+  }
+  syncChatInputHeight();
 }
 
 async function deleteMessageInline(msgId) {
@@ -815,6 +887,7 @@ async function deleteMessageInline(msgId) {
 }
 
 function showReplyForm(messageId) {
+  cancelEditMessage();
   const form = document.getElementById(`reply-form-${messageId}`);
   if (form) form.classList.add('visible');
   document.getElementById(`reply-input-${messageId}`)?.focus();
@@ -863,22 +936,11 @@ function closeMessageOptions() {
   document.getElementById('messageOptionsModal').classList.remove('open');
 }
 
-async function editMessage() {
+function editMessage() {
   if (!currentMessageId) return;
-  const newContent = prompt('Edit your message:');
-  if (!newContent || newContent.trim() === '') return;
-  try {
-    await apiFetch(`/api/messages/${currentMessageId}`, {
-      method: 'PATCH',
-      body: { content: newContent.trim() }
-    });
-    closeMessageOptions();
-    loadMessages(window.chatState.with);
-    haptic('light');
-  } catch (e) {
-    haptic('error');
-    showToast(e.message, 'error');
-  }
+  const msgId = currentMessageId;
+  closeMessageOptions();
+  editMessageInline(msgId);
 }
 
 async function deleteMessage() {
@@ -3528,6 +3590,8 @@ async function loadChat() {
 
 function switchChatPartner(tid) {
   haptic('selection');
+  cancelEditMessage();
+  cancelReply();
   window.chatState.with = tid;
   toggleChatInput(true);
   loadMessages(tid);
@@ -3544,6 +3608,16 @@ async function loadMessages(with_id) {
   try {
     const messages = await apiFetch(`/api/messages/${with_id}`);
     const container = $('chatMessages');
+
+    if (!window._chatMessagesMap) window._chatMessagesMap = new Map();
+    function indexMessages(list) {
+      if (!list || !list.length) return;
+      for (const m of list) {
+        window._chatMessagesMap.set(String(m.id), m);
+        if (m.replies && m.replies.length) indexMessages(m.replies);
+      }
+    }
+    indexMessages(messages);
 
     try {
       const messageTree = buildMessageTree(messages);
@@ -3641,6 +3715,43 @@ async function sendMessage() {
   const input = $('chatInput');
   const content = input.value.trim();
   if (!content || !window.chatState.with) return;
+
+  // If in Edit Mode, update the existing message inline
+  if (window.editingMessageId) {
+    const editMsgId = window.editingMessageId;
+    cancelEditMessage();
+    try {
+      await apiFetch(`/api/messages/${editMsgId}`, {
+        method: 'PATCH',
+        body: { content }
+      });
+      // Update local message cache
+      if (window._chatMessagesMap && window._chatMessagesMap.has(String(editMsgId))) {
+        const cached = window._chatMessagesMap.get(String(editMsgId));
+        cached.content = content;
+        cached.edited_at = new Date().toISOString();
+      }
+      // Optimistically update message bubble in DOM
+      const threadEl = document.querySelector(`.message-thread[data-msg-id="${editMsgId}"]`);
+      if (threadEl) {
+        const captionEl = threadEl.querySelector('.message-caption');
+        if (captionEl) {
+          captionEl.textContent = content;
+        } else {
+          const textEl = threadEl.querySelector('.message-text');
+          if (textEl) {
+            textEl.innerHTML = escapeHtml(content) + '<span class="msg-edited">edited</span>';
+          }
+        }
+      }
+      haptic('light');
+    } catch (e) {
+      haptic('error');
+      showToast(e.message, 'error');
+      if (window.chatState?.with) loadMessages(window.chatState.with);
+    }
+    return;
+  }
 
   const originalContent = content;
   input.value = '';
@@ -3791,6 +3902,11 @@ function resetChatView() {
 }
 
 function handleChatInputKeydown(event) {
+  if (event.key === 'Escape' && window.editingMessageId) {
+    event.preventDefault();
+    cancelEditMessage();
+    return;
+  }
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
     sendMessage();

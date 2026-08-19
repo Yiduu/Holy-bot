@@ -355,7 +355,9 @@ const I18N = {
     "new_request_btn": "+ New Request",
     "New Support Request": "New Support Request",
     "new_support_request_desc": "Describe your issue or question. Our admin team will respond shortly.",
-    "btn_submit_request": "Submit Request"
+    "btn_submit_request": "Submit Request",
+    "edit_indicator_label": "Editing message",
+    "chat_placeholder": "Type a message…"
   },
   am: {
     "btn_find_mentor": "አማካሪ ፈልግ",
@@ -709,6 +711,8 @@ const I18N = {
     "new_request_btn": "+ አዲስ ጥያቄ",
     "New Support Request": "አዲስ የድጋፍ ጥያቄ",
     "new_support_request_desc": "ችግርዎን ወይም ጥያቄዎን ይግለጹ። የአስተዳደር ቡድናችን በቅርቡ ምላሽ ይሰጣል።",
-    "btn_submit_request": "ጥያቄ ላክ"
+    "btn_submit_request": "ጥያቄ ላክ",
+    "edit_indicator_label": "መልእክት በማረም ላይ",
+    "chat_placeholder": "መልእክት ይጻፉ…"
   }
 };
