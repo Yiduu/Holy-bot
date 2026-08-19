@@ -174,7 +174,7 @@ async function showPersistentMenu(chatId, customText) {
     getUserLang(chatId)
   ]);
   const role = user?.role || 'user';
-  const menuText = customText || tSync(lang, 'menu_welcome', { nick: mdEscape(user?.anonymous_id || '') });
+  const menuText = customText || tSync(lang, 'menu_welcome', { nick: user?.anonymous_id || '' });
 
   const kb = [
     [tSync(lang, 'btn_find_mentor'), tSync(lang, 'btn_my_chat')],
@@ -1028,19 +1028,19 @@ async function showSettings(chatId) {
 
   const kb = {
     inline_keyboard: [
-      [{ text: `🔔 ${tSync(lang, 'settings_verse_notif')}: ${s?.notify_daily_verse ? tSync(lang, 'on') : tSync(lang, 'off')}`, callback_data: 'settings_toggle_notify_daily_verse' }],
-      [{ text: `🔔 ${tSync(lang, 'settings_msg_notif')}: ${s?.notify_messages ? tSync(lang, 'on') : tSync(lang, 'off')}`, callback_data: 'settings_toggle_notify_messages' }],
-      [{ text: `⏰ ${tSync(lang, 'settings_verse_time')}: ${format12h(s?.verse_time ?? 0)}`, callback_data: 'settings_time' }],
-      [{ text: `🌍 ${tSync(lang, 'settings_language')}: ${lang === 'en' ? 'EN' : 'አማ'}`, callback_data: 'settings_lang' }],
-      [{ text: `📚 ${tSync(lang, 'settings_my_topics')}`, callback_data: 'settings_topics' }]
+      [{ text: `${tSync(lang, 'settings_verse_notif')}: ${s?.notify_daily_verse ? tSync(lang, 'on') : tSync(lang, 'off')}`, callback_data: 'settings_toggle_notify_daily_verse' }],
+      [{ text: `${tSync(lang, 'settings_msg_notif')}: ${s?.notify_messages ? tSync(lang, 'on') : tSync(lang, 'off')}`, callback_data: 'settings_toggle_notify_messages' }],
+      [{ text: `${tSync(lang, 'settings_verse_time')}: ${format12h(s?.verse_time ?? 0)}`, callback_data: 'settings_time' }],
+      [{ text: `${tSync(lang, 'settings_language')}: ${lang === 'en' ? 'EN' : 'አማ'}`, callback_data: 'settings_lang' }],
+      [{ text: `${tSync(lang, 'settings_my_topics')}`, callback_data: 'settings_topics' }]
     ]
   };
 
   if (user?.role === 'mentor' || user?.role === 'admin') {
-    kb.inline_keyboard.push([{ text: `🎓 ${tSync(lang, 'settings_expertise_topics')}`, callback_data: 'menu_mentor_topics' }]);
+    kb.inline_keyboard.push([{ text: `${tSync(lang, 'settings_expertise_topics')}`, callback_data: 'menu_mentor_topics' }]);
   }
 
-  await safeSend(chatId, `⚙️ *${tSync(lang, 'settings_title')}*`, { reply_markup: kb });
+  await safeSend(chatId, tSync(lang, 'settings_title'), { reply_markup: kb });
 }
 
 async function toggleSetting(chatId, field) {
@@ -1620,7 +1620,7 @@ bot.on('message', async (msg) => {
   }
 
   // ─── Persistent Menu Routing ────────────────────────────────────────────────
-  const textMatches = (key) => text === tSync(lang, key);
+  const textMatches = (key) => text === tSync(lang, key) || text === tSync('en', key) || text === tSync('am', key);
 
   if (textMatches('btn_find_mentor')) {
     const { data: ut } = await supabase.from('user_topics').select('topic_id, topics(name)').eq('telegram_id', chatId);
@@ -2305,7 +2305,10 @@ bot.on('callback_query', async (query) => {
     const newLang = data.replace('set_lang_', '');
     await supabase.from('user_settings').update({ language: newLang }).eq('telegram_id', chatId);
     setLangCache(chatId, newLang);
-    await safeSend(chatId, tSync(newLang, 'language_updated'));
+    try {
+      await bot.answerCallbackQuery(query.id);
+    } catch {}
+    await showPersistentMenu(chatId, tSync(newLang, 'language_updated'));
   }
 
   // Schedule
