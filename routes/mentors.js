@@ -2,8 +2,16 @@
 
 const express = require('express');
 
-module.exports = function mentorRoutes(supabase, requireAuth) {
+module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
   const router = express.Router();
+
+  // Best-effort real-time push — io/onlineUsers are optional so this file
+  // still works (minus live updates) if ever mounted without them.
+  function emitToUser(telegram_id, event, payload) {
+    if (!io || !onlineUsers || !telegram_id) return;
+    const socketId = onlineUsers.get(String(telegram_id));
+    if (socketId) io.to(socketId).emit(event, payload);
+  }
 
   // GET /api/mentors – list available mentors
   router.get('/', requireAuth, async (req, res) => {
@@ -488,19 +496,38 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
   // concrete action items ("Read Psalm 23 this week", "Journal 3x") — a
   // guided follow-up tool that sits alongside free-text notes.
 
-  // GET /api/mentors/goals/:mentee_id – list follow-up goals for a mentee
+  // GET /api/mentors/goals/:mentee_id – list follow-up goals for a mentee.
+  // Accessible to the assigned mentor (as before) AND to the mentee
+  // themselves, so the mini app's mentee-facing "My Goals" dashboard
+  // widget can call this same endpoint with their own telegram_id.
   router.get('/goals/:mentee_id', requireAuth, async (req, res) => {
-    const { id: mentor_id } = req.telegramUser;
+    const caller_id = req.telegramUser.id;
     const mentee_id = req.params.mentee_id;
+    const isSelf = String(caller_id) === String(mentee_id);
 
-    const { data: assignment } = await supabase
-      .from('mentorship_assignments')
-      .select('id')
-      .eq('mentor_id', mentor_id)
-      .eq('user_id', mentee_id)
-      .eq('is_active', true)
-      .single();
-    if (!assignment) return res.status(403).json({ error: 'No active assignment found for this mentee.' });
+    let mentor_id;
+    if (isSelf) {
+      // Mentee viewing their own goals — resolve their active mentor
+      // instead of assuming the caller IS the mentor.
+      const { data: assignment } = await supabase
+        .from('mentorship_assignments')
+        .select('mentor_id')
+        .eq('user_id', mentee_id)
+        .eq('is_active', true)
+        .single();
+      if (!assignment) return res.json([]); // no active mentor yet — nothing to show
+      mentor_id = assignment.mentor_id;
+    } else {
+      mentor_id = caller_id;
+      const { data: assignment } = await supabase
+        .from('mentorship_assignments')
+        .select('id')
+        .eq('mentor_id', mentor_id)
+        .eq('user_id', mentee_id)
+        .eq('is_active', true)
+        .single();
+      if (!assignment) return res.status(403).json({ error: 'No active assignment found for this mentee.' });
+    }
 
     const { data, error } = await supabase
       .from('mentor_mentee_goals')
@@ -535,38 +562,63 @@ module.exports = function mentorRoutes(supabase, requireAuth) {
       .select()
       .single();
     if (error) return res.status(500).json({ error: error.message });
+
+    // Real-time: the goal shows up on the mentee's dashboard instantly.
+    emitToUser(mentee_id, 'goal_added', data);
+
     res.status(201).json(data);
   });
 
-  // PATCH /api/mentors/goals/:id – toggle done / edit a goal
+  // PATCH /api/mentors/goals/:id – toggle done / edit a goal.
+  // Completion (is_done) can be toggled by the mentor OR the mentee
+  // themselves — the mentee is the one actually doing the work being
+  // tracked. Editing the title/due_date stays mentor-only.
   router.patch('/goals/:id', requireAuth, async (req, res) => {
-    const { id: mentor_id } = req.telegramUser;
+    const caller_id = req.telegramUser.id;
     const { is_done, title, due_date } = req.body;
 
-    const { data: goal } = await supabase.from('mentor_mentee_goals').select('mentor_id').eq('id', req.params.id).single();
-    if (!goal || goal.mentor_id !== mentor_id) return res.status(404).json({ error: 'Goal not found' });
+    const { data: goal } = await supabase.from('mentor_mentee_goals').select('mentor_id, mentee_id').eq('id', req.params.id).single();
+    if (!goal) return res.status(404).json({ error: 'Goal not found' });
+
+    const isMentor = String(goal.mentor_id) === String(caller_id);
+    const isMentee = String(goal.mentee_id) === String(caller_id);
+    if (!isMentor && !isMentee) return res.status(404).json({ error: 'Goal not found' });
 
     const updates = {};
     if (typeof is_done === 'boolean') {
       updates.is_done = is_done;
       updates.completed_at = is_done ? new Date().toISOString() : null;
     }
-    if (typeof title === 'string' && title.trim()) updates.title = title.trim().substring(0, 200);
-    if (due_date !== undefined) updates.due_date = due_date || null;
+    if (isMentor) {
+      if (typeof title === 'string' && title.trim()) updates.title = title.trim().substring(0, 200);
+      if (due_date !== undefined) updates.due_date = due_date || null;
+    }
+    if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
 
     const { data, error } = await supabase.from('mentor_mentee_goals').update(updates).eq('id', req.params.id).select().single();
     if (error) return res.status(500).json({ error: error.message });
+
+    // Real-time: push the confirmed row to whichever side didn't just make
+    // the change (and mirror it back to the actor too, so multi-device /
+    // multi-tab sessions for the same person also reconcile instantly).
+    emitToUser(data.mentee_id, 'goal_updated', data);
+    emitToUser(data.mentor_id, 'goal_updated', data);
+
     res.json(data);
   });
 
-  // DELETE /api/mentors/goals/:id – remove a goal
+  // DELETE /api/mentors/goals/:id – remove a goal (mentor-only)
   router.delete('/goals/:id', requireAuth, async (req, res) => {
     const { id: mentor_id } = req.telegramUser;
-    const { data: goal } = await supabase.from('mentor_mentee_goals').select('mentor_id').eq('id', req.params.id).single();
+    const { data: goal } = await supabase.from('mentor_mentee_goals').select('mentor_id, mentee_id').eq('id', req.params.id).single();
     if (!goal || goal.mentor_id !== mentor_id) return res.status(404).json({ error: 'Goal not found' });
 
     const { error } = await supabase.from('mentor_mentee_goals').delete().eq('id', req.params.id);
     if (error) return res.status(500).json({ error: error.message });
+
+    // Real-time: the goal disappears from the mentee's dashboard instantly.
+    emitToUser(goal.mentee_id, 'goal_deleted', { id: req.params.id, mentee_id: goal.mentee_id, mentor_id: goal.mentor_id });
+
     res.json({ success: true });
   });
 

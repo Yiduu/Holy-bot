@@ -2766,6 +2766,227 @@ textarea.form-control {
   white-space: nowrap;
 }
 
+/* ─── My Goals (mentee dashboard widget) ─────────────────────────
+   Read-only follow-up goals set by the mentee's mentor, with live
+   Socket.IO updates. Reuses the same tokens as everything else so
+   it stays correct under [data-theme]. ─────────────────────────── */
+.my-goals-card {
+  overflow: hidden;
+}
+
+.my-goals-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.my-goals-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--gold-light);
+}
+
+.my-goals-icon {
+  display: inline-flex;
+  color: var(--gold);
+}
+
+.my-goals-progress-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text3);
+  flex-shrink: 0;
+}
+
+.my-goals-progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.my-goals-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--gold), var(--gold-light));
+  transition: width 0.5s var(--ease-premium);
+}
+
+.my-goals-list {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.my-goal-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.my-goal-item:last-child {
+  border-bottom: none;
+}
+
+.my-goal-item-title {
+  flex: 1;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  padding-top: 2px;
+  transition: color 0.2s ease;
+}
+
+.my-goal-item.done .my-goal-item-title {
+  text-decoration: line-through;
+  color: var(--text3);
+}
+
+/* ─── Premium checkbox (draw-in checkmark) ───────────────────── */
+.premium-checkbox {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  cursor: pointer;
+}
+
+.premium-checkbox input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.premium-checkbox-box {
+  position: absolute;
+  inset: 0;
+  border-radius: 7px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s var(--ease-spring);
+}
+
+.premium-checkbox input:active~.premium-checkbox-box {
+  transform: scale(0.88);
+}
+
+.premium-checkbox-check {
+  width: 14px;
+  height: 14px;
+  color: #20180a;
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  transition: stroke-dashoffset 0.3s var(--ease-premium) 0.05s;
+}
+
+.premium-checkbox input:checked~.premium-checkbox-box {
+  background: linear-gradient(135deg, var(--gold-light), var(--gold) 65%, #A87C2A);
+  border-color: var(--gold);
+}
+
+.premium-checkbox input:checked~.premium-checkbox-box .premium-checkbox-check {
+  stroke-dashoffset: 0;
+}
+
+/* ─── Live add/update/delete animations (shared by goal widgets) ─ */
+
+/* New goal: slides in from the top with a slight spring overshoot */
+@keyframes goalSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.96);
+  }
+
+  60% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.01);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.goal-enter {
+  animation: goalSlideIn 0.45s var(--ease-spring) both;
+}
+
+/* Toggled goal: a brief gold wash across the row */
+@keyframes goalPulse {
+  0% {
+    background: transparent;
+  }
+
+  30% {
+    background: var(--gold-dim);
+  }
+
+  100% {
+    background: transparent;
+  }
+}
+
+.goal-pulse {
+  animation: goalPulse 0.5s ease;
+  border-radius: 8px;
+}
+
+/* Deleted goal: shrinks and fades out before removal */
+@keyframes goalShrinkOut {
+  0% {
+    opacity: 1;
+    max-height: 60px;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    max-height: 0;
+    transform: scale(0.9);
+    padding-top: 0;
+    padding-bottom: 0;
+    border-bottom-width: 0;
+  }
+}
+
+.goal-exit {
+  animation: goalShrinkOut 0.35s var(--ease-premium) forwards;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .goal-enter,
+  .goal-pulse,
+  .goal-exit {
+    animation: none !important;
+  }
+
+  .my-goals-progress-fill,
+  .premium-checkbox-box,
+  .premium-checkbox-check {
+    transition: none !important;
+  }
+}
+
 /* ─── Session time labels ────────────────────────────────────── */
 .session-time-label {
   display: inline-flex;

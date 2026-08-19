@@ -1322,6 +1322,41 @@ function connectSocket() {
       addMessageToChat(msg);
     }
   });
+
+  // ─── Follow-up goals: real-time on both sides ─────────────────
+  // Mentee dashboard gets a fully animated in-place update via
+  // applyMyGoalRealtime(). The mentor's "My Mentees" goal panel (if
+  // currently open for this mentee) just gets refreshed — it already
+  // re-fetches quickly, and reusing that render path keeps this from
+  // duplicating the mentor-side markup here.
+  function refreshOpenMentorGoalPanel(menteeId) {
+    const panel = $(`goalPanel-${menteeId}`);
+    if (panel && panel.style.display !== 'none' && typeof refreshMenteeGoals === 'function') {
+      refreshMenteeGoals(menteeId);
+    }
+  }
+
+  socket.on('goal_added', (goal) => {
+    if (String(goal.mentee_id) === String(currentUser?.telegram_id)) {
+      haptic('light');
+      applyMyGoalRealtime('added', goal);
+    }
+    refreshOpenMentorGoalPanel(goal.mentee_id);
+  });
+
+  socket.on('goal_updated', (goal) => {
+    if (String(goal.mentee_id) === String(currentUser?.telegram_id)) {
+      applyMyGoalRealtime('updated', goal);
+    }
+    refreshOpenMentorGoalPanel(goal.mentee_id);
+  });
+
+  socket.on('goal_deleted', ({ id, mentee_id } = {}) => {
+    if (String(mentee_id) === String(currentUser?.telegram_id)) {
+      applyMyGoalRealtime('deleted', { id });
+    }
+    refreshOpenMentorGoalPanel(mentee_id);
+  });
 }
 
 // ─── Navigation ───────────────────────────────────────────────
@@ -1878,6 +1913,8 @@ window.loadDashboard = async function loadDashboard() {
 
   loadStreak();
 
+  if (currentUser?.role === 'user') loadMyGoalsWidget();
+
   if (String(currentUser?.telegram_id) === String(window.ADMIN_ID)) {
     $('adminBtn')?.classList.remove('hidden');
   }
@@ -2020,6 +2057,132 @@ async function enableStreakReminder(event) {
     if (toggle) toggle.classList.add('on');
     showToast(t('streak_reminder_enabled'), 'success');
   } catch (e) { showToast(e.message, 'error'); }
+}
+
+// ─── My Goals (mentee dashboard widget) ─────────────────────────
+// Read-only follow-up goals set by the mentee's mentor — the mentee
+// can toggle completion here, but adding/editing/removing a goal is
+// still done from the mentor's "My Mentees" panel. Updates arrive
+// live over Socket.IO (goal_added / goal_updated / goal_deleted),
+// wired up in connectSocket() below, so this widget never needs to
+// poll or be manually refreshed.
+let myGoalsCache = [];
+
+function myGoalsProgress() {
+  const total = myGoalsCache.length;
+  const done = myGoalsCache.filter(g => g.is_done).length;
+  return { total, done, pct: total ? Math.round((done / total) * 100) : 0 };
+}
+
+function renderMyGoalItem(g) {
+  const due = g.due_date ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}</div>` : '';
+  return `
+    <div class="my-goal-item ${g.is_done ? 'done' : ''}" data-goal-id="${g.id}">
+      <label class="premium-checkbox">
+        <input type="checkbox" ${g.is_done ? 'checked' : ''} onchange="toggleMyGoalDone('${g.id}', this.checked)">
+        <span class="premium-checkbox-box">
+          <svg class="premium-checkbox-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        </span>
+      </label>
+      <div class="my-goal-item-title">${escapeHtml(g.title)}${due}</div>
+    </div>`;
+}
+
+function updateMyGoalsProgressBar() {
+  const { total, done, pct } = myGoalsProgress();
+  const fill = $('myGoalsProgressFill');
+  const label = $('myGoalsProgressLabel');
+  if (fill) fill.style.width = `${pct}%`;
+  if (label) label.textContent = t('my_goals_progress_label', { done, total });
+}
+
+async function loadMyGoalsWidget() {
+  const card = $('myGoalsCard');
+  const list = $('myGoalsList');
+  if (!card || !list || !currentUser?.telegram_id) return;
+  try {
+    const goals = await apiFetch(`/api/mentors/goals/${currentUser.telegram_id}`);
+    myGoalsCache = goals || [];
+    if (!myGoalsCache.length) {
+      card.classList.add('hidden');
+      return;
+    }
+    card.classList.remove('hidden');
+    list.innerHTML = myGoalsCache.map(renderMyGoalItem).join('');
+    updateMyGoalsProgressBar();
+  } catch (e) {
+    console.error('My Goals load error:', e);
+  }
+}
+
+async function toggleMyGoalDone(goalId, isDone) {
+  haptic('light');
+  const item = document.querySelector(`.my-goal-item[data-goal-id="${goalId}"]`);
+  item?.classList.toggle('done', isDone);
+  item?.classList.add('goal-pulse');
+  setTimeout(() => item?.classList.remove('goal-pulse'), 500);
+
+  const cached = myGoalsCache.find(g => String(g.id) === String(goalId));
+  if (cached) cached.is_done = isDone;
+  updateMyGoalsProgressBar();
+
+  try {
+    // The server also echoes this back over the goal_updated socket
+    // event (to reconcile fields like completed_at) — this call just
+    // persists the change; the optimistic UI update already happened.
+    await apiFetch(`/api/mentors/goals/${goalId}`, { method: 'PATCH', body: { is_done: isDone } });
+  } catch (e) {
+    showToast(e.message, 'error');
+    await loadMyGoalsWidget(); // roll back to server truth on failure
+  }
+}
+
+// Applies a goal_added/goal_updated/goal_deleted socket payload to the
+// mentee-side widget with the matching enter/update/exit animation.
+function applyMyGoalRealtime(type, payload) {
+  const card = $('myGoalsCard');
+  const list = $('myGoalsList');
+  if (!card || !list) return;
+
+  if (type === 'added') {
+    if (!myGoalsCache.some(g => String(g.id) === String(payload.id))) {
+      myGoalsCache.unshift(payload);
+    }
+    card.classList.remove('hidden');
+    list.insertAdjacentHTML('afterbegin', renderMyGoalItem(payload));
+    const el = list.firstElementChild;
+    el?.classList.add('goal-enter');
+    el?.addEventListener('animationend', () => el.classList.remove('goal-enter'), { once: true });
+  }
+
+  if (type === 'updated') {
+    const idx = myGoalsCache.findIndex(g => String(g.id) === String(payload.id));
+    if (idx !== -1) myGoalsCache[idx] = payload; else myGoalsCache.push(payload);
+    const existing = list.querySelector(`[data-goal-id="${payload.id}"]`);
+    if (existing) {
+      existing.outerHTML = renderMyGoalItem(payload);
+      const fresh = list.querySelector(`[data-goal-id="${payload.id}"]`);
+      fresh?.classList.add('goal-pulse');
+      setTimeout(() => fresh?.classList.remove('goal-pulse'), 500);
+    } else {
+      card.classList.remove('hidden');
+      list.insertAdjacentHTML('afterbegin', renderMyGoalItem(payload));
+    }
+  }
+
+  if (type === 'deleted') {
+    myGoalsCache = myGoalsCache.filter(g => String(g.id) !== String(payload.id));
+    const el = list.querySelector(`[data-goal-id="${payload.id}"]`);
+    if (el) {
+      el.classList.add('goal-exit');
+      el.addEventListener('animationend', () => {
+        el.remove();
+        if (!myGoalsCache.length) card.classList.add('hidden');
+      }, { once: true });
+    }
+  }
+
+  updateMyGoalsProgressBar();
 }
 
 const MENTOR_ICON_AGE = '<svg class="mentor-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><path d="M2 21h20"/><line x1="7" y1="8" x2="7" y2="4"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="17" y1="8" x2="17" y2="4"/></svg>';

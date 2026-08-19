@@ -543,6 +543,30 @@
           </div>
         </div>
 
+        <!-- My Goals — follow-up goals set by the mentee's mentor.
+             Hidden until loadMyGoalsWidget() finds at least one goal;
+             updates live over Socket.IO (goal_added/updated/deleted). -->
+        <div id="myGoalsCard" class="card mb-16 my-goals-card hidden">
+          <div class="my-goals-head">
+            <div class="my-goals-title">
+              <span class="my-goals-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="8" />
+                  <circle cx="12" cy="12" r="4.5" />
+                  <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+                </svg>
+              </span>
+              <span data-i18n="my_goals_title">My Goals</span>
+            </div>
+            <span id="myGoalsProgressLabel" class="my-goals-progress-label">0/0</span>
+          </div>
+          <div class="my-goals-progress-track">
+            <div id="myGoalsProgressFill" class="my-goals-progress-fill" style="width:0%"></div>
+          </div>
+          <div id="myGoalsList" class="my-goals-list"></div>
+        </div>
+
         <div class="section-title" data-i18n="Community">Community</div>
         <div class="stats-grid mb-16">
           <div class="stat-card">
