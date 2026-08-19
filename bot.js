@@ -1215,7 +1215,7 @@ async function broadcastToAll(message, roleFilter) {
   if (users) {
     for (const u of users) {
       const lang = u.user_settings?.language || 'en';
-      await safeSend(u.telegram_id, `📢 *${tSync(lang, 'broadcast')}*\n\n${message}`);
+      await safeSend(u.telegram_id, `${tSync(lang, 'broadcast')}\n\n${message}`);
     }
   }
 }
@@ -1236,24 +1236,8 @@ async function notifySessionInvite(chatId, sessionInfo) {
     : 'TBD';
 
   const text = lang === 'am'
-    ? `አዲስ ስብሰባ ታቅዷል!\n\nአስተናጋጅ: ${sessionInfo.host}\nርዕስ: ${sessionInfo.title}\nሰዓት: ${timeStr}`
-    : `New Session Scheduled!\n\nHost: ${sessionInfo.host}\nTitle: ${sessionInfo.title}\nTime: ${timeStr}`;
-  await bot.sendMessage(chatId, text, {
-    reply_markup: {
-      inline_keyboard: [[{
-        text: tSync(lang, 'btn_join_session'),
-        web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` }
-      }]]
-    }
-  });
-}
-
-// "Starting soon" reminder — sent to the host and every invited participant
-// roughly 10 minutes before a scheduled live session begins. See the
-// scheduler at the bottom of this file for when it fires.
-async function notifySessionReminder(chatId, sessionInfo) {
-  const lang = await getUserLang(chatId);
-  const text = `${tSync(lang, 'live_session_reminder')}${sessionInfo.title ? `\n\n*${mdEscape(sessionInfo.title)}*` : ''}`;
+    ? `አዲስ ስብሰባ ተይዟል\n\nአስተናጋጅ፦ ${sessionInfo.host}\nርዕስ፦ ${sessionInfo.title}\nሰዓት፦ ${timeStr}`
+    : `New Session Scheduled\n\nHost: ${sessionInfo.host}\nTitle: ${sessionInfo.title}\nTime: ${timeStr}`;
   await safeSend(chatId, text, {
     reply_markup: {
       inline_keyboard: [[{
@@ -1264,15 +1248,29 @@ async function notifySessionReminder(chatId, sessionInfo) {
   });
 }
 
-// "Session has started" ping — sent the moment a session actually goes
-// live (first join flips it from 'scheduled'/'active' start), to every
-// other invited participant who hasn't joined yet. This is distinct from
-// notifySessionReminder above (which fires ~10 min *before* the scheduled
-// time); this one fires the instant the room is actually live so people
-// know it's time to jump in right now.
+// "Starting soon" reminder — sent to the host and every invited participant
+// roughly 10 minutes before a scheduled live session begins.
+async function notifySessionReminder(chatId, sessionInfo) {
+  const lang = await getUserLang(chatId);
+  const text = lang === 'am'
+    ? `የስብሰባ ማስታወሻ\n\nየቀጥታ ውይይትዎ በ10 ደቂቃ ውስጥ ይጀምራል፦\n${sessionInfo.title || ''}`
+    : `Session Reminder\n\nYour live session starts within 10 minutes:\n${sessionInfo.title || ''}`;
+  await safeSend(chatId, text, {
+    reply_markup: {
+      inline_keyboard: [[{
+        text: tSync(lang, 'btn_join_session'),
+        web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` }
+      }]]
+    }
+  });
+}
+
+// "Session has started" ping — sent the moment a session actually goes live.
 async function notifySessionStarted(chatId, sessionInfo) {
   const lang = await getUserLang(chatId);
-  const text = `${tSync(lang, 'live_session_started')}${sessionInfo.title ? `\n\n*${mdEscape(sessionInfo.title)}*` : ''}`;
+  const text = lang === 'am'
+    ? `ስብሰባው ተጀምሯል\n\nየቀጥታ ውይይቱ ተጀምሯል፦\n${sessionInfo.title || ''}\n\nእባክዎ አሁን ይቀላቀሉ።`
+    : `Session Started\n\nThe live session has started:\n${sessionInfo.title || ''}\n\nPlease join now.`;
   await safeSend(chatId, text, {
     reply_markup: {
       inline_keyboard: [[{
@@ -1286,13 +1284,13 @@ async function notifySessionStarted(chatId, sessionInfo) {
 async function notifyMentorshipRequest(mentorId, requesterId, requesterName, requesterSex, requesterAge, topicName) {
   const lang = await getUserLang(mentorId);
   const text = lang === 'am'
-    ? `🙏 አዲስ የምክር ጥያቄ!\n\nከ: *${mdEscape(requesterName)}*\nጾታ: ${requesterSex === 'M' ? 'ወንድ' : (requesterSex === 'F' ? 'ሴት' : 'አልገለጸም')}\nዕድሜ: ${requesterAge || 'አልገለጸም'}\nርዕስ: *${mdEscape(topicName)}*\n\nጥያቄውን ለመቀበል/ለመገምገም እባክዎን አፑን ይክፈቱ።`
-    : `🙏 *New Mentorship Request!*\n\nFrom: *${mdEscape(requesterName)}*\nSex: ${requesterSex === 'M' ? 'Male' : (requesterSex === 'F' ? 'Female' : 'Not specified')}\nAge: ${requesterAge || 'Not specified'}\nTopic: *${mdEscape(topicName)}*\n\nPlease open the app to view and respond to this request.`;
+    ? `አዲስ የምክር ጥያቄ\n\nከ፦ ${requesterName}\nርዕስ፦ ${topicName}\nጾታ፦ ${requesterSex === 'M' ? 'ወንድ' : (requesterSex === 'F' ? 'ሴት' : 'አልተገለጸም')}\nዕድሜ፦ ${requesterAge || 'አልተገለጸም'}\n\nጥያቄውን ለመገምገም እና ምላሽ ለመስጠት እባክዎ መተግበሪያውን ይክፈቱ።`
+    : `New Mentorship Request\n\nFrom: ${requesterName}\nTopic: ${topicName}\nSex: ${requesterSex === 'M' ? 'Male' : (requesterSex === 'F' ? 'Female' : 'Not specified')}\nAge: ${requesterAge || 'Not specified'}\n\nPlease open the app to review and respond to this request.`;
 
   await safeSend(mentorId, text, {
     reply_markup: {
       inline_keyboard: [[{
-        text: lang === 'am' ? '📂 ማመልከቻዎችን ይመልከቱ' : '📂 View Requests',
+        text: lang === 'am' ? 'ማመልከቻዎችን ይመልከቱ' : 'View Requests',
         web_app: { url: APP_URL }
       }]]
     }
@@ -1302,13 +1300,13 @@ async function notifyMentorshipRequest(mentorId, requesterId, requesterName, req
 async function notifyMentorshipAccepted(userId, mentorName) {
   const lang = await getUserLang(userId);
   const text = lang === 'am'
-    ? `🎉 እንኳን ደስ አለዎት! ከአማካሪዎ *${mdEscape(mentorName)}* ጋር የነበረዎት የምክር ጥያቄ ተቀባይነት አግኝቷል!`
-    : `🎉 *Congratulations!* Your mentorship request to *${mdEscape(mentorName)}* was accepted!`;
+    ? `የምክር ጥያቄዎ ተቀባይነት አግኝቷል\n\nከአማካሪ ${mentorName} ጋር የነበረዎት የምክር ጥያቄ ተቀባይነት አግኝቷል። አሁን በመተግበሪያው ውስጥ መወያየት ይችላሉ።`
+    : `Mentorship Request Accepted\n\nYour mentorship request to ${mentorName} has been accepted. You can now chat in the app.`;
 
   await safeSend(userId, text, {
     reply_markup: {
       inline_keyboard: [[{
-        text: lang === 'am' ? '💬 አሁን ያውሩ' : '💬 Chat Now',
+        text: lang === 'am' ? 'አሁን ያውሩ' : 'Chat Now',
         web_app: { url: APP_URL }
       }]]
     }
@@ -1318,11 +1316,12 @@ async function notifyMentorshipAccepted(userId, mentorName) {
 async function notifyMentorshipRejected(userId, mentorName) {
   const lang = await getUserLang(userId);
   const text = lang === 'am'
-    ? `📋 *የጥያቄ ምላሽ*\n\nከአማካሪ *${mdEscape(mentorName)}* ጋር የነበረዎት ጥያቄ ተቀባይነት አላገኘም። እባክዎን ሌላ አማካሪ ይሞክሩ።`
-    : `📋 *Request Status Update*\n\nYour mentorship request to *${mdEscape(mentorName)}* was not accepted at this time. Please try another mentor.`;
+    ? `የምክር ጥያቄ ምላሽ\n\nከአማካሪ ${mentorName} ጋር የነበረዎት ጥያቄ በዚህ ወቅት ተቀባይነት አላገኘም። እባክዎ ሌላ አማካሪ ይምረጡ።`
+    : `Mentorship Request Update\n\nYour mentorship request to ${mentorName} was not accepted at this time. Please browse and request another mentor.`;
 
   await safeSend(userId, text);
 }
+
 // Plain text offline message notification with optional deep link
 async function notifyMessage(recipientId, senderName, messageContent, fromId = null) {
   const lang = await getUserLang(recipientId);
@@ -1330,34 +1329,28 @@ async function notifyMessage(recipientId, senderName, messageContent, fromId = n
   let inlineKeyboard = [];
   if (fromId) {
     inlineKeyboard = [[{
-      text: lang === 'am' ? 'ቻት ክፈት 💬' : 'Open Chat 💬',
+      text: lang === 'am' ? 'ቻት ክፈት' : 'Open Chat',
       web_app: { url: `${APP_URL}?start=chat_${fromId}` }
     }]];
   }
 
   const text = lang === 'am'
-    ? `💬 *አዲስ መልዕክት ከ ${mdEscape(senderName)}*\n\n${mdEscape(messageContent)}`
-    : `💬 *New message from ${mdEscape(senderName)}*\n\n${mdEscape(messageContent)}`;
+    ? `አዲስ መልእክት ከ ${senderName}\n\n${messageContent}`
+    : `New message from ${senderName}\n\n${messageContent}`;
 
-  await bot.sendMessage(recipientId, text, {
-    parse_mode: 'Markdown',
+  await safeSend(recipientId, text, {
     reply_markup: inlineKeyboard.length > 0 ? { inline_keyboard: inlineKeyboard } : undefined
   });
 }
 
 // ─── Goal Tracking Notifications ───────────────────────────────────────────
-// Short, human helper for resolving a Telegram chat id — most notify
-// functions in this file just send to the telegram_id directly (that's
-// the private-chat id in practice), but the reminder/inactivity
-// schedulers prefer the explicit users.chat_id column when present, so
-// we do the same here for consistency.
+// Short, human helper for resolving a Telegram chat id
 async function resolveChatId(telegramId) {
   const { data } = await supabase.from('users').select('chat_id').eq('telegram_id', telegramId).single();
   return data?.chat_id || telegramId;
 }
 
-// A short, human date like "Aug 25" — used inline in goal messages so
-// they read like a person wrote them, not a system dump of an ISO string.
+// A short, human date like "Aug 25"
 function formatGoalDate(dateStr) {
   try {
     return new Date(`${String(dateStr).substring(0, 10)}T00:00:00Z`)
@@ -1368,7 +1361,6 @@ function formatGoalDate(dateStr) {
 }
 
 // Whole days between a goal's due_date and "today" in Ethiopia time.
-// 0 = due today, 1 = due tomorrow, negative = already overdue.
 function daysUntilDueEthiopia(dueDateStr) {
   const todayStr = getEthiopiaNow().toISOString().split('T')[0];
   const today = new Date(`${todayStr}T00:00:00Z`);
@@ -1376,50 +1368,46 @@ function daysUntilDueEthiopia(dueDateStr) {
   return Math.round((due - today) / 86400000);
 }
 
-// A. New Goal Notification — sent the moment a mentor sets a goal, with a
-// deep link straight into the mentee's dashboard/goals widget.
+// A. New Goal Notification
 async function notifyNewGoal(menteeId, goal, mentorName) {
   const lang = await getUserLang(menteeId);
   const chatId = await resolveChatId(menteeId);
-  const name = mdEscape(mentorName || (lang === 'am' ? 'አማካሪዎ' : 'Your mentor'));
-  const title = mdEscape(goal.title);
+  const name = mentorName || (lang === 'am' ? 'አማካሪዎ' : 'Your mentor');
+  const title = goal.title;
   const dueLine = goal.due_date
-    ? (lang === 'am' ? `\n🗓️ ማብቂያ፦ ${formatGoalDate(goal.due_date)}` : `\n🗓️ Due ${formatGoalDate(goal.due_date)}`)
+    ? (lang === 'am' ? `\nቀነ-ገደብ፦ ${formatGoalDate(goal.due_date)}` : `\nDue: ${formatGoalDate(goal.due_date)}`)
     : '';
 
   const text = lang === 'am'
-    ? `📌 *${name}* ለእርስዎ አዲስ ግብ አስቀምጦልዎታል፦\n\n*"${title}"*${dueLine}\n\nትንሽ በትንሽ አብረን እንጀምር 🌱`
-    : `📌 *${name}* just set a new goal for you:\n\n*"${title}"*${dueLine}\n\nLet's make it happen 💪`;
+    ? `አዲስ ግብ ተሰጥቶዎታል\n\n${name} አዲስ ግብ አስቀምጦልዎታል፦\n"${title}"${dueLine}`
+    : `New Goal Assigned\n\n${name} set a new goal for you:\n"${title}"${dueLine}`;
 
   await safeSend(chatId, text, {
     reply_markup: {
       inline_keyboard: [[{
-        text: lang === 'am' ? '🎯 ግቤን ክፈት' : '🎯 Open My Goal',
+        text: lang === 'am' ? 'ግቤን ክፈት' : 'Open My Goal',
         web_app: { url: `${APP_URL}?start=goal_${goal.id}` }
       }]]
     }
   });
 }
 
-// B. Due-date reminder — runs once daily (see scheduler below). Copy
-// varies by how close the deadline is instead of repeating one generic
-// line, and carries a one-tap "Mark as Done" button handled in the
-// callback_query listener further down.
+// B. Due-date reminder
 async function notifyGoalDueReminder(menteeId, goal) {
   const lang = await getUserLang(menteeId);
   const chatId = await resolveChatId(menteeId);
-  const title = mdEscape(goal.title);
+  const title = goal.title;
   const daysLeft = daysUntilDueEthiopia(goal.due_date);
 
   let text;
   if (lang === 'am') {
-    if (daysLeft <= 0) text = `🕯️ ዛሬ የ*"${title}"* ግብዎ ቀነ-ገደብ ነው። ጥቂት ትኩረት ሰጥተው ይጨርሱት — ይችላሉ 🙌`;
-    else if (daysLeft === 1) text = `🌙 አንድ ትውስታ ያህል፦ *"${title}"* ነገ ይጠናቀቃል። ዛሬ ትንሽ እርምጃ ይውሰዱ 🌱`;
-    else text = `🌾 *"${title}"* በ${daysLeft} ቀናት ውስጥ ይጠናቀቃል። ጊዜ አለዎት፣ ግን አይርሱት 😊`;
+    if (daysLeft <= 0) text = `የዛሬ ግብ ማስታወሻ\n\nየ"${title}" ግብዎ ቀነ-ገደብ ዛሬ ነው። መተግበሪያውን ከፍተው ማጠናቀቅዎን ያረጋግጡ።`;
+    else if (daysLeft === 1) text = `የግብ ማስታወሻ\n\n"${title}" ነገ ይጠናቀቃል።`;
+    else text = `የግብ ማስታወሻ\n\n"${title}" በ${daysLeft} ቀናት ውስጥ ይጠናቀቃል።`;
   } else {
-    if (daysLeft <= 0) text = `🕯️ *"${title}"* is due today. A few focused minutes and it's done — you've got this 🙌`;
-    else if (daysLeft === 1) text = `🌙 Friendly nudge — *"${title}"* is due tomorrow. A little progress today goes a long way 🌱`;
-    else text = `🌾 *"${title}"* is due in ${daysLeft} days. Plenty of time, just don't let it sneak up on you 😊`;
+    if (daysLeft <= 0) text = `Goal Due Today\n\n"${title}" is due today. Open the app to complete and mark it as done.`;
+    else if (daysLeft === 1) text = `Goal Due Tomorrow\n\n"${title}" is due tomorrow.`;
+    else text = `Goal Reminder\n\n"${title}" is due in ${daysLeft} days.`;
   }
 
   await safeSend(chatId, text, {
@@ -1432,15 +1420,14 @@ async function notifyGoalDueReminder(menteeId, goal) {
   });
 }
 
-// Sent once, the night a goal's due date passes with it still open — a
-// soft, no-guilt heads-up rather than a scolding "overdue" alert.
+// Sent once when a goal's due date passes with it still open
 async function notifyGoalMissed(menteeId, goal) {
   const lang = await getUserLang(menteeId);
   const chatId = await resolveChatId(menteeId);
-  const title = mdEscape(goal.title);
+  const title = goal.title;
   const text = lang === 'am'
-    ? `🍂 *"${title}"* ያለ ምልክት ማብቂያ ቀኑ አልፏል። ምንም ችግር የለውም — ማንኛውም ጊዜ መልሰው ይያዙት፣ አማካሪዎም ይህን ያውቃል 🙏`
-    : `🍂 *"${title}"* slipped past its due date without being marked done. No judgment here — pick it back up whenever you're ready, your mentor can see it's marked as missed 🙏`;
+    ? `ያለፈ ግብ ማሳሰቢያ\n\nየ"${title}" ግብዎ ቀነ-ገደብ አልፏል። በማንኛውም ጊዜ አጠናቀው ምልክት ማድረግ ይችላሉ።`
+    : `Goal Missed\n\n"${title}" passed its due date without being marked done. You can still complete and mark it done at any time.`;
   await safeSend(chatId, text);
 }
 

@@ -851,8 +851,8 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
         if (user?.chat_id) {
           const lang = await getUserLang(assignment.user_id);
           const text = lang === 'am'
-            ? `📋 የምክር አገልግሎትዎ ወደ አማካሪ *${newMentorName}* ተላልፏል።`
-            : `📋 Your mentorship has been transferred to mentor *${newMentorName}*.`;
+            ? `የምክር አገልግሎትዎ ወደ አማካሪ ${newMentorName} ተላልፏል።`
+            : `Your mentorship has been transferred to mentor ${newMentorName}.`;
           await safeSend(user.chat_id, text);
         }
 
@@ -865,8 +865,8 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
 
         const targetLang = await getUserLang(targetTid);
         const targetText = targetLang === 'am'
-          ? `📋 አዲስ ተመካሪ በዝውውር ቀርቦልዎታል፡ *${menteeName}*`
-          : `📋 A new mentee has been transferred to you: *${menteeName}*`;
+          ? `አዲስ ተመካሪ በዝውውር ቀርቦልዎታል፦ ${menteeName}`
+          : `A new mentee has been transferred to you: ${menteeName}`;
         await safeSend(targetTid, targetText);
 
         return res.json({ success: true });

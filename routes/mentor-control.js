@@ -6,24 +6,24 @@ const express = require('express');
 // the pattern used in routes/admin.js (CONTACT_PREFIX) and bot.js.
 const MSG = {
   suspended: {
-    en: (reason) => `⚠️ *Mentor Account Suspended*\n\nYour mentor status has been temporarily suspended by the admin team${reason ? `:\n\n"${reason}"` : '.'}\n\nYou will not appear in mentor search and won't receive new mentorship requests until this is lifted. Any mentees you're already paired with are unaffected. Contact support if you have questions.`,
-    am: (reason) => `⚠️ *የአማካሪ አካውንት ታግዷል*\n\nየአማካሪነትዎ ሁኔታ በአስተዳደር ቡድን ለጊዜው ታግዷል${reason ? `፡\n\n"${reason}"` : '።'}\n\nይህ እስኪነሳ ድረስ በአማካሪ ፍለጋ ውስጥ አይታዩም እና አዲስ ጥያቄዎችን አይቀበሉም። ቀድሞ የተጣመሩ ተመካሪዎች አይነካቸውም። ጥያቄ ካለዎት ድጋፍን ያግኙ።`,
+    en: (reason) => `Mentor Account Suspended\n\nYour mentor status has been temporarily suspended by the admin team${reason ? `:\n\n"${reason}"` : '.'}\n\nYou will not appear in mentor search and will not receive new mentorship requests until this is lifted. Any mentees you are already paired with are unaffected. Contact support if you have questions.`,
+    am: (reason) => `የአማካሪ አካውንት ታግዷል\n\nየአማካሪነት ሁኔታዎ በአስተዳደር ቡድን ለጊዜው ታግዷል${reason ? `፦\n\n"${reason}"` : '።'}\n\nይህ እስኪነሳ ድረስ በአማካሪ ፍለጋ ውስጥ አይታዩም እንዲሁም አዲስ ጥያቄዎችን አይቀበሉም። ቀድሞ የተጣመሩ ተመካሪዎች አይነኩም። ጥያቄ ካለዎት ድጋፍን ያነጋግሩ።`,
   },
   reactivated: {
-    en: '✅ *Mentor Account Reactivated*\n\nYour mentor status has been restored. You are visible in mentor search again and can receive new mentorship requests.',
-    am: '✅ *የአማካሪ አካውንት ተመልሷል*\n\nየአማካሪነትዎ ሁኔታ ተመልሷል። እንደገና በአማካሪ ፍለጋ ይታያሉ እና አዲስ ጥያቄዎችን መቀበል ይችላሉ።',
+    en: 'Mentor Account Reactivated\n\nYour mentor status has been restored. You are visible in mentor search again and can receive new mentorship requests.',
+    am: 'የአማካሪ አካውንት ተመልሷል\n\nየአማካሪነት ሁኔታዎ ተመልሷል። በአማካሪ ፍለጋ ውስጥ እንደገና ይታያሉ እና አዲስ ጥያቄዎችን መቀበል ይችላሉ።',
   },
   unassignedMentor: {
-    en: (name) => `📋 An administrator has ended your mentorship pairing with *${name}*.`,
-    am: (name) => `📋 አስተዳዳሪ ከ*${name}* ጋር የነበረዎትን የምክር ግንኙነት አቁሟል።`,
+    en: (name) => `An administrator has ended your mentorship pairing with ${name}.`,
+    am: (name) => `አስተዳዳሪ ከ${name} ጋር የነበረዎትን የምክር ግንኙነት አቁሟል።`,
   },
   unassignedMentee: {
-    en: (name) => `📋 An administrator has ended your mentorship pairing with *${name}*.`,
-    am: (name) => `📋 አስተዳዳሪ ከ*${name}* ጋር የነበረዎትን የምክር ግንኙነት አቁሟል።`,
+    en: (name) => `An administrator has ended your mentorship pairing with ${name}.`,
+    am: (name) => `አስተዳዳሪ ከ${name} ጋር የነበረዎትን የምክር ግንኙነት አቁሟል።`,
   },
   ADMIN_MESSAGE_PREFIX: {
-    en: '📋 *Message from the Admin Team*',
-    am: '📋 *መልእክት ከአስተዳደር ቡድን*',
+    en: 'Message from the Admin Team',
+    am: 'መልእክት ከአስተዳደር ቡድን',
   },
 };
 

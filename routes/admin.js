@@ -6,8 +6,8 @@ const axios = require('axios');
 // Prefix shown above an admin's custom message, localized by the applicant's
 // preferred language (user_settings.language). Falls back to English.
 const CONTACT_PREFIX = {
-  en: '📋 *Message from the Mentorship Team*\nRegarding your mentor application:',
-  am: '📋 *መልእክት ከአማካሪ ቡድን*\nስለ አማካሪነት ማመልከቻዎ:',
+  en: 'Message from the Mentorship Team\nRegarding your mentor application:',
+  am: 'መልእክት ከአማካሪ ቡድን\nስለ አማካሪነት ማመልከቻዎ፦',
 };
 
 module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
@@ -698,7 +698,7 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       // 2. Telegram Bot notification via safeSend — clean, professional copy
       try {
         const { safeSend } = require('../bot');
-        let msgText = `📩 *Support Request Update*\n\n*Subject:* ${ticket.subject}\n*Status:* ${statusLabel}`;
+        let msgText = `Support Request Update\n\nSubject: ${ticket.subject}\nStatus: ${statusLabel}`;
         if (replyText) {
           const preview = replyText.length > 300 ? replyText.substring(0, 300) + '…' : replyText;
           msgText += `\n\n${preview}`;
