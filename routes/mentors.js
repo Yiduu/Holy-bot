@@ -563,8 +563,10 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       .single();
     if (error) return res.status(500).json({ error: error.message });
 
-    // Real-time: the goal shows up on the mentee's dashboard instantly.
-    emitToUser(mentee_id, 'goal_added', data);
+    // Real-time: the goal shows up on the mentee's dashboard instantly, and
+    // on the mentor's own "My Mentees" panel too (covers multi-tab/device).
+    emitToUser(data.mentee_id, 'goal_created', data);
+    emitToUser(data.mentor_id, 'goal_created', data);
 
     res.status(201).json(data);
   });
@@ -616,8 +618,11 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     const { error } = await supabase.from('mentor_mentee_goals').delete().eq('id', req.params.id);
     if (error) return res.status(500).json({ error: error.message });
 
-    // Real-time: the goal disappears from the mentee's dashboard instantly.
-    emitToUser(goal.mentee_id, 'goal_deleted', { id: req.params.id, mentee_id: goal.mentee_id, mentor_id: goal.mentor_id });
+    // Real-time: the goal disappears from both the mentee's dashboard and
+    // the mentor's own "My Mentees" panel instantly.
+    const payload = { id: req.params.id, mentee_id: goal.mentee_id, mentor_id: goal.mentor_id };
+    emitToUser(goal.mentee_id, 'goal_deleted', payload);
+    emitToUser(goal.mentor_id, 'goal_deleted', payload);
 
     res.json({ success: true });
   });

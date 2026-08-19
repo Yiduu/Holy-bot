@@ -1150,6 +1150,7 @@ function connectSocket() {
     $('reconnectBanner')?.classList.remove('show');
     // Stop polling fallback — socket is live
     stopChatPolling();
+    setGoalsLiveStatus(true);
     console.log('[Socket] Connected, authed as', userId);
   });
 
@@ -1158,6 +1159,7 @@ function connectSocket() {
     $('reconnectBanner')?.classList.add('show');
     startChatPolling();      // keep message polling
     startGlobalRefresh();    // 👈 new: refresh requests & sessions
+    setGoalsLiveStatus(false);
   });
 
   socket.on('connect', () => {
@@ -1166,6 +1168,7 @@ function connectSocket() {
     $('reconnectBanner')?.classList.remove('show');
     stopChatPolling();
     stopGlobalRefresh();     // 👈 new: stop fallback when connected
+    setGoalsLiveStatus(true);
     console.log('[Socket] Connected, authed as', userId);
   });
 
@@ -1173,11 +1176,17 @@ function connectSocket() {
     console.log('[Socket] Reconnected');
     stopChatPolling();
     $('reconnectBanner')?.classList.remove('show');
+    setGoalsLiveStatus(true);
     // Re-auth on reconnect
     const userId = String(currentUser?.telegram_id || getTelegramData().user?.id || '');
     socket.emit('auth', userId);
     if (currentPage === 'chat' && window.chatState?.with) {
       loadMessages(window.chatState.with);
+    }
+    // Goal lists may have drifted while offline — reconcile with the server.
+    if (currentUser?.role === 'user') loadMyGoalsWidget();
+    for (const menteeId of Object.keys(_mentorGoalPanelOpen)) {
+      if (_mentorGoalPanelOpen[menteeId]) refreshMenteeGoals(menteeId);
     }
   });
 
@@ -1325,37 +1334,31 @@ function connectSocket() {
 
   // ─── Follow-up goals: real-time on both sides ─────────────────
   // Mentee dashboard gets a fully animated in-place update via
-  // applyMyGoalRealtime(). The mentor's "My Mentees" goal panel (if
-  // currently open for this mentee) just gets refreshed — it already
-  // re-fetches quickly, and reusing that render path keeps this from
-  // duplicating the mentor-side markup here.
-  function refreshOpenMentorGoalPanel(menteeId) {
-    const panel = $(`goalPanel-${menteeId}`);
-    if (panel && panel.style.display !== 'none' && typeof refreshMenteeGoals === 'function') {
-      refreshMenteeGoals(menteeId);
-    }
-  }
-
-  socket.on('goal_added', (goal) => {
+  // applyMyGoalRealtime(). The mentor's "My Mentees" goal panel gets
+  // the same slide-in/pulse/slide-out treatment via applyMentorGoalRealtime()
+  // — both are idempotent, so they're also safe to call for actions the
+  // current user just triggered themselves (the HTTP response already
+  // patched the DOM; the echoed socket event is a no-op reconciliation).
+  socket.on('goal_created', (goal) => {
     if (String(goal.mentee_id) === String(currentUser?.telegram_id)) {
       haptic('light');
       applyMyGoalRealtime('added', goal);
     }
-    refreshOpenMentorGoalPanel(goal.mentee_id);
+    applyMentorGoalRealtime('added', goal, goal.mentee_id);
   });
 
   socket.on('goal_updated', (goal) => {
     if (String(goal.mentee_id) === String(currentUser?.telegram_id)) {
       applyMyGoalRealtime('updated', goal);
     }
-    refreshOpenMentorGoalPanel(goal.mentee_id);
+    applyMentorGoalRealtime('updated', goal, goal.mentee_id);
   });
 
-  socket.on('goal_deleted', ({ id, mentee_id } = {}) => {
+  socket.on('goal_deleted', ({ id, mentee_id, mentor_id } = {}) => {
     if (String(mentee_id) === String(currentUser?.telegram_id)) {
       applyMyGoalRealtime('deleted', { id });
     }
-    refreshOpenMentorGoalPanel(mentee_id);
+    applyMentorGoalRealtime('deleted', { id, mentee_id, mentor_id }, mentee_id);
   });
 }
 
@@ -2063,10 +2066,21 @@ async function enableStreakReminder(event) {
 // Read-only follow-up goals set by the mentee's mentor — the mentee
 // can toggle completion here, but adding/editing/removing a goal is
 // still done from the mentor's "My Mentees" panel. Updates arrive
-// live over Socket.IO (goal_added / goal_updated / goal_deleted),
-// wired up in connectSocket() below, so this widget never needs to
+// live over Socket.IO (goal_created / goal_updated / goal_deleted),
+// wired up in connectSocket() above, so this widget never needs to
 // poll or be manually refreshed.
 let myGoalsCache = [];
+
+// Green/red pulsing dot next to the "My Goals" title — reflects the
+// live socket.io connection state. Also touches the mentor-side "My
+// Mentees" live dot if one is rendered on the currently open panel.
+function setGoalsLiveStatus(connected) {
+  document.querySelectorAll('.live-dot').forEach(dot => {
+    dot.classList.toggle('live-dot--live', connected);
+    dot.classList.toggle('live-dot--offline', !connected);
+    dot.title = connected ? 'Live' : 'Reconnecting…';
+  });
+}
 
 function myGoalsProgress() {
   const total = myGoalsCache.length;
@@ -2109,6 +2123,13 @@ async function loadMyGoalsWidget() {
     }
     card.classList.remove('hidden');
     list.innerHTML = myGoalsCache.map(renderMyGoalItem).join('');
+    // Staggered reveal so a freshly (re)loaded list still feels alive
+    // instead of popping in all at once.
+    [...list.children].forEach((el, i) => {
+      el.classList.add('goal-enter');
+      el.style.animationDelay = `${Math.min(i, 8) * 45}ms`;
+      el.addEventListener('animationend', () => { el.classList.remove('goal-enter'); el.style.animationDelay = ''; }, { once: true });
+    });
     updateMyGoalsProgressBar();
   } catch (e) {
     console.error('My Goals load error:', e);
@@ -2137,7 +2158,7 @@ async function toggleMyGoalDone(goalId, isDone) {
   }
 }
 
-// Applies a goal_added/goal_updated/goal_deleted socket payload to the
+// Applies a goal_created/goal_updated/goal_deleted socket payload to the
 // mentee-side widget with the matching enter/update/exit animation.
 function applyMyGoalRealtime(type, payload) {
   const card = $('myGoalsCard');
@@ -2145,9 +2166,8 @@ function applyMyGoalRealtime(type, payload) {
   if (!card || !list) return;
 
   if (type === 'added') {
-    if (!myGoalsCache.some(g => String(g.id) === String(payload.id))) {
-      myGoalsCache.unshift(payload);
-    }
+    if (myGoalsCache.some(g => String(g.id) === String(payload.id))) return; // already applied
+    myGoalsCache.unshift(payload);
     card.classList.remove('hidden');
     list.insertAdjacentHTML('afterbegin', renderMyGoalItem(payload));
     const el = list.firstElementChild;
@@ -2157,7 +2177,12 @@ function applyMyGoalRealtime(type, payload) {
 
   if (type === 'updated') {
     const idx = myGoalsCache.findIndex(g => String(g.id) === String(payload.id));
-    if (idx !== -1) myGoalsCache[idx] = payload; else myGoalsCache.push(payload);
+    if (idx !== -1) {
+      if (JSON.stringify(myGoalsCache[idx]) === JSON.stringify(payload)) { updateMyGoalsProgressBar(); return; }
+      myGoalsCache[idx] = payload;
+    } else {
+      myGoalsCache.push(payload);
+    }
     const existing = list.querySelector(`[data-goal-id="${payload.id}"]`);
     if (existing) {
       existing.outerHTML = renderMyGoalItem(payload);
@@ -4741,7 +4766,7 @@ function renderMenteesList() {
           <span style="display:flex;align-items:center;gap:6px;">${menteeIcon('target', 14)}${goalsLabel}</span>
           <span class="goal-toggle-caret">${menteeIcon('chevronDown', 14)}</span>
         </button>
-        <div id="goalPanel-${user.telegram_id}" class="goal-panel" style="display:none"></div>
+        <div id="goalPanel-${user.telegram_id}" class="goal-panel" style="display:none" data-mentee-id="${user.telegram_id}"></div>
         <div class="form-group mb-0" style="margin-top:8px">
           <textarea id="note-${user.telegram_id}" class="form-control text-sm" data-i18n="Private note about this mentee..." placeholder="${t('Private note about this mentee...')}" rows="2" onblur="saveMentorNote('${user.telegram_id}')"></textarea>
         </div>
@@ -4751,44 +4776,78 @@ function renderMenteesList() {
   hydrateAvatars(container);
 }
 
-// ─── Follow-up goals checklist ────────────────────────────────
+// ─── Follow-up goals checklist (mentor's "My Mentees" panel) ───
+// Tracks which mentee goal panels are currently expanded, so live socket
+// events know whether to patch the DOM or just update the badge counts,
+// and so a socket reconnect knows which open panels to reconcile.
+const _mentorGoalPanelOpen = {};
+// Local cache of each open panel's goals, keyed by mentee id — lets the
+// live socket handlers do idempotent inserts/updates/removals instead of
+// re-fetching and flashing a loading spinner on every change.
+const _mentorGoalsCache = {};
+
+function renderMentorGoalItem(g, menteeId) {
+  const due = g.due_date ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}</div>` : '';
+  return `
+    <div class="goal-item ${g.is_done ? 'done' : ''}" data-goal-id="${g.id}">
+      <label class="premium-checkbox">
+        <input type="checkbox" ${g.is_done ? 'checked' : ''} onchange="toggleMenteeGoalDone('${g.id}', '${menteeId}', this.checked)">
+        <span class="premium-checkbox-box">
+          <svg class="premium-checkbox-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        </span>
+      </label>
+      <div class="goal-item-title">${escapeHtml(g.title)}${due}</div>
+      <button class="goal-item-delete" onclick="deleteMenteeGoal('${g.id}', '${menteeId}')" title="${t('mentee_goal_delete')}">${menteeIcon('trash', 13)}</button>
+    </div>`;
+}
+
+function updateMenteeGoalsBadge(menteeId) {
+  const goals = _mentorGoalsCache[menteeId] || [];
+  const total = goals.length;
+  const open = goals.filter(g => !g.is_done).length;
+  _myMenteesFollowupCache[menteeId] = { ..._myMenteesFollowupCache[menteeId], open_goals: open, total_goals: total };
+  const panel = $(`goalPanel-${menteeId}`);
+  const toggleBtn = panel?.previousElementSibling;
+  if (toggleBtn?.classList.contains('goal-toggle-btn')) {
+    const label = total > 0 ? t('mentee_goals_progress', { done: total - open, total }) : t('mentee_goals_add');
+    toggleBtn.querySelector('span').innerHTML = `${menteeIcon('target', 14)}${escapeHtml(label)}`;
+  }
+}
+
 async function toggleMenteeGoals(menteeId, btnEl) {
   const panel = $(`goalPanel-${menteeId}`);
   if (!panel) return;
   const isOpen = panel.style.display !== 'none';
   if (isOpen) {
     panel.style.display = 'none';
+    _mentorGoalPanelOpen[menteeId] = false;
     if (btnEl) btnEl.querySelector('.goal-toggle-caret').innerHTML = menteeIcon('chevronDown', 14);
     return;
   }
   panel.style.display = 'block';
+  _mentorGoalPanelOpen[menteeId] = true;
   if (btnEl) btnEl.querySelector('.goal-toggle-caret').innerHTML = menteeIcon('chevronUp', 14);
   await refreshMenteeGoals(menteeId);
 }
 
+// Full fetch + render — used only for the initial panel open (and to
+// reconcile after a socket reconnect). Live changes afterwards go through
+// applyMentorGoalRealtime() below so the panel never flashes a spinner
+// mid-conversation.
 async function refreshMenteeGoals(menteeId) {
   const panel = $(`goalPanel-${menteeId}`);
   if (!panel) return;
   panel.innerHTML = '<div class="loading-spinner" style="margin:12px auto;width:20px;height:20px"></div>';
   try {
     const goals = await apiFetch(`/api/mentors/goals/${menteeId}`);
-    let itemsHtml = '';
-    if (!goals.length) {
-      itemsHtml = `<div class="text-xs text-dim" style="padding:4px 0">${t('mentee_goals_empty')}</div>`;
-    } else {
-      for (const g of goals) {
-        const due = g.due_date ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}</div>` : '';
-        itemsHtml += `
-          <div class="goal-item ${g.is_done ? 'done' : ''}">
-            <input type="checkbox" ${g.is_done ? 'checked' : ''} onchange="toggleMenteeGoalDone('${g.id}', '${menteeId}', this.checked)">
-            <div class="goal-item-title">${escapeHtml(g.title)}${due}</div>
-            <button class="goal-item-delete" onclick="deleteMenteeGoal('${g.id}', '${menteeId}')" title="${t('mentee_goal_delete')}">${menteeIcon('trash', 13)}</button>
-          </div>`;
-      }
-    }
+    _mentorGoalsCache[menteeId] = goals || [];
+
+    const itemsHtml = goals.length
+      ? goals.map(g => renderMentorGoalItem(g, menteeId)).join('')
+      : `<div class="text-xs text-dim goal-panel-empty" style="padding:4px 0">${t('mentee_goals_empty')}</div>`;
 
     panel.innerHTML = `
-      ${itemsHtml}
+      <div class="goal-panel-items">${itemsHtml}</div>
       <div class="goal-add-row">
         <textarea id="goalInput-${menteeId}" class="form-control text-sm goal-add-input" placeholder="${t('mentee_goal_placeholder')}" maxlength="200" rows="2"></textarea>
         <div class="goal-add-row-bottom">
@@ -4797,18 +4856,90 @@ async function refreshMenteeGoals(menteeId) {
         </div>
       </div>`;
 
-    // Keep the goal-progress label on the toggle button in sync.
-    const total = goals.length;
-    const open = goals.filter(g => !g.is_done).length;
-    _myMenteesFollowupCache[menteeId] = { ..._myMenteesFollowupCache[menteeId], open_goals: open, total_goals: total };
-    const toggleBtn = panel.previousElementSibling;
-    if (toggleBtn?.classList.contains('goal-toggle-btn')) {
-      const label = total > 0 ? t('mentee_goals_progress', { done: total - open, total }) : t('mentee_goals_add');
-      toggleBtn.querySelector('span').innerHTML = `${menteeIcon('target', 14)}${escapeHtml(label)}`;
-    }
+    // Staggered reveal on first open, same spirit as the mentee widget.
+    const items = [...panel.querySelectorAll('.goal-panel-items > .goal-item')];
+    items.forEach((el, i) => {
+      el.classList.add('goal-enter');
+      el.style.animationDelay = `${Math.min(i, 8) * 45}ms`;
+      el.addEventListener('animationend', () => { el.classList.remove('goal-enter'); el.style.animationDelay = ''; }, { once: true });
+    });
+
+    updateMenteeGoalsBadge(menteeId);
   } catch (e) {
     panel.innerHTML = `<div class="text-xs" style="color:var(--danger)">${escapeHtml(e.message)}</div>`;
   }
+}
+
+// Applies a goal_created/goal_updated/goal_deleted socket payload (or a
+// just-confirmed HTTP response, from this mentor's own action) to an open
+// goal panel with the matching enter/pulse/exit animation. Idempotent —
+// safe to call twice for the same change (e.g. once from the HTTP response,
+// once again from the echoed socket event).
+function applyMentorGoalRealtime(type, payload, menteeId) {
+  if (!menteeId) return;
+  const cache = _mentorGoalsCache[menteeId];
+  const panel = $(`goalPanel-${menteeId}`);
+  const isOpen = !!(panel && panel.style.display !== 'none' && _mentorGoalPanelOpen[menteeId]);
+  const itemsWrap = panel?.querySelector('.goal-panel-items');
+
+  if (type === 'added') {
+    if (cache) {
+      if (cache.some(g => String(g.id) === String(payload.id))) return; // already applied
+      cache.unshift(payload);
+    }
+    if (isOpen && itemsWrap) {
+      itemsWrap.querySelector('.goal-panel-empty')?.remove();
+      itemsWrap.insertAdjacentHTML('afterbegin', renderMentorGoalItem(payload, menteeId));
+      const el = itemsWrap.firstElementChild;
+      el?.classList.add('goal-enter');
+      el?.addEventListener('animationend', () => el.classList.remove('goal-enter'), { once: true });
+    }
+  }
+
+  if (type === 'updated') {
+    if (cache) {
+      const idx = cache.findIndex(g => String(g.id) === String(payload.id));
+      if (idx !== -1) {
+        if (JSON.stringify(cache[idx]) === JSON.stringify(payload)) return; // already applied
+        cache[idx] = payload;
+      } else {
+        cache.push(payload);
+      }
+    }
+    if (isOpen && itemsWrap) {
+      const existing = itemsWrap.querySelector(`[data-goal-id="${payload.id}"]`);
+      if (existing) {
+        existing.outerHTML = renderMentorGoalItem(payload, menteeId);
+        const fresh = itemsWrap.querySelector(`[data-goal-id="${payload.id}"]`);
+        fresh?.classList.add('goal-pulse');
+        setTimeout(() => fresh?.classList.remove('goal-pulse'), 500);
+      } else {
+        itemsWrap.insertAdjacentHTML('afterbegin', renderMentorGoalItem(payload, menteeId));
+      }
+    }
+  }
+
+  if (type === 'deleted') {
+    if (cache) {
+      const had = cache.some(g => String(g.id) === String(payload.id));
+      if (!had) return; // already applied
+      _mentorGoalsCache[menteeId] = cache.filter(g => String(g.id) !== String(payload.id));
+    }
+    if (isOpen && itemsWrap) {
+      const el = itemsWrap.querySelector(`[data-goal-id="${payload.id}"]`);
+      if (el) {
+        el.classList.add('goal-exit');
+        el.addEventListener('animationend', () => {
+          el.remove();
+          if (!itemsWrap.children.length) {
+            itemsWrap.innerHTML = `<div class="text-xs text-dim goal-panel-empty" style="padding:4px 0">${t('mentee_goals_empty')}</div>`;
+          }
+        }, { once: true });
+      }
+    }
+  }
+
+  updateMenteeGoalsBadge(menteeId);
 }
 
 async function addMenteeGoal(menteeId) {
@@ -4816,26 +4947,55 @@ async function addMenteeGoal(menteeId) {
   const dateInput = $(`goalDate-${menteeId}`);
   const title = input?.value.trim();
   if (!title) return;
+  const btn = document.querySelector(`#goalPanel-${menteeId} .goal-add-btn`);
+  if (btn) btn.disabled = true;
   try {
-    await apiFetch('/api/mentors/goals', { method: 'POST', body: { mentee_id: menteeId, title, due_date: dateInput?.value || null } });
+    const goal = await apiFetch('/api/mentors/goals', { method: 'POST', body: { mentee_id: menteeId, title, due_date: dateInput?.value || null } });
     haptic('light');
-    await refreshMenteeGoals(menteeId);
-  } catch (e) { showToast(e.message, 'error'); }
+    if (input) input.value = '';
+    if (dateInput) dateInput.value = '';
+    applyMentorGoalRealtime('added', goal, menteeId);
+  } catch (e) {
+    showToast(e.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function toggleMenteeGoalDone(goalId, menteeId, isDone) {
+  // Optimistic update: reflect the toggle immediately, revert + toast on failure.
+  const item = document.querySelector(`#goalPanel-${menteeId} [data-goal-id="${goalId}"]`);
+  item?.classList.toggle('done', isDone);
+  const cached = _mentorGoalsCache[menteeId]?.find(g => String(g.id) === String(goalId));
+  const prevDone = cached?.is_done;
+  if (cached) cached.is_done = isDone;
+  updateMenteeGoalsBadge(menteeId);
+
   try {
-    await apiFetch(`/api/mentors/goals/${goalId}`, { method: 'PATCH', body: { is_done: isDone } });
+    const goal = await apiFetch(`/api/mentors/goals/${goalId}`, { method: 'PATCH', body: { is_done: isDone } });
     haptic('light');
-    await refreshMenteeGoals(menteeId);
-  } catch (e) { showToast(e.message, 'error'); }
+    applyMentorGoalRealtime('updated', goal, menteeId);
+  } catch (e) {
+    showToast(e.message, 'error');
+    item?.classList.toggle('done', prevDone);
+    const box = item?.querySelector('input[type="checkbox"]');
+    if (box) box.checked = !!prevDone;
+    if (cached) cached.is_done = prevDone;
+    updateMenteeGoalsBadge(menteeId);
+  }
 }
 
 async function deleteMenteeGoal(goalId, menteeId) {
+  // Optimistic removal: slide it out immediately, restore on failure.
+  const cache = _mentorGoalsCache[menteeId];
+  const removedGoal = cache?.find(g => String(g.id) === String(goalId));
+  applyMentorGoalRealtime('deleted', { id: goalId }, menteeId);
   try {
     await apiFetch(`/api/mentors/goals/${goalId}`, { method: 'DELETE' });
-    await refreshMenteeGoals(menteeId);
-  } catch (e) { showToast(e.message, 'error'); }
+  } catch (e) {
+    showToast(e.message, 'error');
+    if (removedGoal) applyMentorGoalRealtime('added', removedGoal, menteeId);
+  }
 }
 
 

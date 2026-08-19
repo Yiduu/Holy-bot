@@ -545,7 +545,7 @@
 
         <!-- My Goals — follow-up goals set by the mentee's mentor.
              Hidden until loadMyGoalsWidget() finds at least one goal;
-             updates live over Socket.IO (goal_added/updated/deleted). -->
+             updates live over Socket.IO (goal_created/updated/deleted). -->
         <div id="myGoalsCard" class="card mb-16 my-goals-card hidden">
           <div class="my-goals-head">
             <div class="my-goals-title">
@@ -558,6 +558,7 @@
                 </svg>
               </span>
               <span data-i18n="my_goals_title">My Goals</span>
+              <span id="myGoalsLiveDot" class="live-dot live-dot--live" title="Live"></span>
             </div>
             <span id="myGoalsProgressLabel" class="my-goals-progress-label">0/0</span>
           </div>
