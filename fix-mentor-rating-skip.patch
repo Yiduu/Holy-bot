@@ -1,0 +1,160 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 8ed13c5..da1b43e 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1127,7 +1127,7 @@ async function checkPendingRating() {
+   try {
+     const pending = await apiFetch('/api/users/pending-rating');
+     if (pending && pending.mentor_id) {
+-      openRatingModal(pending.mentor_id, pending.display_name);
++      openRatingModal(pending.mentor_id, pending.display_name, pending.assignment_id);
+     }
+   } catch (e) { /* silent — non-critical */ }
+ }
+@@ -1152,7 +1152,7 @@ function renderStars(rating, count, size = 11) {
+   return `<div class="rating-row"><span class="stars">${svgs}</span><span class="rating-num">${r.toFixed(1)}</span><span class="rating-count">(${count})</span></div>`;
+ }
+ 
+-function openRatingModal(mentorId, mentorName) {
++function openRatingModal(mentorId, mentorName, assignmentId) {
+   ratingModalOpen = true;
+   let selected = 0;
+   const overlay = document.createElement('div');
+@@ -1172,7 +1172,7 @@ function openRatingModal(mentorId, mentorName) {
+       <div class="rating-modal-sub">${(t('rate_mentor_sub') || 'Your mentorship with {name} just ended. Tap a star to rate your experience.').replace('{name}', escapeHtml(mentorName))}</div>
+       <div class="big-stars" id="ratingBigStars"></div>
+       <div class="card-actions" style="display:flex;gap:8px;margin-top:4px;">
+-        <button class="btn btn-outline btn-sm flex-1" onclick="closeRatingModal()">${t('btn_skip') || 'Skip'}</button>
++        <button class="btn btn-outline btn-sm flex-1" id="ratingSkipBtn" onclick="skipRating(${assignmentId ?? 'null'})">${t('btn_skip') || 'Skip'}</button>
+         <button class="btn btn-sm flex-1" id="ratingSubmitBtn" style="background:var(--gold);color:#1a1408;border-color:var(--gold);opacity:0.5;pointer-events:none;" onclick="submitMentorRating(${mentorId})">${t('btn_submit') || 'Submit rating'}</button>
+       </div>
+     </div>`;
+@@ -1201,6 +1201,25 @@ function closeRatingModal() {
+   document.getElementById('ratingModalOverlay')?.remove();
+ }
+ 
++// Skip: persist that this mentee dismissed rating for this specific
++// mentorship assignment so /api/users/pending-rating stops surfacing it —
++// otherwise the popup would just reappear on the next page load/session.
++async function skipRating(assignmentId) {
++  const skipBtn = document.getElementById('ratingSkipBtn');
++  if (skipBtn) skipBtn.disabled = true;
++  try {
++    if (assignmentId) {
++      await apiFetch('/api/users/skip-rating', { method: 'POST', body: { assignment_id: assignmentId } });
++    }
++  } catch (e) {
++    // Non-fatal: worst case the popup can reappear next session. Still
++    // dismiss it for the current one rather than trapping the user.
++    console.error('[rating] failed to persist skip', e);
++  } finally {
++    closeRatingModal();
++  }
++}
++
+ async function submitMentorRating(mentorId) {
+   const overlay = document.getElementById('ratingModalOverlay');
+   const stars = overlay?.querySelectorAll('#ratingBigStars svg[fill="#C9A84C"]').length || 0;
+@@ -5615,7 +5634,7 @@ async function endMentorship(assignId) {
+       updateMessageBadge();
+       navigate('dashboard');
+       if (result?.mentor?.telegram_id) {
+-        openRatingModal(result.mentor.telegram_id, result.mentor.display_name);
++        openRatingModal(result.mentor.telegram_id, result.mentor.display_name, result.assignment_id);
+       }
+     } catch (e) {
+       haptic('error');
+diff --git a/migrations/20260819_mentor_rating_skip.sql b/migrations/20260819_mentor_rating_skip.sql
+new file mode 100644
+index 0000000..0082492
+--- /dev/null
++++ b/migrations/20260819_mentor_rating_skip.sql
+@@ -0,0 +1,18 @@
++BEGIN;
++
++-- Mentor rating popup: "Skip" must be sticky per mentorship assignment
++--
++-- Previously, clicking Skip only closed the modal client-side. The
++-- /api/users/pending-rating endpoint had no way to know the mentee had
++-- already dismissed the prompt, so it kept returning the same ended
++-- assignment as "pending" and the popup reappeared on every subsequent
++-- page load / session until the mentee actually submitted a rating.
++--
++-- rating_skipped_at records when the mentee explicitly skipped rating
++-- this specific assignment. Once set, pending-rating excludes it, same
++-- as when a rating exists. A brand new assignment (reassignment / new
++-- mentor) always starts with rating_skipped_at = NULL, so the popup
++-- correctly appears again for the new mentorship.
++ALTER TABLE mentorship_assignments ADD COLUMN IF NOT EXISTS rating_skipped_at TIMESTAMPTZ;
++
++COMMIT;
+diff --git a/routes/users.js b/routes/users.js
+index 540923c..dbd5d87 100644
+--- a/routes/users.js
++++ b/routes/users.js
+@@ -303,6 +303,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
+ 
+       res.json({
+         success: true,
++        assignment_id: assignment.id,
+         mentor: {
+           telegram_id: assignment.mentor_id,
+           display_name: mentor?.user_settings?.display_name || mentor?.anonymous_id || 'Your mentor'
+@@ -322,9 +323,10 @@ module.exports = function userRoutes(supabase, requireAuth) {
+ 
+     const { data: assignment, error } = await supabase
+       .from('mentorship_assignments')
+-      .select('id, mentor_id, ended_at, mentor:mentor_id(telegram_id, anonymous_id, user_settings(display_name))')
++      .select('id, mentor_id, ended_at, rating_skipped_at, mentor:mentor_id(telegram_id, anonymous_id, user_settings(display_name))')
+       .eq('user_id', telegram_id)
+       .eq('is_active', false)
++      .is('rating_skipped_at', null)
+       .gte('ended_at', sevenDaysAgo)
+       .order('ended_at', { ascending: false })
+       .limit(1)
+@@ -344,10 +346,43 @@ module.exports = function userRoutes(supabase, requireAuth) {
+ 
+     const m = assignment.mentor;
+     res.json({
++      assignment_id: assignment.id,
+       mentor_id: assignment.mentor_id,
+       display_name: m?.user_settings?.display_name || m?.anonymous_id || 'Your mentor'
+     });
+   });
+ 
++  // POST /api/users/skip-rating – mentee dismissed the rating popup without
++  // rating. Marks this specific mentorship assignment as skipped so
++  // pending-rating stops returning it (matches how an existing rating
++  // already suppresses the popup). Scoped to assignment_id + the caller's
++  // own telegram_id so a mentee can't silence another mentee's prompt.
++  router.post('/skip-rating', requireAuth, async (req, res) => {
++    const { id: telegram_id } = req.telegramUser;
++    const { assignment_id } = req.body;
++
++    if (!assignment_id) return res.status(400).json({ error: 'assignment_id required' });
++
++    const { data: assignment, error: fetchErr } = await supabase
++      .from('mentorship_assignments')
++      .select('id')
++      .eq('id', assignment_id)
++      .eq('user_id', telegram_id)
++      .eq('is_active', false)
++      .maybeSingle();
++
++    if (fetchErr) return res.status(500).json({ error: fetchErr.message });
++    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
++
++    const { error: updateErr } = await supabase
++      .from('mentorship_assignments')
++      .update({ rating_skipped_at: new Date().toISOString() })
++      .eq('id', assignment_id);
++
++    if (updateErr) return res.status(500).json({ error: updateErr.message });
++
++    res.json({ success: true });
++  });
++
+   return router;
+-};
+\ No newline at end of file
++};

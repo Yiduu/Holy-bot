@@ -303,6 +303,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
 
       res.json({
         success: true,
+        assignment_id: assignment.id,
         mentor: {
           telegram_id: assignment.mentor_id,
           display_name: mentor?.user_settings?.display_name || mentor?.anonymous_id || 'Your mentor'
@@ -322,9 +323,10 @@ module.exports = function userRoutes(supabase, requireAuth) {
 
     const { data: assignment, error } = await supabase
       .from('mentorship_assignments')
-      .select('id, mentor_id, ended_at, mentor:mentor_id(telegram_id, anonymous_id, user_settings(display_name))')
+      .select('id, mentor_id, ended_at, rating_skipped_at, mentor:mentor_id(telegram_id, anonymous_id, user_settings(display_name))')
       .eq('user_id', telegram_id)
       .eq('is_active', false)
+      .is('rating_skipped_at', null)
       .gte('ended_at', sevenDaysAgo)
       .order('ended_at', { ascending: false })
       .limit(1)
@@ -344,9 +346,42 @@ module.exports = function userRoutes(supabase, requireAuth) {
 
     const m = assignment.mentor;
     res.json({
+      assignment_id: assignment.id,
       mentor_id: assignment.mentor_id,
       display_name: m?.user_settings?.display_name || m?.anonymous_id || 'Your mentor'
     });
+  });
+
+  // POST /api/users/skip-rating – mentee dismissed the rating popup without
+  // rating. Marks this specific mentorship assignment as skipped so
+  // pending-rating stops returning it (matches how an existing rating
+  // already suppresses the popup). Scoped to assignment_id + the caller's
+  // own telegram_id so a mentee can't silence another mentee's prompt.
+  router.post('/skip-rating', requireAuth, async (req, res) => {
+    const { id: telegram_id } = req.telegramUser;
+    const { assignment_id } = req.body;
+
+    if (!assignment_id) return res.status(400).json({ error: 'assignment_id required' });
+
+    const { data: assignment, error: fetchErr } = await supabase
+      .from('mentorship_assignments')
+      .select('id')
+      .eq('id', assignment_id)
+      .eq('user_id', telegram_id)
+      .eq('is_active', false)
+      .maybeSingle();
+
+    if (fetchErr) return res.status(500).json({ error: fetchErr.message });
+    if (!assignment) return res.status(404).json({ error: 'Assignment not found' });
+
+    const { error: updateErr } = await supabase
+      .from('mentorship_assignments')
+      .update({ rating_skipped_at: new Date().toISOString() })
+      .eq('id', assignment_id);
+
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+    res.json({ success: true });
   });
 
   return router;

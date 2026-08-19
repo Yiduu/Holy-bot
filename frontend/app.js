@@ -1127,7 +1127,7 @@ async function checkPendingRating() {
   try {
     const pending = await apiFetch('/api/users/pending-rating');
     if (pending && pending.mentor_id) {
-      openRatingModal(pending.mentor_id, pending.display_name);
+      openRatingModal(pending.mentor_id, pending.display_name, pending.assignment_id);
     }
   } catch (e) { /* silent — non-critical */ }
 }
@@ -1152,7 +1152,7 @@ function renderStars(rating, count, size = 11) {
   return `<div class="rating-row"><span class="stars">${svgs}</span><span class="rating-num">${r.toFixed(1)}</span><span class="rating-count">(${count})</span></div>`;
 }
 
-function openRatingModal(mentorId, mentorName) {
+function openRatingModal(mentorId, mentorName, assignmentId) {
   ratingModalOpen = true;
   let selected = 0;
   const overlay = document.createElement('div');
@@ -1172,7 +1172,7 @@ function openRatingModal(mentorId, mentorName) {
       <div class="rating-modal-sub">${(t('rate_mentor_sub') || 'Your mentorship with {name} just ended. Tap a star to rate your experience.').replace('{name}', escapeHtml(mentorName))}</div>
       <div class="big-stars" id="ratingBigStars"></div>
       <div class="card-actions" style="display:flex;gap:8px;margin-top:4px;">
-        <button class="btn btn-outline btn-sm flex-1" onclick="closeRatingModal()">${t('btn_skip') || 'Skip'}</button>
+        <button class="btn btn-outline btn-sm flex-1" id="ratingSkipBtn" onclick="skipRating(${assignmentId ?? 'null'})">${t('btn_skip') || 'Skip'}</button>
         <button class="btn btn-sm flex-1" id="ratingSubmitBtn" style="background:var(--gold);color:#1a1408;border-color:var(--gold);opacity:0.5;pointer-events:none;" onclick="submitMentorRating(${mentorId})">${t('btn_submit') || 'Submit rating'}</button>
       </div>
     </div>`;
@@ -1199,6 +1199,25 @@ function openRatingModal(mentorId, mentorName) {
 function closeRatingModal() {
   ratingModalOpen = false;
   document.getElementById('ratingModalOverlay')?.remove();
+}
+
+// Skip: persist that this mentee dismissed rating for this specific
+// mentorship assignment so /api/users/pending-rating stops surfacing it —
+// otherwise the popup would just reappear on the next page load/session.
+async function skipRating(assignmentId) {
+  const skipBtn = document.getElementById('ratingSkipBtn');
+  if (skipBtn) skipBtn.disabled = true;
+  try {
+    if (assignmentId) {
+      await apiFetch('/api/users/skip-rating', { method: 'POST', body: { assignment_id: assignmentId } });
+    }
+  } catch (e) {
+    // Non-fatal: worst case the popup can reappear next session. Still
+    // dismiss it for the current one rather than trapping the user.
+    console.error('[rating] failed to persist skip', e);
+  } finally {
+    closeRatingModal();
+  }
 }
 
 async function submitMentorRating(mentorId) {
@@ -5615,7 +5634,7 @@ async function endMentorship(assignId) {
       updateMessageBadge();
       navigate('dashboard');
       if (result?.mentor?.telegram_id) {
-        openRatingModal(result.mentor.telegram_id, result.mentor.display_name);
+        openRatingModal(result.mentor.telegram_id, result.mentor.display_name, result.assignment_id);
       }
     } catch (e) {
       haptic('error');
