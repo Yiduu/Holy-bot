@@ -2937,10 +2937,9 @@ textarea.form-control {
 }
 
 /* Hidden mirror of the content, used purely so the ticker's downward
-   scroll can wrap seamlessly — never interactive, never announced. */
+   scroll can wrap seamlessly */
 .goal-ticker-clone {
   margin-top: 2px;
-  pointer-events: none;
   user-select: none;
 }
 

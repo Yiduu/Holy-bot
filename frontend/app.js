@@ -2152,6 +2152,20 @@ class GoalTicker {
   // Call after any DOM mutation to the content (add/update/delete) so
   // the mirrored clone stays pixel-identical and scrollTop stays sane.
   refresh() {
+    const itemCount = this.content.children.length;
+    const contentH = this.content.scrollHeight;
+    const viewportH = this.viewport?.clientHeight || 0;
+    const shouldLoop = !GOAL_TICKER_REDUCED_MOTION && itemCount >= this.minItemsToRun && viewportH > 0 && contentH > viewportH + 4;
+
+    if (!shouldLoop) {
+      if (this.clone) {
+        this.clone.remove();
+        this.clone = null;
+      }
+      if (this.viewport) this.viewport.scrollTop = 0;
+      return;
+    }
+
     if (!this.clone) {
       this.clone = document.createElement('div');
       this.clone.className = `${this.content.className} goal-ticker-clone`;
@@ -2159,7 +2173,6 @@ class GoalTicker {
       this.viewport.appendChild(this.clone);
     }
     this.clone.innerHTML = this.content.innerHTML;
-    const contentH = this.content.scrollHeight;
     if (contentH > 0 && this.viewport.scrollTop >= contentH) {
       this.viewport.scrollTop = this.viewport.scrollTop % contentH;
     }
@@ -2185,7 +2198,8 @@ class GoalTicker {
 
       const itemCount = this.content.children.length;
       const contentH = this.content.scrollHeight;
-      if (itemCount < this.minItemsToRun || contentH <= this.viewport.clientHeight + 4) return; // nothing worth looping
+      const viewportH = this.viewport?.clientHeight || 0;
+      if (itemCount < this.minItemsToRun || viewportH === 0 || contentH <= viewportH + 4) return; // nothing worth looping
 
       this.viewport.scrollTop += this.speed;
       if (this.viewport.scrollTop >= contentH) {
@@ -2297,10 +2311,13 @@ async function loadMyGoalsWidget() {
 
 async function toggleMyGoalDone(goalId, isDone) {
   haptic('light');
-  const item = document.querySelector(`.my-goal-item[data-goal-id="${goalId}"]`);
-  item?.classList.toggle('done', isDone);
-  item?.classList.add('goal-pulse');
-  setTimeout(() => item?.classList.remove('goal-pulse'), 500);
+  document.querySelectorAll(`.my-goal-item[data-goal-id="${goalId}"]`).forEach(item => {
+    item.classList.toggle('done', isDone);
+    item.classList.add('goal-pulse');
+    setTimeout(() => item?.classList.remove('goal-pulse'), 500);
+    const cb = item.querySelector('input[type="checkbox"]');
+    if (cb) cb.checked = isDone;
+  });
 
   const cached = myGoalsCache.find(g => String(g.id) === String(goalId));
   if (cached) cached.is_done = isDone;
