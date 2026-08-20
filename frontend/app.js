@@ -4179,7 +4179,9 @@ async function loadSettings() {
       renderBioDisplay(s.bio || '');
       $('settingSpecialization').value = s.specialization || '';
       $('settingMaxMentees').value = s.max_mentees || 5;
-      $('settingMenteeSex').value = s.preferred_mentee_sex || 'prefer_not';
+      const menteeSex = s.preferred_mentee_sex || 'prefer_not';
+      const menteeSexLabels = { prefer_not: 'Both', M: 'Male only', F: 'Female only' };
+      selectMenteeSex(menteeSex, menteeSexLabels[menteeSex] || 'Both');
 
       const acceptToggle = $('toggleAcceptingRequests');
       if (acceptToggle) {
@@ -4512,33 +4514,27 @@ function toggleNotif(id) {
   // saveSettings() reads it directly when the user hits Save.
 }
 
-// ─── Mentor Application ───────────────────────────────────────
-function openApplyModal() {
-  haptic('light');
-  $('applySex').value = '';
-  const selectedTextEl = $('applySexSelectedText');
-  if (selectedTextEl) selectedTextEl.textContent = t('Select…') || 'Select…';
-  $('applyEdu').value = '';
-  $('applyAbout').value = '';
-  $('applyModal').classList.add('open');
-}
-
-/* ── Mentor Application Dropdown helpers ────────────────────── */
-function toggleApplySexDropdown(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  const menu = $('applySexDropdownMenu');
-  if (!menu) return;
-  const isOpen = menu.classList.contains('open');
-  closeApplySexDropdown();
-  if (!isOpen) {
-    menu.classList.add('open');
-    setTimeout(() => document.addEventListener('click', closeApplySexDropdown, { once: true }), 0);
+function selectMenteeSex(value, labelText) {
+  haptic('selection');
+  const input = $('settingMenteeSex');
+  if (input) input.value = value;
+  const label = $('settingMenteeSexLabel');
+  if (label) label.textContent = labelText;
+  const menu = $('settingMenteeSexDropdown')?.querySelector('.premium-dropdown-menu');
+  if (menu) {
+    menu.querySelectorAll('.dropdown-item').forEach(item => {
+      item.classList.toggle('selected', item.dataset.value === value);
+    });
   }
 }
 
-function closeApplySexDropdown() {
-  $('applySexDropdownMenu')?.classList.remove('open');
+// ─── Mentor Application ───────────────────────────────────────
+function openApplyModal() {
+  haptic('light');
+  selectApplySex('', t('Select…') || 'Select…');
+  $('applyEdu').value = '';
+  $('applyAbout').value = '';
+  $('applyModal').classList.add('open');
 }
 
 function selectApplySex(val, text, e) {
@@ -4546,13 +4542,21 @@ function selectApplySex(val, text, e) {
     e.preventDefault();
     e.stopPropagation();
   }
-  $('applySex').value = val;
+  haptic('selection');
+  const input = $('applySex');
+  if (input) input.value = val;
   const btnText = $('applySexSelectedText');
   if (btnText) {
-    const localText = t(val === 'prefer_not' ? 'sex_both' : val === 'M' ? 'sex_male' : 'sex_female');
+    const localText = val ? t(val === 'prefer_not' ? 'sex_both' : val === 'M' ? 'sex_male' : 'sex_female') : '';
     btnText.textContent = localText || text;
   }
-  closeApplySexDropdown();
+  const menu = $('applySexDropdownMenu');
+  if (menu) {
+    menu.querySelectorAll('.dropdown-item').forEach(item => {
+      item.classList.toggle('selected', item.dataset.value === val);
+    });
+  }
+  $('applySexDropdown')?.removeAttribute('data-open');
 }
 function closeApplyModal() {
   haptic('light');
@@ -4850,12 +4854,31 @@ async function submitTicketReply() {
   }
 }
 
+function selectTicketCategory(val, text) {
+  haptic('selection');
+  const input = $('modalTicketCategory');
+  if (input) input.value = val;
+  const label = $('modalTicketCategoryLabel');
+  if (label) label.textContent = text;
+  const menu = $('modalTicketCategoryDropdown')?.querySelector('.premium-dropdown-menu');
+  if (menu) {
+    menu.querySelectorAll('.dropdown-item').forEach(item => {
+      item.classList.toggle('selected', item.dataset.value === val);
+    });
+  }
+}
+
 function toggleNewTicketModal(show) {
   haptic('selection');
   const modal = $('newTicketModal');
   if (!modal) return;
   modal.style.display = '';
   modal.classList.toggle('open', show);
+  if (show) {
+    $('modalTicketSubject').value = '';
+    $('modalTicketDesc').value = '';
+    selectTicketCategory('', 'General');
+  }
 }
 
 async function submitModalTicket() {
@@ -4875,7 +4898,7 @@ async function submitModalTicket() {
     showToast('Support request submitted', 'success');
     $('modalTicketSubject').value = '';
     $('modalTicketDesc').value = '';
-    if ($('modalTicketCategory')) $('modalTicketCategory').value = '';
+    selectTicketCategory('', 'General');
     toggleNewTicketModal(false);
     if (currentPage === 'support') {
       loadUserTickets();
@@ -6149,20 +6172,31 @@ document.addEventListener('DOMContentLoaded', init);
 // attribute on itself; styles.css keys the menu's visibility off that
 // attribute. Clicking anywhere else closes whatever is open.
 document.addEventListener('click', (e) => {
+  const toggleBtn = e.target.closest('[data-dropdown-toggle], .premium-dropdown-btn');
   const dropdown = e.target.closest('[data-dropdown]');
-  if (dropdown) {
+  const item = e.target.closest('.dropdown-item');
+
+  if (toggleBtn && dropdown) {
     const isOpen = dropdown.hasAttribute('data-open');
     document.querySelectorAll('[data-dropdown][data-open]').forEach(d => {
       if (d !== dropdown) d.removeAttribute('data-open');
     });
-    if (!isOpen) dropdown.setAttribute('data-open', '');
-    else dropdown.removeAttribute('data-open');
-  } else {
+    if (isOpen) {
+      dropdown.removeAttribute('data-open');
+    } else {
+      dropdown.setAttribute('data-open', '');
+    }
+    return;
+  }
+
+  if (item && dropdown) {
+    dropdown.removeAttribute('data-open');
+    return;
+  }
+
+  if (!dropdown) {
     document.querySelectorAll('[data-dropdown][data-open]').forEach(d => d.removeAttribute('data-open'));
   }
-});
-document.addEventListener('click', (e) => {
-  if (e.target.closest('.premium-dropdown-menu')) e.stopPropagation();
 });
 /* ============================================================
    Organic UI Enhancements — additive, non-destructive
