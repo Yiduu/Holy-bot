@@ -1172,11 +1172,24 @@ function openRatingModal(mentorId, mentorName, assignmentId) {
       <div class="rating-modal-sub">${(t('rate_mentor_sub') || 'Your mentorship with {name} just ended. Tap a star to rate your experience.').replace('{name}', escapeHtml(mentorName))}</div>
       <div class="big-stars" id="ratingBigStars"></div>
       <div class="card-actions" style="display:flex;gap:8px;margin-top:4px;">
-        <button class="btn btn-outline btn-sm flex-1" id="ratingSkipBtn" onclick="skipRating(${assignmentId ?? 'null'})">${t('btn_skip') || 'Skip'}</button>
-        <button class="btn btn-sm flex-1" id="ratingSubmitBtn" style="background:var(--gold);color:#1a1408;border-color:var(--gold);opacity:0.5;pointer-events:none;" onclick="submitMentorRating(${mentorId})">${t('btn_submit') || 'Submit rating'}</button>
+        <button class="btn btn-outline btn-sm flex-1" id="ratingSkipBtn">${t('btn_skip') || 'Skip'}</button>
+        <button class="btn btn-sm flex-1" id="ratingSubmitBtn" style="background:var(--gold);color:#1a1408;border-color:var(--gold);opacity:0.5;pointer-events:none;">${t('btn_submit') || 'Submit rating'}</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
+
+  // Wired up here (closures over the real assignmentId/mentorId values)
+  // rather than via inline onclick="..." attributes. assignmentId is a
+  // UUID (mentorship_assignments.id), and interpolating a bare UUID into
+  // an onclick string — onclick="skipRating(${assignmentId})" — produces
+  // invalid JavaScript (e.g. skipRating(3fa85f64-5717-4562-...)), since a
+  // UUID isn't a valid numeric literal. That silently broke the handler,
+  // so the assignment id never reached skipRating() and the skip was
+  // never persisted — the popup would then reappear next load. Passing
+  // the value directly through a closure sidesteps string-escaping
+  // entirely, so this works for UUIDs, numbers, or anything else.
+  overlay.querySelector('#ratingSkipBtn').addEventListener('click', () => skipRating(assignmentId));
+  overlay.querySelector('#ratingSubmitBtn').addEventListener('click', () => submitMentorRating(mentorId));
 
   const starsWrap = overlay.querySelector('#ratingBigStars');
   const paintStars = (n) => {
