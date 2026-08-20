@@ -965,22 +965,26 @@
         <!-- Display -->
         <div class="section-title" data-i18n="Display">Display</div>
         <div class="card mb-16">
-          <div class="form-group">
-            <label class="form-label" data-i18n="Display Name (still anonymous)">Display Name (still anonymous)</label>
-            <input id="settingDisplayName" class="form-control" placeholder="Custom nickname…"
+          <div class="form__group field">
+            <input id="settingDisplayName" class="form__field" type="text" placeholder=" "
               data-i18n="display_name_placeholder" />
+            <label for="settingDisplayName" class="form__label"
+              data-i18n="Display Name (still anonymous)">Display Name (still anonymous)</label>
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="Language">Language</label>
-            <select id="settingLanguage" class="form-control" onchange="changeLanguage(this.value)">
-              <option value="en">English</option>
-              <option value="am">Amharic (አማርኛ)</option>
-            </select>
+            <div class="segmented-control" id="languageSegmented">
+              <button type="button" class="segmented-btn active" data-lang="en"
+                onclick="changeLanguage('en')">EN</button>
+              <button type="button" class="segmented-btn" data-lang="am" onclick="changeLanguage('am')">አማ</button>
+            </div>
           </div>
           <div class="mt-8 flex items-center gap-8">
             <span class="text-sm text-dim" data-i18n="Theme">Theme</span>
-            <button class="btn btn-ghost btn-sm" onclick="toggleTheme()" data-i18n="Toggle Dark/Light">Toggle
-              Dark/Light</button>
+            <button class="theme-btn theme-btn-pill" onclick="toggleTheme()">
+              <span class="theme-icon-svg"></span>
+              <span data-i18n="Toggle Dark/Light">Toggle Dark/Light</span>
+            </button>
           </div>
           <div class="divider"></div>
           <button class="btn btn-outline btn-sm btn-full mentor-hidden" onclick="openTopicModal()"
@@ -1035,9 +1039,9 @@
                   aria-label="Done editing bio">Done</button>
               </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">Specialization</label>
-              <input id="settingSpecialization" class="form-control" placeholder="e.g. Young adults, Married men…" />
+            <div class="form__group field">
+              <input id="settingSpecialization" class="form__field" type="text" placeholder=" " />
+              <label for="settingSpecialization" class="form__label">Specialization</label>
             </div>
             <div class="form-group">
               <label class="form-label">Mentees I Mentor</label>
@@ -1047,9 +1051,10 @@
                 <option value="F">Female only</option>
               </select>
             </div>
-            <div class="form-group">
-              <label class="form-label">Max Mentees</label>
-              <input id="settingMaxMentees" type="number" class="form-control" min="1" max="20" value="5" />
+            <div class="form__group field">
+              <input id="settingMaxMentees" class="form__field" type="number" min="1" max="20" value="5"
+                placeholder=" " />
+              <label for="settingMaxMentees" class="form__label">Max Mentees</label>
             </div>
             <div class="divider"></div>
             <div class="toggle-wrap">
