@@ -461,6 +461,23 @@
       <div class="app-header">
         <img src="Holy%20logo1.png" alt="Holy Helper" class="app-logo" />
         <div class="header-actions">
+          <!-- Premium click-based dropdown (demonstration). Wired up
+               generically by the [data-dropdown]/[data-open] handler in
+               app.js — safe to duplicate this block elsewhere or remove
+               entirely if not needed on this page. -->
+          <div class="premium-dropdown" data-dropdown>
+            <button class="premium-dropdown-btn" data-dropdown-toggle>
+              <span class="dropdown-label">Actions</span>
+              <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            <div class="premium-dropdown-menu" data-dropdown-menu>
+              <a href="#" class="dropdown-item" data-action="source">Keep source formatting</a>
+              <a href="#" class="dropdown-item" data-action="merge">Merge formatting</a>
+              <a href="#" class="dropdown-item" data-action="text">Keep text only</a>
+            </div>
+          </div>
           <button id="adminBtn" class="btn btn-sm btn-outline hidden" data-i18n="btn_admin"
             onclick="window.location='/admin.html'">Admin</button>
           <button id="langBtnDash" class="lang-toggle-btn" onclick="toggleLanguage()"

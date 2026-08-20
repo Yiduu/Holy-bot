@@ -967,18 +967,30 @@ function showToast(msg, type = 'info') {
 // ─── Theme ────────────────────────────────────────────────────
 const THEME_ICON_SUN = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>';
 const THEME_ICON_MOON = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.4A8.4 8.4 0 1 1 9.6 3.5a6.8 6.8 0 0 0 10.9 10.9z"/></svg>';
+// Theme changes previously mutated data-theme, wrote localStorage, and
+// re-rendered every icon synchronously in one tick — on mobile that
+// synchronous icon re-render (icon innerHTML swap immediately after the
+// CSS variables flip) is what produced the visible blink/flash. Deferring
+// the icon swap to the next animation frame lets the CSS transition
+// (--theme-transition, see styles.css) actually start painting first.
 function setTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
+  const root = document.documentElement;
+  root.setAttribute('data-theme', theme);
   localStorage.setItem('theme', theme);
-  const icon = theme === 'light' ? THEME_ICON_MOON : THEME_ICON_SUN;
-  // Scoped to .theme-icon-svg (not every span) so the label span in the
-  // Settings theme pill isn't overwritten along with the icon.
-  $$('.theme-btn .theme-icon-svg').forEach(s => s.innerHTML = icon);
+  requestAnimationFrame(() => {
+    const icon = theme === 'light' ? THEME_ICON_MOON : THEME_ICON_SUN;
+    // Scoped to .theme-icon-svg (not every span) so the label span in the
+    // Settings theme pill isn't overwritten along with the icon.
+    document.querySelectorAll('.theme-btn .theme-icon-svg').forEach(el => el.innerHTML = icon);
+  });
+  if (typeof rebuildChart === 'function') {
+    requestAnimationFrame(rebuildChart);
+  }
 }
 function toggleTheme() {
   haptic('light');
   const cur = document.documentElement.getAttribute('data-theme') || 'dark';
-  setTheme(cur === 'dark' ? 'light' : 'dark');
+  setTimeout(() => setTheme(cur === 'dark' ? 'light' : 'dark'), 10);
 }
 setTheme(localStorage.getItem('theme') || 'dark');
 
@@ -6130,6 +6142,28 @@ function checkAndShowRatingPopup() {
 // ─── Boot ─────────────────────────────────────────────────────
 window.loadDashboard = loadDashboard;
 document.addEventListener('DOMContentLoaded', init);
+
+// ─── Premium Dropdown (click-toggle) ──────────────────────────
+// Click-based (not hover-only) so it works identically on touch and
+// mouse. Any element with [data-dropdown] toggles a [data-open]
+// attribute on itself; styles.css keys the menu's visibility off that
+// attribute. Clicking anywhere else closes whatever is open.
+document.addEventListener('click', (e) => {
+  const dropdown = e.target.closest('[data-dropdown]');
+  if (dropdown) {
+    const isOpen = dropdown.hasAttribute('data-open');
+    document.querySelectorAll('[data-dropdown][data-open]').forEach(d => {
+      if (d !== dropdown) d.removeAttribute('data-open');
+    });
+    if (!isOpen) dropdown.setAttribute('data-open', '');
+    else dropdown.removeAttribute('data-open');
+  } else {
+    document.querySelectorAll('[data-dropdown][data-open]').forEach(d => d.removeAttribute('data-open'));
+  }
+});
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.premium-dropdown-menu')) e.stopPropagation();
+});
 /* ============================================================
    Organic UI Enhancements — additive, non-destructive
    Wraps loadJournalEntries()/loadMentors() (calls the originals

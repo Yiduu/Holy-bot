@@ -70,6 +70,30 @@
   --inset-hi-gold: inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
+/* ─── Smooth theme transitions (fix blinks/bubbles on mobile) ───
+   A minimal, explicit transition list — only the properties that
+   actually change when data-theme flips — instead of transitioning
+   everything, which is what was causing the visible flash/jank. */
+:root {
+  --theme-transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+body, .app-header, .bottom-nav, .chat-input-row, .card, .mentor-card, .session-item {
+  transition: var(--theme-transition);
+}
+
+.btn, .toggle, .nav-item, .stat-card, .journal-item {
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+
+@media (max-width: 480px) {
+  .app-header, .bottom-nav {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: var(--bg2);
+  }
+}
+
 [data-theme="light"] {
   --bg: #F4F1EA;
   --bg2: #ECEAE0;
@@ -609,12 +633,20 @@ h3 {
   box-shadow: var(--inset-hi);
   padding: 16px;
   transition: transform 0.3s var(--ease-premium), box-shadow 0.3s ease, border-color 0.3s ease, opacity .25s ease;
+  position: relative;
+  overflow: hidden;
 }
 
-.card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-gold), var(--inset-hi);
-  border-color: var(--border);
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0;
+  transition: opacity 0.4s ease;
 }
 
 .card:active {
@@ -624,6 +656,22 @@ h3 {
 .card.gold-border {
   border-color: var(--border);
   box-shadow: var(--shadow-gold);
+}
+
+.card.gold-border::before {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-gold), var(--inset-hi);
+    border-color: var(--border);
+  }
+
+  .card:hover::before {
+    opacity: 1;
+  }
 }
 
 /* ─── Glass card ────────────────────────────────────────────── */
@@ -695,9 +743,11 @@ h3 {
   transition: transform 0.25s var(--ease-premium), border-color 0.25s ease;
 }
 
-.stat-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--border);
+@media (hover: hover) {
+  .stat-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border);
+  }
 }
 
 .stat-num {
@@ -741,8 +791,10 @@ h3 {
   box-shadow: var(--shadow-sm), var(--inset-hi-gold);
 }
 
-.btn-primary:hover {
-  box-shadow: var(--shadow-gold), var(--inset-hi-gold);
+@media (hover: hover) {
+  .btn-primary:hover {
+    box-shadow: var(--shadow-gold), var(--inset-hi-gold);
+  }
 }
 
 .btn-primary:active {
@@ -755,9 +807,11 @@ h3 {
   color: var(--gold);
 }
 
-.btn-outline:hover {
-  background: var(--gold-dim);
-  border-color: var(--gold);
+@media (hover: hover) {
+  .btn-outline:hover {
+    background: var(--gold-dim);
+    border-color: var(--gold);
+  }
 }
 
 .btn-ghost {
@@ -765,9 +819,11 @@ h3 {
   color: var(--text2);
 }
 
-.btn-ghost:hover {
-  background: var(--surface);
-  color: var(--text);
+@media (hover: hover) {
+  .btn-ghost:hover {
+    background: var(--surface);
+    color: var(--text);
+  }
 }
 
 .btn-danger {
@@ -776,8 +832,10 @@ h3 {
   color: var(--danger);
 }
 
-.btn-danger:hover {
-  background: rgba(224, 92, 92, 0.25);
+@media (hover: hover) {
+  .btn-danger:hover {
+    background: rgba(224, 92, 92, 0.25);
+  }
 }
 
 .btn-sm {
@@ -1731,16 +1789,36 @@ textarea.form-control {
   flex-direction: column;
   gap: 10px;
   transition: transform 0.3s var(--ease-premium), box-shadow 0.3s ease, border-color 0.3s ease;
+  position: relative;
+  overflow: hidden;
 }
 
-.mentor-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-gold), var(--inset-hi);
-  border-color: var(--border);
+.mentor-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0;
+  transition: opacity 0.4s ease;
 }
 
 .mentor-card:active {
   transform: translateY(-1px) scale(0.99);
+}
+
+@media (hover: hover) {
+  .mentor-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-gold), var(--inset-hi);
+    border-color: var(--border);
+  }
+
+  .mentor-card:hover::before {
+    opacity: 1;
+  }
 }
 
 .mentor-header {
@@ -4119,11 +4197,30 @@ textarea.form-control {
   box-shadow: var(--inset-hi);
   margin-bottom: 8px;
   transition: transform 0.25s var(--ease-premium), border-color 0.25s ease;
+  position: relative;
 }
 
-.session-item:hover {
-  transform: translateY(-2px);
-  border-color: var(--border);
+.session-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+@media (hover: hover) {
+  .session-item:hover {
+    transform: translateY(-2px);
+    border-color: var(--border);
+  }
+
+  .session-item:hover::before {
+    opacity: 1;
+  }
 }
 
 .session-icon {
@@ -4317,15 +4414,22 @@ textarea.form-control {
   transition: opacity 0.25s ease;
 }
 
-.journal-item:active,
-.journal-item:hover {
+.journal-item:active {
   background: linear-gradient(135deg, rgba(var(--bg3-rgb), 0.8) 0%, rgba(var(--bg2-rgb), 0.9) 100%);
-  transform: translateY(-2px);
+  transform: translateY(-1px) scale(0.99);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
 }
 
-.journal-item:hover::before {
-  opacity: 1;
+@media (hover: hover) {
+  .journal-item:hover {
+    background: linear-gradient(135deg, rgba(var(--bg3-rgb), 0.8) 0%, rgba(var(--bg2-rgb), 0.9) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+  }
+
+  .journal-item:hover::before {
+    opacity: 1;
+  }
 }
 
 .journal-item .journal-mood {
@@ -7373,4 +7477,83 @@ textarea.form-control {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+}
+
+/* ─── Premium Dropdown (click-based) ───
+   Click/tap-toggled dropdown driven by a [data-dropdown]/[data-open]
+   pair (see app.js), so it works identically on touch and mouse —
+   no hover-only behavior anywhere in this component. */
+.premium-dropdown {
+  position: relative;
+  display: inline-block;
+}
+.premium-dropdown-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.premium-dropdown-btn:hover {
+  border-color: var(--gold);
+  background: var(--gold-dim);
+}
+.premium-dropdown-btn .dropdown-arrow {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.25s var(--ease-premium);
+}
+.premium-dropdown[data-open] .dropdown-arrow {
+  transform: rotate(180deg);
+}
+.premium-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 200px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px) scale(0.96);
+  transition: opacity 0.2s ease, transform 0.25s var(--ease-premium), visibility 0.2s;
+  transform-origin: top left;
+  z-index: 1000;
+}
+.premium-dropdown[data-open] .premium-dropdown-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  color: var(--text2);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.dropdown-item:hover {
+  background: var(--gold-dim);
+  color: var(--gold-light);
+}
+.dropdown-item:active {
+  transform: scale(0.96);
 }
