@@ -4139,6 +4139,13 @@ async function updateSessionsBadge(directCount = null) {
 }
 
 // ─── Settings ─────────────────────────────────────────────────
+function jumpToSettingsSection(btn, targetId) {
+  haptic('selection');
+  $(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $$('.settings-nav-item').forEach(el => el.classList.remove('active'));
+  btn.classList.add('active');
+}
+
 async function loadSettings() {
   const nameInput = $('settingDisplayName');
   if (nameInput && !nameInput.dataset.errClearBound) {
@@ -4155,6 +4162,7 @@ async function loadSettings() {
 
     if (currentUser?.role === 'mentor') {
       $('mentorSettings').classList.remove('hidden');
+      $('settingsNavMentor')?.classList.remove('hidden');
       $('settingBio').value = s.bio || '';
       renderBioDisplay(s.bio || '');
       $('settingSpecialization').value = s.specialization || '';

@@ -1413,6 +1413,83 @@ textarea.form-control {
   box-shadow: inset 1px 2px 6px rgba(0, 0, 0, 0.25), 0 0 0 1px var(--danger);
 }
 
+/* ─── Settings jump-nav ──────────────────────────────────────────
+   From Uiverse.io by reglobby — renamed .input/.value to
+   .settings-nav/.settings-nav-item since this app already has an
+   unrelated .input class (the text-field style above); reusing it
+   here would have broken both. Accent bar remapped from GitHub blue
+   (#2F81F7) to var(--gold) to keep brand identity, and the
+   hardcoded near-black background/hover shades replaced with the
+   app's existing surface/bg3/gold-dim tokens. Active state is
+   driven by a persistent .active class set in jumpToSettingsSection()
+   (app.js) rather than the original's :focus/:active, since a jump
+   nav should keep showing which section you're in even after you
+   scroll away and tap elsewhere. */
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  padding: 6px;
+  margin-bottom: 16px;
+}
+
+.settings-nav-item {
+  background-color: transparent;
+  border: none;
+  width: 100%;
+  padding: 10px 12px 10px 18px;
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  position: relative;
+  gap: 10px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  transition: background var(--transition), color var(--transition);
+}
+
+.settings-nav-item:not(.active):hover {
+  background-color: var(--bg3);
+  color: var(--text);
+}
+
+.settings-nav-item.active {
+  background-color: var(--gold-dim);
+  color: var(--text);
+}
+
+.settings-nav-item::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 4px;
+  width: 3px;
+  height: calc(100% - 10px);
+  background-color: var(--gold);
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.settings-nav-item.active::before {
+  opacity: 1;
+}
+
+.settings-nav-item svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  fill: currentColor;
+}
+
 /* ─── Segmented control (Settings: Language) ──────────────────── */
 .segmented-control {
   display: inline-flex;
