@@ -26,6 +26,15 @@
   --text2: #A8A49A;
   --text3: #867F76;
 
+  /* Settings inputs/toggles — aliased onto the tokens above so both
+     themes stay in sync automatically */
+  --input-border: var(--text3);
+  --input-focus: var(--gold);
+  --input-label: var(--text2);
+  --toggle-bg-off: var(--bg3);
+  --toggle-bg-on: var(--gold);
+  --toggle-knob: #fff;
+
   --accent: #5B8EFF;
   --danger: #E05C5C;
   --success: #5BAD7A;
@@ -951,12 +960,135 @@ textarea.form-control {
   position: absolute;
   top: 2px;
   left: 2px;
-  transition: transform var(--transition), box-shadow var(--transition);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow var(--transition);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .toggle.on::after {
   transform: translateX(20px);
+}
+
+/* ─── Floating-label inputs (Settings: Display Name, Specialization,
+       Max Mentees) ─────────────────────────────────────────────
+   Reuses the existing .toggle for switches (already pill-shaped,
+   gold, glowing, spring-eased above) rather than introducing a
+   parallel checkbox-based toggle system — same visual result, no
+   duplicate markup/JS to keep in sync. */
+.form__group {
+  position: relative;
+  padding: 20px 0 0;
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.form__field {
+  font-family: var(--font-body);
+  width: 100%;
+  border: none;
+  border-bottom: 2px solid var(--input-border, var(--text3));
+  outline: 0;
+  font-size: 0.9rem;
+  color: var(--text);
+  padding: 8px 0;
+  background: transparent;
+  border-radius: 0;
+  transition: border-color 0.2s ease;
+}
+
+.form__field::placeholder {
+  color: transparent;
+}
+
+.form__label {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  display: block;
+  transition: 0.2s ease;
+  font-size: 0.9rem;
+  color: var(--input-label, var(--text2));
+  pointer-events: none;
+  font-weight: 500;
+}
+
+.form__field:focus {
+  border-bottom-color: var(--input-focus, var(--gold));
+}
+
+.form__field:focus ~ .form__label,
+.form__field:not(:placeholder-shown) ~ .form__label {
+  top: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.form__field:focus ~ .form__label {
+  color: var(--input-focus, var(--gold));
+}
+
+.form__field.is-invalid {
+  border-bottom-color: var(--danger);
+}
+
+.form__field.is-invalid ~ .form__label {
+  color: var(--danger);
+}
+
+/* ─── Segmented control (Settings: Language) ──────────────────── */
+.segmented-control {
+  display: inline-flex;
+  background: var(--bg3);
+  border-radius: 999px;
+  padding: 3px;
+  border: 1px solid var(--border-dim);
+}
+
+.segmented-btn {
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.segmented-btn.active {
+  background: var(--gold);
+  color: #1a1200;
+  box-shadow: 0 0 12px rgba(201, 168, 76, 0.25);
+}
+
+.segmented-btn:hover:not(.active) {
+  color: var(--text);
+}
+
+/* ─── Theme pill (Settings) ─────────────────────────────────────
+   Extends the existing .theme-btn (already used in headers) rather
+   than a one-off class, so it still gets its icon swapped by
+   setTheme() in app.js. */
+.theme-btn.theme-btn-pill {
+  width: auto;
+  height: auto;
+  border-radius: 999px;
+  padding: 6px 14px 6px 10px;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  background: var(--bg3);
+}
+
+.theme-btn.theme-btn-pill:hover {
+  border-color: var(--border);
+}
+
+.theme-btn.theme-btn-pill .theme-icon-svg {
+  display: flex;
+  align-items: center;
 }
 
 /* ─── Profile Photo (Settings) ─────────────────────────────── */

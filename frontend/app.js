@@ -971,7 +971,9 @@ function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('theme', theme);
   const icon = theme === 'light' ? THEME_ICON_MOON : THEME_ICON_SUN;
-  $$('.theme-btn span').forEach(s => s.innerHTML = icon);
+  // Scoped to .theme-icon-svg (not every span) so the label span in the
+  // Settings theme pill isn't overwritten along with the icon.
+  $$('.theme-btn .theme-icon-svg').forEach(s => s.innerHTML = icon);
 }
 function toggleTheme() {
   haptic('light');
@@ -4888,8 +4890,9 @@ function applyLanguage() {
       el.textContent = translated;
     }
   });
-  const langSelect = $('settingLanguage');
-  if (langSelect) langSelect.value = currentLanguage;
+  $$('#languageSegmented .segmented-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === currentLanguage);
+  });
 
   document.querySelectorAll('.lang-toggle-btn').forEach(btn => {
     btn.textContent = currentLanguage.toUpperCase();
