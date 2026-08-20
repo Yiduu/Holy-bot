@@ -2169,7 +2169,7 @@ async function enableStreakReminder(event) {
     });
     $('streakReminderNudge')?.classList.add('hidden');
     const toggle = $('toggleStreak');
-    if (toggle) toggle.classList.add('on');
+    if (toggle) toggle.checked = true;
     showToast(t('streak_reminder_enabled'), 'success');
   } catch (e) { showToast(e.message, 'error'); }
 }
@@ -4148,10 +4148,10 @@ async function loadSettings() {
   try {
     const s = await apiFetch('/api/users/settings');
     $('settingDisplayName').value = s.display_name || '';
-    $('toggleMessages').classList.toggle('on', s.notify_messages !== false);
-    $('toggleSessions').classList.toggle('on', s.notify_sessions !== false);
-    $('toggleVerse').classList.toggle('on', s.notify_daily_verse !== false);
-    $('toggleStreak').classList.toggle('on', s.notify_streak_reminder !== false);
+    $('toggleMessages').checked = s.notify_messages !== false;
+    $('toggleSessions').checked = s.notify_sessions !== false;
+    $('toggleVerse').checked = s.notify_daily_verse !== false;
+    $('toggleStreak').checked = s.notify_streak_reminder !== false;
 
     if (currentUser?.role === 'mentor') {
       $('mentorSettings').classList.remove('hidden');
@@ -4163,7 +4163,7 @@ async function loadSettings() {
 
       const acceptToggle = $('toggleAcceptingRequests');
       if (acceptToggle) {
-        acceptToggle.classList.toggle('on', s.accepting_requests !== false);
+        acceptToggle.checked = s.accepting_requests !== false;
       }
     }
 
@@ -4435,16 +4435,16 @@ async function saveSettings() {
   clearFieldError('settingDisplayName');
   const body = {
     display_name: $('settingDisplayName').value,
-    notify_messages: $('toggleMessages').classList.contains('on'),
-    notify_sessions: $('toggleSessions').classList.contains('on'),
-    notify_daily_verse: $('toggleVerse').classList.contains('on'),
-    notify_streak_reminder: $('toggleStreak').classList.contains('on'),
+    notify_messages: $('toggleMessages').checked,
+    notify_sessions: $('toggleSessions').checked,
+    notify_daily_verse: $('toggleVerse').checked,
+    notify_streak_reminder: $('toggleStreak').checked,
     bio: $('settingBio')?.value,
     specialization: $('settingSpecialization')?.value,
     max_mentees: parseInt($('settingMaxMentees')?.value) || 5,
   };
   if (currentUser?.role === 'mentor') {
-    body.accepting_requests = $('toggleAcceptingRequests')?.classList.contains('on');
+    body.accepting_requests = $('toggleAcceptingRequests')?.checked;
     body.preferred_mentee_sex = $('settingMenteeSex')?.value;
   }
   try {
@@ -4468,9 +4468,9 @@ async function toggleAcceptingRequests() {
   haptic('light');
   const el = $('toggleAcceptingRequests');
   if (!el) return;
-  const isCurrentlyOn = el.classList.contains('on');
-  const nextValue = !isCurrentlyOn;
-  el.classList.toggle('on', nextValue);
+  // The checkbox has already flipped its own .checked state natively by
+  // the time this change handler fires.
+  const nextValue = el.checked;
 
   try {
     await apiFetch('/api/users/settings', {
@@ -4481,15 +4481,15 @@ async function toggleAcceptingRequests() {
     showToast('Request availability updated.', 'success');
   } catch (e) {
     haptic('error');
-    el.classList.toggle('on', isCurrentlyOn); // revert on error
+    el.checked = !nextValue; // revert on error
     showToast(e.message, 'error');
   }
 }
 
 function toggleNotif(id) {
   haptic('light');
-  const el = $(id);
-  el.classList.toggle('on');
+  // The neo-toggle checkbox already flips its own .checked state natively;
+  // saveSettings() reads it directly when the user hits Save.
 }
 
 // ─── Mentor Application ───────────────────────────────────────
