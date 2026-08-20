@@ -965,11 +965,10 @@
         <!-- Display -->
         <div class="section-title" data-i18n="Display">Display</div>
         <div class="card mb-16">
-          <div class="form__group field">
-            <input id="settingDisplayName" class="form__field" type="text" placeholder=" "
+          <div class="form-group">
+            <label class="form-label" data-i18n="Display Name (still anonymous)">Display Name (still anonymous)</label>
+            <input id="settingDisplayName" class="input" type="text" autocomplete="off" placeholder="Custom nickname…"
               data-i18n="display_name_placeholder" />
-            <label for="settingDisplayName" class="form__label"
-              data-i18n="Display Name (still anonymous)">Display Name (still anonymous)</label>
           </div>
           <div class="form-group">
             <label class="form-label" data-i18n="Language">Language</label>
@@ -1187,9 +1186,10 @@
                   aria-label="Done editing bio">Done</button>
               </div>
             </div>
-            <div class="form__group field">
-              <input id="settingSpecialization" class="form__field" type="text" placeholder=" " />
-              <label for="settingSpecialization" class="form__label">Specialization</label>
+            <div class="form-group">
+              <label class="form-label">Specialization</label>
+              <input id="settingSpecialization" class="input" type="text" autocomplete="off"
+                placeholder="e.g. Young adults, Married men…" />
             </div>
             <div class="form-group">
               <label class="form-label">Mentees I Mentor</label>
@@ -1199,10 +1199,9 @@
                 <option value="F">Female only</option>
               </select>
             </div>
-            <div class="form__group field">
-              <input id="settingMaxMentees" class="form__field" type="number" min="1" max="20" value="5"
-                placeholder=" " />
-              <label for="settingMaxMentees" class="form__label">Max Mentees</label>
+            <div class="form-group">
+              <label class="form-label">Max Mentees</label>
+              <input id="settingMaxMentees" class="input" type="number" min="1" max="20" value="5" />
             </div>
             <div class="divider"></div>
             <div class="toggle-wrap toggle-wrap--neo">

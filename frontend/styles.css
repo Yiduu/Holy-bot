@@ -1373,72 +1373,44 @@ textarea.form-control {
   content: "STANDBY";
 }
 
-/* ─── Floating-label inputs (Settings: Display Name, Specialization,
-       Max Mentees) ─────────────────────────────────────────────
-   Reuses the existing .toggle for switches (already pill-shaped,
-   gold, glowing, spring-eased above) rather than introducing a
-   parallel checkbox-based toggle system — same visual result, no
-   duplicate markup/JS to keep in sync. */
-.form__group {
-  position: relative;
-  padding: 20px 0 0;
-  width: 100%;
-  margin-bottom: 14px;
-}
-
-.form__field {
-  font-family: var(--font-body);
+/* ─── Neumorphic input (Settings: Display Name, Specialization,
+       Max Mentees) ───────────────────────────────────────────────
+   From Uiverse.io by Praashoo7 — original used a light-grey/white
+   pair (#ccc / #fff) that only reads as "neumorphic" against a
+   pale background; on this app's dark surface that pair would just
+   look like a mistake. Remapped onto var(--bg3)/var(--bg2) with a
+   soft dark inset (in place of the light box-shadow) so the
+   pressed-in look still holds, and the focus glow uses the app's
+   existing --shadow-gold instead of a plain white halo. Scale bump
+   on focus toned down from 1.05 to 1.02 so it doesn't overflow the
+   16px card padding on narrow screens. */
+.input {
+  display: block;
   width: 100%;
   border: none;
-  border-bottom: 2px solid var(--input-border, var(--text3));
-  outline: 0;
+  outline: none;
+  border-radius: 12px;
+  padding: 11px 14px;
+  font-family: var(--font-body);
   font-size: 0.9rem;
   color: var(--text);
-  padding: 8px 0;
-  background: transparent;
-  border-radius: 0;
-  transition: border-color 0.2s ease;
+  background-color: var(--bg3);
+  box-shadow: inset 2px 4px 8px rgba(0, 0, 0, 0.35), inset -1px -1px 3px rgba(255, 255, 255, 0.03);
+  transition: 300ms ease-in-out;
 }
 
-.form__field::placeholder {
-  color: transparent;
+.input::placeholder {
+  color: var(--text3);
 }
 
-.form__label {
-  position: absolute;
-  top: 28px;
-  left: 0;
-  display: block;
-  transition: 0.2s ease;
-  font-size: 0.9rem;
-  color: var(--input-label, var(--text2));
-  pointer-events: none;
-  font-weight: 500;
+.input:focus {
+  background-color: var(--bg2);
+  transform: scale(1.02);
+  box-shadow: var(--shadow-gold), inset 1px 2px 6px rgba(0, 0, 0, 0.25);
 }
 
-.form__field:focus {
-  border-bottom-color: var(--input-focus, var(--gold));
-}
-
-.form__field:focus ~ .form__label,
-.form__field:not(:placeholder-shown) ~ .form__label {
-  top: 0;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.form__field:focus ~ .form__label {
-  color: var(--input-focus, var(--gold));
-}
-
-.form__field.is-invalid {
-  border-bottom-color: var(--danger);
-}
-
-.form__field.is-invalid ~ .form__label {
-  color: var(--danger);
+.input.is-invalid {
+  box-shadow: inset 1px 2px 6px rgba(0, 0, 0, 0.25), 0 0 0 1px var(--danger);
 }
 
 /* ─── Segmented control (Settings: Language) ──────────────────── */
