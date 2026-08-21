@@ -2503,51 +2503,195 @@ function applyMyGoalRealtime(type, payload) {
 
 const MENTOR_ICON_AGE = '<svg class="mentor-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><path d="M2 21h20"/><line x1="7" y1="8" x2="7" y2="4"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="17" y1="8" x2="17" y2="4"/></svg>';
 
+let mentorsCache = [];
+let mentorActiveTopicId = '';
+let mentorActiveTab = 'browse';
+let hasActiveMentorState = false;
+let savedMentorsSet = new Set();
+try {
+  const savedArr = JSON.parse(localStorage.getItem('holy_saved_mentors') || '[]');
+  savedMentorsSet = new Set(savedArr.map(String));
+} catch (e) {
+  savedMentorsSet = new Set();
+}
+
+function toggleSaveMentor(mentorId) {
+  haptic('light');
+  const idStr = String(mentorId);
+  if (savedMentorsSet.has(idStr)) {
+    savedMentorsSet.delete(idStr);
+  } else {
+    savedMentorsSet.add(idStr);
+  }
+  try {
+    localStorage.setItem('holy_saved_mentors', JSON.stringify([...savedMentorsSet]));
+  } catch (e) {}
+  updateSavedMentorsBadge();
+  renderMentorsList();
+}
+
+function updateSavedMentorsBadge() {
+  const badge = $('savedMentorsBadge');
+  if (!badge) return;
+  const count = savedMentorsSet.size;
+  if (count > 0) {
+    badge.textContent = count;
+    badge.style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function setMentorTab(tab) {
+  haptic('light');
+  mentorActiveTab = tab;
+  const btnBrowse = $('mentorTabBrowse');
+  const btnSaved = $('mentorTabSaved');
+  if (btnBrowse) btnBrowse.classList.toggle('active', tab === 'browse');
+  if (btnSaved) btnSaved.classList.toggle('active', tab === 'saved');
+  renderMentorsList();
+}
+
+function selectMentorTopicChip(btn, topicId) {
+  haptic('light');
+  mentorActiveTopicId = topicId || '';
+  const chips = $$('#mentorTopicChips .topic-chip');
+  chips.forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const select = $('mentorTopicSelect');
+  if (select) select.value = mentorActiveTopicId;
+  loadMentors();
+}
+
+function filterMentorsView() {
+  renderMentorsList();
+}
+
+function renderHaloAvatar(m, letter, isOnline = false, percent = 0) {
+  const safeLetter = escapeHtml(letter || '?');
+  const r = 25;
+  const c = 2 * Math.PI * r; // ~157.08
+  const pct = Math.min(Math.max(percent, 0), 1);
+  const isFull = pct >= 1;
+  const strokeColor = isFull ? 'rgba(255,255,255,0.2)' : 'var(--gold, #CBA05C)';
+  const dashoffset = c * (1 - pct);
+
+  const photoAttr = m?.photo_file_id
+    ? `data-avatar-tid="${m.telegram_id}" data-avatar-v="${m.photo_updated_at || ''}" onclick="viewAvatar(this)"`
+    : '';
+  const hasPhotoClass = m?.photo_file_id ? 'has-photo' : '';
+
+  return `
+    <div class="halo-avatar">
+      <svg class="halo-ring" viewBox="0 0 60 60">
+        <circle cx="30" cy="30" r="${r}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2.2" />
+        <circle cx="30" cy="30" r="${r}" fill="none" stroke="${strokeColor}" stroke-width="2.2" stroke-linecap="round"
+          stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${dashoffset.toFixed(2)}"
+          transform="rotate(-90 30 30)" />
+      </svg>
+      <div class="halo-inner ${hasPhotoClass}" ${photoAttr}>
+        ${safeLetter}
+      </div>
+      ${isOnline ? '<div class="halo-online-dot"></div>' : ''}
+    </div>`;
+}
+
+function renderModernStars(rating) {
+  const r = Math.round(rating || 0);
+  let svgs = '';
+  for (let n = 1; n <= 5; n++) {
+    const fill = n <= r ? 'var(--gold-light, #F0D9A6)' : 'rgba(255,255,255,0.14)';
+    svgs += `<svg width="12" height="12" viewBox="0 0 24 24" fill="${fill}" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+  }
+  return `<div class="mentor-stats-stars">${svgs}</div>`;
+}
+
+// Small stroke-style hourglass icon for the Pending button state.
+const MENTOR_ICON_PENDING = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><path d="M6 3h12M6 21h12M6 3c0 5 4 6 6 9-2 3-6 4-6 9M18 3c0 5-4 6-6 9 2 3 6 4 6 9"/></svg>';
+
 // ─── Mentors ──────────────────────────────────────────────────
 async function loadMentors() {
   const container = $('mentorsList');
+  const activeContainer = $('activeMentorContainer');
   const filterSelect = $('mentorTopicSelect');
-  const selectedTopic = filterSelect ? filterSelect.value : '';
+  const selectedTopic = mentorActiveTopicId || (filterSelect ? filterSelect.value : '');
 
-  container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
+  if (container) {
+    container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
+  }
+
+  updateSavedMentorsBadge();
 
   try {
-    // 1. Fetch active mentor for the user (if any) – keep as is
-    let activeMentorHtml = '';
-    let hasActiveMentor = false;
+    // 1. Fetch active mentor for the user (if any)
+    hasActiveMentorState = false;
+    if (activeContainer) activeContainer.innerHTML = '';
+
     if (currentUser?.role === 'user') {
       try {
         const activeAssignment = await apiFetch('/api/users/my-mentor');
         if (activeAssignment && activeAssignment.mentor) {
-          hasActiveMentor = true;
+          hasActiveMentorState = true;
           const m = activeAssignment.mentor;
           const name = m.user_settings?.display_name || m.anonymous_id;
-          const bio = m.user_settings?.bio || 'No bio provided';
+          const bio = m.user_settings?.bio || "Whatever you're carrying, you don't have to carry it alone. I'm here to encourage you with the hope found in Christ.";
           const letter = name.charAt(0).toUpperCase();
           const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
-          const pillsHtml = (sexLabel || m.age_range) ? `
-              <div class="mentor-pill-row">
-                ${sexLabel ? `<span class="mentor-pill">${escapeHtml(sexLabel)}</span>` : ''}
-                ${m.age_range ? `<span class="mentor-pill mentor-pill-age">${MENTOR_ICON_AGE} ${escapeHtml(m.age_range)}</span>` : ''}
-              </div>` : '';
-          activeMentorHtml = `
-            <div class="card gold-border mb-16" style="border: 2px solid var(--gold);">
-              <div class="text-xs font-bold uppercase tracking-wider mb-8" style="color:var(--gold)" data-i18n="your_active_mentor">
-                ${t('your_active_mentor') || 'Your Active Mentor'}
-              </div>
-              <div class="mentor-header mb-8">
-                ${renderAvatar(m, letter)}
-                <div class="mentor-header-info">
-                  <div class="mentor-id">${escapeHtml(name)}</div>
-                  ${pillsHtml}
+          const ageLabel = m.age_range || '';
+          const spec = m.user_settings?.specialization || '';
+          const rating = m.rating || 5.0;
+          const reviews = m.rating_count || 0;
+          const responseTime = '~1 hr';
+
+          const haloHtml = renderHaloAvatar(m, letter, true, 0.7);
+
+          if (activeContainer) {
+            activeContainer.innerHTML = `
+              <div class="active-mentor-luxury-card">
+                <div class="active-mentor-top-eyebrow">
+                  <span class="active-mentor-label">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    ${t('your_active_mentor') || 'Your Active Mentor'}
+                  </span>
+                  <span class="active-mentor-status-pill">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+                    ${t('active_mentorship_label') || 'Active Mentorship'}
+                  </span>
                 </div>
-              </div>
-              <div class="mentor-bio mb-12">${escapeHtml(bio)}</div>
-              <div class="flex gap-8">
-                <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${m.telegram_id}')" data-i18n="btn_message">${t('btn_message') || 'Message'}</button>
-                <button class="btn btn-danger btn-sm" onclick="endMentorship()" data-i18n="btn_end">${t('btn_end') || 'End Mentorship'}</button>
-              </div>
-            </div>`;
+                <div class="mentor-card-top">
+                  ${haloHtml}
+                  <div class="mentor-card-main">
+                    <div class="mentor-card-name-row">
+                      <div class="mentor-name-wrap">
+                        <span class="mentor-name">${escapeHtml(name)}</span>
+                        <svg class="verified-shield" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                      </div>
+                    </div>
+                    <div class="mentor-stats-row">
+                      ${renderModernStars(rating)}
+                      <span class="mentor-rating-val">${Number(rating).toFixed(1)}</span>
+                      <span class="mentor-reviews-count">(${reviews})</span>
+                      <span class="mentor-response-time">· ${t('replies_in', { time: responseTime }) || `replies in ${responseTime}`}</span>
+                    </div>
+                    <div class="mentor-pills-wrap">
+                      ${sexLabel ? `<span class="mentor-pill">${escapeHtml(sexLabel)}</span>` : ''}
+                      ${ageLabel ? `<span class="mentor-pill">${escapeHtml(ageLabel)}</span>` : ''}
+                      ${spec ? `<span class="mentor-pill">${escapeHtml(spec)}</span>` : ''}
+                    </div>
+                  </div>
+                </div>
+                <p class="mentor-bio-text" style="-webkit-line-clamp:3">${escapeHtml(bio)}</p>
+                <div class="mentor-card-bottom" style="margin-top:10px">
+                  <div style="display:flex;gap:8px;width:100%">
+                    <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${m.telegram_id}')" style="display:flex;align-items:center;justify-content:center;gap:6px">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                      <span>${t('btn_message') || 'Message'}</span>
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="endMentorship()">${t('btn_end') || 'End Mentorship'}</button>
+                  </div>
+                </div>
+              </div>`;
+          }
         }
       } catch (err) {
         console.error('Error fetching active mentor:', err);
@@ -2557,98 +2701,196 @@ async function loadMentors() {
     // 2. Fetch mentors from API, optionally filtered by topic_id
     let url = '/api/mentors';
     if (selectedTopic && selectedTopic !== '') {
-      url += `?topic_id=${selectedTopic}`;
+      url += `?topic_id=${encodeURIComponent(selectedTopic)}`;
     }
-    let mentors = await apiFetch(url);
-    // No client‑side filtering needed – API already filtered.
-
-    // 3. Render mentor cards – store selectedTopic for the request button
-    let mentorsListHtml = '';
-    if (!mentors.length) {
-      let message = 'No mentors available';
-      if (selectedTopic && selectedTopic !== '') {
-        const topicName = filterSelect?.options[filterSelect.selectedIndex]?.text || selectedTopic;
-        message = `No mentors available for "${topicName}"`;
-      }
-      mentorsListHtml = `<div class="empty-state"><span>${message}</span></div>`;
-    } else {
-      mentorsListHtml = mentors.map(m => {
-        const name = m.user_settings?.display_name || m.anonymous_id;
-        const bio = m.user_settings?.bio || 'No bio provided';
-        const spec = m.user_settings?.specialization || '';
-        const letter = name.charAt(0).toUpperCase();
-        const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
-        const pillsHtml = (sexLabel || m.age_range) ? `
-              <div class="mentor-pill-row">
-                ${sexLabel ? `<span class="mentor-pill">${escapeHtml(sexLabel)}</span>` : ''}
-                ${m.age_range ? `<span class="mentor-pill mentor-pill-age">${MENTOR_ICON_AGE} ${escapeHtml(m.age_range)}</span>` : ''}
-              </div>` : '';
-        const mentees = m.mentee_count || 0;
-        const max = m.user_settings?.max_mentees || 5;
-        const canRequest = !hasActiveMentor && mentees < max;
-
-        // Pass selectedTopic (topic ID) to the request function
-        const topicIdParam = selectedTopic && selectedTopic !== '' ? `, ${selectedTopic}` : '';
-
-        return `
-          <div class="mentor-card">
-            <div class="mentor-header">
-              ${renderAvatar(m, letter)}
-              <div class="mentor-header-info">
-                <div class="mentor-id">${escapeHtml(name)}</div>
-                ${renderStars(m.rating, m.rating_count)}
-                ${pillsHtml}
-              </div>
-            </div>
-            <div class="mentor-bio">${escapeHtml(bio)}</div>
-            <div class="mentor-meta">
-              ${spec ? `<span class="mentor-badge badge-spec">${escapeHtml(spec)}</span>` : ''}
-              <span class="mentor-badge badge-mentees">${mentees}/${max} ${t('role_mentees')}</span>
-              ${m.accepting_requests === false ? `<span class="mentor-badge" style="background:rgba(224,92,92,0.1);color:var(--danger);border:1px solid rgba(224,92,92,0.2);">Not Accepting</span>` : ''}
-            </div>
-            ${currentUser?.role === 'mentor' ? '' : (m.request_pending ? `
-              <button class="btn btn-outline btn-sm btn-pending" disabled title="${t('request_pending_tooltip')}">
-                ${MENTOR_ICON_PENDING} ${t('btn_request_pending')}
-              </button>
-            ` : (mentees >= max ? `
-              <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed;background:var(--bg3);color:var(--text3);" title="${t('capacity_full_tooltip')}">
-                ${t('capacity_full')}
-              </button>
-            ` : (m.accepting_requests === false ? `
-              <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed;background:var(--bg3);color:var(--text3);" title="This mentor is not accepting new requests at this time.">
-                ${t('btn_request')}
-              </button>
-            ` : `
-              <button class="btn btn-outline btn-sm" data-mentor-name="${escapeHtml(name)}"
-                onclick="requestMentorship(event, ${m.telegram_id}${topicIdParam})" ${!canRequest ? 'disabled' : ''}>
-                ${t('btn_request')}
-              </button>
-            `)))}
-          </div>`;
-      }).join('');
-    }
-
-    container.innerHTML = activeMentorHtml + mentorsListHtml;
-    applyLanguage();
-    hydrateAvatars(container);
+    mentorsCache = await apiFetch(url) || [];
+    renderMentorsList();
   } catch (e) {
-    container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`;
+    if (container) container.innerHTML = `<div class="empty-state"><span>${escapeHtml(e.message)}</span></div>`;
   }
 }
+
+function renderMentorsList() {
+  const container = $('mentorsList');
+  if (!container) return;
+
+  const countBadge = $('mentorsAvailableCount');
+  const query = ($('mentorSearchInput')?.value || '').trim().toLowerCase();
+  const selectedTopic = mentorActiveTopicId;
+
+  // Filter mentors based on query and active tab
+  const filtered = mentorsCache.filter(m => {
+    const name = (m.user_settings?.display_name || m.anonymous_id || '').toLowerCase();
+    const bio = (m.user_settings?.bio || '').toLowerCase();
+    const spec = (m.user_settings?.specialization || '').toLowerCase();
+    const topics = (m.expertise_topics || []).join(' ').toLowerCase();
+    const matchesQuery = !query || name.includes(query) || bio.includes(query) || spec.includes(query) || topics.includes(query);
+    return matchesQuery;
+  });
+
+  const listToShow = mentorActiveTab === 'saved'
+    ? filtered.filter(m => savedMentorsSet.has(String(m.telegram_id)))
+    : filtered;
+
+  if (countBadge) {
+    const countText = t('mentors_available_count', { count: listToShow.length }) || `${listToShow.length} available`;
+    countBadge.textContent = countText;
+  }
+
+  if (!listToShow.length) {
+    if (mentorActiveTab === 'saved') {
+      container.innerHTML = `
+        <div style="text-align:center;padding:48px 12px;color:var(--text3)">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:10px">
+            <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+          </svg>
+          <p style="font-size:14px;color:var(--gold-light);margin:0 0 4px;font-weight:600">
+            ${t('no_saved_mentors_title') || 'No mentors saved yet'}
+          </p>
+          <p style="font-size:12.5px;margin:0;line-height:1.5">
+            ${t('no_saved_mentors_desc') || "Tap the bookmark icon on a mentor's card to keep track of who you'd like to reach out to."}
+          </p>
+        </div>`;
+    } else {
+      let message = 'No mentors available';
+      if (query) {
+        message = `No mentors matching "${escapeHtml(query)}"`;
+      } else if (selectedTopic) {
+        message = `No mentors available for this topic`;
+      }
+      container.innerHTML = `<div class="empty-state"><span>${message}</span></div>`;
+    }
+    return;
+  }
+
+  container.innerHTML = listToShow.map(m => {
+    const name = m.user_settings?.display_name || m.anonymous_id;
+    const bio = m.user_settings?.bio || "I'm here as a mentor to walk alongside you through faith and life's challenges.";
+    const spec = m.user_settings?.specialization || '';
+    const letter = name.charAt(0).toUpperCase();
+    const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
+    const ageLabel = m.age_range || '';
+    const mentees = m.mentee_count || 0;
+    const max = m.user_settings?.max_mentees || 5;
+    const isFull = mentees >= max || m.accepting_requests === false;
+    const canRequest = !hasActiveMentorState && !isFull && !m.request_pending;
+    const isSaved = savedMentorsSet.has(String(m.telegram_id));
+    const isOnline = !!m.is_online;
+    const pct = max > 0 ? (mentees / max) : 0;
+    const spotsOpen = Math.max(max - mentees, 0);
+
+    const rating = m.rating || 5.0;
+    const reviews = m.rating_count || 0;
+    const responseTime = '~2 hrs';
+
+    const haloHtml = renderHaloAvatar(m, letter, isOnline, pct);
+    const topicIdParam = selectedTopic && selectedTopic !== '' ? `, ${selectedTopic}` : '';
+
+    const spotsLabel = isFull
+      ? (t('fully_booked') || 'Fully booked')
+      : (t('spots_open', { open: spotsOpen, max }) || `${spotsOpen} of ${max} spots open`);
+
+    // Topic pills (sex, age, specialization, expertise topics)
+    const topicPills = [
+      sexLabel ? `<span class="mentor-pill">${escapeHtml(sexLabel)}</span>` : '',
+      ageLabel ? `<span class="mentor-pill">${escapeHtml(ageLabel)}</span>` : '',
+      spec ? `<span class="mentor-pill">${escapeHtml(spec)}</span>` : '',
+      ...(m.expertise_topics || []).slice(0, 2).map(tp => `<span class="mentor-pill">${escapeHtml(tp)}</span>`)
+    ].filter(Boolean).join('');
+
+    const bookmarkFill = isSaved ? 'var(--gold, #CBA05C)' : 'none';
+    const bookmarkStroke = isSaved ? 'var(--gold, #CBA05C)' : 'var(--text3)';
+
+    // Action button
+    let actionBtnHtml = '';
+    if (currentUser?.role === 'mentor') {
+      actionBtnHtml = '';
+    } else if (m.request_pending) {
+      actionBtnHtml = `
+        <button class="btn btn-outline btn-sm btn-pending" disabled title="${t('request_pending_tooltip')}">
+          ${MENTOR_ICON_PENDING} ${t('btn_request_pending')}
+        </button>`;
+    } else if (isFull) {
+      actionBtnHtml = `
+        <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed;background:var(--bg3);color:var(--text3);" title="${t('capacity_full_tooltip')}">
+          ${t('capacity_full') || 'Full'}
+        </button>`;
+    } else {
+      actionBtnHtml = `
+        <button class="btn btn-primary btn-sm btn-mentor-request" data-mentor-name="${escapeHtml(name)}"
+          onclick="requestMentorship(event, ${m.telegram_id}${topicIdParam})" ${!canRequest ? 'disabled' : ''}>
+          <span>${t('btn_request')}</span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>`;
+    }
+
+    return `
+      <div class="mentor-card" data-mentor-id="${m.telegram_id}">
+        <div class="mentor-card-top">
+          ${haloHtml}
+          <div class="mentor-card-main">
+            <div class="mentor-card-name-row">
+              <div class="mentor-name-wrap">
+                <span class="mentor-name">${escapeHtml(name)}</span>
+                <svg class="verified-shield" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+              </div>
+              <button class="btn-save-mentor ${isSaved ? 'saved' : ''}" onclick="toggleSaveMentor(${m.telegram_id})" aria-label="Save mentor">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="${bookmarkFill}" stroke="${bookmarkStroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+                </svg>
+              </button>
+            </div>
+            <div class="mentor-stats-row">
+              ${renderModernStars(rating)}
+              <span class="mentor-rating-val">${Number(rating).toFixed(1)}</span>
+              <span class="mentor-reviews-count">(${reviews})</span>
+              <span class="mentor-response-time">· ${t('replies_in', { time: responseTime }) || `replies in ${responseTime}`}</span>
+            </div>
+            ${topicPills ? `<div class="mentor-pills-wrap">${topicPills}</div>` : ''}
+          </div>
+        </div>
+        <p class="mentor-bio-text">${escapeHtml(bio)}</p>
+        <div class="mentor-card-bottom">
+          <span class="mentor-capacity-text ${isFull ? 'full' : ''}">${spotsLabel}</span>
+          <div class="mentor-actions-group">
+            <button class="btn-mentor-msg" onclick="openChat('${m.telegram_id}')" title="${t('btn_message') || 'Message'}">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </button>
+            ${actionBtnHtml}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  applyLanguage();
+  hydrateAvatars(container);
+  if ($('activeMentorContainer')) hydrateAvatars($('activeMentorContainer'));
+}
+
 async function loadMentorTopics() {
   try {
-    const topics = await apiFetch('/api/topics');
+    const topics = await apiFetch('/api/topics') || [];
     const select = $('mentorTopicSelect');
+    const container = $('mentorTopicChips');
     if (select) {
       select.innerHTML = '<option value="">All Topics</option>' +
         topics.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+    }
+    if (container) {
+      container.innerHTML = `
+        <button class="topic-chip ${!mentorActiveTopicId ? 'active' : ''}" data-topic-id="" onclick="selectMentorTopicChip(this, '')">
+          ${t('all_topics') || 'All'}
+        </button>` +
+        topics.map(t => `
+          <button class="topic-chip ${String(mentorActiveTopicId) === String(t.id) ? 'active' : ''}" data-topic-id="${t.id}" onclick="selectMentorTopicChip(this, '${t.id}')">
+            ${escapeHtml(t.name)}
+          </button>
+        `).join('');
     }
   } catch (e) {
     console.error('Failed to load topics for filter:', e);
   }
 }
-// Small stroke-style hourglass icon for the Pending button state.
-const MENTOR_ICON_PENDING = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><path d="M6 3h12M6 21h12M6 3c0 5 4 6 6 9-2 3-6 4-6 9M18 3c0 5-4 6-6 9 2 3 6 4 6 9"/></svg>';
 
 async function requestMentorship(event, mentor_id, topic_id = null) {
   haptic('medium');

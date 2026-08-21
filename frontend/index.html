@@ -644,18 +644,72 @@
             </span></button>
         </div>
       </div>
-      <div class="page-content">
-        <div class="page-intro mb-12 stagger-fade">
-          <span class="page-intro-eyebrow" data-i18n="Mentorship">Mentorship</span>
-          <p class="page-intro-text" data-i18n="Connect with an anonymous mentor.">Connect with an anonymous mentor.</p>
+      <div class="page-content mentors-page-content">
+        <!-- Subheader count & intro -->
+        <div class="mentors-header-row mb-12">
+          <div class="page-intro">
+            <span class="page-intro-eyebrow" data-i18n="Mentorship">Mentorship</span>
+            <p class="page-intro-text" data-i18n="Connect with an anonymous mentor.">Connect with an anonymous mentor.</p>
+          </div>
+          <span id="mentorsAvailableCount" class="mentors-count-badge"></span>
         </div>
-        <div class="form-group mb-12">
-          <label class="form-label" data-i18n="Select a topic to find mentors">Select a topic to find mentors</label>
-          <select id="mentorTopicSelect" class="form-control" onchange="loadMentors()">
-            <option value="" data-i18n="All Topics">-- Loading topics --</option>
-          </select>
+
+        <!-- Search Bar -->
+        <div class="mentor-search-wrap mb-12">
+          <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input id="mentorSearchInput" type="text" class="mentor-search-input" placeholder="Search mentors by name, bio, topic…" oninput="filterMentorsView()" autocomplete="off" />
+          <svg class="filter-sliders-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" y1="21" x2="4" y2="14"></line>
+            <line x1="4" y1="10" x2="4" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12" y2="3"></line>
+            <line x1="20" y1="21" x2="20" y2="16"></line>
+            <line x1="20" y1="12" x2="20" y2="3"></line>
+            <line x1="1" y1="14" x2="7" y2="14"></line>
+            <line x1="9" y1="8" x2="15" y2="8"></line>
+            <line x1="17" y1="16" x2="23" y2="16"></line>
+          </svg>
         </div>
-        <div id="mentorsList" style="display:flex;flex-direction:column;gap:10px">
+
+        <!-- Horizontal Topic Chips -->
+        <div class="mentor-topic-scroll-container mb-12">
+          <div id="mentorTopicChips" class="topic-scroll">
+            <button class="topic-chip active" data-topic-id="" onclick="selectMentorTopicChip(this, '')">All</button>
+          </div>
+          <div class="topic-scroll-fade"></div>
+        </div>
+
+        <!-- Hidden select kept for backwards compatibility if needed -->
+        <select id="mentorTopicSelect" style="display:none" onchange="loadMentors()">
+          <option value="">All Topics</option>
+        </select>
+
+        <!-- Segmented Tabs: Browse vs Saved -->
+        <div class="mentor-tabs-segmented mb-16">
+          <button id="mentorTabBrowse" class="mentor-tab-btn active" onclick="setMentorTab('browse')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+            </svg>
+            <span data-i18n="tab_browse">Browse</span>
+          </button>
+          <button id="mentorTabSaved" class="mentor-tab-btn" onclick="setMentorTab('saved')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+            </svg>
+            <span data-i18n="tab_saved">Saved</span>
+            <span id="savedMentorsBadge" class="mentor-tab-badge" style="display:none">0</span>
+          </button>
+        </div>
+
+        <!-- Active Mentor Container (displayed if user has an active mentor) -->
+        <div id="activeMentorContainer" class="mb-16"></div>
+
+        <!-- Mentors List Container -->
+        <div id="mentorsList" style="display:flex;flex-direction:column;gap:12px">
           <div class="loading-spinner" style="margin:40px auto"></div>
         </div>
       </div>
