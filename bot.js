@@ -352,13 +352,18 @@ async function createVideoSession(chatId, date, time12h) {
     const isGroup = state.tempData.type === 'group';
     const menteeId = state.tempData.mentee_id ? parseInt(state.tempData.mentee_id) : null;
 
+    // NOTE: video_sessions has no mentor_id/mentee_id columns (see
+    // supabase/01_schema.sql) — only host_id. Passing mentor_id/mentee_id
+    // here made every insert fail with a "column does not exist" error,
+    // which is why scheduling always ended in "Failed to schedule
+    // session." Participants (host + mentee) belong in the separate
+    // session_participants table instead, matching how the mini app's
+    // POST /api/sessions/create already does it correctly.
     const { data: sess, error } = await supabase.from('video_sessions').insert({
       host_id: chatId,
-      mentor_id: chatId,
       scheduled_at: scheduledAt.toISOString(),
       is_group: isGroup,
       title: isGroup ? 'Group Session' : '1-on-1 Session',
-      mentee_id: menteeId,
       room_name: roomName,
       room_password: roomPassword,
       status: 'scheduled',
@@ -366,6 +371,14 @@ async function createVideoSession(chatId, date, time12h) {
     }).select().single();
 
     if (error) throw error;
+
+    // Add host as a participant
+    await supabase.from('session_participants').insert({ session_id: sess.id, telegram_id: chatId });
+
+    // Add mentee as a participant for private sessions
+    if (menteeId && !isGroup) {
+      await supabase.from('session_participants').insert({ session_id: sess.id, telegram_id: menteeId });
+    }
 
     const link = `${APP_URL}?start=session_${sess.id}`;
 
@@ -383,8 +396,8 @@ async function createVideoSession(chatId, date, time12h) {
     await bot.sendMessage(chatId, mentorMsg);
     console.log(`[Scheduler] Success: Session ${sess.id} created for mentor ${chatId}`);
 
-    if (sess.mentee_id) {
-      await notifySessionInvite(sess.mentee_id, {
+    if (menteeId && !isGroup) {
+      await notifySessionInvite(menteeId, {
         session_id: sess.id,
         host: 'Your mentor',
         title: 'Session',
@@ -948,10 +961,6 @@ async function handleDailyVerse(chatId) {
   if (!v) return safeSend(chatId, tSync(lang, 'no_verse'));
 
   let text = `📖 *${tSync(lang, 'verse_title')}*\n*${mdEscape(v.reference)}*\n\n${mdEscape(v.text)}`;
-  if (lang === 'am') {
-    const amVerse = await getAmharicVerse(v.text);
-    if (amVerse) text += `\n\n🇪🇹 *${tSync('am', 'amharic_translation')}:*\n_${mdEscape(amVerse)}_`;
-  }
   await safeSend(chatId, text);
 }
 
