@@ -2586,13 +2586,24 @@ function toggleBioExpand(id) {
   btn.textContent = isExpanded ? lessText : moreText;
 }
 
-function renderHaloAvatar(m, letter, isOnline = false, percent = 0) {
+function toggleTopicsExpand(id) {
+  const extraEl = document.getElementById(`topics-extra-${id}`);
+  const btn = event?.currentTarget;
+  if (!extraEl || !btn) return;
+  const isExpanded = extraEl.classList.toggle('expanded');
+  const count = btn.dataset.count || '';
+  btn.textContent = isExpanded
+    ? (btn.dataset.i18nLess || t('btn_less') || 'Less')
+    : `+${count} ${btn.dataset.i18nMore || t('btn_more') || 'more'}`;
+}
+
+function renderHaloAvatar(m, letter, isOnline = false, percent = 0, isAccepting = true) {
   const safeLetter = escapeHtml(letter || '?');
   const r = 25;
   const c = 2 * Math.PI * r; // ~157.08
   const pct = Math.min(Math.max(percent, 0), 1);
   const isFull = pct >= 1;
-  const strokeColor = isFull ? 'rgba(255,255,255,0.2)' : 'var(--gold, #CBA05C)';
+  const strokeColor = !isAccepting ? 'rgba(201, 168, 76, 0.2)' : (isFull ? 'rgba(255,255,255,0.2)' : 'var(--gold, #CBA05C)');
   const dashoffset = c * (1 - pct);
 
   const photoAttr = m?.photo_file_id
@@ -2615,13 +2626,11 @@ function renderHaloAvatar(m, letter, isOnline = false, percent = 0) {
     </div>`;
 }
 
-function renderModernRating(rating, count, responseTime) {
-  const timeLabel = responseTime ? `<span class="mentor-response-time">· ${t('replies_in', { time: responseTime }) || `replies in ${responseTime}`}</span>` : '';
+function renderModernRating(rating, count) {
   if (!count || !rating || count <= 0) {
     return `
       <div class="mentor-stats-row">
         <span class="no-rating">${t('no_ratings_yet') || 'No ratings yet'}</span>
-        ${timeLabel}
       </div>`;
   }
   const r = Math.round(rating);
@@ -2635,7 +2644,6 @@ function renderModernRating(rating, count, responseTime) {
       <div class="mentor-stats-stars">${svgs}</div>
       <span class="mentor-rating-val">${Number(rating).toFixed(1)}</span>
       <span class="mentor-reviews-count">(${count})</span>
-      ${timeLabel}
     </div>`;
 }
 
@@ -2674,7 +2682,6 @@ async function loadMentors() {
           const spec = m.user_settings?.specialization || '';
           const rating = m.rating || null;
           const reviews = m.rating_count || 0;
-          const responseTime = '~1 hr';
 
           const haloHtml = renderHaloAvatar(m, letter, true, 0.7);
 
@@ -2702,7 +2709,7 @@ async function loadMentors() {
                         <svg class="verified-shield" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
                       </div>
                     </div>
-                    ${renderModernRating(rating, reviews, responseTime)}
+                    ${renderModernRating(rating, reviews)}
                     <div class="mentor-demographics-row">
                       ${sexLabel ? `<span class="mentor-pill-demographic">${escapeHtml(sexLabel)}</span>` : ''}
                       ${ageLabel ? `<span class="mentor-pill-demographic">${escapeHtml(ageLabel)}</span>` : ''}
@@ -2805,8 +2812,9 @@ function renderMentorsList() {
     const ageLabel = m.age_range || '';
     const mentees = m.mentee_count || 0;
     const max = m.user_settings?.max_mentees || 5;
-    const isFull = mentees >= max || m.accepting_requests === false;
-    const canRequest = !hasActiveMentorState && !isFull && !m.request_pending;
+    const isAccepting = m.accepting_requests !== false;
+    const isFull = mentees >= max;
+    const canRequest = !hasActiveMentorState && isAccepting && !isFull && !m.request_pending;
     const isSaved = savedMentorsSet.has(String(m.telegram_id));
     const isOnline = !!m.is_online;
     const pct = max > 0 ? (mentees / max) : 0;
@@ -2814,19 +2822,37 @@ function renderMentorsList() {
 
     const rating = m.rating || null;
     const reviews = m.rating_count || 0;
-    const responseTime = '~2 hrs';
 
-    const haloHtml = renderHaloAvatar(m, letter, isOnline, pct);
+    const haloHtml = renderHaloAvatar(m, letter, isOnline, isAccepting ? pct : 1, isAccepting);
     const topicIdParam = selectedTopic && selectedTopic !== '' ? `, ${selectedTopic}` : '';
 
-    const spotsLabel = isFull
-      ? (t('fully_booked') || 'Fully booked')
-      : (t('spots_open', { open: spotsOpen, max }) || `${spotsOpen} of ${max} spots open`);
+    let spotsLabel = '';
+    let spotsClass = '';
+    if (!isAccepting) {
+      spotsLabel = t('not_accepting_requests') || 'Not accepting requests';
+      spotsClass = 'paused';
+    } else if (isFull) {
+      spotsLabel = t('fully_booked') || 'Fully booked';
+      spotsClass = 'full';
+    } else {
+      spotsLabel = t('spots_open', { open: spotsOpen, max }) || `${spotsOpen} of ${max} spots open`;
+    }
 
-    // Horizontal full-width tag chips (specialization + expertise topics) starting from left edge under avatar!
+    // Specialization + Topic chips with expandable more button
     const specChip = spec ? `<span class="mentor-tag-chip spec-chip">${escapeHtml(spec)}</span>` : '';
-    const topicChips = (m.expertise_topics || []).map(tp => `<span class="mentor-tag-chip">${escapeHtml(tp)}</span>`).join('');
-    const allTagsRow = (specChip || topicChips) ? `<div class="mentor-tags-full-row">${specChip}${topicChips}</div>` : '';
+    const topicsList = m.expertise_topics || [];
+    const initialTopics = topicsList.slice(0, 2);
+    const extraTopics = topicsList.slice(2);
+
+    let topicsHtml = initialTopics.map(tp => `<span class="mentor-tag-chip">${escapeHtml(tp)}</span>`).join('');
+    if (extraTopics.length > 0) {
+      topicsHtml += `
+        <span class="mentor-extra-topics" id="topics-extra-${m.telegram_id}">
+          ${extraTopics.map(tp => `<span class="mentor-tag-chip">${escapeHtml(tp)}</span>`).join('')}
+        </span>
+        <button class="btn-topics-more" onclick="toggleTopicsExpand('${m.telegram_id}')" data-count="${extraTopics.length}" data-i18n-more="${t('btn_more') || 'more'}" data-i18n-less="${t('btn_less') || 'Less'}">+${extraTopics.length} ${t('btn_more') || 'more'}</button>`;
+    }
+    const allTagsRow = (specChip || topicsHtml) ? `<div class="mentor-tags-full-row">${specChip}${topicsHtml}</div>` : '';
 
     const bookmarkFill = isSaved ? 'var(--gold, #CBA05C)' : 'none';
     const bookmarkStroke = isSaved ? 'var(--gold, #CBA05C)' : 'var(--text3)';
@@ -2839,6 +2865,11 @@ function renderMentorsList() {
       actionBtnHtml = `
         <button class="btn btn-outline btn-sm btn-pending" disabled title="${t('request_pending_tooltip')}">
           ${MENTOR_ICON_PENDING} ${t('btn_request_pending')}
+        </button>`;
+    } else if (!isAccepting) {
+      actionBtnHtml = `
+        <button class="btn btn-outline btn-sm btn-not-accepting" disabled title="${t('not_accepting_tooltip') || 'This mentor is currently not accepting new mentees.'}">
+          ${t('not_accepting') || 'Paused'}
         </button>`;
     } else if (isFull) {
       actionBtnHtml = `
@@ -2871,7 +2902,7 @@ function renderMentorsList() {
                 </svg>
               </button>
             </div>
-            ${renderModernRating(rating, reviews, responseTime)}
+            ${renderModernRating(rating, reviews)}
             <div class="mentor-demographics-row">
               ${sexLabel ? `<span class="mentor-pill-demographic">${escapeHtml(sexLabel)}</span>` : ''}
               ${ageLabel ? `<span class="mentor-pill-demographic">${escapeHtml(ageLabel)}</span>` : ''}
@@ -2890,7 +2921,7 @@ function renderMentorsList() {
 
         <!-- Bottom Action Row: Capacity + Message & Request buttons -->
         <div class="mentor-card-bottom">
-          <span class="mentor-capacity-text ${isFull ? 'full' : ''}">${spotsLabel}</span>
+          <span class="mentor-capacity-text ${spotsClass}">${spotsLabel}</span>
           <div class="mentor-actions-group">
             <button class="btn-mentor-msg" onclick="openChat('${m.telegram_id}')" title="${t('btn_message') || 'Message'}">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>

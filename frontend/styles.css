@@ -2009,9 +2009,9 @@ textarea.form-control {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: var(--teal, #5FCFC0);
+  background: var(--gold);
   border: 2px solid var(--surface);
-  box-shadow: 0 0 6px rgba(95, 207, 192, 0.6);
+  box-shadow: 0 0 6px rgba(201, 168, 76, 0.6);
 }
 
 /* ─── Modern Mentor Card ────────────────────────────────────── */
@@ -2071,8 +2071,8 @@ textarea.form-control {
 }
 
 .verified-shield {
-  color: var(--teal, #5FCFC0);
-  stroke: var(--teal, #5FCFC0);
+  color: var(--gold);
+  stroke: var(--gold);
   flex-shrink: 0;
 }
 
@@ -2119,11 +2119,6 @@ textarea.form-control {
 }
 
 .mentor-reviews-count {
-  font-size: 0.75rem;
-  color: var(--text3);
-}
-
-.mentor-response-time {
   font-size: 0.75rem;
   color: var(--text3);
 }
@@ -2178,10 +2173,39 @@ textarea.form-control {
 }
 
 .mentor-tag-chip.spec-chip {
-  background: rgba(95, 207, 192, 0.09);
-  color: var(--teal, #5FCFC0);
-  border-color: rgba(95, 207, 192, 0.28);
+  background: rgba(201, 168, 76, 0.16);
+  color: var(--gold-light);
+  border-color: rgba(201, 168, 76, 0.35);
   font-weight: 600;
+}
+
+.mentor-extra-topics {
+  display: none;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mentor-extra-topics.expanded {
+  display: inline-flex;
+}
+
+.btn-topics-more {
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 0.68rem;
+  color: var(--gold);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.btn-topics-more:hover {
+  background: rgba(201, 168, 76, 0.12);
+  color: var(--gold-light);
 }
 
 .mentor-bio-wrap {
@@ -2193,10 +2217,11 @@ textarea.form-control {
 
 .mentor-bio-text {
   font-size: 0.82rem;
-  color: rgba(243, 238, 226, 0.78);
-  line-height: 1.5;
+  color: var(--text2);
+  line-height: 1.55;
   margin: 0;
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
@@ -2205,6 +2230,7 @@ textarea.form-control {
 
 .mentor-bio-text.expanded {
   display: block;
+  line-clamp: unset;
   -webkit-line-clamp: unset;
   overflow: visible;
 }
@@ -2265,6 +2291,11 @@ textarea.form-control {
   color: rgba(240, 217, 166, 0.55);
 }
 
+.mentor-capacity-text.paused {
+  color: var(--text3);
+  opacity: 0.85;
+}
+
 .mentor-actions-group {
   display: flex;
   gap: 8px;
@@ -2300,6 +2331,14 @@ textarea.form-control {
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+.btn.btn-not-accepting {
+  background: var(--bg3);
+  color: var(--text3);
+  border-color: var(--border-dim);
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 /* ─── Top Active Mentor Luxury Card ─────────────────────────── */
@@ -2347,9 +2386,9 @@ textarea.form-control {
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(95, 207, 192, 0.12);
-  color: var(--teal, #5FCFC0);
-  border: 1px solid rgba(95, 207, 192, 0.25);
+  background: rgba(201, 168, 76, 0.14);
+  color: var(--gold-light);
+  border: 1px solid rgba(201, 168, 76, 0.3);
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -4615,6 +4654,7 @@ textarea.form-control {
   font-family: var(--font-display);
   font-size: 1.5rem;
   background: linear-gradient(135deg, var(--gold), var(--gold-light));
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: 0.08em;
@@ -6382,6 +6422,7 @@ textarea.form-control {
   line-height: 1.5;
   margin: 0 0 12px;
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
