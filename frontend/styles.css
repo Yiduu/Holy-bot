@@ -298,12 +298,26 @@ h3 {
 }
 
 .app-header h2 {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 1.2rem;
   font-weight: 700;
+}
+
+/* Every page's header has a different second child next to the h2 —
+   a .header-actions row (lang/theme toggles), a single bare <button>
+   (Save / Clear / + New), or a plain <div> of buttons (Journal). None
+   of these should ever compress: only the heading (above) is allowed
+   to shrink/ellipsis. Without this, on narrow phones each page's
+   controls squeezed by a different amount depending on their own
+   markup, so toggles and buttons visibly landed in different spots
+   from page to page. Pinning every non-heading child to a fixed size
+   keeps their position identical everywhere. */
+.app-header > *:not(h2) {
+  flex-shrink: 0;
 }
 
 /* ─── Logo ──────────────────────────────────────────────────── */
@@ -4753,20 +4767,20 @@ textarea.form-control {
   }
 
   /* Headers with a title + action buttons (Journal, Support, etc.)
-     get tight on narrow phones — let them wrap onto a second line
-     instead of clipping or overflowing off-screen. */
-  .app-header {
-    flex-wrap: wrap;
-    row-gap: 8px;
-  }
-
+     used to wrap onto a second line here, but since every page's
+     action controls are marked up differently (.header-actions vs a
+     bare button vs a plain div), wrapping made each page's buttons
+     land in a different spot — the exact "buttons/toggles keep
+     changing position" issue. Instead, keep the header a single row
+     everywhere and just shrink the heading itself; it already
+     ellipsizes via .app-header h2 above, and the non-heading rule
+     right below keeps every page's action controls pinned to a
+     fixed, identical size/position.
+     Also nudge the heading down slightly more on very narrow phones
+     so long titles ("My Support Requests") have room to breathe
+     before truncating. */
   .app-header h2 {
-    white-space: normal;
-    flex: 1 1 100%;
-  }
-
-  .app-header .header-actions {
-    flex-wrap: wrap;
+    font-size: 1.02rem;
   }
 }
 
