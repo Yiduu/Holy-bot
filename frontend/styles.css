@@ -2347,10 +2347,17 @@ textarea.form-control {
   max-width: min(280px, 80vw);
   max-height: min(320px, 60vh);
   overflow-y: auto;
-  background: var(--bg2);
-  border: 1px solid var(--border-dim);
+  /* --bg2 was nearly indistinguishable from the chat page's own --bg
+     (#141720 vs #0D0F14) with only a 6%-white border, so the menu read
+     as "hidden"/blended into the conversation behind it instead of a
+     distinct floating panel. --bg3 + a gold-tinted border + blur give
+     it real separation. */
+  background: var(--bg3);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), var(--inset-hi);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), var(--inset-hi);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -2369,6 +2376,25 @@ textarea.form-control {
   visibility: visible;
   transform: none;
   pointer-events: auto;
+}
+
+/* Dims the conversation behind the picker while it's open, so it reads
+   unmistakably as an overlay sitting above the chat rather than a box
+   that's oddly overlapping/hiding message bubbles. Tapping it closes
+   the picker, same as tapping anywhere else outside it. */
+.chat-partner-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1140;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s var(--ease-premium), visibility 0.2s;
+}
+
+.chat-partner-backdrop.open {
+  opacity: 1;
+  visibility: visible;
 }
 
 /* Small red count badge shown next to each mentee's name in the list. */

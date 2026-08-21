@@ -792,12 +792,14 @@ function toggleChatPartnerDropdown(e) {
   closeChatPartnerDropdown();
   if (!isOpen) {
     menu.classList.add('open');
+    $('chatPartnerBackdrop')?.classList.add('open');
     setTimeout(() => document.addEventListener('click', closeChatPartnerDropdown, { once: true }), 0);
   }
 }
 
 function closeChatPartnerDropdown() {
   $('chatPartnerDropdownMenu')?.classList.remove('open');
+  $('chatPartnerBackdrop')?.classList.remove('open');
 }
 
 
