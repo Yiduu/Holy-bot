@@ -2062,7 +2062,7 @@ textarea.form-control {
 .mentor-name {
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 1.15rem;
+  font-size: 0.98rem;
   color: var(--gold-light);
   letter-spacing: 0.2px;
   overflow: hidden;
@@ -2128,37 +2128,121 @@ textarea.form-control {
   color: var(--text3);
 }
 
-.mentor-pills-wrap {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 8px;
+.no-rating {
+  font-size: 0.75rem;
+  color: var(--text3);
+  font-style: italic;
 }
 
-.mentor-pill {
-  font-size: 0.7rem;
-  color: var(--text2);
+.mentor-demographics-row {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+
+.mentor-pill-demographic {
+  font-size: 0.68rem;
+  color: var(--text3);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border-dim);
   border-radius: 999px;
-  padding: 3px 9px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+/* ─── Specialization and Topics Full-width Under Avatar ────── */
+.mentor-tags-full-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 2px;
+  width: 100%;
+}
+
+.mentor-tag-chip {
+  font-size: 0.68rem;
+  color: var(--gold-light);
+  background: rgba(201, 160, 92, 0.08);
+  border: 1px solid rgba(201, 160, 92, 0.22);
+  border-radius: 6px;
+  padding: 2.5px 8px;
   white-space: nowrap;
   font-weight: 500;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  line-height: 1.3;
+}
+
+.mentor-tag-chip.spec-chip {
+  background: rgba(95, 207, 192, 0.09);
+  color: var(--teal, #5FCFC0);
+  border-color: rgba(95, 207, 192, 0.28);
+  font-weight: 600;
+}
+
+.mentor-bio-wrap {
+  position: relative;
+  margin-top: 3px;
+  margin-bottom: 2px;
+  width: 100%;
 }
 
 .mentor-bio-text {
   font-size: 0.82rem;
-  color: rgba(243, 238, 226, 0.75);
-  line-height: 1.55;
-  margin-top: 4px;
-  margin-bottom: 2px;
+  color: rgba(243, 238, 226, 0.78);
+  line-height: 1.5;
+  margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.mentor-bio-text.expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.btn-bio-toggle {
+  background: none;
+  border: none;
+  padding: 3px 0 0;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  color: var(--gold, #CBA05C);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-block;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.2s ease;
+}
+
+.btn-bio-toggle:hover {
+  color: var(--gold-light, #F0D9A6);
+}
+
+.btn-search-filter {
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.btn-search-filter:hover {
+  transform: scale(1.1);
+  color: var(--gold-light);
 }
 
 .mentor-card-bottom {
@@ -2166,7 +2250,7 @@ textarea.form-control {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 2px;
+  margin-top: 4px;
   padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
