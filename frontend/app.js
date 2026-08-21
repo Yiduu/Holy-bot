@@ -1317,6 +1317,10 @@ function connectSocket() {
       apiFetch(`/api/messages/${msg.from_id}`).then(() => updateMessageBadge()).catch(() => { });
     } else {
       updateMessageBadge();
+      // If the mentor is sitting on the chat page with a different mentee
+      // open, refresh the picker's badges live instead of leaving them
+      // stale until the dropdown is next reopened.
+      refreshChatPartnerBadges();
       showToast('💬 New message received');
       haptic('medium');
     }
@@ -3592,6 +3596,13 @@ async function loadChat() {
         selectedNameEl.textContent = partner.display_name;
       }
 
+      // A dot on the collapsed button flags unread messages from any
+      // OTHER mentee — the mentor can tell someone else messaged them
+      // without opening the list or waiting on a notification.
+      const hasOtherUnread = res.mentees.some(m => String(m.telegram_id) !== String(partner.telegram_id) && m.unread_count > 0);
+      const badgeDot = $('chatPartnerBadgeDot');
+      if (badgeDot) badgeDot.style.display = hasOtherUnread ? 'inline-block' : 'none';
+
       // Render custom menu items
       const menu = $('chatPartnerDropdownMenu');
       if (menu) {
@@ -3601,11 +3612,14 @@ async function loadChat() {
           const isOnline = isUserOnline(m.last_active);
           const dotColor = isOnline ? 'var(--success)' : 'var(--text3)';
           const dotLabel = isOnline ? 'Online' : 'Offline';
+          const badge = m.unread_count > 0
+            ? `<span class="chat-partner-badge">${m.unread_count > 99 ? '99+' : m.unread_count}</span>`
+            : `<span style="width: 8px; height: 8px; border-radius: 50%; background: ${dotColor}; display: inline-block;" title="${dotLabel}"></span>`;
 
           return `
             <button class="msg-menu-item" style="justify-content: space-between; align-items: center; ${activeStyle}" onclick="switchChatPartner('${m.telegram_id}'); closeChatPartnerDropdown()">
               <span style="font-weight: ${isSelected ? '700' : '500'};">${escapeHtml(m.display_name)}</span>
-              <span style="width: 8px; height: 8px; border-radius: 50%; background: ${dotColor}; display: inline-block;" title="${dotLabel}"></span>
+              ${badge}
             </button>
           `;
         }).join('');
@@ -3630,15 +3644,54 @@ async function loadChat() {
   }
 }
 
+// Re-fetches just the mentee list's unread badges — used when a
+// 'new_message' socket event arrives for a mentee that ISN'T the one
+// currently open in chat, so the dropdown/badge-dot update live instead
+// of only refreshing the next time the mentor opens the picker.
+// Deliberately does NOT touch window.chatState or call loadMessages, so
+// it never marks anything as read or disturbs the open conversation.
+async function refreshChatPartnerBadges() {
+  if (currentPage !== 'chat') return;
+  try {
+    const res = await apiFetch('/api/users/chat-partner');
+    if (res.type !== 'multiple') return;
+
+    const currentId = window.chatState?.with;
+    const hasOtherUnread = res.mentees.some(m => String(m.telegram_id) !== String(currentId) && m.unread_count > 0);
+    const badgeDot = $('chatPartnerBadgeDot');
+    if (badgeDot) badgeDot.style.display = hasOtherUnread ? 'inline-block' : 'none';
+
+    const menu = $('chatPartnerDropdownMenu');
+    if (!menu) return;
+    res.mentees.forEach(m => {
+      const btn = menu.querySelector(`button[onclick*="switchChatPartner('${m.telegram_id}')"]`);
+      if (!btn) return;
+      const badgeEl = btn.querySelector('.chat-partner-badge');
+      const dotEl = btn.querySelector('span[style*="border-radius: 50%"]');
+      if (m.unread_count > 0) {
+        const text = m.unread_count > 99 ? '99+' : String(m.unread_count);
+        if (badgeEl) { badgeEl.textContent = text; }
+        else if (dotEl) { dotEl.outerHTML = `<span class="chat-partner-badge">${text}</span>`; }
+      } else if (badgeEl) {
+        const isOnline = isUserOnline(m.last_active);
+        const dotColor = isOnline ? 'var(--success)' : 'var(--text3)';
+        badgeEl.outerHTML = `<span style="width: 8px; height: 8px; border-radius: 50%; background: ${dotColor}; display: inline-block;"></span>`;
+      }
+    });
+  } catch { }
+}
+
 function switchChatPartner(tid) {
   haptic('selection');
   cancelEditMessage();
   cancelReply();
   window.chatState.with = tid;
   toggleChatInput(true);
-  loadMessages(tid);
   window.pendingChatPartner = tid;
-  loadChat();
+  // Await the read-marking round trip before re-fetching chat-partner data,
+  // so the badge for the mentee we just opened is reliably cleared instead
+  // of racing loadChat()'s fetch against loadMessages()'s read-marking.
+  loadMessages(tid).finally(loadChat);
 }
 
 function openChat(partnerId) {

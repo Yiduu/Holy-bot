@@ -188,6 +188,22 @@ module.exports = function userRoutes(supabase, requireAuth) {
     const { data: user } = await supabase.from('users').select('role').eq('telegram_id', telegram_id).single();
     if (!user) return res.status(404).json({ error: 'User not found' });
 
+    // Single query for unread counts from a given set of partner ids, grouped
+    // client-side. Kept small/cheap (mentors rarely have more than a handful
+    // of mentees) so one query beats N+1 per-partner count queries.
+    async function unreadCountsFrom(fromIds) {
+      if (!fromIds.length) return {};
+      const { data: rows } = await supabase
+        .from('messages')
+        .select('from_id')
+        .eq('to_id', telegram_id)
+        .eq('is_read', false)
+        .in('from_id', fromIds);
+      const counts = {};
+      (rows || []).forEach(r => { counts[r.from_id] = (counts[r.from_id] || 0) + 1; });
+      return counts;
+    }
+
     if (user.role === 'mentor') {
       const { data: mentees, error } = await supabase
         .from('mentorship_assignments')
@@ -201,6 +217,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
         return res.json({ type: 'none' });
       } else if (mentees.length === 1) {
         const m = mentees[0].user;
+        const unread = await unreadCountsFrom([m.telegram_id]);
         return res.json({
           type: 'single',
           partner: {
@@ -209,17 +226,20 @@ module.exports = function userRoutes(supabase, requireAuth) {
             display_name: m.user_settings?.display_name || m.anonymous_id,
             last_active: m.last_active,
             photo_file_id: m.photo_file_id,
-            photo_updated_at: m.photo_updated_at
+            photo_updated_at: m.photo_updated_at,
+            unread_count: unread[m.telegram_id] || 0
           }
         });
       } else {
+        const unread = await unreadCountsFrom(mentees.map(m => m.user.telegram_id));
         const list = mentees.map(m => ({
           telegram_id: m.user.telegram_id,
           anonymous_id: m.user.anonymous_id,
           display_name: m.user.user_settings?.display_name || m.user.anonymous_id,
           last_active: m.user.last_active,
           photo_file_id: m.user.photo_file_id,
-          photo_updated_at: m.user.photo_updated_at
+          photo_updated_at: m.user.photo_updated_at,
+          unread_count: unread[m.user.telegram_id] || 0
         }));
         return res.json({ type: 'multiple', mentees: list });
       }
@@ -235,6 +255,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
       if (!assignment) return res.json({ type: 'none' });
 
       const m = assignment.mentor;
+      const unread = await unreadCountsFrom([m.telegram_id]);
       return res.json({
         type: 'single',
         partner: {
@@ -243,7 +264,8 @@ module.exports = function userRoutes(supabase, requireAuth) {
           display_name: m.user_settings?.display_name || m.anonymous_id,
           last_active: m.last_active,
           photo_file_id: m.photo_file_id,
-          photo_updated_at: m.photo_updated_at
+          photo_updated_at: m.photo_updated_at,
+          unread_count: unread[m.telegram_id] || 0
         }
       });
     }

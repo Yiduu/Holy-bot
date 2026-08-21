@@ -2326,6 +2326,80 @@ textarea.form-control {
   background: rgba(224, 92, 92, 0.1);
 }
 
+/* ── Chat partner (multi-mentee) selector ───────────────────────
+   This used to reuse .msg-context-menu (built for the per-message
+   long-press action menu) with inline style overrides to flip it from
+   "opens upward, anchored bottom-right" to "opens downward, anchored
+   top-left". That worked for placement, but it inherited that menu's
+   z-index (500) and had no max-height — with more than a couple of
+   mentees, or on a short viewport, the list could grow tall enough to
+   render underneath .chat-input-row (position:fixed, z-index:500) or
+   .bottom-nav (z-index:9999), which sit at the same or higher
+   stacking level as *siblings* of the sticky header rather than as
+   descendants of it. Giving this its own class fixes both: a z-index
+   safely above the fixed input bar, and a capped, scrollable height
+   so the list can never physically reach that far down the screen. */
+.chat-partner-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 200px;
+  max-width: min(280px, 80vw);
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+  background: var(--bg2);
+  border: 1px solid var(--border-dim);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35), var(--inset-hi);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 1150;
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.96) translateY(-4px);
+  pointer-events: none;
+  transition: opacity 0.2s var(--ease-premium), transform 0.2s var(--ease-premium), visibility 0.2s;
+  transform-origin: top left;
+}
+
+.chat-partner-menu.open {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* Small red count badge shown next to each mentee's name in the list. */
+.chat-partner-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Plain dot on the collapsed dropdown button — tells the mentor at a
+   glance that *some* mentee other than the one currently open has an
+   unread message, without needing to expand the list or check a
+   notification. */
+.chat-partner-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
 /* ── Edited badge ───────────────────────────────────────────── */
 .msg-edited {
   font-size: 0.6rem;
