@@ -2859,14 +2859,14 @@ function refreshSessionLabels() {
           actionEl.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:6px;">
               <button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${joinSessionBtnLabel()}</button>
-              <button class="btn btn-outline btn-sm"  onclick="openSessionInBrowser('${sid}')">Join via Browser</button>
+              <button class="btn btn-outline btn-sm"  onclick="openSessionInBrowser('${sid}')">${joinBrowserBtnLabel()}</button>
             </div>`;
         } else if (labelClass === 'chip chip-muted session-not-yet') {
           // Scheduled but too early — show disabled buttons + "Starts at" text
           actionEl.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:6px;">
               <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinSessionBtnLabel()}</button>
-              <button class="btn btn-outline btn-sm"  disabled style="opacity:.45;cursor:not-allowed;">Join via Browser</button>
+              <button class="btn btn-outline btn-sm"  disabled style="opacity:.45;cursor:not-allowed;">${joinBrowserBtnLabel()}</button>
               <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
             </div>`;
         } else {
@@ -2948,13 +2948,13 @@ async function loadSessions() {
           const actionHtml = isJoinable
             ? `<div style="display:flex; flex-direction:column; gap:6px;">
                 <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${joinSessionBtnLabel()}</button>
-                <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">Join via Browser</button>
+                <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">${joinBrowserBtnLabel()}</button>
                 ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${session.id}')">End Session</button>` : ''}
               </div>`
             : (labelClass === 'chip chip-muted session-not-yet'
               ? `<div style="display:flex; flex-direction:column; gap:6px;">
                   <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinSessionBtnLabel()}</button>
-                  <button class="btn btn-outline btn-sm" disabled style="opacity:.45;cursor:not-allowed;">Join via Browser</button>
+                  <button class="btn btn-outline btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinBrowserBtnLabel()}</button>
                   ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${session.id}')">End Session</button>` : ''}
                   <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
                 </div>`
@@ -2965,7 +2965,7 @@ async function loadSessions() {
                 data-session-id="${session.id}"
                 data-scheduled-at="${session.scheduled_at}"
                 data-status="${session.status}">
-              <div class="session-icon">${isGroup ? '👥' : '👤'}</div>
+              <div class="session-icon">${isGroup ? ICON_GROUP_SVG : ICON_USER_SVG}</div>
               <div class="session-body">
                 <div class="session-title">${escapeHtml(title)}</div>
                 <div class="session-sub">${scheduled}</div>
@@ -3023,7 +3023,7 @@ async function loadSessions() {
                 data-session-id="${s.id}"
                 data-scheduled-at="${s.scheduled_at}"
                 data-status="${s.status}">
-              <div class="session-icon">👥</div>
+              <div class="session-icon">${ICON_GROUP_SVG}</div>
               <div class="session-body">
                 <div class="session-title">${escapeHtml(s.title)}</div>
                 <div class="session-sub">${formatDateTime(s.scheduled_at)}</div>
@@ -4012,8 +4012,23 @@ function handleChatInputKeydown(event) {
 // every "Join Session" button so its icon always looks identical.
 const ICON_JOIN_SESSION_SVG = '<svg class="btn-icon-video" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>';
 
+// Premium SVG "join via browser" icon — pairs with ICON_JOIN_SESSION_SVG so
+// the outline button matches the primary button's icon weight and style
+// instead of sitting as bare text next to an iconed sibling.
+const ICON_JOIN_BROWSER_SVG = '<svg class="btn-icon-browser" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3c2.4 2.6 3.7 5.7 3.7 9s-1.3 6.4-3.7 9c-2.4-2.6-3.7-5.7-3.7-9s1.3-6.4 3.7-9z"/></svg>';
+
+// Premium SVG "user / 1-on-1" icon — replaces the 👤 emoji for sessions.
+const ICON_USER_SVG = '<svg class="session-type-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+
+// Premium SVG "group / multi-user" icon — replaces the 👥 emoji for sessions.
+const ICON_GROUP_SVG = '<svg class="session-type-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+
 function joinSessionBtnLabel() {
   return `${ICON_JOIN_SESSION_SVG}<span>${t('btn_join_session')}</span>`;
+}
+
+function joinBrowserBtnLabel() {
+  return `${ICON_JOIN_BROWSER_SVG}<span>Join via Browser</span>`;
 }
 
 function autoResizeChatInput() {
