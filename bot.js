@@ -168,14 +168,11 @@ async function showMainMenu(chatId, customText) {
   return showPersistentMenu(chatId, customText);
 }
 
-async function showPersistentMenu(chatId, customText) {
-  const [{ data: user }, lang] = await Promise.all([
-    supabase.from('users').select('role, anonymous_id').eq('telegram_id', chatId).single(),
-    getUserLang(chatId)
-  ]);
-  const role = user?.role || 'user';
-  const menuText = customText || tSync(lang, 'menu_welcome', { nick: user?.anonymous_id || '' });
-
+// Builds the bottom reply-keyboard rows for a given role/lang. Pulled out
+// of showPersistentMenu so other send paths (chat notifications) can
+// reattach the same keyboard without duplicating the layout, and without
+// needing a full showMainMenu-style text message.
+function buildPersistentKeyboard(role, lang) {
   const kb = [
     [tSync(lang, 'btn_find_mentor'), tSync(lang, 'btn_my_chat')],
     [tSync(lang, 'btn_streak'), tSync(lang, 'btn_journal')],
@@ -188,12 +185,19 @@ async function showPersistentMenu(chatId, customText) {
     kb.push([tSync(lang, 'btn_apply_mentor')]);
   }
 
+  return { keyboard: kb, resize_keyboard: true, one_time_keyboard: false };
+}
+
+async function showPersistentMenu(chatId, customText) {
+  const [{ data: user }, lang] = await Promise.all([
+    supabase.from('users').select('role, anonymous_id').eq('telegram_id', chatId).single(),
+    getUserLang(chatId)
+  ]);
+  const role = user?.role || 'user';
+  const menuText = customText || tSync(lang, 'menu_welcome', { nick: user?.anonymous_id || '' });
+
   await safeSend(chatId, menuText, {
-    reply_markup: {
-      keyboard: kb,
-      resize_keyboard: true,
-      one_time_keyboard: false
-    }
+    reply_markup: buildPersistentKeyboard(role, lang)
   });
 }
 
@@ -598,14 +602,20 @@ async function forwardMessage(fromId, toId, text) {
   // Send Telegram notification (existing code)
   const [{ data: sender }, { data: recipient }] = await Promise.all([
     supabase.from('users').select('anonymous_id, role').eq('telegram_id', fromId).single(),
-    supabase.from('users').select('chat_id').eq('telegram_id', toId).single()
+    supabase.from('users').select('chat_id, role').eq('telegram_id', toId).single()
   ]);
 
   const lang = await getUserLang(toId);
   if (recipient?.chat_id) {
     const roleLabel = sender?.role === 'mentor' ? tSync(lang, 'role_mentor') : tSync(lang, 'role_mentee');
     const msgText = tSync(lang, 'msg_from_partner', { role: roleLabel, nick: mdEscape(sender?.anonymous_id), text: mdEscape(text) });
-    await safeSend(recipient.chat_id, msgText);
+    // Reattach the bottom reply keyboard here too — this notification is
+    // often the first message a recipient sees in a session, and without a
+    // keyboard field on it the client can be left showing no keyboard at
+    // all until the user types /start.
+    await safeSend(recipient.chat_id, msgText, {
+      reply_markup: buildPersistentKeyboard(recipient.role || 'user', lang)
+    });
     setState(toId, 'chat_active', fromId);
   }
 
@@ -624,7 +634,14 @@ async function forwardMessage(fromId, toId, text) {
 // go to. Used by both plain-text forwarding (above) and file/voice forwarding
 // (below) so the "which partner" behavior stays identical for every message
 // type.
-async function resolveChatTarget(chatId, state) {
+// `pending` (optional) is the message/file we couldn't deliver yet because
+// the sender has multiple active partners. When supplied, we stash it on
+// the user's state and prompt with tappable buttons instead of asking the
+// user to type `/reply @nickname` — nicknames contain underscores, which
+// legacy Markdown mangles in the list (see mdEscape usage below), so
+// hand-typed matches were unreliable. Buttons carry the real telegram_id in
+// callback_data, so there's nothing to mistype or mis-render.
+async function resolveChatTarget(chatId, state, pending = null) {
   const partnersInfo = await getActiveChatPartners(chatId);
   if (!partnersInfo) {
     const lang = await getUserLang(chatId);
@@ -644,8 +661,20 @@ async function resolveChatTarget(chatId, state) {
 
   const lang = await getUserLang(chatId);
   const { data: mentees } = await supabase.from('users').select('telegram_id, anonymous_id').in('telegram_id', partnersInfo.partners);
+
+  if (pending) {
+    setState(chatId, 'awaiting_target', null, { pending });
+    const buttons = mentees.map(m => [{ text: m.anonymous_id, callback_data: `select_target_${m.telegram_id}` }]);
+    await safeSend(chatId, tSync(lang, 'select_target_prompt'), { reply_markup: { inline_keyboard: buttons } });
+    return null;
+  }
+
+  // Fallback path (e.g. legacy /reply without a pending payload): keep the
+  // typed list, but escape anonymous_id so a stray underscore doesn't get
+  // eaten by Markdown italics parsing and silently corrupt the nickname
+  // the user sees/copies.
   let listStr = tSync(lang, 'multiple_partners') + '\n\n';
-  mentees.forEach((m, i) => listStr += `${i + 1}. @${m.anonymous_id}\n`);
+  mentees.forEach((m, i) => listStr += `${i + 1}. @${mdEscape(m.anonymous_id)}\n`);
   listStr += `\n${tSync(lang, 'use_reply_cmd')}`;
   await safeSend(chatId, listStr);
   return null;
@@ -743,7 +772,7 @@ async function forwardFileMessage(fromId, toId, fileType, meta, caption = '') {
 
   const [{ data: sender }, { data: recipient }] = await Promise.all([
     supabase.from('users').select('anonymous_id, role').eq('telegram_id', fromId).single(),
-    supabase.from('users').select('chat_id').eq('telegram_id', toId).single()
+    supabase.from('users').select('chat_id, role').eq('telegram_id', toId).single()
   ]);
 
   if (recipient?.chat_id) {
@@ -756,7 +785,10 @@ async function forwardFileMessage(fromId, toId, fileType, meta, caption = '') {
     const label = translated === 'msg_from_partner_file'
       ? `📎 New ${fileLabels[fileType] || 'file'} from ${roleLabel} @${mdEscape(sender?.anonymous_id)}`
       : translated;
-    await safeSend(recipient.chat_id, label);
+    // Same keyboard reattachment as forwardMessage — see comment there.
+    await safeSend(recipient.chat_id, label, {
+      reply_markup: buildPersistentKeyboard(recipient.role || 'user', lang)
+    });
 
     // Forward the actual file using its file_id — Telegram re-serves the
     // same stored bytes, so this costs no extra bandwidth or storage on our side.
@@ -791,13 +823,13 @@ async function forwardFileMessage(fromId, toId, fileType, meta, caption = '') {
 // attachment. Resolves the active chat partner (same rule as text messages)
 // then forwards.
 async function handleFileMessage(chatId, msg, fileType, state) {
-  const targetId = await resolveChatTarget(chatId, state);
-  if (!targetId) return;
-
   const meta = extractFileMeta(msg, fileType);
   if (!meta || !meta.file_id) return;
 
   const caption = (msg.caption || '').trim();
+  const targetId = await resolveChatTarget(chatId, state, { type: 'file', fileType, meta, caption });
+  if (!targetId) return;
+
   await forwardFileMessage(chatId, targetId, fileType, meta, caption);
 }
 
@@ -1599,8 +1631,8 @@ bot.on('message', async (msg) => {
         const input = args[1];
         const content = args.slice(2).join(' ');
         if (input.startsWith('@')) {
-          const nick = input.replace('@', '');
-          const { data: u } = await supabase.from('users').select('telegram_id').eq('anonymous_id', nick).single();
+          const nick = input.replace('@', '').trim();
+          const { data: u } = await supabase.from('users').select('telegram_id').ilike('anonymous_id', nick).single();
           if (u && partnersInfo.partners.includes(u.telegram_id)) targetId = u.telegram_id;
         } else {
           const idx = parseInt(input) - 1;
@@ -1955,7 +1987,7 @@ bot.on('message', async (msg) => {
 
   // 🛡️ CHAT SHIELD: Only allow forwarding if NOT in a flow state
   if (!state || state.step === 'chat_active') {
-    const targetId = await resolveChatTarget(chatId, state);
+    const targetId = await resolveChatTarget(chatId, state, { type: 'text', content: text.trim() });
     if (targetId) await forwardMessage(chatId, targetId, text.trim());
   }
 });
@@ -1985,6 +2017,39 @@ bot.on('callback_query', async (query) => {
     await safeSend(chatId, tSync(lang, 'application_cancelled'));
     await showMainMenu(chatId);
     return bot.answerCallbackQuery(query.id);
+  }
+
+  // Mentor tapped a mentee button from resolveChatTarget's "you have
+  // multiple mentees" prompt. The target's real telegram_id lives in
+  // callback_data, so there's no nickname text to parse or mismatch.
+  if (data.startsWith('select_target_')) {
+    const targetId = data.replace('select_target_', '');
+    const pending = state?.tempData?.pending;
+
+    // Re-verify this is still an active mentee — guards against a stale
+    // button if the assignment ended between prompt and tap.
+    const partnersInfo = await getActiveChatPartners(chatId);
+    if (!partnersInfo || !partnersInfo.partners.map(String).includes(String(targetId))) {
+      clearState(chatId);
+      return bot.answerCallbackQuery(query.id, { text: tSync(lang, 'partner_not_found'), show_alert: true });
+    }
+
+    if (!pending) {
+      clearState(chatId);
+      return bot.answerCallbackQuery(query.id, { text: tSync(lang, 'pending_expired'), show_alert: true });
+    }
+
+    if (pending.type === 'file') {
+      await forwardFileMessage(chatId, targetId, pending.fileType, pending.meta, pending.caption);
+    } else {
+      await forwardMessage(chatId, targetId, pending.content);
+    }
+
+    setState(chatId, 'chat_active', targetId);
+    const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', targetId).single();
+    await bot.answerCallbackQuery(query.id, { text: tSync(lang, 'target_selected', { nick: u?.anonymous_id || '' }) });
+    try { await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: query.message.message_id }); } catch {}
+    return;
   }
 
   // "Mark as Done" button on a due-date reminder (see notifyGoalDueReminder
