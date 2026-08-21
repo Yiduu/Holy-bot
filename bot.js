@@ -1313,6 +1313,31 @@ async function notifySessionStarted(chatId, sessionInfo) {
   });
 }
 
+// Notifies all configured admins that a new mentor application has come in.
+// Used by BOTH the bot's own /apply flow and the mini app's
+// POST /api/users/apply-mentor route, so admins get pinged the same way
+// no matter which surface the applicant used to apply.
+async function notifyAdminNewMentorApplication(applicantTelegramId, sex, educational_background, about) {
+  const adminIds = process.env.ADMIN_TELEGRAM_ID || process.env.ADMIN_CHAT_ID;
+  if (!adminIds) return;
+
+  const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', applicantTelegramId).single();
+  const adminMsg = `🆕 *New Mentor Application*\n\nUser: *${mdEscape(u?.anonymous_id || String(applicantTelegramId))}*\n\n*Sex:* ${mdEscape(sex)}\n*Education:* ${mdEscape(educational_background)}\n*About:* ${mdEscape(about || '')}`;
+
+  for (const id of adminIds.split(',')) {
+    if (id.trim()) {
+      await safeSend(id.trim(), adminMsg, {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '✅ Approve', callback_data: `admin_approve_${applicantTelegramId}` },
+            { text: '❌ Reject', callback_data: `admin_reject_${applicantTelegramId}` }
+          ]]
+        }
+      });
+    }
+  }
+}
+
 async function notifyMentorshipRequest(mentorId, requesterId, requesterName, requesterSex, requesterAge, topicName) {
   const lang = await getUserLang(mentorId);
   const text = lang === 'am'
@@ -1799,21 +1824,7 @@ bot.on('message', async (msg) => {
         await safeSend(chatId, await t(chatId, 'application_error'));
       } else {
         await safeSend(chatId, await t(chatId, 'application_submitted'));
-        const adminIds = process.env.ADMIN_TELEGRAM_ID || process.env.ADMIN_CHAT_ID;
-        if (adminIds) {
-          const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', chatId).single();
-          const adminMsg = `🆕 *New Mentor Application*\n\nUser: *${mdEscape(u?.anonymous_id || String(chatId))}*\n\n*Sex:* ${mdEscape(state.tempData.sex)}\n*Education:* ${mdEscape(state.tempData.educational_background)}\n*About:* ${mdEscape(about)}`;
-          for (const id of adminIds.split(',')) {
-            if (id.trim()) await safeSend(id.trim(), adminMsg, {
-              reply_markup: {
-                inline_keyboard: [[
-                  { text: '✅ Approve', callback_data: `admin_approve_${chatId}` },
-                  { text: '❌ Reject', callback_data: `admin_reject_${chatId}` }
-                ]]
-              }
-            });
-          }
-        }
+        await notifyAdminNewMentorApplication(chatId, state.tempData.sex, state.tempData.educational_background, about);
       }
       clearState(chatId); return showMainMenu(chatId);
     }
@@ -2876,6 +2887,7 @@ module.exports = {
   notifySessionReminder,
   notifySessionStarted,
   notifyMentorshipRequest,
+  notifyAdminNewMentorApplication,
   notifyMentorshipAccepted,
   notifyMentorshipRejected,
   notifyMessage,

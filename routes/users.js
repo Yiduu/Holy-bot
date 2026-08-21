@@ -164,6 +164,20 @@ module.exports = function userRoutes(supabase, requireAuth) {
     }).select().single();
 
     if (error) return res.status(500).json({ error: error.message });
+
+    // Notify admins the same way the bot's own /apply flow does — this was
+    // previously missing here, so applications submitted from the mini app
+    // silently sat in mentor_applications with no ping, and admins only
+    // ever found them by manually checking the admin page.
+    try {
+      const { notifyAdminNewMentorApplication } = require('../bot');
+      await notifyAdminNewMentorApplication(telegram_id, finalSex, finalEdu, finalAbout);
+    } catch (notifyErr) {
+      // Never fail the application submission just because the admin
+      // notification couldn't be sent (e.g. bot down, bad admin id).
+      console.error('[Mentor Application] Failed to notify admin:', notifyErr);
+    }
+
     res.status(201).json(data);
   });
 
