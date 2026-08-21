@@ -746,9 +746,9 @@
 
         <div id="chatPartnerWrapper" style="display:none; position:relative;">
           <button id="chatPartnerDropdownBtn" class="btn btn-outline btn-sm flex items-center gap-4"
-            style="border-radius:12px;background:var(--bg3);color:var(--text);font-weight:600;padding:6px 12px;"
+            style="border-radius:12px;background:var(--bg3);color:var(--text);font-weight:600;padding:6px 12px;flex-shrink:0;max-width:180px;"
             onclick="toggleChatPartnerDropdown(event)">
-            <span id="chatPartnerSelectedName">Select Mentee</span>
+            <span id="chatPartnerSelectedName" style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Select Mentee</span>
             <span id="chatPartnerBadgeDot" class="chat-partner-badge-dot" style="display:none;"></span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
               stroke-linecap="round" stroke-linejoin="round">

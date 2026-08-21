@@ -2342,9 +2342,10 @@ textarea.form-control {
 .chat-partner-menu {
   position: absolute;
   top: calc(100% + 4px);
-  left: 0;
+  right: 0;
+  left: auto;
   min-width: 200px;
-  max-width: min(280px, 80vw);
+  max-width: min(280px, calc(100vw - 32px));
   max-height: min(320px, 60vh);
   overflow-y: auto;
   /* --bg2 was nearly indistinguishable from the chat page's own --bg
@@ -2368,7 +2369,7 @@ textarea.form-control {
   transform: scale(0.96) translateY(-4px);
   pointer-events: none;
   transition: opacity 0.2s var(--ease-premium), transform 0.2s var(--ease-premium), visibility 0.2s;
-  transform-origin: top left;
+  transform-origin: top right;
 }
 
 .chat-partner-menu.open {
