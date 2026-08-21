@@ -114,8 +114,18 @@ function getState(chatId) {
 function formatUserDateTime(dateStr, timezone = 'Africa/Addis_Ababa') {
   let tz = timezone;
   if (!tz || tz === 'UTC') tz = 'Africa/Addis_Ababa';
+  // NOTE: dateStyle/timeStyle cannot be combined with timeZoneName in the
+  // same Intl.DateTimeFormat options object — V8 throws
+  // "RangeError: Invalid option : option" for that combination. Using the
+  // granular field options (year/month/day/hour/minute) instead of the
+  // dateStyle/timeStyle shorthand avoids the conflict while still
+  // including the timezone abbreviation (e.g. "EAT").
   try {
-    return new Date(dateStr).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: tz, timeZoneName: 'short' });
+    return new Date(dateStr).toLocaleString('en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+      timeZone: tz, timeZoneName: 'short'
+    });
   } catch {
     try {
       return new Date(dateStr).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: tz });
@@ -388,7 +398,15 @@ async function createVideoSession(chatId, date, time12h) {
     if (!hostTimezone || hostTimezone === 'UTC') hostTimezone = 'Africa/Addis_Ababa';
 
     const dateStr = scheduledAt.toLocaleDateString('en-US', { timeZone: hostTimezone, dateStyle: 'medium' });
-    const timeStr = scheduledAt.toLocaleTimeString('en-US', { timeZone: hostTimezone, timeStyle: 'short', timeZoneName: 'short' });
+    // NOTE: timeStyle can't be combined with timeZoneName in the same
+    // Intl.DateTimeFormat options — that combination throws
+    // "RangeError: Invalid option : option", which is what was making
+    // every scheduling attempt fail with "Failed to schedule session."
+    // Granular hour/minute options avoid the conflict while still
+    // showing the timezone abbreviation (e.g. "EAT").
+    const timeStr = scheduledAt.toLocaleTimeString('en-US', {
+      timeZone: hostTimezone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+    });
     const typeLabel = state.tempData.type === 'private' ? 'Private' : 'Group';
 
     const mentorMsg = `✅ Session scheduled!\n\nDate: ${dateStr}\nTime: ${timeStr}\nType: ${typeLabel}\n\nJoin link: ${link}`;
