@@ -203,19 +203,46 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       .single();
     if (existingPending) return res.status(409).json({ error: 'Request already pending' });
 
-    // Determine topic_id for the request
-    let topic_id = req.body.topic_id;
-    if (!topic_id) {
-      const [userTopicsRes, mentorTopicsRes] = await Promise.all([
-        supabase.from('user_topics').select('topic_id').eq('telegram_id', user_id),
-        supabase.from('mentor_topics').select('topic_id').eq('telegram_id', mentor_id)
-      ]);
-      const userTids = (userTopicsRes.data || []).map(t => t.topic_id);
-      const mentorTids = (mentorTopicsRes.data || []).map(t => t.topic_id);
-      const common = userTids.filter(id => mentorTids.includes(id));
-      if (common.length === 0) {
-        return res.status(400).json({ error: 'User and mentor have no overlapping topics' });
+    // Determine topic_id for the request.
+    //
+    // IMPORTANT: a topic is only valid for this request if it appears on
+    // BOTH the user's own topic settings (user_topics) AND the mentor's
+    // topic list (mentor_topics) — i.e. it must be in the intersection.
+    // It is NOT enough for the mentor to have the topic; the requesting
+    // user must have selected that same topic themselves too.
+    //
+    // This must be enforced even when the client supplies a topic_id
+    // (e.g. a user browsing/filtering the mentors list by a topic and
+    // hitting "Request" from there). Previously the overlap check only
+    // ran when topic_id was absent, which let a user request mentorship
+    // under a topic the mentor offers but the user never selected on
+    // their own profile — simply by picking that topic on the mentor
+    // search/filter page. Always recompute the intersection and validate
+    // against it.
+    const requestedTopicId = req.body.topic_id ? Number(req.body.topic_id) : null;
+
+    const [userTopicsRes, mentorTopicsRes] = await Promise.all([
+      supabase.from('user_topics').select('topic_id').eq('telegram_id', user_id),
+      supabase.from('mentor_topics').select('topic_id').eq('telegram_id', mentor_id)
+    ]);
+    const userTids = (userTopicsRes.data || []).map(t => t.topic_id);
+    const mentorTids = (mentorTopicsRes.data || []).map(t => t.topic_id);
+    const common = userTids.filter(id => mentorTids.includes(id));
+
+    if (common.length === 0) {
+      return res.status(400).json({ error: 'User and mentor have no overlapping topics' });
+    }
+
+    let topic_id;
+    if (requestedTopicId) {
+      if (!common.includes(requestedTopicId)) {
+        // The mentor may well have this topic, and/or the user may have
+        // browsed to it via the mentor search filter, but since it's not
+        // in BOTH lists it's not an acceptable topic for this request.
+        return res.status(400).json({ error: 'This topic is not shared between you and this mentor. Add it to your own topics to request mentorship on it.' });
       }
+      topic_id = requestedTopicId;
+    } else {
       topic_id = common[0];
     }
 
