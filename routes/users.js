@@ -41,13 +41,17 @@ module.exports = function userRoutes(supabase, requireAuth) {
     const { id } = req.telegramUser;
     const [settingsRes, userRes] = await Promise.all([
       supabase.from('user_settings').select('*').eq('telegram_id', id).single(),
-      supabase.from('users').select('accepting_requests, preferred_mentee_sex').eq('telegram_id', id).single()
+      supabase.from('users').select('accepting_requests, preferred_mentee_sex, rating, rating_count').eq('telegram_id', id).single()
     ]);
     if (settingsRes.error) return res.status(500).json({ error: settingsRes.error.message });
     const merged = {
       ...settingsRes.data,
       accepting_requests: userRes.data ? userRes.data.accepting_requests !== false : true,
-      preferred_mentee_sex: userRes.data?.preferred_mentee_sex || 'prefer_not'
+      preferred_mentee_sex: userRes.data?.preferred_mentee_sex || 'prefer_not',
+      // The mentor's own average + number of ratings (same aggregate mentees
+      // see on mentor cards). Never includes who rated.
+      rating: Number(userRes.data?.rating) || 0,
+      rating_count: Number(userRes.data?.rating_count) || 0
     };
     res.json(merged);
   });

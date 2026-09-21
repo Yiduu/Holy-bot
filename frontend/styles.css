@@ -1873,6 +1873,54 @@ textarea.form-control {
   white-space: nowrap;
 }
 
+/* Mentor's own rating, under the name in the Profile hero */
+.profile-hero-rating {
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.profile-rating-stars {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.profile-rating-stars svg {
+  display: block;
+  stroke: none;
+}
+
+.profile-rating-stars .star-on {
+  fill: var(--gold-light);
+}
+
+.profile-rating-stars .star-off {
+  fill: var(--text3);
+  opacity: 0.35;
+}
+
+.profile-rating-val {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--gold-light);
+}
+
+[data-theme="light"] .profile-rating-val {
+  color: var(--gold);
+}
+
+.profile-rating-count {
+  font-size: 0.78rem;
+  color: var(--text3);
+}
+
+.profile-rating-empty {
+  font-size: 0.78rem;
+  color: var(--text3);
+  font-style: italic;
+}
+
 .profile-hero-meta {
   display: flex;
   align-items: center;

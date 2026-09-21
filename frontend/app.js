@@ -5578,9 +5578,35 @@ async function loadSettings() {
       }
     }
 
+    // Keep the mentor's own rating fresh: mentees can rate at any time, and
+    // currentUser was loaded once at app start.
+    if (currentUser && s.rating !== undefined) {
+      currentUser.rating = s.rating;
+      currentUser.rating_count = s.rating_count;
+    }
+
     updateProfileIdentity();
     loadProfilePhoto();
   } catch (e) { showToast(e.message, 'error'); }
+}
+
+/** A mentor's own rating for the Profile hero, styled to match what mentees
+ * see on mentor cards (renderModernRating): stars rounded to the nearest
+ * whole star, the exact average, and the number of ratings. */
+function renderProfileRating(rating, count) {
+  const n = Number(count) || 0;
+  const r = Number(rating) || 0;
+  if (n <= 0 || r <= 0) {
+    return `<span class="profile-rating-empty">${escapeHtml(t('no_ratings_yet') || 'No ratings yet')}</span>`;
+  }
+  const filled = Math.max(0, Math.min(5, Math.round(r)));
+  let stars = '';
+  for (let i = 1; i <= 5; i++) {
+    stars += `<svg class="${i <= filled ? 'star-on' : 'star-off'}" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+  }
+  return `<span class="profile-rating-stars">${stars}</span>` +
+    `<span class="profile-rating-val">${r.toFixed(1)}</span>` +
+    `<span class="profile-rating-count">(${n})</span>`;
 }
 
 /** Syncs the small pieces of "who am I" text/chips that appear in both the
@@ -5589,6 +5615,22 @@ function updateProfileIdentity() {
   const name = currentUser?.user_settings?.display_name || currentUser?.anonymous_id || '—';
   const heroName = $('profileHeroName');
   if (heroName) heroName.textContent = name;
+
+  // Mentors see their own rating right under their name.
+  const heroRating = $('profileHeroRating');
+  if (heroRating) {
+    if (currentUser?.role === 'mentor') {
+      heroRating.innerHTML = renderProfileRating(currentUser.rating, currentUser.rating_count);
+      const n = Number(currentUser.rating_count) || 0;
+      heroRating.setAttribute('aria-label', n > 0
+        ? `${Number(currentUser.rating).toFixed(1)} out of 5, ${n} rating${n === 1 ? '' : 's'}`
+        : 'No ratings yet');
+      heroRating.style.display = 'flex';
+    } else {
+      heroRating.style.display = 'none';
+      heroRating.innerHTML = '';
+    }
+  }
 
   const anonId = currentUser?.anonymous_id || '';
   const rawRole = currentUser?.role || '';

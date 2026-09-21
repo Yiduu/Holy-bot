@@ -1,0 +1,179 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index df53d68..4226b2a 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -5578,11 +5578,37 @@ async function loadSettings() {
+       }
+     }
+ 
++    // Keep the mentor's own rating fresh: mentees can rate at any time, and
++    // currentUser was loaded once at app start.
++    if (currentUser && s.rating !== undefined) {
++      currentUser.rating = s.rating;
++      currentUser.rating_count = s.rating_count;
++    }
++
+     updateProfileIdentity();
+     loadProfilePhoto();
+   } catch (e) { showToast(e.message, 'error'); }
+ }
+ 
++/** A mentor's own rating for the Profile hero, styled to match what mentees
++ * see on mentor cards (renderModernRating): stars rounded to the nearest
++ * whole star, the exact average, and the number of ratings. */
++function renderProfileRating(rating, count) {
++  const n = Number(count) || 0;
++  const r = Number(rating) || 0;
++  if (n <= 0 || r <= 0) {
++    return `<span class="profile-rating-empty">${escapeHtml(t('no_ratings_yet') || 'No ratings yet')}</span>`;
++  }
++  const filled = Math.max(0, Math.min(5, Math.round(r)));
++  let stars = '';
++  for (let i = 1; i <= 5; i++) {
++    stars += `<svg class="${i <= filled ? 'star-on' : 'star-off'}" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
++  }
++  return `<span class="profile-rating-stars">${stars}</span>` +
++    `<span class="profile-rating-val">${r.toFixed(1)}</span>` +
++    `<span class="profile-rating-count">(${n})</span>`;
++}
++
+ /** Syncs the small pieces of "who am I" text/chips that appear in both the
+  * Profile hero (view-only) and the Edit Profile modal (editable context). */
+ function updateProfileIdentity() {
+@@ -5590,6 +5616,22 @@ function updateProfileIdentity() {
+   const heroName = $('profileHeroName');
+   if (heroName) heroName.textContent = name;
+ 
++  // Mentors see their own rating right under their name.
++  const heroRating = $('profileHeroRating');
++  if (heroRating) {
++    if (currentUser?.role === 'mentor') {
++      heroRating.innerHTML = renderProfileRating(currentUser.rating, currentUser.rating_count);
++      const n = Number(currentUser.rating_count) || 0;
++      heroRating.setAttribute('aria-label', n > 0
++        ? `${Number(currentUser.rating).toFixed(1)} out of 5, ${n} rating${n === 1 ? '' : 's'}`
++        : 'No ratings yet');
++      heroRating.style.display = 'flex';
++    } else {
++      heroRating.style.display = 'none';
++      heroRating.innerHTML = '';
++    }
++  }
++
+   const anonId = currentUser?.anonymous_id || '';
+   const rawRole = currentUser?.role || '';
+   const formattedRole = rawRole ? (rawRole.charAt(0).toUpperCase() + rawRole.slice(1)) : '';
+diff --git a/frontend/index.html b/frontend/index.html
+index d91cd4e..c5fec04 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -14,7 +14,7 @@
+   <!-- Non-blocking fonts (text shows in fallback fonts, then swaps) -->
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" /></noscript>
+-  <link rel="stylesheet" href="styles.css?v=1.2" />
++  <link rel="stylesheet" href="styles.css?v=1.3" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+ 
+   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+@@ -1032,6 +1032,8 @@
+             <div id="settingsAvatarPreview" class="avatar-preview avatar-preview-xl" onclick="viewAvatar(this)">?</div>
+           </div>
+           <div id="profileHeroName" class="profile-hero-name">—</div>
++          <!-- Mentors only: their own rating, shown under the name (filled in by app.js) -->
++          <div id="profileHeroRating" class="profile-hero-rating" style="display:none"></div>
+           <div class="profile-hero-meta">
+             <span id="userRole" class="chip chip-blue"></span>
+           </div>
+@@ -2187,7 +2189,7 @@
+   </div>
+ 
+   <script src="locales.js"></script>
+-  <script src="app.js?v=1.3"></script>
++  <script src="app.js?v=1.4"></script>
+ 
+   <script>
+     /* ── Offline banner ──────────────────────────────────────── */
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 3e6c686..608442c 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -1873,6 +1873,54 @@ textarea.form-control {
+   white-space: nowrap;
+ }
+ 
++/* Mentor's own rating, under the name in the Profile hero */
++.profile-hero-rating {
++  align-items: center;
++  justify-content: center;
++  gap: 6px;
++  margin-top: 6px;
++}
++
++.profile-rating-stars {
++  display: inline-flex;
++  gap: 2px;
++}
++
++.profile-rating-stars svg {
++  display: block;
++  stroke: none;
++}
++
++.profile-rating-stars .star-on {
++  fill: var(--gold-light);
++}
++
++.profile-rating-stars .star-off {
++  fill: var(--text3);
++  opacity: 0.35;
++}
++
++.profile-rating-val {
++  font-size: 0.9rem;
++  font-weight: 700;
++  color: var(--gold-light);
++}
++
++[data-theme="light"] .profile-rating-val {
++  color: var(--gold);
++}
++
++.profile-rating-count {
++  font-size: 0.78rem;
++  color: var(--text3);
++}
++
++.profile-rating-empty {
++  font-size: 0.78rem;
++  color: var(--text3);
++  font-style: italic;
++}
++
+ .profile-hero-meta {
+   display: flex;
+   align-items: center;
+diff --git a/routes/users.js b/routes/users.js
+index ecece5a..2004933 100644
+--- a/routes/users.js
++++ b/routes/users.js
+@@ -41,13 +41,17 @@ module.exports = function userRoutes(supabase, requireAuth) {
+     const { id } = req.telegramUser;
+     const [settingsRes, userRes] = await Promise.all([
+       supabase.from('user_settings').select('*').eq('telegram_id', id).single(),
+-      supabase.from('users').select('accepting_requests, preferred_mentee_sex').eq('telegram_id', id).single()
++      supabase.from('users').select('accepting_requests, preferred_mentee_sex, rating, rating_count').eq('telegram_id', id).single()
+     ]);
+     if (settingsRes.error) return res.status(500).json({ error: settingsRes.error.message });
+     const merged = {
+       ...settingsRes.data,
+       accepting_requests: userRes.data ? userRes.data.accepting_requests !== false : true,
+-      preferred_mentee_sex: userRes.data?.preferred_mentee_sex || 'prefer_not'
++      preferred_mentee_sex: userRes.data?.preferred_mentee_sex || 'prefer_not',
++      // The mentor's own average + number of ratings (same aggregate mentees
++      // see on mentor cards). Never includes who rated.
++      rating: Number(userRes.data?.rating) || 0,
++      rating_count: Number(userRes.data?.rating_count) || 0
+     };
+     res.json(merged);
+   });
