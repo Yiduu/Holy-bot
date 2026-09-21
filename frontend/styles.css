@@ -4912,14 +4912,19 @@ textarea.form-control {
   transition: opacity 0.35s ease;
 }
 
-.mentee-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--border);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(201, 168, 76, 0.1);
-}
+/* Lift/glow on hover only where a real hover exists. On touch screens
+   :hover sticks after a tap, which left the last-tapped card nudged up
+   2px next to its neighbours. */
+@media (hover: hover) {
+  .mentee-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(201, 168, 76, 0.1);
+  }
 
-.mentee-card:hover::before {
-  opacity: 1;
+  .mentee-card:hover::before {
+    opacity: 1;
+  }
 }
 
 /* ─── Mentee activity status (My Mentees page) ─────────────────── */
@@ -5097,6 +5102,249 @@ textarea.form-control {
 .mentor-note-status.is-error {
   color: var(--danger);
   cursor: pointer;
+}
+
+/* ─── My Mentees page layout ───────────────────────────────────────
+   One spacing scale: 16px between cards, 14px between the groups inside
+   a card, 8–10px between items inside a group. Anything whose length
+   varies (names, status text, streak badge, save status) is allowed to
+   wrap, so nothing can collide in Amharic or on a 320px-wide screen. */
+.mentees-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+#menteeSortDropdown {
+  margin-bottom: 16px;
+}
+
+.card.mentee-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+/* Group 1: who this is */
+.mentee-card-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mentee-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.mentee-card-head .mentor-avatar {
+  flex: 0 0 44px;
+}
+
+.mentee-card-identity {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 1px;
+}
+
+/* Long names wrap onto as many lines as they need instead of being cut to
+   "Hanna Tesf…" (names are user-chosen, so hiding part of one isn't OK) */
+.mentee-card-name {
+  font-weight: 700;
+  font-size: 0.98rem;
+  line-height: 1.3;
+  color: var(--gold);
+  overflow-wrap: anywhere;
+}
+
+/* Activity readout sits under the name (left-aligned) instead of competing
+   with it for width in the top-right corner. */
+.mentee-card-identity .mentee-status-line-compact {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px 10px;
+  text-align: left;
+  font-size: 0.78rem;
+}
+
+.mentee-card-identity .mentee-status-row {
+  white-space: normal;
+  font-size: 0.78rem;
+}
+
+.mentee-card-identity .mentee-followup-pill {
+  font-size: 0.66rem;
+  padding: 2px 7px;
+}
+
+.mentee-card-profile .mentee-streak-badge {
+  margin-top: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  row-gap: 2px;
+  white-space: normal;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  border-radius: 14px;
+}
+
+/* The "best N" divider only looks right on one line; when the badge wraps
+   (long Amharic text, 320px screens) it dangled at the start of line two.
+   Dim colour + spacing separates the two parts on their own. */
+.mentee-card-profile .mentee-streak-best {
+  padding-left: 0;
+  margin-left: 4px;
+  border-left: 0;
+}
+
+/* Actions: a compact ⋯ button in the header instead of a full-width row */
+.mentee-actions {
+  flex: 0 0 auto;
+  display: block;
+}
+
+.mentee-actions-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid var(--border-dim);
+  background: var(--surface);
+  color: var(--text2);
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.mentee-actions-btn:hover,
+.mentee-actions[data-open] .mentee-actions-btn {
+  border-color: var(--gold);
+  color: var(--gold-light);
+  background: var(--gold-dim);
+}
+
+.mentee-actions .premium-dropdown-menu {
+  left: auto;
+  right: 0;
+  min-width: min(220px, calc(100vw - 48px));
+  transform-origin: top right;
+}
+
+/* Keep an open menu above the cards that follow it */
+.mentee-card:has([data-open]) {
+  z-index: 10;
+}
+
+/* Group 2: what the mentor does */
+.mentee-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-dim);
+}
+
+.mentee-goals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mentee-card-body .goal-toggle-btn {
+  min-height: 44px;
+  padding: 10px 14px;
+  gap: 10px;
+  text-align: left;
+}
+
+.mentee-card-body .goal-toggle-btn > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.mentee-card-body .goal-panel {
+  margin-top: 0;
+}
+
+/* Add-goal form: when Cancel / Add wrap onto their own row, right-align them */
+.mentee-card-body .goal-add-row-bottom > .flex {
+  margin-left: auto;
+}
+
+.mentee-note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mentee-note-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.mentee-note-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.mentee-note-head .mentor-note-status {
+  min-height: 0;
+  margin: 0 0 0 auto;
+  padding: 2px 0;
+  text-align: right;
+}
+
+.mentee-note textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 76px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+/* Light theme: the gold used for text here (#C9A84C / #E8C96B) is only
+   1.4–2:1 against the cream background, i.e. close to unreadable. Darker
+   tones from the existing palette, all >= 5:1. Dark theme is untouched. */
+[data-theme="light"] .mentee-card-name {
+  color: #7A5E22;
+}
+
+[data-theme="light"] .mentee-card .goal-toggle-btn,
+[data-theme="light"] .mentee-card .goal-toggle-caret,
+[data-theme="light"] .mentee-card-profile .mentee-streak-badge.is-active {
+  color: #7A5E22;
+}
+
+[data-theme="light"] .mentee-card-profile .mentee-streak-badge.is-active .mentee-streak-flame {
+  color: #7A5E22;
+}
+
+[data-theme="light"] .mentee-card .mentee-followup-pill {
+  color: #B33927;
+  border-color: rgba(179, 57, 39, 0.35);
 }
 
 .goal-panel {
@@ -5280,17 +5528,39 @@ textarea.form-control {
   color-scheme: light;
 }
 
-/* Force visible text on the individual day/month/year segments and the
-   unfilled placeholder — the part that actually goes invisible on mobile. */
-.goal-add-date::-webkit-datetime-edit,
-.goal-add-date::-webkit-datetime-edit-fields-wrapper,
-.goal-add-date::-webkit-datetime-edit-text,
-.goal-add-date::-webkit-datetime-edit-month-field,
-.goal-add-date::-webkit-datetime-edit-day-field,
-.goal-add-date::-webkit-datetime-edit-year-field {
+/* Day/month/year segments: force readable text once the field has a value
+   or is being edited (the part that can go invisible on some WebViews)...
+   */
+.goal-add-date.has-value::-webkit-datetime-edit,
+.goal-add-date.has-value::-webkit-datetime-edit-fields-wrapper,
+.goal-add-date.has-value::-webkit-datetime-edit-text,
+.goal-add-date.has-value::-webkit-datetime-edit-month-field,
+.goal-add-date.has-value::-webkit-datetime-edit-day-field,
+.goal-add-date.has-value::-webkit-datetime-edit-year-field,
+.goal-add-date:focus::-webkit-datetime-edit,
+.goal-add-date:focus::-webkit-datetime-edit-fields-wrapper,
+.goal-add-date:focus::-webkit-datetime-edit-text,
+.goal-add-date:focus::-webkit-datetime-edit-month-field,
+.goal-add-date:focus::-webkit-datetime-edit-day-field,
+.goal-add-date:focus::-webkit-datetime-edit-year-field {
   color: var(--text) !important;
   -webkit-text-fill-color: var(--text) !important;
   opacity: 1 !important;
+}
+
+/* ...but keep them invisible while the field is empty and unfocused.
+   Previously the rule above applied unconditionally and, being aimed at
+   the segments themselves, beat the parent's `color: transparent` — so the
+   native "mm/dd/yyyy" printed on top of our own "Due date (optional)"
+   placeholder. */
+.goal-add-date:not(.has-value):not(:focus)::-webkit-datetime-edit,
+.goal-add-date:not(.has-value):not(:focus)::-webkit-datetime-edit-fields-wrapper,
+.goal-add-date:not(.has-value):not(:focus)::-webkit-datetime-edit-text,
+.goal-add-date:not(.has-value):not(:focus)::-webkit-datetime-edit-month-field,
+.goal-add-date:not(.has-value):not(:focus)::-webkit-datetime-edit-day-field,
+.goal-add-date:not(.has-value):not(:focus)::-webkit-datetime-edit-year-field {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
 }
 
 .goal-add-date::-webkit-calendar-picker-indicator {

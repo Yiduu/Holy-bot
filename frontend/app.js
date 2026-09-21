@@ -270,6 +270,8 @@ const MENTEE_ICONS = {
   pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   transfer: '<path d="M7 3v14"/><path d="M3 7l4-4 4 4"/><path d="M17 21V7"/><path d="M21 17l-4 4-4-4"/>',
   userMinus: '<path d="M14 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-4A3.5 3.5 0 0 0 3 17.5V19"/><circle cx="8.5" cy="7.5" r="3.5"/><path d="M17 10h5"/>',
+  more: '<circle cx="12" cy="5" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.7" fill="currentColor" stroke="none"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   sliders: '<line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="1.6" fill="currentColor" stroke="none"/>',
 };
 function menteeIcon(name, size = 14) {
@@ -6671,46 +6673,47 @@ function renderMenteesList() {
       : t('mentee_goals_add');
     const actionsId = `menteeActions-${assignId}`;
 
+    // Layout: [profile: avatar + name/status + actions menu, streak] then a
+    // divider, then [body: goals, private note]. Spacing between and inside
+    // these groups is set in styles.css (.mentee-card*), not with utility
+    // classes. IDs / data-* hooks used by the goal, note and dropdown code
+    // are unchanged; the goals toggle must stay directly before its panel
+    // (see updateMenteeGoalsBadge, which uses previousElementSibling).
     html += `
-      <div class="card gold-border mb-16 mentee-card" style="padding: 16px;">
-        <!-- Row 1: Name + streak (left) | single activity readout (right) -->
-        <div class="flex justify-between items-start mb-12" style="gap: 8px;">
-          <div class="flex items-start gap-10" style="flex: 1; min-width: 0;">
+      <div class="card gold-border mentee-card">
+        <div class="mentee-card-profile">
+          <div class="mentee-card-head">
             ${renderAvatar(user, letter)}
-            <div style="flex: 1; min-width: 0;">
-              <div class="font-bold" style="color:var(--gold); font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(displayName)}</div>
-              <!-- Streak badge placed directly below the name -->
-              <div style="margin-top: 3px;">
-                ${renderMenteeStreakBadge(user.telegram_id)}
+            <div class="mentee-card-identity">
+              <div class="mentee-card-name">${escapeHtml(displayName)}</div>
+              ${renderMenteeActivity(user)}
+            </div>
+            <div class="premium-dropdown mentee-actions" data-dropdown id="${actionsId}">
+              <button type="button" class="mentee-actions-btn" data-dropdown-toggle aria-haspopup="menu" aria-label="${t('mentee_actions_label')}" title="${t('mentee_actions_label')}">${menteeIcon('more', 18)}</button>
+              <div class="premium-dropdown-menu" data-dropdown-menu>
+                <button type="button" class="dropdown-item" onclick="openTransferModal('${assignId}', '${user.telegram_id}', '${escapeHtml(displayName)}')">${menteeIcon('transfer', 14)}${t('btn_transfer')}</button>
+                <button type="button" class="dropdown-item" style="color:var(--danger)" onclick="endMentorship('${assignId}')">${menteeIcon('userMinus', 14)}${t('btn_end')}</button>
               </div>
             </div>
           </div>
-          <div class="text-right" style="flex-shrink: 0; margin-top: 2px;">
-            ${renderMenteeActivity(user)}
-          </div>
+          ${renderMenteeStreakBadge(user.telegram_id)}
         </div>
 
-        <!-- Row 2: Actions dropdown (Transfer / End Mentorship) -->
-        <div class="premium-dropdown mb-12" data-dropdown id="${actionsId}" style="width:100%;">
-          <button type="button" class="premium-dropdown-btn btn-sm" data-dropdown-toggle style="width:100%; justify-content:space-between;">
-            <span class="dropdown-label" style="display:flex;align-items:center;gap:6px;">${menteeIcon('sliders', 14)}${t('mentee_actions_label') || 'Actions'}</span>
-            <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-          </button>
-          <div class="premium-dropdown-menu" data-dropdown-menu style="width:100%; min-width:100%; box-sizing:border-box;">
-            <button type="button" class="dropdown-item" onclick="openTransferModal('${assignId}', '${user.telegram_id}', '${escapeHtml(displayName)}')">${menteeIcon('transfer', 14)}${t('btn_transfer')}</button>
-            <button type="button" class="dropdown-item" style="color:var(--danger)" onclick="endMentorship('${assignId}')">${menteeIcon('userMinus', 14)}${t('btn_end')}</button>
+        <div class="mentee-card-body">
+          <div class="mentee-goals">
+            <button class="goal-toggle-btn" onclick="toggleMenteeGoals('${user.telegram_id}', this)">
+              <span style="display:flex;align-items:center;gap:6px;">${menteeIcon('target', 14)}${goalsLabel}</span>
+              <span class="goal-toggle-caret">${menteeIcon('chevronDown', 14)}</span>
+            </button>
+            <div id="goalPanel-${user.telegram_id}" class="goal-panel" style="display:none" data-mentee-id="${user.telegram_id}"></div>
           </div>
-        </div>
-
-        <!-- Goals toggle and note below -->
-        <button class="goal-toggle-btn" onclick="toggleMenteeGoals('${user.telegram_id}', this)">
-          <span style="display:flex;align-items:center;gap:6px;">${menteeIcon('target', 14)}${goalsLabel}</span>
-          <span class="goal-toggle-caret">${menteeIcon('chevronDown', 14)}</span>
-        </button>
-        <div id="goalPanel-${user.telegram_id}" class="goal-panel" style="display:none" data-mentee-id="${user.telegram_id}"></div>
-        <div class="form-group mb-0" style="margin-top:10px">
-          <textarea id="note-${user.telegram_id}" class="form-control text-sm" data-i18n="Private note about this mentee..." placeholder="${t('Private note about this mentee...')}" rows="2" maxlength="${MENTOR_NOTE_MAX}" ${_mentorNotesLoadFailed ? 'disabled' : ''} oninput="onMentorNoteInput('${user.telegram_id}')" onblur="saveMentorNote('${user.telegram_id}')">${escapeHtml(mentorNoteValue(user.telegram_id))}</textarea>
-          <div id="noteStatus-${user.telegram_id}" class="mentor-note-status" role="status" aria-live="polite" onclick="retryMentorNote('${user.telegram_id}')"></div>
+          <div class="mentee-note">
+            <div class="mentee-note-head">
+              <label class="mentee-note-label" for="note-${user.telegram_id}">${menteeIcon('lock', 13)}<span data-i18n="mentee_note_label">${t('mentee_note_label')}</span></label>
+              <div id="noteStatus-${user.telegram_id}" class="mentor-note-status" role="status" aria-live="polite" onclick="retryMentorNote('${user.telegram_id}')"></div>
+            </div>
+            <textarea id="note-${user.telegram_id}" class="form-control text-sm" data-i18n="Private note about this mentee..." placeholder="${t('Private note about this mentee...')}" rows="2" maxlength="${MENTOR_NOTE_MAX}" ${_mentorNotesLoadFailed ? 'disabled' : ''} oninput="onMentorNoteInput('${user.telegram_id}')" onblur="saveMentorNote('${user.telegram_id}')">${escapeHtml(mentorNoteValue(user.telegram_id))}</textarea>
+          </div>
         </div>
       </div>`;
   }
