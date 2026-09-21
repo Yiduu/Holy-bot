@@ -504,15 +504,95 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     res.json(streaks);
   });
 
+  // ─── Private mentor notes ────────────────────────────────────
+  // Free-text notes a mentor keeps about a mentee. They are keyed by
+  // (mentor_id, mentee_id), only ever returned to the mentor who wrote them,
+  // and are never exposed to the mentee or (via any route) to anyone else.
+
+  // Kept well under the 10kb JSON body limit in server.js even in the worst
+  // case (Amharic text is 3 bytes/char in UTF-8) so a long note can't be
+  // rejected with a 413 halfway through typing.
+  const MAX_NOTE_LENGTH = 2000;
+
+  // Upsert one note row. mentor_notes has no unique constraint on
+  // (mentor_id, mentee_id) until migrations/20260818_mentor_followup_tools.sql
+  // has been applied, and ON CONFLICT fails outright without it (Postgres
+  // 42P10). Fall back to update-then-insert so saving still works on a
+  // database that hasn't had that migration yet.
+  async function saveNoteRow(mentor_id, mentee_id, content) {
+    const updated_at = new Date().toISOString();
+    const first = await supabase
+      .from('mentor_notes')
+      .upsert({ mentor_id, mentee_id, content, updated_at }, { onConflict: 'mentor_id,mentee_id' })
+      .select()
+      .single();
+    if (!first.error || first.error.code !== '42P10') return first;
+
+    const { data: existing } = await supabase
+      .from('mentor_notes')
+      .select('id')
+      .eq('mentor_id', mentor_id)
+      .eq('mentee_id', mentee_id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      return supabase
+        .from('mentor_notes')
+        .update({ content, updated_at })
+        .eq('id', existing.id)
+        .select()
+        .single();
+    }
+    return supabase
+      .from('mentor_notes')
+      .insert({ mentor_id, mentee_id, content, updated_at })
+      .select()
+      .single();
+  }
+
+  // GET /api/mentors/notes – every private note the calling mentor has written,
+  // as { [mentee_id]: content }. One request instead of one per mentee, so the
+  // My Mentees page can render notes together with the list.
+  router.get('/notes', requireAuth, async (req, res) => {
+    const { id: mentor_id } = req.telegramUser;
+    const { data, error } = await supabase
+      .from('mentor_notes')
+      .select('mentee_id, content')
+      .eq('mentor_id', mentor_id)
+      .order('updated_at', { ascending: true }); // if duplicates ever exist, the newest wins
+    if (error) return res.status(500).json({ error: error.message });
+    const notes = {};
+    (data || []).forEach(r => { notes[r.mentee_id] = r.content || ''; });
+    res.json(notes);
+  });
+
   // POST /api/mentors/notes – add/update private note
   router.post('/notes', requireAuth, async (req, res) => {
     const { id: mentor_id } = req.telegramUser;
-    const { mentee_id, content } = req.body;
-    const { data, error } = await supabase
-      .from('mentor_notes')
-      .upsert({ mentor_id, mentee_id, content, updated_at: new Date().toISOString() }, { onConflict: 'mentor_id,mentee_id' })
-      .select()
-      .single();
+    const { mentee_id, content } = req.body || {};
+    if (!mentee_id || !/^\d+$/.test(String(mentee_id))) {
+      return res.status(400).json({ error: 'mentee_id is required' });
+    }
+    if (typeof content !== 'string') return res.status(400).json({ error: 'content must be a string' });
+    const trimmed = content.trim();
+    if (trimmed.length > MAX_NOTE_LENGTH) {
+      return res.status(400).json({ error: `Note is too long (max ${MAX_NOTE_LENGTH} characters)` });
+    }
+
+    // Same guard the goals/nudge endpoints use: a mentor can only keep notes
+    // on a mentee they are actively mentoring.
+    const { data: assignment } = await supabase
+      .from('mentorship_assignments')
+      .select('id')
+      .eq('mentor_id', mentor_id)
+      .eq('user_id', mentee_id)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+    if (!assignment) return res.status(403).json({ error: 'No active assignment found for this mentee.' });
+
+    const { data, error } = await saveNoteRow(mentor_id, mentee_id, trimmed);
     if (error) return res.status(500).json({ error: error.message });
     res.json(data);
   });

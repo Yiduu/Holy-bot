@@ -1,0 +1,378 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 4226b2a..e430751 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1699,6 +1699,9 @@ function navigate(page) {
+   // Stop the sessions refresh timer whenever we leave the sessions page
+   if (currentPage === 'sessions' && page !== 'sessions') stopSessionTimer();
+ 
++  // Save any note the mentor is still typing before this page goes away
++  if (currentPage === 'my-mentees' && page !== 'my-mentees') flushMentorNotes();
++
+   currentPage = page;
+   $$('.page').forEach(p => p.classList.remove('active'));
+   $$('.nav-item').forEach(n => n.classList.remove('active'));
+@@ -6611,17 +6614,21 @@ function sortedMentees() {
+ 
+ async function loadMyMentees() {
+   const container = $('menteesList');
++  // The list is about to be replaced; make sure nothing typed is left unsaved.
++  await flushMentorNotes();
+   container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
+   try {
+-    const [mentees, followup, streaks] = await Promise.all([
++    const [mentees, followup, streaks, notes] = await Promise.all([
+       apiFetch('/api/mentors/my-mentees'),
+       apiFetch('/api/mentors/my-mentees/followup').catch(() => ({})),
+       apiFetch('/api/mentors/my-mentees/streaks').catch(() => ({})),
++      apiFetch('/api/mentors/notes').catch(() => null),
+     ]);
+ 
+     _myMenteesCache = mentees || [];
+     _myMenteesFollowupCache = followup || {};
+     _myMenteesStreakCache = streaks || {};
++    applyLoadedMentorNotes(notes, _myMenteesCache);
+ 
+     $('activeMenteeCount').textContent = _myMenteesCache.length;
+     const followupCount = _myMenteesCache.filter(m => menteeIsStale(m.user)).length;
+@@ -6638,11 +6645,6 @@ async function loadMyMentees() {
+     }
+ 
+     renderMenteesList();
+-
+-    for (const m of _myMenteesCache) {
+-      const note = await apiFetch(`/api/mentors/notes/${m.user.telegram_id}`);
+-      if (note.content) { const el = $(`note-${m.user.telegram_id}`); if (el) el.value = note.content; }
+-    }
+   } catch (e) { showToast(e.message, 'error'); }
+ }
+ 
+@@ -6707,12 +6709,15 @@ function renderMenteesList() {
+         </button>
+         <div id="goalPanel-${user.telegram_id}" class="goal-panel" style="display:none" data-mentee-id="${user.telegram_id}"></div>
+         <div class="form-group mb-0" style="margin-top:10px">
+-          <textarea id="note-${user.telegram_id}" class="form-control text-sm" data-i18n="Private note about this mentee..." placeholder="${t('Private note about this mentee...')}" rows="2" onblur="saveMentorNote('${user.telegram_id}')"></textarea>
++          <textarea id="note-${user.telegram_id}" class="form-control text-sm" data-i18n="Private note about this mentee..." placeholder="${t('Private note about this mentee...')}" rows="2" maxlength="${MENTOR_NOTE_MAX}" ${_mentorNotesLoadFailed ? 'disabled' : ''} oninput="onMentorNoteInput('${user.telegram_id}')" onblur="saveMentorNote('${user.telegram_id}')">${escapeHtml(mentorNoteValue(user.telegram_id))}</textarea>
++          <div id="noteStatus-${user.telegram_id}" class="mentor-note-status" role="status" aria-live="polite" onclick="retryMentorNote('${user.telegram_id}')"></div>
+         </div>
+       </div>`;
+   }
+   container.innerHTML = html;
+   hydrateAvatars(container);
++  // Restore each note's save-status line (e.g. "Saved" / "tap to retry")
++  for (const m of mentees) setMentorNoteStatus(m.user.telegram_id, _mentorNoteStatus[m.user.telegram_id] || '');
+ }
+ 
+ // ─── Follow-up goals checklist (mentor's "My Mentees" panel) ───
+@@ -7058,14 +7063,119 @@ async function saveEditGoal() {
+ 
+ 
+ 
+-async function saveMentorNote(menteeId) {
+-  const content = $(`note-${menteeId}`).value.trim();
+-  try {
+-    await apiFetch('/api/mentors/notes', { method: 'POST', body: { mentee_id: menteeId, content } });
+-    haptic('light');
+-  } catch (e) { showToast(e.message, 'error'); }
++// ─── Mentor private notes ─────────────────────────────────────
++// A note is saved automatically ~1s after the mentor stops typing, and again
++// on blur, when the app is backgrounded/closed, when leaving the page, and
++// before the list reloads. Saving on blur alone (the old behaviour) lost text
++// whenever blur didn't fire — common in Telegram's mobile WebView — and gave
++// no sign whether anything was stored.
++const MENTOR_NOTE_MAX = 2000;          // keep in sync with MAX_NOTE_LENGTH in routes/mentors.js
++const MENTOR_NOTE_AUTOSAVE_MS = 1000;
++const _mentorNoteSaved = {};   // menteeId -> last content confirmed stored on the server
++const _mentorNoteDraft = {};   // menteeId -> text last typed (survives list re-renders)
++const _mentorNoteTimers = {};  // menteeId -> pending autosave timer (present = unsaved edits)
++const _mentorNoteQueue = {};   // menteeId -> promise chain, so saves reach the server in order
++const _mentorNoteStatus = {};  // menteeId -> '' | 'unsaved' | 'saving' | 'saved' | 'error'
++const _mentorNoteFailing = {}; // menteeId -> true while saves keep failing (so we toast once, not per retry)
++let _mentorNotesLoadFailed = false;
++
++/** What the textarea should show: unsaved draft first, else what's on the server. */
++function mentorNoteValue(menteeId) {
++  return _mentorNoteDraft[menteeId] ?? _mentorNoteSaved[menteeId] ?? '';
++}
++
++function setMentorNoteStatus(menteeId, state) {
++  _mentorNoteStatus[menteeId] = state;
++  const el = $(`noteStatus-${menteeId}`);
++  if (!el) return;
++  el.textContent = state ? t(`note_status_${state}`) : '';
++  el.className = `mentor-note-status${state ? ` is-${state}` : ''}`;
++}
++
++/** Called by loadMyMentees with GET /api/mentors/notes ({ menteeId: content }, or null on failure). */
++function applyLoadedMentorNotes(notesMap, mentees) {
++  _mentorNotesLoadFailed = !notesMap;
++  if (!notesMap) {
++    // Don't render empty boxes the mentor could type over an unseen note with.
++    showToast(t('note_load_failed'), 'error');
++    return;
++  }
++  mentees.forEach(m => {
++    const id = String(m.user.telegram_id);
++    const server = notesMap[id] || '';
++    _mentorNoteSaved[id] = server;
++    // Keep a local draft only if it still differs from the server (e.g. a
++    // failed save); otherwise the server copy is the source of truth.
++    if (_mentorNoteDraft[id] !== undefined && _mentorNoteDraft[id].trim() === server) delete _mentorNoteDraft[id];
++  });
++}
++
++function onMentorNoteInput(menteeId) {
++  const el = $(`note-${menteeId}`);
++  if (!el) return;
++  _mentorNoteDraft[menteeId] = el.value;
++  setMentorNoteStatus(menteeId, 'unsaved');
++  clearTimeout(_mentorNoteTimers[menteeId]);
++  _mentorNoteTimers[menteeId] = setTimeout(() => saveMentorNote(menteeId), MENTOR_NOTE_AUTOSAVE_MS);
+ }
+ 
++/**
++ * Saves a mentee's note if it changed. Always resolves (errors are shown in
++ * the note's status line), so callers can safely await it.
++ * `keepalive` lets the request finish while the app is being closed/hidden.
++ */
++function saveMentorNote(menteeId, { keepalive = false } = {}) {
++  clearTimeout(_mentorNoteTimers[menteeId]);
++  delete _mentorNoteTimers[menteeId];
++
++  const el = $(`note-${menteeId}`);
++  const content = (el ? el.value : (_mentorNoteDraft[menteeId] ?? '')).trim();
++  if (content === (_mentorNoteSaved[menteeId] ?? '')) {
++    if (_mentorNoteStatus[menteeId] === 'unsaved') setMentorNoteStatus(menteeId, '');
++    return Promise.resolve();
++  }
++
++  setMentorNoteStatus(menteeId, 'saving');
++  const run = async () => {
++    try {
++      await apiFetch('/api/mentors/notes', { method: 'POST', body: { mentee_id: menteeId, content }, keepalive });
++      _mentorNoteSaved[menteeId] = content;
++      delete _mentorNoteFailing[menteeId];
++      const live = $(`note-${menteeId}`);
++      const current = (live ? live.value : (_mentorNoteDraft[menteeId] ?? content)).trim();
++      // If the mentor kept typing during the request, the pending autosave
++      // timer will store the rest — leave the status at "unsaved".
++      if (current === content) {
++        delete _mentorNoteDraft[menteeId];
++        setMentorNoteStatus(menteeId, 'saved');
++      }
++    } catch (e) {
++      const alreadyFailing = _mentorNoteFailing[menteeId];
++      _mentorNoteFailing[menteeId] = true;
++      setMentorNoteStatus(menteeId, 'error');
++      if (!alreadyFailing && !keepalive) showToast(e.message, 'error');
++    }
++  };
++  const queued = (_mentorNoteQueue[menteeId] || Promise.resolve()).then(run);
++  _mentorNoteQueue[menteeId] = queued;
++  return queued;
++}
++
++function retryMentorNote(menteeId) {
++  if (_mentorNoteStatus[menteeId] === 'error') saveMentorNote(menteeId);
++}
++
++/** Saves every note that has edits still waiting on the autosave timer. */
++function flushMentorNotes(opts) {
++  return Promise.all(Object.keys(_mentorNoteTimers).map(id => saveMentorNote(id, opts)));
++}
++
++// Backgrounding or closing the mini app: push out anything still pending.
++document.addEventListener('visibilitychange', () => {
++  if (document.visibilityState === 'hidden') flushMentorNotes({ keepalive: true });
++});
++window.addEventListener('pagehide', () => { flushMentorNotes({ keepalive: true }); });
++
+ // ─── Transfer Mentee ──────────────────────────────────────────
+ // Module-level state for the transfer modal
+ let _transferAssignmentId = null;
+diff --git a/frontend/index.html b/frontend/index.html
+index c5fec04..38eaa8b 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -14,7 +14,7 @@
+   <!-- Non-blocking fonts (text shows in fallback fonts, then swaps) -->
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" /></noscript>
+-  <link rel="stylesheet" href="styles.css?v=1.3" />
++  <link rel="stylesheet" href="styles.css?v=1.4" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+ 
+   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+@@ -2189,7 +2189,7 @@
+   </div>
+ 
+   <script src="locales.js"></script>
+-  <script src="app.js?v=1.4"></script>
++  <script src="app.js?v=1.5"></script>
+ 
+   <script>
+     /* ── Offline banner ──────────────────────────────────────── */
+diff --git a/frontend/locales.js b/frontend/locales.js
+index be13f0e..0ec314d 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -377,6 +377,11 @@ const I18N = {
+     "mentee_streak_none": "No active Bible streak",
+     "mentee_streak_best": "best {count}",
+     "Private note about this mentee...": "Private note about this mentee...",
++    "note_status_unsaved": "Unsaved changes…",
++    "note_status_saving": "Saving…",
++    "note_status_saved": "Saved",
++    "note_status_error": "Couldn't save — tap to retry",
++    "note_load_failed": "Couldn't load your private notes. Please reopen this page.",
+     "time_just_now": "just now",
+     "time_minutes_ago": "{count}m ago",
+     "time_hours_ago": "{count}h ago",
+@@ -814,6 +819,11 @@ const I18N = {
+     "mentee_streak_none": "ንቁ የመጽሐፍ ቅዱስ ንባብ ሪከርድ የለም",
+     "mentee_streak_best": "ከፍተኛው {count}",
+     "Private note about this mentee...": "ስለ ተመካሪው የግል ጽሁፍ",
++    "note_status_unsaved": "ያልተቀመጠ ለውጥ…",
++    "note_status_saving": "በማስቀመጥ ላይ…",
++    "note_status_saved": "ተቀምጧል",
++    "note_status_error": "ማስቀመጥ አልተቻለም — እንደገና ለመሞከር ይጫኑ",
++    "note_load_failed": "የግል ማስታወሻዎችዎን መጫን አልተቻለም። እባክዎ ገጹን እንደገና ይክፈቱ።",
+     "time_just_now": "አሁኑኑ",
+     "time_minutes_ago": "ከ{count} ደቂቃ በፊት",
+     "time_hours_ago": "ከ{count} ሰዓት በፊት",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 608442c..dec59a1 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -5080,6 +5080,25 @@ textarea.form-control {
+   color: var(--gold-light);
+ }
+ 
++/* Save-status line under a mentee's private note (autosave feedback) */
++.mentor-note-status {
++  min-height: 16px;
++  margin-top: 4px;
++  padding: 0 2px;
++  font-size: 0.72rem;
++  font-weight: 600;
++  color: var(--text3);
++}
++
++.mentor-note-status.is-saved {
++  color: var(--success);
++}
++
++.mentor-note-status.is-error {
++  color: var(--danger);
++  cursor: pointer;
++}
++
+ .goal-panel {
+   margin-top: 8px;
+   padding: 10px 12px;
+diff --git a/routes/mentors.js b/routes/mentors.js
+index 70acad0..8d0c0b2 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -504,15 +504,95 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+     res.json(streaks);
+   });
+ 
+-  // POST /api/mentors/notes – add/update private note
+-  router.post('/notes', requireAuth, async (req, res) => {
+-    const { id: mentor_id } = req.telegramUser;
+-    const { mentee_id, content } = req.body;
+-    const { data, error } = await supabase
++  // ─── Private mentor notes ────────────────────────────────────
++  // Free-text notes a mentor keeps about a mentee. They are keyed by
++  // (mentor_id, mentee_id), only ever returned to the mentor who wrote them,
++  // and are never exposed to the mentee or (via any route) to anyone else.
++
++  // Kept well under the 10kb JSON body limit in server.js even in the worst
++  // case (Amharic text is 3 bytes/char in UTF-8) so a long note can't be
++  // rejected with a 413 halfway through typing.
++  const MAX_NOTE_LENGTH = 2000;
++
++  // Upsert one note row. mentor_notes has no unique constraint on
++  // (mentor_id, mentee_id) until migrations/20260818_mentor_followup_tools.sql
++  // has been applied, and ON CONFLICT fails outright without it (Postgres
++  // 42P10). Fall back to update-then-insert so saving still works on a
++  // database that hasn't had that migration yet.
++  async function saveNoteRow(mentor_id, mentee_id, content) {
++    const updated_at = new Date().toISOString();
++    const first = await supabase
++      .from('mentor_notes')
++      .upsert({ mentor_id, mentee_id, content, updated_at }, { onConflict: 'mentor_id,mentee_id' })
++      .select()
++      .single();
++    if (!first.error || first.error.code !== '42P10') return first;
++
++    const { data: existing } = await supabase
++      .from('mentor_notes')
++      .select('id')
++      .eq('mentor_id', mentor_id)
++      .eq('mentee_id', mentee_id)
++      .order('updated_at', { ascending: false })
++      .limit(1)
++      .maybeSingle();
++    if (existing) {
++      return supabase
++        .from('mentor_notes')
++        .update({ content, updated_at })
++        .eq('id', existing.id)
++        .select()
++        .single();
++    }
++    return supabase
+       .from('mentor_notes')
+-      .upsert({ mentor_id, mentee_id, content, updated_at: new Date().toISOString() }, { onConflict: 'mentor_id,mentee_id' })
++      .insert({ mentor_id, mentee_id, content, updated_at })
+       .select()
+       .single();
++  }
++
++  // GET /api/mentors/notes – every private note the calling mentor has written,
++  // as { [mentee_id]: content }. One request instead of one per mentee, so the
++  // My Mentees page can render notes together with the list.
++  router.get('/notes', requireAuth, async (req, res) => {
++    const { id: mentor_id } = req.telegramUser;
++    const { data, error } = await supabase
++      .from('mentor_notes')
++      .select('mentee_id, content')
++      .eq('mentor_id', mentor_id)
++      .order('updated_at', { ascending: true }); // if duplicates ever exist, the newest wins
++    if (error) return res.status(500).json({ error: error.message });
++    const notes = {};
++    (data || []).forEach(r => { notes[r.mentee_id] = r.content || ''; });
++    res.json(notes);
++  });
++
++  // POST /api/mentors/notes – add/update private note
++  router.post('/notes', requireAuth, async (req, res) => {
++    const { id: mentor_id } = req.telegramUser;
++    const { mentee_id, content } = req.body || {};
++    if (!mentee_id || !/^\d+$/.test(String(mentee_id))) {
++      return res.status(400).json({ error: 'mentee_id is required' });
++    }
++    if (typeof content !== 'string') return res.status(400).json({ error: 'content must be a string' });
++    const trimmed = content.trim();
++    if (trimmed.length > MAX_NOTE_LENGTH) {
++      return res.status(400).json({ error: `Note is too long (max ${MAX_NOTE_LENGTH} characters)` });
++    }
++
++    // Same guard the goals/nudge endpoints use: a mentor can only keep notes
++    // on a mentee they are actively mentoring.
++    const { data: assignment } = await supabase
++      .from('mentorship_assignments')
++      .select('id')
++      .eq('mentor_id', mentor_id)
++      .eq('user_id', mentee_id)
++      .eq('is_active', true)
++      .limit(1)
++      .maybeSingle();
++    if (!assignment) return res.status(403).json({ error: 'No active assignment found for this mentee.' });
++
++    const { data, error } = await saveNoteRow(mentor_id, mentee_id, trimmed);
+     if (error) return res.status(500).json({ error: error.message });
+     res.json(data);
+   });

@@ -5080,6 +5080,25 @@ textarea.form-control {
   color: var(--gold-light);
 }
 
+/* Save-status line under a mentee's private note (autosave feedback) */
+.mentor-note-status {
+  min-height: 16px;
+  margin-top: 4px;
+  padding: 0 2px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text3);
+}
+
+.mentor-note-status.is-saved {
+  color: var(--success);
+}
+
+.mentor-note-status.is-error {
+  color: var(--danger);
+  cursor: pointer;
+}
+
 .goal-panel {
   margin-top: 8px;
   padding: 10px 12px;
