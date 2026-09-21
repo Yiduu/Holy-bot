@@ -1,0 +1,1638 @@
+diff --git a/bot.js b/bot.js
+index d428a1e..1fceaf6 100644
+--- a/bot.js
++++ b/bot.js
+@@ -1474,7 +1474,13 @@ async function notifyMessage(recipientId, senderName, messageContent, fromId = n
+     ? `አዲስ መልእክት ከ ${senderName}\n\n${messageContent}`
+     : `New message from ${senderName}\n\n${messageContent}`;
+ 
++  // parse_mode: undefined → plain text. safeSend defaults to Markdown, and this
++  // text contains raw user input plus anonymous handles like "Warrior_9XkL2".
++  // A stray "_", "*", "[" or backtick makes Telegram reject the message
++  // ("can't parse entities"), and safeSend swallows the error — so offline
++  // recipients silently got no notification.
+   await safeSend(recipientId, text, {
++    parse_mode: undefined,
+     reply_markup: inlineKeyboard.length > 0 ? { inline_keyboard: inlineKeyboard } : undefined
+   });
+ }
+diff --git a/frontend/app.js b/frontend/app.js
+index 99a98f8..df53d68 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -19,17 +19,28 @@ let jitsiApi = null;
+ // drawn on top of content — including the chat input — that assumed it
+ // had that extra space. `--app-height` tracks the real visible height and
+ // updates live as Telegram resizes it (keyboard open/close, etc).
++let _lastAppHeight = 0;
++let _appHeightRaf = 0;
+ function applyAppHeight() {
+-  const tg = window.Telegram?.WebApp;
+-  const h = tg?.viewportStableHeight || tg?.viewportHeight || window.visualViewport?.height || window.innerHeight;
+-  document.documentElement.style.setProperty('--app-height', h + 'px');
++  // visualViewport fires 'scroll'/'resize' many times per frame while the
++  // keyboard animates. Each write to a root CSS variable invalidates styles
++  // for the whole (very large) document, so coalesce to once per frame and
++  // skip writes when the value hasn't changed.
++  if (_appHeightRaf) return;
++  _appHeightRaf = requestAnimationFrame(() => {
++    _appHeightRaf = 0;
++    const tg = window.Telegram?.WebApp;
++    const h = Math.round(tg?.viewportStableHeight || tg?.viewportHeight || window.visualViewport?.height || window.innerHeight);
++    if (h === _lastAppHeight) return;
++    _lastAppHeight = h;
++    document.documentElement.style.setProperty('--app-height', h + 'px');
++  });
+ }
+ applyAppHeight();
+ window.Telegram?.WebApp?.onEvent?.('viewportChanged', applyAppHeight);
+ window.addEventListener('resize', applyAppHeight);
+ window.addEventListener('orientationchange', applyAppHeight);
+ window.visualViewport?.addEventListener('resize', applyAppHeight);
+-window.visualViewport?.addEventListener('scroll', applyAppHeight);
+ 
+ // ─── Helpers ──────────────────────────────────────────────────
+ const $ = id => document.getElementById(id);
+@@ -61,22 +72,57 @@ function getTelegramData() {
+   return { initData: '', user: { id: 12345, first_name: 'Dev' } };
+ }
+ 
++// Requests now have a timeout (previously a stalled request hung forever, which
++// froze the chat input) and GETs get ONE automatic retry on a network error or
++// 502/503/504 — the usual blips on Render's free tier (cold start, deploy,
++// dropped keep-alive connection). POSTs are never retried here; callers that
++// retry must do so idempotently (see sendMessage + client_id).
+ async function apiFetch(path, opts = {}) {
+-  const { initData } = getTelegramData();
+-  const res = await fetch(`${API}${path}`, {
+-    ...opts,
+-    headers: {
+-      'Content-Type': 'application/json',
+-      'x-telegram-init-data': initData,
+-      'x-telegram-id': getTelegramData().user?.id || '',
+-      ...(opts.headers || {}),
+-    },
+-    body: opts.body ? JSON.stringify(opts.body) : undefined,
+-  });
++  const { timeout, retry, ...fetchOpts } = opts;
++  const method = (fetchOpts.method || 'GET').toUpperCase();
++  const timeoutMs = timeout ?? 20000;
++  const canRetry = method === 'GET' && retry !== false;
++
++  const attempt = async () => {
++    const { initData } = getTelegramData();
++    const ctrl = new AbortController();
++    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
++    try {
++      return await fetch(`${API}${path}`, {
++        ...fetchOpts,
++        signal: ctrl.signal,
++        headers: {
++          'Content-Type': 'application/json',
++          'x-telegram-init-data': initData,
++          'x-telegram-id': getTelegramData().user?.id || '',
++          // Lets the server skip echoing our own message back to this socket.
++          ...(socket?.id ? { 'x-socket-id': socket.id } : {}),
++          ...(fetchOpts.headers || {}),
++        },
++        body: fetchOpts.body ? JSON.stringify(fetchOpts.body) : undefined,
++      });
++    } catch (e) {
++      throw new Error(e.name === 'AbortError' ? 'Request timed out' : (e.message || 'Network error'));
++    } finally {
++      clearTimeout(timer);
++    }
++  };
++
++  let res;
++  try {
++    res = await attempt();
++    if (canRetry && [502, 503, 504].includes(res.status)) throw new Error(`HTTP ${res.status}`);
++  } catch (e) {
++    if (!canRetry) throw e;
++    await new Promise(r => setTimeout(r, 700));
++    res = await attempt();
++  }
++
+   if (!res.ok) {
+     const err = await res.json().catch(() => ({}));
+     const e = new Error(err.error || `HTTP ${res.status}`);
+     if (err.nickname_taken) e.nickname_taken = true;
++    e.status = res.status;
+     throw e;
+   }
+   const ct = res.headers.get('content-type') || '';
+@@ -309,6 +355,27 @@ function renderFileAttachment(msg) {
+ // document attachments are intentionally NOT auto-fetched here — those stay
+ // lazy (fetched on tap) to avoid burning bandwidth on media the person may
+ // never open.
++// Photos were re-downloaded (Telegram getFile + full stream through our small
++// server) every time the chat list was re-rendered, and each blob URL leaked.
++// Cache one blob URL per file_id for the session (bounded).
++const photoUrlCache = new Map(); // file_id → Promise<blob URL>
++const PHOTO_CACHE_MAX = 40;
++function getPhotoUrl(fileId) {
++  let p = photoUrlCache.get(fileId);
++  if (!p) {
++    p = fetchAuthedBlob(`/api/messages/file/${fileId}`).then(blob => URL.createObjectURL(blob));
++    p.catch(() => photoUrlCache.delete(fileId)); // allow a later retry
++    photoUrlCache.set(fileId, p);
++    if (photoUrlCache.size > PHOTO_CACHE_MAX) {
++      const oldestKey = photoUrlCache.keys().next().value;
++      const oldest = photoUrlCache.get(oldestKey);
++      photoUrlCache.delete(oldestKey);
++      oldest.then(u => URL.revokeObjectURL(u)).catch(() => { });
++    }
++  }
++  return p;
++}
++
+ function hydratePhotoMessages(container) {
+   if (!container) return;
+   const els = container.querySelectorAll('.msg-photo[data-file-id]:not(.msg-photo-loaded)');
+@@ -316,8 +383,7 @@ function hydratePhotoMessages(container) {
+     el.classList.add('msg-photo-loaded'); // mark immediately so we never double-fetch
+     const fileId = el.dataset.fileId;
+     try {
+-      const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
+-      const url = URL.createObjectURL(blob);
++      const url = await getPhotoUrl(fileId);
+       el.innerHTML = `<img src="${url}" class="msg-photo-img" alt="Photo attachment" onclick="openImageLightbox('${url}')" />`;
+     } catch (e) {
+       el.innerHTML = '<div class="msg-photo-error">⚠️ Failed to load photo</div>';
+@@ -628,6 +694,25 @@ function renderThread(messages, isRoot = true) {
+   return html;
+ }
+ 
++// Swap our optimistic ("sending…") bubble for the confirmed server message.
++// Done in place: the new bubble no longer replays the entrance animation, so
++// the message you just sent doesn't fade out and back in ("blink").
++function replaceOptimisticBubble(container, tempId, msg) {
++  if (window._chatMessagesMap) {
++    window._chatMessagesMap.delete(String(tempId));
++    window._chatMessagesMap.set(String(msg.id), msg);
++  }
++  const tempEl = container.querySelector(`.message-thread[data-msg-id="${tempId}"]`);
++  if (!tempEl) return false;
++  if (container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`)) {
++    tempEl.remove(); // the real one already arrived another way
++  } else {
++    tempEl.outerHTML = renderThread([msg], false);
++    hydratePhotoMessages(container);
++  }
++  return true;
++}
++
+ function addMessageToChat(msg) {
+   const container = $('chatMessages');
+   if (!container) return;
+@@ -635,10 +720,21 @@ function addMessageToChat(msg) {
+   if (!window._chatMessagesMap) window._chatMessagesMap = new Map();
+   window._chatMessagesMap.set(String(msg.id), msg);
+ 
++  // Our own message echoed back (server sets client_id): reconcile with the
++  // optimistic bubble rather than appending a duplicate next to it.
++  if (msg.client_id && replaceOptimisticBubble(container, msg.client_id, msg)) return;
++
+   // Check if already exists (by ID)
+   const existing = container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
+   if (existing) return;
+ 
++  // Only auto-scroll if the user is already at the bottom (or it's their own
++  // message). Previously every incoming message yanked the view to the bottom
++  // even while the user was scrolled up reading history.
++  const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
++  const isMine = msg.is_sending || String(msg.from_id) === String(currentUser?.telegram_id);
++  const stickToBottom = wasNearBottom || isMine;
++
+   const html = renderThread([msg], false);
+ 
+   if (msg.parent_id) {
+@@ -652,17 +748,17 @@ function addMessageToChat(msg) {
+       }
+       repliesContainer.insertAdjacentHTML('beforeend', html);
+ 
++      const newThread = repliesContainer.lastElementChild;
++      newThread?.classList.add('msg-enter'); // entrance animation only for NEW messages
++
+       // If temporary sending message, style the bubble
+       if (msg.is_sending) {
+-        const tempEl = repliesContainer.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
+-        if (tempEl) {
+-          const bubble = tempEl.querySelector('.message-bubble');
+-          if (bubble) bubble.classList.add('sending');
+-        }
++        const bubble = newThread?.querySelector('.message-bubble');
++        if (bubble) bubble.classList.add('sending');
+       }
+ 
+       hydratePhotoMessages(repliesContainer);
+-      container.scrollTop = container.scrollHeight;
++      if (stickToBottom) container.scrollTop = container.scrollHeight;
+       return;
+     }
+   }
+@@ -679,17 +775,17 @@ function addMessageToChat(msg) {
+ 
+   container.insertAdjacentHTML('beforeend', finalHtml);
+ 
++  const newThread = container.lastElementChild;
++  newThread?.classList.add('msg-enter'); // entrance animation only for NEW messages
++
+   // If temporary sending message, style the bubble
+   if (msg.is_sending) {
+-    const tempEl = container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
+-    if (tempEl) {
+-      const bubble = tempEl.querySelector('.message-bubble');
+-      if (bubble) bubble.classList.add('sending');
+-    }
++    const bubble = newThread?.querySelector('.message-bubble');
++    if (bubble) bubble.classList.add('sending');
+   }
+ 
+   hydratePhotoMessages(container);
+-  container.scrollTop = container.scrollHeight;
++  if (stickToBottom) container.scrollTop = container.scrollHeight;
+ }
+ 
+ /* ── Inline context-menu helpers ────────────────────────────── */
+@@ -972,39 +1068,63 @@ function showToast(msg, type = 'info') {
+ // ─── Theme ────────────────────────────────────────────────────
+ const THEME_ICON_SUN = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>';
+ const THEME_ICON_MOON = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.4A8.4 8.4 0 1 1 9.6 3.5a6.8 6.8 0 0 0 10.9 10.9z"/></svg>';
+-// Theme changes previously mutated data-theme, wrote localStorage, and
+-// re-rendered every icon synchronously in one tick — on mobile that
+-// synchronous icon re-render (icon innerHTML swap immediately after the
+-// CSS variables flip) is what produced the visible blink/flash. Deferring
+-// the icon swap to the next animation frame lets the CSS transition
+-// (--theme-transition, see styles.css) actually start painting first.
++// Background colours must match --bg in styles.css. Also pushed to Telegram so
++// its own header/bottom bars change with the theme instead of staying dark.
++const THEME_BG = { dark: '#0D0F14', light: '#F4F1EA' };
++
+ function setTheme(theme) {
+   const root = document.documentElement;
+   root.setAttribute('data-theme', theme);
+-  localStorage.setItem('theme', theme);
++  try { localStorage.setItem('theme', theme); } catch { }
+   const icon = theme === 'light' ? THEME_ICON_MOON : THEME_ICON_SUN;
+   document.querySelectorAll('.theme-btn .theme-icon-svg').forEach(el => el.innerHTML = icon);
++  const tg = window.Telegram?.WebApp;
++  if (tg) {
++    const c = THEME_BG[theme] || THEME_BG.dark;
++    try { tg.setHeaderColor?.(c); tg.setBackgroundColor?.(c); tg.setBottomBarColor?.(c); } catch { }
++  }
+   if (typeof rebuildChart === 'function') {
+     requestAnimationFrame(rebuildChart);
+   }
+ }
+ 
++// The old toggle used document.startViewTransition (screenshots the whole
++// page — very heavy with this much DOM/blur on phones) and a fallback that put
++// a colour transition on EVERY element. Both are gone.
++// Now: a single full-screen "veil" in the NEW background colour fades in
++// (opacity only — cheap, GPU-composited), the theme flips underneath while
++// it's opaque with transitions switched off (so nothing animates piecemeal),
++// then the veil fades out to reveal the new theme.
++let _themeBusy = false;
+ function toggleTheme() {
++  if (_themeBusy) return;
+   haptic('selection');
+-  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+-  const next = cur === 'dark' ? 'light' : 'dark';
++  const root = document.documentElement;
++  const next = (root.getAttribute('data-theme') || 'dark') === 'dark' ? 'light' : 'dark';
+ 
+-  if (typeof document.startViewTransition === 'function') {
+-    document.startViewTransition(() => {
+-      setTheme(next);
+-    });
+-  } else {
+-    document.documentElement.classList.add('theme-transitioning');
++  const flip = () => {
++    root.classList.add('theme-switching');
+     setTheme(next);
+-    setTimeout(() => {
+-      document.documentElement.classList.remove('theme-transitioning');
+-    }, 250);
+-  }
++    void root.offsetWidth; // apply new values with transitions disabled
++    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
++  };
++
++  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { flip(); return; }
++
++  _themeBusy = true;
++  const veil = document.createElement('div');
++  veil.className = 'theme-veil';
++  veil.style.background = THEME_BG[next];
++  document.body.appendChild(veil);
++  void veil.offsetWidth;
++  veil.style.transition = 'opacity .12s ease-out';
++  veil.style.opacity = '1';
++  setTimeout(() => {
++    flip();
++    veil.style.transition = 'opacity .18s ease-in';
++    veil.style.opacity = '0';
++    setTimeout(() => { veil.remove(); _themeBusy = false; }, 220);
++  }, 130);
+ }
+ setTheme(localStorage.getItem('theme') || 'dark');
+ 
+@@ -1295,18 +1415,55 @@ let _socketInitialized = false;
+ function connectSocket() {
+   if (socket || _socketInitialized) return;
+   _socketInitialized = true;
+-  socket = io(API, { transports: ['websocket', 'polling'] });
++  // Identity is proven with Telegram's signed initData (verified server-side).
++  // A function is used so every reconnect sends fresh data.
++  socket = io(API, {
++    transports: ['websocket', 'polling'],
++    auth: (cb) => {
++      const { initData, user } = getTelegramData();
++      cb({ initData, telegram_id: String(currentUser?.telegram_id || user?.id || '') });
++    },
++    reconnectionDelay: 500,
++    reconnectionDelayMax: 5000,
++  });
+ 
++  let _hasConnectedOnce = false;
+   socket.on('connect', () => {
+-    // Always send auth as a string to match server-side Map key type
+-    const userId = String(currentUser?.telegram_id || getTelegramData().user?.id || '');
+-    socket.emit('auth', userId);
+     $('reconnectBanner')?.classList.remove('show');
+     // Stop polling fallback — socket is live
+     stopChatPolling();
+     stopGlobalRefresh();
+     setGoalsLiveStatus(true);
+-    console.log('[Socket] Connected, authed as', userId);
++
++    // On a RE-connect, anything sent while we were offline was missed (Socket.IO
++    // only replays for short drops). Re-sync the open conversation and badges.
++    if (_hasConnectedOnce && !socket.recovered) {
++      if (currentPage === 'chat' && window.chatState?.with) loadMessages(window.chatState.with).catch(() => { });
++      updateMessageBadge();
++    }
++    _hasConnectedOnce = true;
++  });
++
++  socket.on('connect_error', (err) => {
++    console.warn('[Socket] connect_error:', err.message);
++    $('reconnectBanner')?.classList.add('show');
++    startChatPolling();
++    startGlobalRefresh();
++  });
++
++  // Coming back from the background: phones suspend sockets silently, so the
++  // connection can look alive while being dead. Reconnect if needed and, if we
++  // were away a while, re-sync the open chat (cheap no-op if nothing changed).
++  let _hiddenAt = 0;
++  document.addEventListener('visibilitychange', () => {
++    if (document.visibilityState === 'hidden') { _hiddenAt = Date.now(); return; }
++    if (!socket) return;
++    if (!socket.connected) socket.connect();
++    if (_hiddenAt && Date.now() - _hiddenAt > 15000) {
++      if (currentPage === 'chat' && window.chatState?.with) loadMessages(window.chatState.with).catch(() => { });
++      updateMessageBadge();
++    }
++    _hiddenAt = 0;
+   });
+ 
+   socket.on('disconnect', (reason) => {
+@@ -1330,11 +1487,16 @@ function connectSocket() {
+     }
+   });
+ 
+-  socket.on('new_message', (msg) => {
++  socket.on('new_message', (msg, ack) => {
++    // Confirms receipt; the server falls back to a Telegram notification if
++    // it doesn't get this (dead connection).
++    if (typeof ack === 'function') ack();
+     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(msg.from_id)) {
+       addMessageToChat(msg);
+-      // Mark as read silently
+-      apiFetch(`/api/messages/${msg.from_id}`).then(() => updateMessageBadge()).catch(() => { });
++      // Mark as read. This used to call GET /api/messages/:id — downloading
++      // the entire 100-message history (4 DB queries) for EVERY incoming
++      // message just to trigger a side effect, then throwing the result away.
++      apiFetch(`/api/messages/read/${msg.from_id}`, { method: 'POST' }).then(() => updateMessageBadge()).catch(() => { });
+     } else {
+       updateMessageBadge();
+       // If the mentor is sitting on the chat page with a different mentee
+@@ -1423,15 +1585,38 @@ function connectSocket() {
+     }
+   });
+ 
++  // Edits and deletes are applied to the bubble in place. They used to reload
++  // and rebuild the entire conversation (for BOTH participants, and even when
++  // the event belonged to a different chat).
+   socket.on('message_edited', (editedMsg) => {
+-    if (currentPage === 'chat' && window.chatState?.with) {
+-      loadMessages(window.chatState.with);
++    if (!editedMsg?.id) return;
++    const cached = window._chatMessagesMap?.get(String(editedMsg.id));
++    if (cached) Object.assign(cached, editedMsg);
++    if (currentPage !== 'chat' || !window.chatState?.with) return;
++    const threadEl = document.querySelector(`#chatMessages .message-thread[data-msg-id="${editedMsg.id}"]`);
++    if (!threadEl) return;
++    const captionEl = threadEl.querySelector('.message-caption');
++    const textEl = threadEl.querySelector('.message-text');
++    if (captionEl) {
++      captionEl.textContent = editedMsg.content;
++    } else if (textEl) {
++      textEl.innerHTML = escapeHtml(editedMsg.content) + '<span class="msg-edited">edited</span>';
++    } else {
++      loadMessages(window.chatState.with).catch(() => { });
+     }
+   });
+ 
+-  socket.on('message_deleted', ({ id }) => {
+-    if (currentPage === 'chat' && window.chatState?.with) {
+-      loadMessages(window.chatState.with);
++  socket.on('message_deleted', ({ id } = {}) => {
++    if (!id) return;
++    window._chatMessagesMap?.delete(String(id));
++    if (currentPage !== 'chat' || !window.chatState?.with) return;
++    const threadEl = document.querySelector(`#chatMessages .message-thread[data-msg-id="${id}"]`);
++    if (!threadEl) return;
++    // A message with replies needs the tree rebuilt; a leaf can just go.
++    if (threadEl.querySelector('.replies-container .message-thread')) {
++      loadMessages(window.chatState.with).catch(() => { });
++    } else {
++      threadEl.remove();
+     }
+   });
+ 
+@@ -4819,13 +5004,17 @@ function openChat(partnerId) {
+   navigate('chat');
+ }
+ 
+-async function loadMessages(with_id) {
++async function loadMessages(with_id, opts = {}) {
+   const container = $('chatMessages');
+ 
+   try {
+     const messages = await apiFetch(`/api/messages/${with_id}`);
+     if (!container) return;
+ 
++    // A slow response for a conversation the user has already switched away
++    // from must not overwrite the one they're looking at now.
++    if (window.chatState?.with && String(window.chatState.with) !== String(with_id)) return;
++
+     if (!window._chatMessagesMap) window._chatMessagesMap = new Map();
+     function indexMessages(list) {
+       if (!list || !list.length) return;
+@@ -4834,11 +5023,38 @@ async function loadMessages(with_id) {
+         if (m.replies && m.replies.length) indexMessages(m.replies);
+       }
+     }
++
++    // Skip the re-render when nothing changed. Reconnect re-syncs, duplicate
++    // socket events, badge refreshes and visibility changes all call this;
++    // rebuilding up to 100 bubbles (and losing scroll position) each time was
++    // a major source of flicker and lag. Compare what's on screen (ids + edit
++    // state) with what the server returned.
++    const domSig = Array.from(container.querySelectorAll('.message-thread[data-msg-id]'))
++      .map(el => el.dataset.msgId)
++      .filter(id => !String(id).startsWith('temp_'))
++      .map(id => `${id}:${window._chatMessagesMap.get(String(id))?.edited_at || ''}`)
++      .sort().join('|');
++    const serverSig = messages.map(m => `${m.id}:${m.edited_at || ''}`).sort().join('|');
++    const sameChat = container.dataset.chatWith === String(with_id);
++    if (!opts.force && sameChat && domSig === serverSig) {
++      updateMessageBadge();
++      return;
++    }
++
+     indexMessages(messages);
+ 
++    // Keep the user's place: stick to the bottom only if they were already
++    // there (or this is a fresh conversation); otherwise restore scroll.
++    const prevTop = container.scrollTop;
++    const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
++
++    // Bubbles still "sending…" aren't in the server response yet — keep them.
++    const pending = !sameChat ? '' : Array.from(container.querySelectorAll(':scope > .message-thread[data-msg-id^="temp_"]'))
++      .map(el => el.outerHTML).join('');
++
+     try {
+       const messageTree = buildMessageTree(messages);
+-      container.innerHTML = renderThread(messageTree);
++      container.innerHTML = renderThread(messageTree) + pending;
+       hydratePhotoMessages(container);
+     } catch (renderError) {
+       console.error('[loadMessages] Render error:', renderError);
+@@ -4851,7 +5067,8 @@ async function loadMessages(with_id) {
+       `).join('');
+     }
+ 
+-    container.scrollTop = container.scrollHeight;
++    container.dataset.chatWith = String(with_id);
++    container.scrollTop = (!sameChat || wasNearBottom || opts.force) ? container.scrollHeight : prevTop;
+     // The GET endpoint marks messages as read on the backend, so refresh the
+     // badge immediately — no page reload required.
+     updateMessageBadge();
+@@ -4905,7 +5122,7 @@ async function loadMessagesWithRetry(with_id, retryCount = 0) {
+ function refreshChat() {
+   haptic('light');
+   if (window.chatState?.with) {
+-    loadMessages(window.chatState.with);
++    loadMessages(window.chatState.with, { force: true });
+   } else {
+     loadChat();
+   }
+@@ -4977,126 +5194,104 @@ async function sendMessage() {
+   const counter = $('charCounter');
+   if (counter) { counter.textContent = '0 / 2000'; counter.classList.remove('danger'); }
+ 
+-  const sendBtn = document.querySelector('.chat-send-btn');
+-  if (sendBtn) sendBtn.disabled = true;
+-  if (sendBtn) sendBtn.classList.add('sending');
++  // The input is deliberately NOT disabled while sending. Disabling it blurred
++  // the textarea, which collapsed the phone keyboard and re-opened it when
++  // re-enabled — a visible jump on every message — and stopped people typing
++  // their next message while one was in flight. Keep focus so the keyboard stays.
++  try { input.focus({ preventScroll: true }); } catch { }
+ 
+-  // Generate temporary ID
+-  const tempId = 'temp_' + Date.now();
++  // Unique per message. Also sent to the server as client_id, which makes
++  // retries idempotent (no duplicate messages if a response was lost).
++  window._sendSeq = (window._sendSeq || 0) + 1;
++  const tempId = `temp_${Date.now()}_${window._sendSeq}`;
+ 
+-  // Create temporary message object
+-  const tempMsg = {
++  // Capture reply target now and clear the reply banner immediately, so the
++  // NEXT message isn't accidentally sent as a reply too.
++  const replyParentId = window.replyToId || null;
++  cancelReply();
++
++  const toId = window.chatState.with;
++  addMessageToChat({
+     id: tempId,
+     from_id: currentUser?.telegram_id,
+-    to_id: window.chatState.with,
++    to_id: toId,
+     content: originalContent,
+     created_at: new Date().toISOString(),
+     is_sending: true,
+     is_deleted: false,
+-    parent_id: window.replyToId || null,
++    parent_id: replyParentId,
+     replies: []
+-  };
+-
+-  // Call addMessageToChat(tempMsg)
+-  addMessageToChat(tempMsg);
++  });
+ 
+-  // Disable the input field
+-  if (input) input.disabled = true;
++  if (!window._pendingSends) window._pendingSends = new Map();
++  window._pendingSends.set(tempId, { toId, content: originalContent, parentId: replyParentId });
++  deliverMessage(tempId);
++}
+ 
+-  let attempts = 0;
+-  const maxAttempts = 3;
++// POST with up to 3 attempts. Every attempt carries the same client_id, so if
++// an earlier attempt actually reached the database (response lost / timed out)
++// the server returns that message instead of inserting it again.
++async function postMessageWithRetry(body) {
+   let lastError = null;
+-  let msg = null;
+-
+-  // Capture replyToId in case it changes before async operations finish
+-  const replyParentId = window.replyToId;
+-
+-  while (attempts < maxAttempts) {
++  for (let attempt = 0; attempt < 3; attempt++) {
+     try {
+-      msg = await apiFetch('/api/messages', {
+-        method: 'POST',
+-        body: {
+-          to_id: window.chatState.with,
+-          content: originalContent,
+-          parent_id: replyParentId || undefined
+-        }
+-      });
+-      lastError = null;
+-      break;
++      return await apiFetch('/api/messages', { method: 'POST', body, timeout: 12000, retry: false });
+     } catch (e) {
+       lastError = e;
+-      attempts++;
+-      if (attempts < maxAttempts) {
+-        const delay = attempts * 500;
+-        await new Promise(r => setTimeout(r, delay));
+-      }
++      // 4xx (validation, no mentorship, rate limit) will never succeed on retry.
++      if (e.status && e.status >= 400 && e.status < 500 && e.status !== 408) throw e;
++      if (attempt < 2) await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
+     }
+   }
++  throw lastError;
++}
+ 
+-  // Re-enable input and button
+-  if (input) input.disabled = false;
+-  if (sendBtn) { sendBtn.disabled = false; sendBtn.classList.remove('sending'); }
++async function deliverMessage(tempId) {
++  const pending = window._pendingSends?.get(tempId);
++  if (!pending) return;
++  const findTemp = () => document.querySelector(`#chatMessages .message-thread[data-msg-id="${tempId}"]`);
+ 
+-  if (!lastError && msg) {
+-    // On success, replace the temp element with the real message
+-    const container = document.getElementById('chatMessages');
+-    if (container) {
+-      const existingReal = container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
+-      const tempEl = container.querySelector(`.message-thread[data-msg-id="${tempId}"]`);
+-      if (existingReal) {
+-        tempEl?.remove();
+-      } else if (tempEl) {
+-        tempEl.outerHTML = renderThread([msg], false);
+-      }
+-    }
+-    // Clear reply state
+-    cancelReply();
+-  } else {
+-    // On failure, mark the temp message as failed (add a "Retry" button)
++  try {
++    const msg = await postMessageWithRetry({
++      to_id: pending.toId,
++      content: pending.content,
++      parent_id: pending.parentId || undefined,
++      client_id: tempId,
++    });
++    window._pendingSends.delete(tempId);
++    const container = $('chatMessages');
++    if (container) replaceOptimisticBubble(container, tempId, msg);
++  } catch (e) {
+     haptic('error');
+-    showToast(t('msg_send_failed'), 'error');
+-
+-    const container = document.getElementById('chatMessages');
+-    if (container) {
+-      const tempEl = container.querySelector(`.message-thread[data-msg-id="${tempId}"]`);
+-      if (tempEl) {
+-        const bubble = tempEl.querySelector('.message-bubble');
+-        if (bubble) {
+-          bubble.classList.remove('sending');
+-          bubble.classList.add('failed');
+-          // Add retry button if not already present
+-          if (!bubble.querySelector('.retry-btn')) {
+-            bubble.insertAdjacentHTML('beforeend', `
+-              <div class="failed-status" style="margin-top: 4px; display: flex; align-items: center; justify-content: flex-end; gap: 4px;">
+-                <span style="font-size: 0.75rem; color: var(--danger);">Failed</span>
+-                <button class="btn btn-danger btn-xs btn-outline retry-btn" onclick="retrySendMessage('${tempId}')" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--danger);">Retry</button>
+-              </div>
+-            `);
+-          }
+-        }
++    showToast(e.message && !/^HTTP|timed out|Network|Failed to fetch/i.test(e.message) ? e.message : t('msg_send_failed'), 'error');
++    const bubble = findTemp()?.querySelector('.message-bubble');
++    if (bubble) {
++      bubble.classList.remove('sending');
++      bubble.classList.add('failed');
++      if (!bubble.querySelector('.retry-btn')) {
++        bubble.insertAdjacentHTML('beforeend', `
++          <div class="failed-status" style="margin-top: 4px; display: flex; align-items: center; justify-content: flex-end; gap: 4px;">
++            <span style="font-size: 0.75rem; color: var(--danger);">Failed</span>
++            <button class="btn btn-danger btn-xs btn-outline retry-btn" onclick="retrySendMessage('${tempId}')" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--danger);">Retry</button>
++          </div>
++        `);
+       }
+     }
+   }
+ }
+ 
++// Retry re-uses the SAME client_id (tempId) and the SAME bubble, so a message
++// that did reach the server earlier can't be duplicated.
+ function retrySendMessage(tempId) {
+-  const container = document.getElementById('chatMessages');
+-  if (!container) return;
+-
+-  const tempEl = container.querySelector(`.message-thread[data-msg-id="${tempId}"]`);
+-  if (!tempEl) return;
+-
+-  const textEl = tempEl.querySelector('.message-text');
+-  if (!textEl) return;
+-
+-  const content = textEl.textContent.trim();
+-  tempEl.remove();
+-
+-  const input = document.getElementById('chatInput');
+-  if (input) {
+-    input.value = content;
+-    sendMessage();
++  const tempEl = document.querySelector(`#chatMessages .message-thread[data-msg-id="${tempId}"]`);
++  if (!tempEl || !window._pendingSends?.has(tempId)) return;
++  const bubble = tempEl.querySelector('.message-bubble');
++  if (bubble) {
++    bubble.classList.remove('failed');
++    bubble.classList.add('sending');
++    bubble.querySelector('.failed-status')?.remove();
+   }
++  deliverMessage(tempId);
+ }
+ 
+ function cancelReply() {
+@@ -5110,7 +5305,7 @@ function cancelReply() {
+ function resetChatView() {
+   if (!window.chatState?.with) return;
+   cancelReply();
+-  loadMessages(window.chatState.with);
++  loadMessages(window.chatState.with, { force: true });
+   showToast('Chat view reset', 'info');
+   syncChatInputHeight();
+ }
+@@ -5161,7 +5356,12 @@ function autoResizeChatInput() {
+ }
+ 
+ function handleChatTyping() {
+-  if (socket && window.chatState.with) {
++  // At most one 'typing' event every 2.5 s (was one per keystroke), and only
++  // while there is text in the box.
++  const inputEl = $('chatInput');
++  const now = Date.now();
++  if (socket?.connected && window.chatState.with && inputEl?.value && now - (window._lastTypingEmit || 0) > 2500) {
++    window._lastTypingEmit = now;
+     socket.emit('typing', { to_id: window.chatState.with });
+   }
+   autoResizeChatInput();
+@@ -7569,6 +7769,8 @@ document.addEventListener('click', (e) => {
+ 
+   // ── Subtle parallax for the blobs (pointer + scroll) ──
+   function initParallax() {
++    // Blobs are hidden on touch/small screens (see styles.css); skip the work.
++    if (window.matchMedia('(hover: none)').matches || window.innerWidth <= 480) return;
+     let ticking = false;
+ 
+     function apply(nx, ny) {
+diff --git a/frontend/index.html b/frontend/index.html
+index 67cf339..d91cd4e 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -6,9 +6,15 @@
+   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+   <title>Holy – Anonymous Christian Support</title>
+   <meta name="color-scheme" content="dark light" />
++  <!-- Apply the saved theme BEFORE first paint (was applied only after the
++       315 KB app.js loaded, so light-theme users saw a dark flash on launch). -->
++  <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')==='light'?'light':'dark')}catch(e){}</script>
+   <link rel="preconnect" href="https://fonts.googleapis.com" />
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+-  <link rel="stylesheet" href="styles.css?v=1.1" />
++  <!-- Non-blocking fonts (text shows in fallback fonts, then swaps) -->
++  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" media="print" onload="this.media='all'" />
++  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" /></noscript>
++  <link rel="stylesheet" href="styles.css?v=1.2" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+ 
+   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+@@ -2181,7 +2187,7 @@
+   </div>
+ 
+   <script src="locales.js"></script>
+-  <script src="app.js?v=1.2"></script>
++  <script src="app.js?v=1.3"></script>
+ 
+   <script>
+     /* ── Offline banner ──────────────────────────────────────── */
+diff --git a/frontend/styles.css b/frontend/styles.css
+index dc61267..3e6c686 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -3,8 +3,8 @@
+    Dark/Light mode · Glassmorphism · Gold accents · Smooth animations
+    ============================================================ */
+ 
+-/* ─── Google Fonts ──────────────────────────────────────────── */
+-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap');
++/* Google Fonts are loaded via <link> in index.html (an @import here made
++   them download only AFTER this whole file, in series). */
+ 
+ /* ─── CSS Variables ─────────────────────────────────────────── */
+ :root {
+@@ -72,17 +72,35 @@
+   --inset-hi-gold: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+ }
+ 
+-/* ─── Smooth theme transitions (GPU View Transition + fallback) ─── */
+-::view-transition-old(root),
+-::view-transition-new(root) {
+-  animation-duration: 0.22s;
+-  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
++/* ─── Theme switching ───────────────────────────────────────── */
++/* Native scrollbars / inputs / keyboard follow the app theme, not the OS. */
++:root { color-scheme: dark; }
++[data-theme="light"] { color-scheme: light; }
++
++/* While the theme flips, suppress ALL transitions so nothing animates
++   piecemeal (49 rules use `transition: all`, which made buttons/cards
++   visibly lag behind the rest of the page). app.js toggleTheme() adds this
++   for two frames, hidden behind .theme-veil. */
++html.theme-switching *,
++html.theme-switching *::before,
++html.theme-switching *::after {
++  transition: none !important;
+ }
+ 
+-html.theme-transitioning,
+-html.theme-transitioning * {
+-  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
+-  transition-delay: 0s !important;
++/* Full-screen fade used to cover the theme flip. Opacity-only = cheap. */
++.theme-veil {
++  position: fixed;
++  inset: 0;
++  z-index: 2147483000;
++  pointer-events: none;
++  opacity: 0;
++}
++
++/* Decorative blurred blobs are barely visible (10-14% opacity) but cost three
++   large blur(70px) layers plus parallax updates on every touch/scroll.
++   Not worth it on phones. */
++@media (hover: none), (max-width: 480px) {
++  .bg-blobs { display: none; }
+ }
+ 
+ @media (max-width: 480px) {
+@@ -3315,10 +3333,16 @@ textarea.form-control {
+   line-height: 1.55;
+   word-break: break-word;
+   position: relative;
+-  animation: msgPop 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+ }
+ 
++/* Entrance animation ONLY for a newly added message (app.js adds .msg-enter).
++   It used to be on every bubble, so each full re-render replayed it for the
++   whole conversation at once — the chat "blinked". */
++.msg-enter .message-bubble {
++  animation: msgPop 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
++}
++
+ .message-bubble.sent {
+   align-self: flex-end;
+   background: linear-gradient(145deg, var(--gold) 0%, #a87a28 100%);
+diff --git a/migrations/20260921_chat_performance_indexes.sql b/migrations/20260921_chat_performance_indexes.sql
+new file mode 100644
+index 0000000..2087d9a
+--- /dev/null
++++ b/migrations/20260921_chat_performance_indexes.sql
+@@ -0,0 +1,14 @@
++-- Chat performance indexes. Safe to run more than once.
++--
++-- The conversation query matches messages in BOTH directions:
++--   (from_id = me AND to_id = them) OR (from_id = them AND to_id = me)
++-- ordered by created_at DESC. idx_messages_pair (from_id, to_id, created_at)
++-- serves the first half; without the reverse index the second half has to
++-- filter/sort more rows than necessary.
++CREATE INDEX IF NOT EXISTS idx_messages_pair_rev
++  ON messages (to_id, from_id, created_at DESC);
++
++-- Unread badge counts and "mark as read" only ever touch unread rows.
++CREATE INDEX IF NOT EXISTS idx_messages_unread
++  ON messages (to_id, from_id)
++  WHERE is_read = false;
+diff --git a/package.json b/package.json
+index 4bb7a6d..e990c8d 100644
+--- a/package.json
++++ b/package.json
+@@ -14,6 +14,7 @@
+         "@sentry/node": "^7.120.4",
+         "@supabase/supabase-js": "^2.39.0",
+         "axios": "^1.6.0",
++        "compression": "^1.8.2",
+         "cors": "^2.8.5",
+         "dotenv": "^16.3.1",
+         "express": "^4.18.2",
+diff --git a/routes/messages.js b/routes/messages.js
+index 5fa9135..172d4ba 100644
+--- a/routes/messages.js
++++ b/routes/messages.js
+@@ -10,9 +10,93 @@ function containsProfanity(text) {
+   return PROFANITY_LIST.some(word => lower.includes(word));
+ }
+ 
++// Tiny in-memory TTL cache. Render's free tier runs a single instance, so a
++// process-local cache is safe here and saves Supabase round-trips.
++function makeTtlCache(ttlMs, max = 2000) {
++  const m = new Map();
++  return {
++    get(k) {
++      const e = m.get(k);
++      if (!e) return undefined;
++      if (e.exp < Date.now()) { m.delete(k); return undefined; }
++      return e.v;
++    },
++    set(k, v) {
++      if (m.size >= max) m.delete(m.keys().next().value);
++      m.set(k, { v, exp: Date.now() + ttlMs });
++    },
++    delete(k) { m.delete(k); },
++  };
++}
++
++// Express 4 does not catch rejected promises from async handlers: an
++// exception left the request hanging forever (client spinner, input locked).
++// This forwards them to the global error handler so the client gets a 500.
++const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
++
++const assignmentCache = makeTtlCache(15 * 1000);          // authorised pairs
++const senderNameCache = makeTtlCache(10 * 60 * 1000);     // telegram_id → anonymous_id
++const filePathCache = makeTtlCache(30 * 60 * 1000, 500);  // file_id → telegram file_path
++const sendDedupe = makeTtlCache(2 * 60 * 1000, 5000);     // from:client_id → insert promise
++
+ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) {
+   const router = express.Router();
+ 
++  const userRoom = (id) => `user:${id}`;
++
++  // Is there an active mentorship between these two users (either direction)?
++  // Positive answers are cached for 15 s: this check ran on EVERY send and
++  // EVERY history load. Trade-off: after a mentorship ends, messaging can
++  // still pass this check for up to 15 s.
++  async function hasActiveMentorship(a, b) {
++    const key = a < b ? `${a}:${b}` : `${b}:${a}`;
++    if (assignmentCache.get(key)) return true;
++    const { data, error } = await supabase
++      .from('mentorship_assignments')
++      .select('id')
++      .or(`and(user_id.eq.${a},mentor_id.eq.${b}),and(user_id.eq.${b},mentor_id.eq.${a})`)
++      .eq('is_active', true)
++      .limit(1);
++    if (error) throw error;
++    const ok = !!(data && data.length);
++    if (ok) assignmentCache.set(key, true);
++    return ok;
++  }
++
++  async function getSenderName(id) {
++    const cached = senderNameCache.get(id);
++    if (cached) return cached;
++    const { data } = await supabase.from('users').select('anonymous_id').eq('telegram_id', id).limit(1);
++    const name = data?.[0]?.anonymous_id || null;
++    if (name) senderNameCache.set(id, name);
++    return name;
++  }
++
++  // Telegram notification for a recipient who isn't connected. Fire-and-forget:
++  // this used to be awaited INSIDE the send request, so every message to an
++  // offline user waited on 2 DB queries + a Telegram API call (often 1-3 s,
++  // more when Telegram rate-limits) before the sender saw it as sent.
++  function notifyOffline(toId, fromId, content) {
++    (async () => {
++      const name = await getSenderName(fromId);
++      if (!name) return;
++      const { notifyMessage } = require('../bot');
++      await notifyMessage(toId, name, content, fromId);
++    })().catch((err) => console.error('[messages] offline notification failed:', err.message));
++  }
++
++  // Push to the recipient's devices and require an ack from the client. If
++  // nobody is connected — or a zombie connection never acks within 4 s — fall
++  // back to the Telegram notification so the message can't silently vanish.
++  function deliverToRecipient(toId, payload, onUndelivered) {
++    const room = userRoom(toId);
++    const sockets = io.sockets.adapter.rooms.get(room);
++    if (!sockets || sockets.size === 0) return onUndelivered();
++    io.to(room).timeout(4000).emit('new_message', payload, (err) => {
++      if (err) onUndelivered();
++    });
++  }
++
+   // GET /api/messages/unread/count
+   // NOTE: This route must be defined BEFORE /:with to avoid "unread" being
+   // captured as a :with param.
+@@ -20,15 +104,16 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers)
+   // Only count unread messages from currently ACTIVE mentorship partners.
+   // The user may appear as a mentee (user_id column) or as a mentor
+   // (mentor_id column), so we look at both sides of every active assignment.
+-  router.get('/unread/count', requireAuth, async (req, res) => {
++  router.get('/unread/count', requireAuth, wrap(async (req, res) => {
+     const { id } = req.telegramUser;
+ 
+     // Fetch all active assignments where this user is involved (either role).
+-    const { data: assignments } = await supabase
++    const { data: assignments, error: aErr } = await supabase
+       .from('mentorship_assignments')
+       .select('user_id, mentor_id')
+       .eq('is_active', true)
+       .or(`user_id.eq.${id},mentor_id.eq.${id}`);
++    if (aErr) throw aErr;
+ 
+     if (!assignments || assignments.length === 0) {
+       return res.json({ count: 0 });
+@@ -40,21 +125,18 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers)
+     );
+ 
+     // Count unread messages sent TO this user FROM one of the active partners.
+-    const { count } = await supabase
++    const { count, error: cErr } = await supabase
+       .from('messages')
+       .select('id', { count: 'exact', head: true })
+       .eq('to_id', id)
+       .eq('is_read', false)
+       .in('from_id', partnerIds);
++    if (cErr) throw cErr;
+ 
+     res.json({ count: count || 0 });
+-  });
++  }));
+ 
+   // GET /api/messages/file/:file_id – stream a voice/file attachment
+-  // NOTE: This route must be defined BEFORE /:with for the same reason as
+-  // /unread/count above — but since it has two path segments ("file" + the
+-  // id) it can never actually collide with the single-segment /:with route.
+-  // It's placed here anyway to keep all the "must come first" routes together.
+   //
+   // The mini app can't call Telegram's file API directly because that would
+   // require exposing our bot token to the client (Telegram's file URLs are
+@@ -66,16 +148,25 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers)
+     const token = process.env.TELEGRAM_BOT_TOKEN;
+ 
+     try {
+-      const { data } = await axios.get(`https://api.telegram.org/bot${token}/getFile`, {
+-        params: { file_id }
+-      });
+-
+-      if (!data.ok || !data.result?.file_path) {
+-        return res.status(404).json({ error: 'File not found' });
++      // file_path is stable for ~1 h, so cache it instead of a getFile call
++      // per request (chats with photos re-requested these constantly).
++      let filePath = filePathCache.get(file_id);
++      if (!filePath) {
++        const { data } = await axios.get(`https://api.telegram.org/bot${token}/getFile`, {
++          params: { file_id },
++          timeout: 10000,
++        });
++        if (!data.ok || !data.result?.file_path) {
++          return res.status(404).json({ error: 'File not found' });
++        }
++        filePath = data.result.file_path;
++        filePathCache.set(file_id, filePath);
+       }
+ 
+-      const fileUrl = `https://api.telegram.org/file/bot${token}/${data.result.file_path}`;
+-      const fileRes = await axios.get(fileUrl, { responseType: 'stream' });
++      const fileRes = await axios.get(`https://api.telegram.org/file/bot${token}/${filePath}`, {
++        responseType: 'stream',
++        timeout: 20000,
++      });
+ 
+       if (fileRes.headers['content-type']) res.setHeader('Content-Type', fileRes.headers['content-type']);
+       if (fileRes.headers['content-length']) res.setHeader('Content-Length', fileRes.headers['content-length']);
+@@ -83,124 +174,151 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers)
+       // the mini app cache them for a while.
+       res.setHeader('Cache-Control', 'private, max-age=86400');
+ 
++      fileRes.data.on('error', () => res.destroy());
++      res.on('close', () => fileRes.data.destroy()); // client went away → stop streaming
+       fileRes.data.pipe(res);
+     } catch (err) {
+       console.error('[GET /messages/file/:file_id] Error:', err.message);
+-      res.status(500).json({ error: 'Failed to fetch file' });
++      if (!res.headersSent) res.status(500).json({ error: 'Failed to fetch file' });
+     }
+   });
+ 
+-  // GET /api/messages/:with – conversation with a user
+-  router.get('/:with', requireAuth, async (req, res) => {
++  // POST /api/messages/read/:with – mark everything from :with as read.
++  // Lightweight replacement for the client re-downloading the whole
++  // conversation (GET /:with) on every incoming message just to trigger the
++  // mark-as-read side effect.
++  router.post('/read/:with', requireAuth, wrap(async (req, res) => {
+     const { id: my_id } = req.telegramUser;
+-    const other_id = parseInt(req.params.with);
+-
+-    // FIX: Use a single compound .or() so the query correctly finds a row
+-    // where (user_id=me AND mentor_id=other) OR (user_id=other AND mentor_id=me).
+-    // The original two chained .or() calls were AND-ed together, which could
+-    // never match a single assignment row.
+-    const { data: assign } = await supabase
+-      .from('mentorship_assignments')
+-      .select('id')
+-      .or(`and(user_id.eq.${my_id},mentor_id.eq.${other_id}),and(user_id.eq.${other_id},mentor_id.eq.${my_id})`)
+-      .eq('is_active', true)
+-      .single();
+-
+-    if (!assign) return res.status(403).json({ error: 'No active mentorship with this user' });
++    const other_id = parseInt(req.params.with, 10);
++    if (!Number.isSafeInteger(other_id)) return res.status(400).json({ error: 'Invalid partner ID' });
+ 
+-    // select('*') already returns file_id, file_type, file_size, mime_type,
+-    // duration and file_name once those columns exist on the table (see the
+-    // migration script), so no changes are needed here for the mini app to
+-    // receive attachment metadata alongside regular text messages.
+-    // Cleared/soft-deleted messages were previously still being fetched and
+-    // re-rendered on every load — as a conversation accumulates deletions
+-    // over time this means the "last 100" window keeps counting messages
+-    // the user can no longer see, so real recent messages fall out of it,
+-    // and the client wastes work rendering rows it just throws away.
+-    // Filtering is_deleted here keeps the 100-message window meaningful
+-    // and shrinks the payload/render work as history grows.
+-    const { data, error } = await supabase
++    const { error } = await supabase
+       .from('messages')
+-      .select('*')
+-      .or(`and(from_id.eq.${my_id},to_id.eq.${other_id}),and(from_id.eq.${other_id},to_id.eq.${my_id})`)
+-      // `is_deleted` predates its own tracked migration in this repo, so
+-      // older rows may have it NULL rather than false — match both so we
+-      // don't silently drop pre-existing messages that were never deleted.
+-      .or('is_deleted.eq.false,is_deleted.is.null')
+-      .order('created_at', { ascending: false })
+-      .limit(100);
++      .update({ is_read: true, read_at: new Date().toISOString() })
++      .eq('to_id', my_id)
++      .eq('from_id', other_id)
++      .is('read_at', null);
++    if (error) throw error;
+ 
+-    if (error) return res.status(500).json({ error: error.message });
++    res.json({ success: true });
++  }));
+ 
+-    const ordered = (data || []).slice().reverse();
++  // GET /api/messages/:with – conversation with a user
++  router.get('/:with', requireAuth, wrap(async (req, res) => {
++    const { id: my_id } = req.telegramUser;
++    const other_id = parseInt(req.params.with, 10);
++    if (!Number.isSafeInteger(other_id)) return res.status(400).json({ error: 'Invalid partner ID' });
+ 
+-    // Mark as read and update read_at
+-    try {
+-      await supabase
++    // Authorisation check and history fetch are independent, so run them
++    // together (they were sequential: two round-trips to Supabase in a row).
++    //
++    // select('*') already returns file_id, file_type, file_size, mime_type,
++    // duration and file_name once those columns exist on the table, so the
++    // mini app gets attachment metadata alongside regular text messages.
++    // Soft-deleted rows are filtered here so the "last 100" window stays
++    // meaningful. `is_deleted` predates its own tracked migration, so older
++    // rows may have it NULL rather than false — match both.
++    const [allowed, historyRes] = await Promise.all([
++      hasActiveMentorship(my_id, other_id),
++      supabase
++        .from('messages')
++        .select('*')
++        .or(`and(from_id.eq.${my_id},to_id.eq.${other_id}),and(from_id.eq.${other_id},to_id.eq.${my_id})`)
++        .or('is_deleted.eq.false,is_deleted.is.null')
++        .order('created_at', { ascending: false })
++        .limit(100),
++    ]);
++
++    if (!allowed) return res.status(403).json({ error: 'No active mentorship with this user' });
++    if (historyRes.error) throw historyRes.error;
++
++    const data = historyRes.data || [];
++    const ordered = data.slice().reverse();
++
++    // Only write when there is actually something to mark. Most loads (tab
++    // switches, reconnects) have nothing unread, so this skips a DB write.
++    const hasUnread = data.length >= 100 || data.some(m => Number(m.to_id) === my_id && !m.read_at);
++    if (hasUnread) {
++      const { error: readErr } = await supabase
+         .from('messages')
+         .update({ is_read: true, read_at: new Date().toISOString() })
+         .eq('to_id', my_id)
+         .eq('from_id', other_id)
+         .is('read_at', null);
+-    } catch (e) {
+-      console.error('Error marking messages as read:', e);
++      if (readErr) console.error('Error marking messages as read:', readErr.message);
+     }
+ 
+     res.json(ordered);
+-  });
++  }));
+ 
+   // POST /api/messages – send message
+-  router.post('/', requireAuth, async (req, res) => {
++  router.post('/', requireAuth, wrap(async (req, res) => {
+     const { id: from_id } = req.telegramUser;
+-    const { to_id, content, parent_id } = req.body;
++    const { content, parent_id, client_id } = req.body;
++    const to_id = Number(req.body.to_id);
+ 
+-    if (!to_id || !content?.trim()) return res.status(400).json({ error: 'to_id and content required' });
++    if (!Number.isSafeInteger(to_id) || !content?.trim()) {
++      return res.status(400).json({ error: 'to_id and content required' });
++    }
+     if (content.length > 2000) return res.status(400).json({ error: 'Message too long' });
+ 
+-    // FIX: Same compound .or() fix applied here for consistency and correctness.
+-    const { data: assign } = await supabase
+-      .from('mentorship_assignments')
+-      .select('id')
+-      .or(`and(user_id.eq.${from_id},mentor_id.eq.${to_id}),and(user_id.eq.${to_id},mentor_id.eq.${from_id})`)
+-      .eq('is_active', true)
+-      .single();
++    // client_id makes retries idempotent. The client retries failed sends;
++    // without this, a request that actually succeeded (but whose response was
++    // lost, or that errored after the insert) was inserted AGAIN on retry —
++    // duplicate messages. Same (sender, client_id) within 2 min → same message.
++    const safeClientId = typeof client_id === 'string' && /^[\w-]{1,64}$/.test(client_id) ? client_id : null;
++    const dedupeKey = safeClientId ? `${from_id}:${safeClientId}` : null;
++    const withClientId = (m) => (safeClientId ? { ...m, client_id: safeClientId } : m);
++
++    if (dedupeKey) {
++      const prior = sendDedupe.get(dedupeKey);
++      if (prior) return res.status(201).json(withClientId(await prior));
++    }
+ 
+-    if (!assign) return res.status(403).json({ error: 'No active mentorship with this user' });
++    if (!(await hasActiveMentorship(from_id, to_id))) {
++      return res.status(403).json({ error: 'No active mentorship with this user' });
++    }
+ 
+     const is_flagged = containsProfanity(content);
++    const trimmed = content.trim();
+ 
+-    const { data: msg, error } = await supabase
+-      .from('messages')
+-      .insert({ from_id, to_id, content: content.trim(), is_flagged, parent_id: parent_id || null })
+-      .select()
+-      .single();
+-
+-    if (error) return res.status(500).json({ error: error.message });
+-
+-    // Real-time push to recipient
+-    const recipientSocket = onlineUsers.get(String(to_id));
+-    if (recipientSocket) {
+-      io.to(recipientSocket).emit('new_message', msg);
++    const insertPromise = (async () => {
++      const { data: row, error } = await supabase
++        .from('messages')
++        .insert({ from_id, to_id, content: trimmed, is_flagged, parent_id: parent_id || null })
++        .select()
++        .single();
++      if (error) throw error;
++      return row;
++    })();
++    if (dedupeKey) sendDedupe.set(dedupeKey, insertPromise);
++
++    let msg;
++    try {
++      msg = await insertPromise;
++    } catch (err) {
++      if (dedupeKey) sendDedupe.delete(dedupeKey); // let a retry try again
++      throw err;
+     }
+ 
+-    // Also push to sender's other devices/tabs
+-    const senderSocket = onlineUsers.get(String(from_id));
+-    if (senderSocket && senderSocket !== recipientSocket) {
+-      io.to(senderSocket).emit('message_sent', msg);
+-    }
++    const payload = withClientId(msg);
+ 
+-    const { data: sender } = await supabase.from('users').select('anonymous_id').eq('telegram_id', from_id).single();
+-    if (sender && !onlineUsers.has(String(to_id))) {
+-      const { notifyMessage } = require('../bot');
+-      // Pass the actual message content (clean, no prefix) and the sender's id
+-      await notifyMessage(to_id, sender.anonymous_id, content, from_id);
+-    }
++    // Real-time push to every device the recipient has open (with fallback).
++    deliverToRecipient(to_id, payload, () => notifyOffline(to_id, from_id, trimmed));
+ 
+-    res.status(201).json(msg);
+-  });
++    // Also push to the sender's OTHER devices/tabs. The originating socket is
++    // excluded (x-socket-id) — before, it received its own message back over
++    // the socket while the HTTP response was still in flight, so the bubble
++    // appeared twice for a moment and then one vanished: the visible "blink".
++    const originSocket = req.get('x-socket-id');
++    io.to(userRoom(from_id)).except(originSocket || []).emit('message_sent', payload);
++
++    // Respond immediately — nothing above waits on Telegram.
++    res.status(201).json(payload);
++  }));
+ 
+   // PATCH /api/messages/:id – edit a message
+-  router.patch('/:id', requireAuth, async (req, res) => {
++  router.patch('/:id', requireAuth, wrap(async (req, res) => {
+     const { id: user_id } = req.telegramUser;
+     const { content } = req.body;
+     const messageId = req.params.id;
+@@ -236,16 +354,13 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers)
+ 
+     if (error) return res.status(500).json({ error: error.message });
+ 
+-    const recipientSocket = onlineUsers.get(String(msg.to_id));
+-    if (recipientSocket) io.to(recipientSocket).emit('message_edited', data);
+-    const senderSocket = onlineUsers.get(String(user_id));
+-    if (senderSocket && senderSocket !== recipientSocket) io.to(senderSocket).emit('message_edited', data);
++    io.to([userRoom(msg.to_id), userRoom(user_id)]).emit('message_edited', data);
+ 
+     res.json(data);
+-  });
++  }));
+ 
+   // DELETE /api/messages/:id – soft delete / clear conversation
+-  router.delete('/:id', requireAuth, async (req, res) => {
++  router.delete('/:id', requireAuth, wrap(async (req, res) => {
+     const { id: user_id } = req.telegramUser;
+     const messageId = req.params.id;
+ 
+@@ -254,7 +369,7 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers)
+ 
+     if (!isUuid) {
+       // It's a conversation clear request!
+-      const partner_id = parseInt(messageId);
++      const partner_id = parseInt(messageId, 10);
+       if (isNaN(partner_id)) {
+         return res.status(400).json({ error: 'Invalid partner ID' });
+       }
+@@ -268,10 +383,7 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers)
+       if (error) return res.status(500).json({ error: error.message });
+ 
+       // Notify the partner via socket if online
+-      const recipientSocket = onlineUsers.get(String(partner_id));
+-      if (recipientSocket) {
+-        io.to(recipientSocket).emit('chat_cleared', { by_id: user_id });
+-      }
++      io.to(userRoom(partner_id)).emit('chat_cleared', { by_id: user_id });
+ 
+       return res.json({ success: true, message: 'Conversation cleared' });
+     }
+@@ -293,14 +405,10 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers)
+ 
+     if (error) return res.status(500).json({ error: error.message });
+ 
+-    const placeholder = { id: messageId, is_deleted: true };
+-    const recipientSocket = onlineUsers.get(String(msg.to_id));
+-    if (recipientSocket) io.to(recipientSocket).emit('message_deleted', placeholder);
+-    const senderSocket = onlineUsers.get(String(user_id));
+-    if (senderSocket && senderSocket !== recipientSocket) io.to(senderSocket).emit('message_deleted', placeholder);
++    io.to([userRoom(msg.to_id), userRoom(user_id)]).emit('message_deleted', { id: messageId, is_deleted: true });
+ 
+     res.json({ success: true });
+-  });
++  }));
+ 
+   return router;
+-};
+\ No newline at end of file
++};
+diff --git a/server.js b/server.js
+index 1a742ec..dec4dca 100644
+--- a/server.js
++++ b/server.js
+@@ -6,7 +6,8 @@ const { Server } = require('socket.io');
+ const cors = require('cors');
+ const helmet = require('helmet');
+ const crypto = require('crypto');
+-const rateLimit = require('express-rate-limit');
++const compression = require('compression');
++const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
+ require('dotenv').config();
+ 
+ const logger = require('./utils/logger');
+@@ -32,10 +33,21 @@ const { createClient } = require('@supabase/supabase-js');
+ const { bot, notifyMessage, notifySessionInvite, notifyMentorApproved, broadcastToAll } = require('./bot');
+ 
+ // ─── Supabase Client ──────────────────────────────────────────────────────────
++// Free-tier Supabase can stall for a long time (cold project, noisy neighbour).
++// Without a timeout a stalled query leaves the HTTP request hanging forever,
++// which is what makes the chat "spin" and never send. Failing fast (15 s)
++// lets the client retry instead.
++const SUPABASE_TIMEOUT_MS = 15000;
+ const supabase = createClient(
+   process.env.SUPABASE_URL,
+   process.env.SUPABASE_SERVICE_ROLE_KEY,
+-  { auth: { autoRefreshToken: false, persistSession: false } }
++  {
++    auth: { autoRefreshToken: false, persistSession: false },
++    global: {
++      fetch: (url, opts = {}) =>
++        fetch(url, { ...opts, signal: opts.signal || AbortSignal.timeout(SUPABASE_TIMEOUT_MS) }),
++    },
++  }
+ );
+ 
+ // ─── Express App ──────────────────────────────────────────────────────────────
+@@ -46,45 +58,98 @@ const server = http.createServer(app);
+ // Sentry request handler must be first middleware if enabled
+ if (Sentry) app.use(Sentry.Handlers.requestHandler());
+ 
++// Log only what matters. Logging every request (incl. every static file and
++// every poll) burns CPU on Render's 0.1 vCPU free instance; slow and failing
++// requests are the ones worth seeing.
+ app.use((req, res, next) => {
+-  logger.info(`${req.method} ${req.url}`);
++  const start = Date.now();
++  res.on('finish', () => {
++    const ms = Date.now() - start;
++    if (res.statusCode >= 500 || ms > 1500) {
++      logger.warn(`${req.method} ${req.originalUrl.split('?')[0]} ${res.statusCode} ${ms}ms`);
++    }
++  });
+   next();
+ });
+ 
++// gzip: app.js (~315 KB), styles.css (~218 KB) and index.html (~133 KB) were
++// being sent uncompressed. Skips Socket.IO's own traffic automatically.
++app.use(compression());
++
+ // Origin is locked down via ALLOWED_ORIGIN in production. Falls back to '*'
+ // only when that var isn't set, so local dev keeps working out of the box.
+ const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
+ app.use(cors({ origin: allowedOrigin, methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }));
+ app.use(helmet({ contentSecurityPolicy: false }));
+ app.use(express.json({ limit: '10kb' }));
+-app.use(express.static('frontend'));
++// HTML/JS/CSS: always revalidate (cheap 304 via ETag) so deploys reach users
++// immediately; images: cache for a week.
++app.use(express.static('frontend', {
++  etag: true,
++  setHeaders(res, filePath) {
++    if (/\.(png|jpg|jpeg|webp|svg|ico)$/i.test(filePath)) {
++      res.setHeader('Cache-Control', 'public, max-age=604800');
++    } else {
++      res.setHeader('Cache-Control', 'no-cache');
++    }
++  },
++}));
+ 
+ // ─── Rate Limiters ────────────────────────────────────────────────────────────
+ 
+-// General API limiter: 500 requests per 15 minutes per IP (increased to prevent blocking users on CGNAT or active sessions)
+-const generalLimiter = rateLimit({
+-  windowMs: 15 * 60 * 1000,
+-  max: 500,
++// Key limits by the verified Telegram user, NOT by IP. Ethiopian mobile
++// carriers put many subscribers behind one shared (CGNAT) IP, so an IP-based
++// limit lets a handful of active chatters exhaust the budget for everyone on
++// that IP — the "message failed to send" symptom under load. Falls back to IP
++// only for requests without valid initData (which 401 anyway).
++function limiterKey(req) {
++  const initData = req.headers['x-telegram-init-data'];
++  if (initData) {
++    const u = validateTelegramData(initData);
++    if (u?.id) return `u:${u.id}`;
++  }
++  if (process.env.NODE_ENV === 'development' && req.headers['x-telegram-id']) {
++    return `u:${req.headers['x-telegram-id']}`;
++  }
++  return `ip:${ipKeyGenerator(req.ip)}`;
++}
++
++const limiterBase = {
+   standardHeaders: true,
+   legacyHeaders: false,
++  keyGenerator: limiterKey,
++};
++
++// General API limiter: 240 requests/minute per user (only stops runaway loops)
++const generalLimiter = rateLimit({
++  ...limiterBase,
++  windowMs: 60 * 1000,
++  max: 240,
+   message: { error: 'Too many requests, please try again later.' },
+ });
+ 
+-// Strict limiter for auth/registration: 20 requests per minute per IP
++// Registration: 20 per minute per user
+ const authLimiter = rateLimit({
++  ...limiterBase,
+   windowMs: 60 * 1000,
+   max: 20,
+-  standardHeaders: true,
+-  legacyHeaders: false,
+   message: { error: 'Too many auth attempts, please slow down.' },
+ });
+ 
+-// Very strict limiter for broadcast: 5 requests per minute per IP
++// Sending chat messages: 60 per minute per user (spam guard; POST only)
++const sendMessageLimiter = rateLimit({
++  ...limiterBase,
++  windowMs: 60 * 1000,
++  max: 60,
++  skip: (req) => req.method !== 'POST',
++  message: { error: 'You are sending messages too fast, please slow down.' },
++});
++
++// Very strict limiter for broadcast: 5 requests per minute per user
+ const broadcastLimiter = rateLimit({
++  ...limiterBase,
+   windowMs: 60 * 1000,
+   max: 5,
+-  standardHeaders: true,
+-  legacyHeaders: false,
+   message: { error: 'Broadcast rate limit exceeded.' },
+ });
+ 
+@@ -92,41 +157,75 @@ const broadcastLimiter = rateLimit({
+ app.use('/api', generalLimiter);
+ // Tighter limits on specific sensitive routes
+ app.use('/api/auth/register', authLimiter);
++app.use('/api/messages', sendMessageLimiter);
+ app.use('/api/admin/broadcast', broadcastLimiter);
+ 
+-// ─── Socket.IO (presence + typing) ────────────────────────────────────────────
++// ─── Socket.IO (real-time messages + typing) ─────────────────────────────────
+ const io = new Server(server, {
+   cors: { origin: '*' },
+-  pingTimeout: 60000,   // 60 seconds
+-  pingInterval: 25000,  // 25 seconds
++  // A dead mobile connection (app backgrounded, network switch) used to be
++  // treated as "online" for up to 85 s (25 s + 60 s). Messages sent in that
++  // window went into the void AND skipped the Telegram fallback notification.
++  pingInterval: 20000,
++  pingTimeout: 20000,
++  // If a client drops for < 2 min, Socket.IO restores its rooms and replays
++  // the events it missed on reconnect (built into Socket.IO ≥ 4.6).
++  connectionStateRecovery: { maxDisconnectionDuration: 2 * 60 * 1000, skipMiddlewares: true },
+ });
+-const onlineUsers = new Map(); // telegram_id → socket_id
++const onlineUsers = new Map(); // telegram_id → most recent socket_id (legacy lookups in other routes)
+ global.io = io;
+ global.onlineUsers = onlineUsers;
+ 
++// SECURITY: the old code trusted a client-supplied telegram_id in an 'auth'
++// event, so anyone could connect and receive another user's private counseling
++// messages. The identity now comes from Telegram-signed initData, verified in
++// the handshake — the same check the REST API uses.
++io.use((socket, next) => {
++  const auth = socket.handshake.auth || {};
++  let user = null;
++  if (auth.initData) {
++    user = validateTelegramData(auth.initData);
++  } else if (process.env.NODE_ENV === 'development' && auth.telegram_id) {
++    user = { id: parseInt(auth.telegram_id, 10) };
++  }
++  if (!user?.id) return next(new Error('unauthorized'));
++  socket.data.telegram_id = String(user.id);
++  next();
++});
++
+ io.on('connection', (socket) => {
+-  socket.on('auth', (telegram_id) => {
+-    onlineUsers.set(String(telegram_id), socket.id);
+-    socket.data.telegram_id = String(telegram_id);
+-    io.emit('presence', { telegram_id, online: true });
+-  });
++  const myId = socket.data.telegram_id;
+ 
+-  socket.on('typing', ({ to_id }) => {
+-    const targetSocket = onlineUsers.get(String(to_id));
+-    if (targetSocket) io.to(targetSocket).emit('typing', { from_id: socket.data.telegram_id });
++  // One room per user: reaches every device/tab the user has open, instead of
++  // only whichever socket connected last.
++  socket.join(`user:${myId}`);
++  onlineUsers.set(myId, socket.id);
++
++  // Legacy clients emitted 'auth'; identity is now taken from the handshake.
++  socket.on('auth', () => { });
++
++  socket.on('typing', ({ to_id } = {}) => {
++    if (to_id == null) return;
++    socket.to(`user:${to_id}`).emit('typing', { from_id: myId });
+   });
+ 
+   // Support ticket typing indicator — broadcast to everyone else (the ticket
+   // owner + every admin dashboard). Cheap and stateless by design.
+-  socket.on('ticket_typing', ({ ticket_id, sender_type }) => {
++  socket.on('ticket_typing', ({ ticket_id, sender_type } = {}) => {
+     if (!ticket_id || (sender_type !== 'user' && sender_type !== 'admin')) return;
+     socket.broadcast.emit('ticket_typing', { ticket_id, sender_type });
+   });
+ 
+   socket.on('disconnect', () => {
+-    if (socket.data.telegram_id) {
+-      onlineUsers.delete(socket.data.telegram_id);
+-      io.emit('presence', { telegram_id: socket.data.telegram_id, online: false });
++    // Only touch the map if it still points at THIS socket. Previously an old
++    // socket timing out AFTER the user had reconnected deleted the fresh
++    // entry, so the user looked offline and stopped receiving live messages.
++    if (onlineUsers.get(myId) !== socket.id) return;
++    const remaining = io.sockets.adapter.rooms.get(`user:${myId}`);
++    if (remaining && remaining.size > 0) {
++      onlineUsers.set(myId, remaining.values().next().value);
++    } else {
++      onlineUsers.delete(myId);
+     }
+   });
+ });
+@@ -244,6 +343,13 @@ app.use((err, req, res, _next) => {
+   res.status(500).json({ error: 'Internal server error' });
+ });
+ 
++// Render's load balancer keeps idle connections open longer than Node's
++// default 5 s keep-alive. When Node closes one just as the browser reuses it,
++// the request dies with ECONNRESET — an intermittent "failed to send" that
++// no amount of app code can explain. Node's timeouts must exceed the proxy's.
++server.keepAliveTimeout = 65 * 1000;
++server.headersTimeout = 66 * 1000;
++
+ const PORT = process.env.PORT || 3000;
+ const httpServer = server.listen(PORT, () => logger.info(`Server running on port ${PORT}`));
+ 

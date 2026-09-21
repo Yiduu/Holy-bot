@@ -10,8 +10,92 @@ function containsProfanity(text) {
   return PROFANITY_LIST.some(word => lower.includes(word));
 }
 
+// Tiny in-memory TTL cache. Render's free tier runs a single instance, so a
+// process-local cache is safe here and saves Supabase round-trips.
+function makeTtlCache(ttlMs, max = 2000) {
+  const m = new Map();
+  return {
+    get(k) {
+      const e = m.get(k);
+      if (!e) return undefined;
+      if (e.exp < Date.now()) { m.delete(k); return undefined; }
+      return e.v;
+    },
+    set(k, v) {
+      if (m.size >= max) m.delete(m.keys().next().value);
+      m.set(k, { v, exp: Date.now() + ttlMs });
+    },
+    delete(k) { m.delete(k); },
+  };
+}
+
+// Express 4 does not catch rejected promises from async handlers: an
+// exception left the request hanging forever (client spinner, input locked).
+// This forwards them to the global error handler so the client gets a 500.
+const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+const assignmentCache = makeTtlCache(15 * 1000);          // authorised pairs
+const senderNameCache = makeTtlCache(10 * 60 * 1000);     // telegram_id → anonymous_id
+const filePathCache = makeTtlCache(30 * 60 * 1000, 500);  // file_id → telegram file_path
+const sendDedupe = makeTtlCache(2 * 60 * 1000, 5000);     // from:client_id → insert promise
+
 module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) {
   const router = express.Router();
+
+  const userRoom = (id) => `user:${id}`;
+
+  // Is there an active mentorship between these two users (either direction)?
+  // Positive answers are cached for 15 s: this check ran on EVERY send and
+  // EVERY history load. Trade-off: after a mentorship ends, messaging can
+  // still pass this check for up to 15 s.
+  async function hasActiveMentorship(a, b) {
+    const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+    if (assignmentCache.get(key)) return true;
+    const { data, error } = await supabase
+      .from('mentorship_assignments')
+      .select('id')
+      .or(`and(user_id.eq.${a},mentor_id.eq.${b}),and(user_id.eq.${b},mentor_id.eq.${a})`)
+      .eq('is_active', true)
+      .limit(1);
+    if (error) throw error;
+    const ok = !!(data && data.length);
+    if (ok) assignmentCache.set(key, true);
+    return ok;
+  }
+
+  async function getSenderName(id) {
+    const cached = senderNameCache.get(id);
+    if (cached) return cached;
+    const { data } = await supabase.from('users').select('anonymous_id').eq('telegram_id', id).limit(1);
+    const name = data?.[0]?.anonymous_id || null;
+    if (name) senderNameCache.set(id, name);
+    return name;
+  }
+
+  // Telegram notification for a recipient who isn't connected. Fire-and-forget:
+  // this used to be awaited INSIDE the send request, so every message to an
+  // offline user waited on 2 DB queries + a Telegram API call (often 1-3 s,
+  // more when Telegram rate-limits) before the sender saw it as sent.
+  function notifyOffline(toId, fromId, content) {
+    (async () => {
+      const name = await getSenderName(fromId);
+      if (!name) return;
+      const { notifyMessage } = require('../bot');
+      await notifyMessage(toId, name, content, fromId);
+    })().catch((err) => console.error('[messages] offline notification failed:', err.message));
+  }
+
+  // Push to the recipient's devices and require an ack from the client. If
+  // nobody is connected — or a zombie connection never acks within 4 s — fall
+  // back to the Telegram notification so the message can't silently vanish.
+  function deliverToRecipient(toId, payload, onUndelivered) {
+    const room = userRoom(toId);
+    const sockets = io.sockets.adapter.rooms.get(room);
+    if (!sockets || sockets.size === 0) return onUndelivered();
+    io.to(room).timeout(4000).emit('new_message', payload, (err) => {
+      if (err) onUndelivered();
+    });
+  }
 
   // GET /api/messages/unread/count
   // NOTE: This route must be defined BEFORE /:with to avoid "unread" being
@@ -20,15 +104,16 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
   // Only count unread messages from currently ACTIVE mentorship partners.
   // The user may appear as a mentee (user_id column) or as a mentor
   // (mentor_id column), so we look at both sides of every active assignment.
-  router.get('/unread/count', requireAuth, async (req, res) => {
+  router.get('/unread/count', requireAuth, wrap(async (req, res) => {
     const { id } = req.telegramUser;
 
     // Fetch all active assignments where this user is involved (either role).
-    const { data: assignments } = await supabase
+    const { data: assignments, error: aErr } = await supabase
       .from('mentorship_assignments')
       .select('user_id, mentor_id')
       .eq('is_active', true)
       .or(`user_id.eq.${id},mentor_id.eq.${id}`);
+    if (aErr) throw aErr;
 
     if (!assignments || assignments.length === 0) {
       return res.json({ count: 0 });
@@ -40,21 +125,18 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     );
 
     // Count unread messages sent TO this user FROM one of the active partners.
-    const { count } = await supabase
+    const { count, error: cErr } = await supabase
       .from('messages')
       .select('id', { count: 'exact', head: true })
       .eq('to_id', id)
       .eq('is_read', false)
       .in('from_id', partnerIds);
+    if (cErr) throw cErr;
 
     res.json({ count: count || 0 });
-  });
+  }));
 
   // GET /api/messages/file/:file_id – stream a voice/file attachment
-  // NOTE: This route must be defined BEFORE /:with for the same reason as
-  // /unread/count above — but since it has two path segments ("file" + the
-  // id) it can never actually collide with the single-segment /:with route.
-  // It's placed here anyway to keep all the "must come first" routes together.
   //
   // The mini app can't call Telegram's file API directly because that would
   // require exposing our bot token to the client (Telegram's file URLs are
@@ -66,16 +148,25 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     const token = process.env.TELEGRAM_BOT_TOKEN;
 
     try {
-      const { data } = await axios.get(`https://api.telegram.org/bot${token}/getFile`, {
-        params: { file_id }
-      });
-
-      if (!data.ok || !data.result?.file_path) {
-        return res.status(404).json({ error: 'File not found' });
+      // file_path is stable for ~1 h, so cache it instead of a getFile call
+      // per request (chats with photos re-requested these constantly).
+      let filePath = filePathCache.get(file_id);
+      if (!filePath) {
+        const { data } = await axios.get(`https://api.telegram.org/bot${token}/getFile`, {
+          params: { file_id },
+          timeout: 10000,
+        });
+        if (!data.ok || !data.result?.file_path) {
+          return res.status(404).json({ error: 'File not found' });
+        }
+        filePath = data.result.file_path;
+        filePathCache.set(file_id, filePath);
       }
 
-      const fileUrl = `https://api.telegram.org/file/bot${token}/${data.result.file_path}`;
-      const fileRes = await axios.get(fileUrl, { responseType: 'stream' });
+      const fileRes = await axios.get(`https://api.telegram.org/file/bot${token}/${filePath}`, {
+        responseType: 'stream',
+        timeout: 20000,
+      });
 
       if (fileRes.headers['content-type']) res.setHeader('Content-Type', fileRes.headers['content-type']);
       if (fileRes.headers['content-length']) res.setHeader('Content-Length', fileRes.headers['content-length']);
@@ -83,124 +174,151 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
       // the mini app cache them for a while.
       res.setHeader('Cache-Control', 'private, max-age=86400');
 
+      fileRes.data.on('error', () => res.destroy());
+      res.on('close', () => fileRes.data.destroy()); // client went away → stop streaming
       fileRes.data.pipe(res);
     } catch (err) {
       console.error('[GET /messages/file/:file_id] Error:', err.message);
-      res.status(500).json({ error: 'Failed to fetch file' });
+      if (!res.headersSent) res.status(500).json({ error: 'Failed to fetch file' });
     }
   });
 
-  // GET /api/messages/:with – conversation with a user
-  router.get('/:with', requireAuth, async (req, res) => {
+  // POST /api/messages/read/:with – mark everything from :with as read.
+  // Lightweight replacement for the client re-downloading the whole
+  // conversation (GET /:with) on every incoming message just to trigger the
+  // mark-as-read side effect.
+  router.post('/read/:with', requireAuth, wrap(async (req, res) => {
     const { id: my_id } = req.telegramUser;
-    const other_id = parseInt(req.params.with);
+    const other_id = parseInt(req.params.with, 10);
+    if (!Number.isSafeInteger(other_id)) return res.status(400).json({ error: 'Invalid partner ID' });
 
-    // FIX: Use a single compound .or() so the query correctly finds a row
-    // where (user_id=me AND mentor_id=other) OR (user_id=other AND mentor_id=me).
-    // The original two chained .or() calls were AND-ed together, which could
-    // never match a single assignment row.
-    const { data: assign } = await supabase
-      .from('mentorship_assignments')
-      .select('id')
-      .or(`and(user_id.eq.${my_id},mentor_id.eq.${other_id}),and(user_id.eq.${other_id},mentor_id.eq.${my_id})`)
-      .eq('is_active', true)
-      .single();
-
-    if (!assign) return res.status(403).json({ error: 'No active mentorship with this user' });
-
-    // select('*') already returns file_id, file_type, file_size, mime_type,
-    // duration and file_name once those columns exist on the table (see the
-    // migration script), so no changes are needed here for the mini app to
-    // receive attachment metadata alongside regular text messages.
-    // Cleared/soft-deleted messages were previously still being fetched and
-    // re-rendered on every load — as a conversation accumulates deletions
-    // over time this means the "last 100" window keeps counting messages
-    // the user can no longer see, so real recent messages fall out of it,
-    // and the client wastes work rendering rows it just throws away.
-    // Filtering is_deleted here keeps the 100-message window meaningful
-    // and shrinks the payload/render work as history grows.
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('messages')
-      .select('*')
-      .or(`and(from_id.eq.${my_id},to_id.eq.${other_id}),and(from_id.eq.${other_id},to_id.eq.${my_id})`)
-      // `is_deleted` predates its own tracked migration in this repo, so
-      // older rows may have it NULL rather than false — match both so we
-      // don't silently drop pre-existing messages that were never deleted.
-      .or('is_deleted.eq.false,is_deleted.is.null')
-      .order('created_at', { ascending: false })
-      .limit(100);
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq('to_id', my_id)
+      .eq('from_id', other_id)
+      .is('read_at', null);
+    if (error) throw error;
 
-    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  }));
 
-    const ordered = (data || []).slice().reverse();
+  // GET /api/messages/:with – conversation with a user
+  router.get('/:with', requireAuth, wrap(async (req, res) => {
+    const { id: my_id } = req.telegramUser;
+    const other_id = parseInt(req.params.with, 10);
+    if (!Number.isSafeInteger(other_id)) return res.status(400).json({ error: 'Invalid partner ID' });
 
-    // Mark as read and update read_at
-    try {
-      await supabase
+    // Authorisation check and history fetch are independent, so run them
+    // together (they were sequential: two round-trips to Supabase in a row).
+    //
+    // select('*') already returns file_id, file_type, file_size, mime_type,
+    // duration and file_name once those columns exist on the table, so the
+    // mini app gets attachment metadata alongside regular text messages.
+    // Soft-deleted rows are filtered here so the "last 100" window stays
+    // meaningful. `is_deleted` predates its own tracked migration, so older
+    // rows may have it NULL rather than false — match both.
+    const [allowed, historyRes] = await Promise.all([
+      hasActiveMentorship(my_id, other_id),
+      supabase
+        .from('messages')
+        .select('*')
+        .or(`and(from_id.eq.${my_id},to_id.eq.${other_id}),and(from_id.eq.${other_id},to_id.eq.${my_id})`)
+        .or('is_deleted.eq.false,is_deleted.is.null')
+        .order('created_at', { ascending: false })
+        .limit(100),
+    ]);
+
+    if (!allowed) return res.status(403).json({ error: 'No active mentorship with this user' });
+    if (historyRes.error) throw historyRes.error;
+
+    const data = historyRes.data || [];
+    const ordered = data.slice().reverse();
+
+    // Only write when there is actually something to mark. Most loads (tab
+    // switches, reconnects) have nothing unread, so this skips a DB write.
+    const hasUnread = data.length >= 100 || data.some(m => Number(m.to_id) === my_id && !m.read_at);
+    if (hasUnread) {
+      const { error: readErr } = await supabase
         .from('messages')
         .update({ is_read: true, read_at: new Date().toISOString() })
         .eq('to_id', my_id)
         .eq('from_id', other_id)
         .is('read_at', null);
-    } catch (e) {
-      console.error('Error marking messages as read:', e);
+      if (readErr) console.error('Error marking messages as read:', readErr.message);
     }
 
     res.json(ordered);
-  });
+  }));
 
   // POST /api/messages – send message
-  router.post('/', requireAuth, async (req, res) => {
+  router.post('/', requireAuth, wrap(async (req, res) => {
     const { id: from_id } = req.telegramUser;
-    const { to_id, content, parent_id } = req.body;
+    const { content, parent_id, client_id } = req.body;
+    const to_id = Number(req.body.to_id);
 
-    if (!to_id || !content?.trim()) return res.status(400).json({ error: 'to_id and content required' });
+    if (!Number.isSafeInteger(to_id) || !content?.trim()) {
+      return res.status(400).json({ error: 'to_id and content required' });
+    }
     if (content.length > 2000) return res.status(400).json({ error: 'Message too long' });
 
-    // FIX: Same compound .or() fix applied here for consistency and correctness.
-    const { data: assign } = await supabase
-      .from('mentorship_assignments')
-      .select('id')
-      .or(`and(user_id.eq.${from_id},mentor_id.eq.${to_id}),and(user_id.eq.${to_id},mentor_id.eq.${from_id})`)
-      .eq('is_active', true)
-      .single();
+    // client_id makes retries idempotent. The client retries failed sends;
+    // without this, a request that actually succeeded (but whose response was
+    // lost, or that errored after the insert) was inserted AGAIN on retry —
+    // duplicate messages. Same (sender, client_id) within 2 min → same message.
+    const safeClientId = typeof client_id === 'string' && /^[\w-]{1,64}$/.test(client_id) ? client_id : null;
+    const dedupeKey = safeClientId ? `${from_id}:${safeClientId}` : null;
+    const withClientId = (m) => (safeClientId ? { ...m, client_id: safeClientId } : m);
 
-    if (!assign) return res.status(403).json({ error: 'No active mentorship with this user' });
+    if (dedupeKey) {
+      const prior = sendDedupe.get(dedupeKey);
+      if (prior) return res.status(201).json(withClientId(await prior));
+    }
+
+    if (!(await hasActiveMentorship(from_id, to_id))) {
+      return res.status(403).json({ error: 'No active mentorship with this user' });
+    }
 
     const is_flagged = containsProfanity(content);
+    const trimmed = content.trim();
 
-    const { data: msg, error } = await supabase
-      .from('messages')
-      .insert({ from_id, to_id, content: content.trim(), is_flagged, parent_id: parent_id || null })
-      .select()
-      .single();
+    const insertPromise = (async () => {
+      const { data: row, error } = await supabase
+        .from('messages')
+        .insert({ from_id, to_id, content: trimmed, is_flagged, parent_id: parent_id || null })
+        .select()
+        .single();
+      if (error) throw error;
+      return row;
+    })();
+    if (dedupeKey) sendDedupe.set(dedupeKey, insertPromise);
 
-    if (error) return res.status(500).json({ error: error.message });
-
-    // Real-time push to recipient
-    const recipientSocket = onlineUsers.get(String(to_id));
-    if (recipientSocket) {
-      io.to(recipientSocket).emit('new_message', msg);
+    let msg;
+    try {
+      msg = await insertPromise;
+    } catch (err) {
+      if (dedupeKey) sendDedupe.delete(dedupeKey); // let a retry try again
+      throw err;
     }
 
-    // Also push to sender's other devices/tabs
-    const senderSocket = onlineUsers.get(String(from_id));
-    if (senderSocket && senderSocket !== recipientSocket) {
-      io.to(senderSocket).emit('message_sent', msg);
-    }
+    const payload = withClientId(msg);
 
-    const { data: sender } = await supabase.from('users').select('anonymous_id').eq('telegram_id', from_id).single();
-    if (sender && !onlineUsers.has(String(to_id))) {
-      const { notifyMessage } = require('../bot');
-      // Pass the actual message content (clean, no prefix) and the sender's id
-      await notifyMessage(to_id, sender.anonymous_id, content, from_id);
-    }
+    // Real-time push to every device the recipient has open (with fallback).
+    deliverToRecipient(to_id, payload, () => notifyOffline(to_id, from_id, trimmed));
 
-    res.status(201).json(msg);
-  });
+    // Also push to the sender's OTHER devices/tabs. The originating socket is
+    // excluded (x-socket-id) — before, it received its own message back over
+    // the socket while the HTTP response was still in flight, so the bubble
+    // appeared twice for a moment and then one vanished: the visible "blink".
+    const originSocket = req.get('x-socket-id');
+    io.to(userRoom(from_id)).except(originSocket || []).emit('message_sent', payload);
+
+    // Respond immediately — nothing above waits on Telegram.
+    res.status(201).json(payload);
+  }));
 
   // PATCH /api/messages/:id – edit a message
-  router.patch('/:id', requireAuth, async (req, res) => {
+  router.patch('/:id', requireAuth, wrap(async (req, res) => {
     const { id: user_id } = req.telegramUser;
     const { content } = req.body;
     const messageId = req.params.id;
@@ -236,16 +354,13 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
 
     if (error) return res.status(500).json({ error: error.message });
 
-    const recipientSocket = onlineUsers.get(String(msg.to_id));
-    if (recipientSocket) io.to(recipientSocket).emit('message_edited', data);
-    const senderSocket = onlineUsers.get(String(user_id));
-    if (senderSocket && senderSocket !== recipientSocket) io.to(senderSocket).emit('message_edited', data);
+    io.to([userRoom(msg.to_id), userRoom(user_id)]).emit('message_edited', data);
 
     res.json(data);
-  });
+  }));
 
   // DELETE /api/messages/:id – soft delete / clear conversation
-  router.delete('/:id', requireAuth, async (req, res) => {
+  router.delete('/:id', requireAuth, wrap(async (req, res) => {
     const { id: user_id } = req.telegramUser;
     const messageId = req.params.id;
 
@@ -254,7 +369,7 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
 
     if (!isUuid) {
       // It's a conversation clear request!
-      const partner_id = parseInt(messageId);
+      const partner_id = parseInt(messageId, 10);
       if (isNaN(partner_id)) {
         return res.status(400).json({ error: 'Invalid partner ID' });
       }
@@ -268,10 +383,7 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
       if (error) return res.status(500).json({ error: error.message });
 
       // Notify the partner via socket if online
-      const recipientSocket = onlineUsers.get(String(partner_id));
-      if (recipientSocket) {
-        io.to(recipientSocket).emit('chat_cleared', { by_id: user_id });
-      }
+      io.to(userRoom(partner_id)).emit('chat_cleared', { by_id: user_id });
 
       return res.json({ success: true, message: 'Conversation cleared' });
     }
@@ -293,14 +405,10 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
 
     if (error) return res.status(500).json({ error: error.message });
 
-    const placeholder = { id: messageId, is_deleted: true };
-    const recipientSocket = onlineUsers.get(String(msg.to_id));
-    if (recipientSocket) io.to(recipientSocket).emit('message_deleted', placeholder);
-    const senderSocket = onlineUsers.get(String(user_id));
-    if (senderSocket && senderSocket !== recipientSocket) io.to(senderSocket).emit('message_deleted', placeholder);
+    io.to([userRoom(msg.to_id), userRoom(user_id)]).emit('message_deleted', { id: messageId, is_deleted: true });
 
     res.json({ success: true });
-  });
+  }));
 
   return router;
 };

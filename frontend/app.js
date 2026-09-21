@@ -19,17 +19,28 @@ let jitsiApi = null;
 // drawn on top of content — including the chat input — that assumed it
 // had that extra space. `--app-height` tracks the real visible height and
 // updates live as Telegram resizes it (keyboard open/close, etc).
+let _lastAppHeight = 0;
+let _appHeightRaf = 0;
 function applyAppHeight() {
-  const tg = window.Telegram?.WebApp;
-  const h = tg?.viewportStableHeight || tg?.viewportHeight || window.visualViewport?.height || window.innerHeight;
-  document.documentElement.style.setProperty('--app-height', h + 'px');
+  // visualViewport fires 'scroll'/'resize' many times per frame while the
+  // keyboard animates. Each write to a root CSS variable invalidates styles
+  // for the whole (very large) document, so coalesce to once per frame and
+  // skip writes when the value hasn't changed.
+  if (_appHeightRaf) return;
+  _appHeightRaf = requestAnimationFrame(() => {
+    _appHeightRaf = 0;
+    const tg = window.Telegram?.WebApp;
+    const h = Math.round(tg?.viewportStableHeight || tg?.viewportHeight || window.visualViewport?.height || window.innerHeight);
+    if (h === _lastAppHeight) return;
+    _lastAppHeight = h;
+    document.documentElement.style.setProperty('--app-height', h + 'px');
+  });
 }
 applyAppHeight();
 window.Telegram?.WebApp?.onEvent?.('viewportChanged', applyAppHeight);
 window.addEventListener('resize', applyAppHeight);
 window.addEventListener('orientationchange', applyAppHeight);
 window.visualViewport?.addEventListener('resize', applyAppHeight);
-window.visualViewport?.addEventListener('scroll', applyAppHeight);
 
 // ─── Helpers ──────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -61,22 +72,57 @@ function getTelegramData() {
   return { initData: '', user: { id: 12345, first_name: 'Dev' } };
 }
 
+// Requests now have a timeout (previously a stalled request hung forever, which
+// froze the chat input) and GETs get ONE automatic retry on a network error or
+// 502/503/504 — the usual blips on Render's free tier (cold start, deploy,
+// dropped keep-alive connection). POSTs are never retried here; callers that
+// retry must do so idempotently (see sendMessage + client_id).
 async function apiFetch(path, opts = {}) {
-  const { initData } = getTelegramData();
-  const res = await fetch(`${API}${path}`, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-telegram-init-data': initData,
-      'x-telegram-id': getTelegramData().user?.id || '',
-      ...(opts.headers || {}),
-    },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
+  const { timeout, retry, ...fetchOpts } = opts;
+  const method = (fetchOpts.method || 'GET').toUpperCase();
+  const timeoutMs = timeout ?? 20000;
+  const canRetry = method === 'GET' && retry !== false;
+
+  const attempt = async () => {
+    const { initData } = getTelegramData();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      return await fetch(`${API}${path}`, {
+        ...fetchOpts,
+        signal: ctrl.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-telegram-init-data': initData,
+          'x-telegram-id': getTelegramData().user?.id || '',
+          // Lets the server skip echoing our own message back to this socket.
+          ...(socket?.id ? { 'x-socket-id': socket.id } : {}),
+          ...(fetchOpts.headers || {}),
+        },
+        body: fetchOpts.body ? JSON.stringify(fetchOpts.body) : undefined,
+      });
+    } catch (e) {
+      throw new Error(e.name === 'AbortError' ? 'Request timed out' : (e.message || 'Network error'));
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  let res;
+  try {
+    res = await attempt();
+    if (canRetry && [502, 503, 504].includes(res.status)) throw new Error(`HTTP ${res.status}`);
+  } catch (e) {
+    if (!canRetry) throw e;
+    await new Promise(r => setTimeout(r, 700));
+    res = await attempt();
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     const e = new Error(err.error || `HTTP ${res.status}`);
     if (err.nickname_taken) e.nickname_taken = true;
+    e.status = res.status;
     throw e;
   }
   const ct = res.headers.get('content-type') || '';
@@ -309,6 +355,27 @@ function renderFileAttachment(msg) {
 // document attachments are intentionally NOT auto-fetched here — those stay
 // lazy (fetched on tap) to avoid burning bandwidth on media the person may
 // never open.
+// Photos were re-downloaded (Telegram getFile + full stream through our small
+// server) every time the chat list was re-rendered, and each blob URL leaked.
+// Cache one blob URL per file_id for the session (bounded).
+const photoUrlCache = new Map(); // file_id → Promise<blob URL>
+const PHOTO_CACHE_MAX = 40;
+function getPhotoUrl(fileId) {
+  let p = photoUrlCache.get(fileId);
+  if (!p) {
+    p = fetchAuthedBlob(`/api/messages/file/${fileId}`).then(blob => URL.createObjectURL(blob));
+    p.catch(() => photoUrlCache.delete(fileId)); // allow a later retry
+    photoUrlCache.set(fileId, p);
+    if (photoUrlCache.size > PHOTO_CACHE_MAX) {
+      const oldestKey = photoUrlCache.keys().next().value;
+      const oldest = photoUrlCache.get(oldestKey);
+      photoUrlCache.delete(oldestKey);
+      oldest.then(u => URL.revokeObjectURL(u)).catch(() => { });
+    }
+  }
+  return p;
+}
+
 function hydratePhotoMessages(container) {
   if (!container) return;
   const els = container.querySelectorAll('.msg-photo[data-file-id]:not(.msg-photo-loaded)');
@@ -316,8 +383,7 @@ function hydratePhotoMessages(container) {
     el.classList.add('msg-photo-loaded'); // mark immediately so we never double-fetch
     const fileId = el.dataset.fileId;
     try {
-      const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
-      const url = URL.createObjectURL(blob);
+      const url = await getPhotoUrl(fileId);
       el.innerHTML = `<img src="${url}" class="msg-photo-img" alt="Photo attachment" onclick="openImageLightbox('${url}')" />`;
     } catch (e) {
       el.innerHTML = '<div class="msg-photo-error">⚠️ Failed to load photo</div>';
@@ -628,6 +694,25 @@ function renderThread(messages, isRoot = true) {
   return html;
 }
 
+// Swap our optimistic ("sending…") bubble for the confirmed server message.
+// Done in place: the new bubble no longer replays the entrance animation, so
+// the message you just sent doesn't fade out and back in ("blink").
+function replaceOptimisticBubble(container, tempId, msg) {
+  if (window._chatMessagesMap) {
+    window._chatMessagesMap.delete(String(tempId));
+    window._chatMessagesMap.set(String(msg.id), msg);
+  }
+  const tempEl = container.querySelector(`.message-thread[data-msg-id="${tempId}"]`);
+  if (!tempEl) return false;
+  if (container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`)) {
+    tempEl.remove(); // the real one already arrived another way
+  } else {
+    tempEl.outerHTML = renderThread([msg], false);
+    hydratePhotoMessages(container);
+  }
+  return true;
+}
+
 function addMessageToChat(msg) {
   const container = $('chatMessages');
   if (!container) return;
@@ -635,9 +720,20 @@ function addMessageToChat(msg) {
   if (!window._chatMessagesMap) window._chatMessagesMap = new Map();
   window._chatMessagesMap.set(String(msg.id), msg);
 
+  // Our own message echoed back (server sets client_id): reconcile with the
+  // optimistic bubble rather than appending a duplicate next to it.
+  if (msg.client_id && replaceOptimisticBubble(container, msg.client_id, msg)) return;
+
   // Check if already exists (by ID)
   const existing = container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
   if (existing) return;
+
+  // Only auto-scroll if the user is already at the bottom (or it's their own
+  // message). Previously every incoming message yanked the view to the bottom
+  // even while the user was scrolled up reading history.
+  const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+  const isMine = msg.is_sending || String(msg.from_id) === String(currentUser?.telegram_id);
+  const stickToBottom = wasNearBottom || isMine;
 
   const html = renderThread([msg], false);
 
@@ -652,17 +748,17 @@ function addMessageToChat(msg) {
       }
       repliesContainer.insertAdjacentHTML('beforeend', html);
 
+      const newThread = repliesContainer.lastElementChild;
+      newThread?.classList.add('msg-enter'); // entrance animation only for NEW messages
+
       // If temporary sending message, style the bubble
       if (msg.is_sending) {
-        const tempEl = repliesContainer.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
-        if (tempEl) {
-          const bubble = tempEl.querySelector('.message-bubble');
-          if (bubble) bubble.classList.add('sending');
-        }
+        const bubble = newThread?.querySelector('.message-bubble');
+        if (bubble) bubble.classList.add('sending');
       }
 
       hydratePhotoMessages(repliesContainer);
-      container.scrollTop = container.scrollHeight;
+      if (stickToBottom) container.scrollTop = container.scrollHeight;
       return;
     }
   }
@@ -679,17 +775,17 @@ function addMessageToChat(msg) {
 
   container.insertAdjacentHTML('beforeend', finalHtml);
 
+  const newThread = container.lastElementChild;
+  newThread?.classList.add('msg-enter'); // entrance animation only for NEW messages
+
   // If temporary sending message, style the bubble
   if (msg.is_sending) {
-    const tempEl = container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
-    if (tempEl) {
-      const bubble = tempEl.querySelector('.message-bubble');
-      if (bubble) bubble.classList.add('sending');
-    }
+    const bubble = newThread?.querySelector('.message-bubble');
+    if (bubble) bubble.classList.add('sending');
   }
 
   hydratePhotoMessages(container);
-  container.scrollTop = container.scrollHeight;
+  if (stickToBottom) container.scrollTop = container.scrollHeight;
 }
 
 /* ── Inline context-menu helpers ────────────────────────────── */
@@ -972,39 +1068,63 @@ function showToast(msg, type = 'info') {
 // ─── Theme ────────────────────────────────────────────────────
 const THEME_ICON_SUN = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>';
 const THEME_ICON_MOON = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.4A8.4 8.4 0 1 1 9.6 3.5a6.8 6.8 0 0 0 10.9 10.9z"/></svg>';
-// Theme changes previously mutated data-theme, wrote localStorage, and
-// re-rendered every icon synchronously in one tick — on mobile that
-// synchronous icon re-render (icon innerHTML swap immediately after the
-// CSS variables flip) is what produced the visible blink/flash. Deferring
-// the icon swap to the next animation frame lets the CSS transition
-// (--theme-transition, see styles.css) actually start painting first.
+// Background colours must match --bg in styles.css. Also pushed to Telegram so
+// its own header/bottom bars change with the theme instead of staying dark.
+const THEME_BG = { dark: '#0D0F14', light: '#F4F1EA' };
+
 function setTheme(theme) {
   const root = document.documentElement;
   root.setAttribute('data-theme', theme);
-  localStorage.setItem('theme', theme);
+  try { localStorage.setItem('theme', theme); } catch { }
   const icon = theme === 'light' ? THEME_ICON_MOON : THEME_ICON_SUN;
   document.querySelectorAll('.theme-btn .theme-icon-svg').forEach(el => el.innerHTML = icon);
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    const c = THEME_BG[theme] || THEME_BG.dark;
+    try { tg.setHeaderColor?.(c); tg.setBackgroundColor?.(c); tg.setBottomBarColor?.(c); } catch { }
+  }
   if (typeof rebuildChart === 'function') {
     requestAnimationFrame(rebuildChart);
   }
 }
 
+// The old toggle used document.startViewTransition (screenshots the whole
+// page — very heavy with this much DOM/blur on phones) and a fallback that put
+// a colour transition on EVERY element. Both are gone.
+// Now: a single full-screen "veil" in the NEW background colour fades in
+// (opacity only — cheap, GPU-composited), the theme flips underneath while
+// it's opaque with transitions switched off (so nothing animates piecemeal),
+// then the veil fades out to reveal the new theme.
+let _themeBusy = false;
 function toggleTheme() {
+  if (_themeBusy) return;
   haptic('selection');
-  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
-  const next = cur === 'dark' ? 'light' : 'dark';
+  const root = document.documentElement;
+  const next = (root.getAttribute('data-theme') || 'dark') === 'dark' ? 'light' : 'dark';
 
-  if (typeof document.startViewTransition === 'function') {
-    document.startViewTransition(() => {
-      setTheme(next);
-    });
-  } else {
-    document.documentElement.classList.add('theme-transitioning');
+  const flip = () => {
+    root.classList.add('theme-switching');
     setTheme(next);
-    setTimeout(() => {
-      document.documentElement.classList.remove('theme-transitioning');
-    }, 250);
-  }
+    void root.offsetWidth; // apply new values with transitions disabled
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
+  };
+
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { flip(); return; }
+
+  _themeBusy = true;
+  const veil = document.createElement('div');
+  veil.className = 'theme-veil';
+  veil.style.background = THEME_BG[next];
+  document.body.appendChild(veil);
+  void veil.offsetWidth;
+  veil.style.transition = 'opacity .12s ease-out';
+  veil.style.opacity = '1';
+  setTimeout(() => {
+    flip();
+    veil.style.transition = 'opacity .18s ease-in';
+    veil.style.opacity = '0';
+    setTimeout(() => { veil.remove(); _themeBusy = false; }, 220);
+  }, 130);
 }
 setTheme(localStorage.getItem('theme') || 'dark');
 
@@ -1295,18 +1415,55 @@ let _socketInitialized = false;
 function connectSocket() {
   if (socket || _socketInitialized) return;
   _socketInitialized = true;
-  socket = io(API, { transports: ['websocket', 'polling'] });
+  // Identity is proven with Telegram's signed initData (verified server-side).
+  // A function is used so every reconnect sends fresh data.
+  socket = io(API, {
+    transports: ['websocket', 'polling'],
+    auth: (cb) => {
+      const { initData, user } = getTelegramData();
+      cb({ initData, telegram_id: String(currentUser?.telegram_id || user?.id || '') });
+    },
+    reconnectionDelay: 500,
+    reconnectionDelayMax: 5000,
+  });
 
+  let _hasConnectedOnce = false;
   socket.on('connect', () => {
-    // Always send auth as a string to match server-side Map key type
-    const userId = String(currentUser?.telegram_id || getTelegramData().user?.id || '');
-    socket.emit('auth', userId);
     $('reconnectBanner')?.classList.remove('show');
     // Stop polling fallback — socket is live
     stopChatPolling();
     stopGlobalRefresh();
     setGoalsLiveStatus(true);
-    console.log('[Socket] Connected, authed as', userId);
+
+    // On a RE-connect, anything sent while we were offline was missed (Socket.IO
+    // only replays for short drops). Re-sync the open conversation and badges.
+    if (_hasConnectedOnce && !socket.recovered) {
+      if (currentPage === 'chat' && window.chatState?.with) loadMessages(window.chatState.with).catch(() => { });
+      updateMessageBadge();
+    }
+    _hasConnectedOnce = true;
+  });
+
+  socket.on('connect_error', (err) => {
+    console.warn('[Socket] connect_error:', err.message);
+    $('reconnectBanner')?.classList.add('show');
+    startChatPolling();
+    startGlobalRefresh();
+  });
+
+  // Coming back from the background: phones suspend sockets silently, so the
+  // connection can look alive while being dead. Reconnect if needed and, if we
+  // were away a while, re-sync the open chat (cheap no-op if nothing changed).
+  let _hiddenAt = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { _hiddenAt = Date.now(); return; }
+    if (!socket) return;
+    if (!socket.connected) socket.connect();
+    if (_hiddenAt && Date.now() - _hiddenAt > 15000) {
+      if (currentPage === 'chat' && window.chatState?.with) loadMessages(window.chatState.with).catch(() => { });
+      updateMessageBadge();
+    }
+    _hiddenAt = 0;
   });
 
   socket.on('disconnect', (reason) => {
@@ -1330,11 +1487,16 @@ function connectSocket() {
     }
   });
 
-  socket.on('new_message', (msg) => {
+  socket.on('new_message', (msg, ack) => {
+    // Confirms receipt; the server falls back to a Telegram notification if
+    // it doesn't get this (dead connection).
+    if (typeof ack === 'function') ack();
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(msg.from_id)) {
       addMessageToChat(msg);
-      // Mark as read silently
-      apiFetch(`/api/messages/${msg.from_id}`).then(() => updateMessageBadge()).catch(() => { });
+      // Mark as read. This used to call GET /api/messages/:id — downloading
+      // the entire 100-message history (4 DB queries) for EVERY incoming
+      // message just to trigger a side effect, then throwing the result away.
+      apiFetch(`/api/messages/read/${msg.from_id}`, { method: 'POST' }).then(() => updateMessageBadge()).catch(() => { });
     } else {
       updateMessageBadge();
       // If the mentor is sitting on the chat page with a different mentee
@@ -1423,15 +1585,38 @@ function connectSocket() {
     }
   });
 
+  // Edits and deletes are applied to the bubble in place. They used to reload
+  // and rebuild the entire conversation (for BOTH participants, and even when
+  // the event belonged to a different chat).
   socket.on('message_edited', (editedMsg) => {
-    if (currentPage === 'chat' && window.chatState?.with) {
-      loadMessages(window.chatState.with);
+    if (!editedMsg?.id) return;
+    const cached = window._chatMessagesMap?.get(String(editedMsg.id));
+    if (cached) Object.assign(cached, editedMsg);
+    if (currentPage !== 'chat' || !window.chatState?.with) return;
+    const threadEl = document.querySelector(`#chatMessages .message-thread[data-msg-id="${editedMsg.id}"]`);
+    if (!threadEl) return;
+    const captionEl = threadEl.querySelector('.message-caption');
+    const textEl = threadEl.querySelector('.message-text');
+    if (captionEl) {
+      captionEl.textContent = editedMsg.content;
+    } else if (textEl) {
+      textEl.innerHTML = escapeHtml(editedMsg.content) + '<span class="msg-edited">edited</span>';
+    } else {
+      loadMessages(window.chatState.with).catch(() => { });
     }
   });
 
-  socket.on('message_deleted', ({ id }) => {
-    if (currentPage === 'chat' && window.chatState?.with) {
-      loadMessages(window.chatState.with);
+  socket.on('message_deleted', ({ id } = {}) => {
+    if (!id) return;
+    window._chatMessagesMap?.delete(String(id));
+    if (currentPage !== 'chat' || !window.chatState?.with) return;
+    const threadEl = document.querySelector(`#chatMessages .message-thread[data-msg-id="${id}"]`);
+    if (!threadEl) return;
+    // A message with replies needs the tree rebuilt; a leaf can just go.
+    if (threadEl.querySelector('.replies-container .message-thread')) {
+      loadMessages(window.chatState.with).catch(() => { });
+    } else {
+      threadEl.remove();
     }
   });
 
@@ -4819,12 +5004,16 @@ function openChat(partnerId) {
   navigate('chat');
 }
 
-async function loadMessages(with_id) {
+async function loadMessages(with_id, opts = {}) {
   const container = $('chatMessages');
 
   try {
     const messages = await apiFetch(`/api/messages/${with_id}`);
     if (!container) return;
+
+    // A slow response for a conversation the user has already switched away
+    // from must not overwrite the one they're looking at now.
+    if (window.chatState?.with && String(window.chatState.with) !== String(with_id)) return;
 
     if (!window._chatMessagesMap) window._chatMessagesMap = new Map();
     function indexMessages(list) {
@@ -4834,11 +5023,38 @@ async function loadMessages(with_id) {
         if (m.replies && m.replies.length) indexMessages(m.replies);
       }
     }
+
+    // Skip the re-render when nothing changed. Reconnect re-syncs, duplicate
+    // socket events, badge refreshes and visibility changes all call this;
+    // rebuilding up to 100 bubbles (and losing scroll position) each time was
+    // a major source of flicker and lag. Compare what's on screen (ids + edit
+    // state) with what the server returned.
+    const domSig = Array.from(container.querySelectorAll('.message-thread[data-msg-id]'))
+      .map(el => el.dataset.msgId)
+      .filter(id => !String(id).startsWith('temp_'))
+      .map(id => `${id}:${window._chatMessagesMap.get(String(id))?.edited_at || ''}`)
+      .sort().join('|');
+    const serverSig = messages.map(m => `${m.id}:${m.edited_at || ''}`).sort().join('|');
+    const sameChat = container.dataset.chatWith === String(with_id);
+    if (!opts.force && sameChat && domSig === serverSig) {
+      updateMessageBadge();
+      return;
+    }
+
     indexMessages(messages);
+
+    // Keep the user's place: stick to the bottom only if they were already
+    // there (or this is a fresh conversation); otherwise restore scroll.
+    const prevTop = container.scrollTop;
+    const wasNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+
+    // Bubbles still "sending…" aren't in the server response yet — keep them.
+    const pending = !sameChat ? '' : Array.from(container.querySelectorAll(':scope > .message-thread[data-msg-id^="temp_"]'))
+      .map(el => el.outerHTML).join('');
 
     try {
       const messageTree = buildMessageTree(messages);
-      container.innerHTML = renderThread(messageTree);
+      container.innerHTML = renderThread(messageTree) + pending;
       hydratePhotoMessages(container);
     } catch (renderError) {
       console.error('[loadMessages] Render error:', renderError);
@@ -4851,7 +5067,8 @@ async function loadMessages(with_id) {
       `).join('');
     }
 
-    container.scrollTop = container.scrollHeight;
+    container.dataset.chatWith = String(with_id);
+    container.scrollTop = (!sameChat || wasNearBottom || opts.force) ? container.scrollHeight : prevTop;
     // The GET endpoint marks messages as read on the backend, so refresh the
     // badge immediately — no page reload required.
     updateMessageBadge();
@@ -4905,7 +5122,7 @@ async function loadMessagesWithRetry(with_id, retryCount = 0) {
 function refreshChat() {
   haptic('light');
   if (window.chatState?.with) {
-    loadMessages(window.chatState.with);
+    loadMessages(window.chatState.with, { force: true });
   } else {
     loadChat();
   }
@@ -4977,126 +5194,104 @@ async function sendMessage() {
   const counter = $('charCounter');
   if (counter) { counter.textContent = '0 / 2000'; counter.classList.remove('danger'); }
 
-  const sendBtn = document.querySelector('.chat-send-btn');
-  if (sendBtn) sendBtn.disabled = true;
-  if (sendBtn) sendBtn.classList.add('sending');
+  // The input is deliberately NOT disabled while sending. Disabling it blurred
+  // the textarea, which collapsed the phone keyboard and re-opened it when
+  // re-enabled — a visible jump on every message — and stopped people typing
+  // their next message while one was in flight. Keep focus so the keyboard stays.
+  try { input.focus({ preventScroll: true }); } catch { }
 
-  // Generate temporary ID
-  const tempId = 'temp_' + Date.now();
+  // Unique per message. Also sent to the server as client_id, which makes
+  // retries idempotent (no duplicate messages if a response was lost).
+  window._sendSeq = (window._sendSeq || 0) + 1;
+  const tempId = `temp_${Date.now()}_${window._sendSeq}`;
 
-  // Create temporary message object
-  const tempMsg = {
+  // Capture reply target now and clear the reply banner immediately, so the
+  // NEXT message isn't accidentally sent as a reply too.
+  const replyParentId = window.replyToId || null;
+  cancelReply();
+
+  const toId = window.chatState.with;
+  addMessageToChat({
     id: tempId,
     from_id: currentUser?.telegram_id,
-    to_id: window.chatState.with,
+    to_id: toId,
     content: originalContent,
     created_at: new Date().toISOString(),
     is_sending: true,
     is_deleted: false,
-    parent_id: window.replyToId || null,
+    parent_id: replyParentId,
     replies: []
-  };
+  });
 
-  // Call addMessageToChat(tempMsg)
-  addMessageToChat(tempMsg);
+  if (!window._pendingSends) window._pendingSends = new Map();
+  window._pendingSends.set(tempId, { toId, content: originalContent, parentId: replyParentId });
+  deliverMessage(tempId);
+}
 
-  // Disable the input field
-  if (input) input.disabled = true;
-
-  let attempts = 0;
-  const maxAttempts = 3;
+// POST with up to 3 attempts. Every attempt carries the same client_id, so if
+// an earlier attempt actually reached the database (response lost / timed out)
+// the server returns that message instead of inserting it again.
+async function postMessageWithRetry(body) {
   let lastError = null;
-  let msg = null;
-
-  // Capture replyToId in case it changes before async operations finish
-  const replyParentId = window.replyToId;
-
-  while (attempts < maxAttempts) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      msg = await apiFetch('/api/messages', {
-        method: 'POST',
-        body: {
-          to_id: window.chatState.with,
-          content: originalContent,
-          parent_id: replyParentId || undefined
-        }
-      });
-      lastError = null;
-      break;
+      return await apiFetch('/api/messages', { method: 'POST', body, timeout: 12000, retry: false });
     } catch (e) {
       lastError = e;
-      attempts++;
-      if (attempts < maxAttempts) {
-        const delay = attempts * 500;
-        await new Promise(r => setTimeout(r, delay));
-      }
+      // 4xx (validation, no mentorship, rate limit) will never succeed on retry.
+      if (e.status && e.status >= 400 && e.status < 500 && e.status !== 408) throw e;
+      if (attempt < 2) await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
     }
   }
+  throw lastError;
+}
 
-  // Re-enable input and button
-  if (input) input.disabled = false;
-  if (sendBtn) { sendBtn.disabled = false; sendBtn.classList.remove('sending'); }
+async function deliverMessage(tempId) {
+  const pending = window._pendingSends?.get(tempId);
+  if (!pending) return;
+  const findTemp = () => document.querySelector(`#chatMessages .message-thread[data-msg-id="${tempId}"]`);
 
-  if (!lastError && msg) {
-    // On success, replace the temp element with the real message
-    const container = document.getElementById('chatMessages');
-    if (container) {
-      const existingReal = container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
-      const tempEl = container.querySelector(`.message-thread[data-msg-id="${tempId}"]`);
-      if (existingReal) {
-        tempEl?.remove();
-      } else if (tempEl) {
-        tempEl.outerHTML = renderThread([msg], false);
-      }
-    }
-    // Clear reply state
-    cancelReply();
-  } else {
-    // On failure, mark the temp message as failed (add a "Retry" button)
+  try {
+    const msg = await postMessageWithRetry({
+      to_id: pending.toId,
+      content: pending.content,
+      parent_id: pending.parentId || undefined,
+      client_id: tempId,
+    });
+    window._pendingSends.delete(tempId);
+    const container = $('chatMessages');
+    if (container) replaceOptimisticBubble(container, tempId, msg);
+  } catch (e) {
     haptic('error');
-    showToast(t('msg_send_failed'), 'error');
-
-    const container = document.getElementById('chatMessages');
-    if (container) {
-      const tempEl = container.querySelector(`.message-thread[data-msg-id="${tempId}"]`);
-      if (tempEl) {
-        const bubble = tempEl.querySelector('.message-bubble');
-        if (bubble) {
-          bubble.classList.remove('sending');
-          bubble.classList.add('failed');
-          // Add retry button if not already present
-          if (!bubble.querySelector('.retry-btn')) {
-            bubble.insertAdjacentHTML('beforeend', `
-              <div class="failed-status" style="margin-top: 4px; display: flex; align-items: center; justify-content: flex-end; gap: 4px;">
-                <span style="font-size: 0.75rem; color: var(--danger);">Failed</span>
-                <button class="btn btn-danger btn-xs btn-outline retry-btn" onclick="retrySendMessage('${tempId}')" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--danger);">Retry</button>
-              </div>
-            `);
-          }
-        }
+    showToast(e.message && !/^HTTP|timed out|Network|Failed to fetch/i.test(e.message) ? e.message : t('msg_send_failed'), 'error');
+    const bubble = findTemp()?.querySelector('.message-bubble');
+    if (bubble) {
+      bubble.classList.remove('sending');
+      bubble.classList.add('failed');
+      if (!bubble.querySelector('.retry-btn')) {
+        bubble.insertAdjacentHTML('beforeend', `
+          <div class="failed-status" style="margin-top: 4px; display: flex; align-items: center; justify-content: flex-end; gap: 4px;">
+            <span style="font-size: 0.75rem; color: var(--danger);">Failed</span>
+            <button class="btn btn-danger btn-xs btn-outline retry-btn" onclick="retrySendMessage('${tempId}')" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--danger);">Retry</button>
+          </div>
+        `);
       }
     }
   }
 }
 
+// Retry re-uses the SAME client_id (tempId) and the SAME bubble, so a message
+// that did reach the server earlier can't be duplicated.
 function retrySendMessage(tempId) {
-  const container = document.getElementById('chatMessages');
-  if (!container) return;
-
-  const tempEl = container.querySelector(`.message-thread[data-msg-id="${tempId}"]`);
-  if (!tempEl) return;
-
-  const textEl = tempEl.querySelector('.message-text');
-  if (!textEl) return;
-
-  const content = textEl.textContent.trim();
-  tempEl.remove();
-
-  const input = document.getElementById('chatInput');
-  if (input) {
-    input.value = content;
-    sendMessage();
+  const tempEl = document.querySelector(`#chatMessages .message-thread[data-msg-id="${tempId}"]`);
+  if (!tempEl || !window._pendingSends?.has(tempId)) return;
+  const bubble = tempEl.querySelector('.message-bubble');
+  if (bubble) {
+    bubble.classList.remove('failed');
+    bubble.classList.add('sending');
+    bubble.querySelector('.failed-status')?.remove();
   }
+  deliverMessage(tempId);
 }
 
 function cancelReply() {
@@ -5110,7 +5305,7 @@ function cancelReply() {
 function resetChatView() {
   if (!window.chatState?.with) return;
   cancelReply();
-  loadMessages(window.chatState.with);
+  loadMessages(window.chatState.with, { force: true });
   showToast('Chat view reset', 'info');
   syncChatInputHeight();
 }
@@ -5161,7 +5356,12 @@ function autoResizeChatInput() {
 }
 
 function handleChatTyping() {
-  if (socket && window.chatState.with) {
+  // At most one 'typing' event every 2.5 s (was one per keystroke), and only
+  // while there is text in the box.
+  const inputEl = $('chatInput');
+  const now = Date.now();
+  if (socket?.connected && window.chatState.with && inputEl?.value && now - (window._lastTypingEmit || 0) > 2500) {
+    window._lastTypingEmit = now;
     socket.emit('typing', { to_id: window.chatState.with });
   }
   autoResizeChatInput();
@@ -7569,6 +7769,8 @@ document.addEventListener('click', (e) => {
 
   // ── Subtle parallax for the blobs (pointer + scroll) ──
   function initParallax() {
+    // Blobs are hidden on touch/small screens (see styles.css); skip the work.
+    if (window.matchMedia('(hover: none)').matches || window.innerWidth <= 480) return;
     let ticking = false;
 
     function apply(nx, ny) {

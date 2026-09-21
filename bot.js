@@ -1474,7 +1474,13 @@ async function notifyMessage(recipientId, senderName, messageContent, fromId = n
     ? `አዲስ መልእክት ከ ${senderName}\n\n${messageContent}`
     : `New message from ${senderName}\n\n${messageContent}`;
 
+  // parse_mode: undefined → plain text. safeSend defaults to Markdown, and this
+  // text contains raw user input plus anonymous handles like "Warrior_9XkL2".
+  // A stray "_", "*", "[" or backtick makes Telegram reject the message
+  // ("can't parse entities"), and safeSend swallows the error — so offline
+  // recipients silently got no notification.
   await safeSend(recipientId, text, {
+    parse_mode: undefined,
     reply_markup: inlineKeyboard.length > 0 ? { inline_keyboard: inlineKeyboard } : undefined
   });
 }
