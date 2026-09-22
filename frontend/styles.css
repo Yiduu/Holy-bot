@@ -70,7 +70,6 @@
   /* Derived elevation + glass tokens — same palette, more depth */
   --inset-hi: inset 0 1px 0 rgba(255, 255, 255, 0.07);
   --inset-hi-gold: inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  --modal-glow: 0 -30px 70px -25px rgba(201, 168, 76, 0.22);
 }
 
 /* ─── Theme switching ───────────────────────────────────────── */
@@ -133,7 +132,6 @@ html.theme-switching *::after {
   --shadow-lg: 0 24px 60px rgba(30, 25, 15, 0.14), 0 2px 6px rgba(30, 25, 15, 0.08);
   --inset-hi: inset 0 1px 0 rgba(255, 255, 255, 0.5);
   --inset-hi-gold: inset 0 1px 0 rgba(255, 255, 255, 0.45);
-  --modal-glow: 0 -30px 70px -25px rgba(201, 168, 76, 0.16);
 }
 
 /* Upgrade the viewport-height fallback to the dynamic small viewport unit
@@ -5990,11 +5988,7 @@ textarea.form-control {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  /* Warm radial wash instead of flat black — the sheet reads as rising
-     out of its own light rather than sitting on a generic scrim. */
-  background:
-    radial-gradient(ellipse 100% 55% at 50% 100%, rgba(201, 168, 76, 0.10), transparent 65%),
-    rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: flex-end;
@@ -6010,38 +6004,19 @@ textarea.form-control {
 }
 
 .modal-sheet {
-  position: relative;
-  background: linear-gradient(180deg, var(--bg3), var(--bg2) 60%);
+  background: var(--bg2);
   border-radius: var(--radius) var(--radius) 0 0;
   border: 1px solid var(--border-dim);
   border-bottom: none;
-  box-shadow: var(--shadow-lg), var(--modal-glow), var(--inset-hi);
-  padding: 22px 20px 20px;
+  box-shadow: var(--shadow-lg), var(--inset-hi);
+  padding: 20px;
   width: 100%;
   max-height: 85vh;
-  overflow-x: hidden;
   overflow-y: auto;
   transform: translateY(100%) translateZ(0);
   -webkit-transform: translateY(100%) translateZ(0);
   transition: transform 0.25s var(--ease-premium);
   will-change: transform;
-}
-
-/* Signature gold hairline — the same top-edge motif used on .card and the
-   active nav tab, carried onto every modal so the sheet feels like part of
-   the same system rather than a plain generic dialog. */
-.modal-sheet::before,
-.modal::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  border-radius: var(--radius) var(--radius) 0 0;
-  background: linear-gradient(90deg, transparent, var(--gold), transparent);
-  opacity: 0.8;
-  pointer-events: none;
 }
 
 .modal-overlay.open .modal-sheet {
@@ -6050,56 +6025,18 @@ textarea.form-control {
 }
 
 .modal-handle {
-  width: 40px;
+  width: 36px;
   height: 4px;
-  border-radius: 3px;
-  background: linear-gradient(90deg, var(--gold-dim), var(--gold), var(--gold-dim));
-  margin: 0 auto 18px;
+  border-radius: 2px;
+  background: var(--border-dim);
+  margin: 0 auto 16px;
 }
 
 .modal-title {
   font-family: var(--font-display);
   font-size: 1rem;
   color: var(--gold);
-  margin-bottom: 18px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border-dim);
-  position: relative;
-}
-
-/* Short centered accent standing in for a divider ornament — echoes the
-   nav tab's underline device instead of a generic full-width rule. */
-.modal-title::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -1px;
-  transform: translateX(-50%);
-  width: 30px;
-  height: 1px;
-  background: var(--gold);
-}
-
-.modal h3 {
-  font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--gold);
-  margin-bottom: 18px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border-dim);
-  position: relative;
-}
-
-.modal h3::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -1px;
-  transform: translateX(-50%);
-  width: 30px;
-  height: 1px;
-  background: var(--gold);
+  margin-bottom: 16px;
 }
 
 /* ─── Request-sent confirmation modal ───────────────────────── */
@@ -6171,10 +6108,10 @@ textarea.form-control {
 
 .engagement-popup {
   position: relative;
-  background: linear-gradient(180deg, var(--bg3), var(--bg2) 60%);
+  background: var(--bg2);
   border: 1px solid var(--border-dim);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg), var(--modal-glow), var(--inset-hi);
+  box-shadow: var(--shadow-lg), var(--inset-hi);
   padding: 28px 22px 22px;
   width: 100%;
   max-width: 340px;
@@ -6182,18 +6119,6 @@ textarea.form-control {
   transform: scale(0.85) translateY(12px);
   opacity: 0;
   transition: transform 0.4s var(--ease-spring), opacity 0.3s ease;
-  overflow: hidden;
-}
-
-.engagement-popup::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--gold), transparent);
-  opacity: 0.8;
 }
 
 .engagement-popup-overlay.open .engagement-popup {
@@ -6297,22 +6222,16 @@ textarea.form-control {
 
 /* ─── Modal (center style for schedule) ────────────────────── */
 .modal {
-  position: relative;
-  background: linear-gradient(180deg, var(--bg3), var(--bg2) 60%);
+  background: var(--bg2);
   border-radius: var(--radius);
   border: 1px solid var(--border-dim);
-  box-shadow: var(--shadow-lg), var(--modal-glow), var(--inset-hi);
-  padding: 22px 20px 20px;
+  box-shadow: var(--shadow-lg), var(--inset-hi);
+  padding: 20px;
   width: calc(100% - 32px);
   max-width: 400px;
   max-height: 85vh;
-  overflow-x: hidden;
   overflow-y: auto;
   animation: fadeScaleIn 0.3s var(--ease-premium) both;
-}
-
-.modal::before {
-  border-radius: var(--radius);
 }
 
 @keyframes fadeScaleIn {
