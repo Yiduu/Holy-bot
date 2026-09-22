@@ -2844,7 +2844,13 @@
         /* ── Realtime (Socket.IO) ─────────────────────────────────────── */
         function connectWS() {
             try {
-                wsConn = io(API, { transports: ['websocket', 'polling'] });
+                wsConn = io(API, {
+                    transports: ['websocket', 'polling'],
+                    auth: {
+                        initData: window.Telegram?.WebApp?.initData || '',
+                        telegram_id: String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || ''),
+                    },
+                });
                 wsConn.on('connect', () => setWSStatus(true));
                 wsConn.on('disconnect', () => setWSStatus(false));
                 wsConn.on('connect_error', () => setWSStatus(false));

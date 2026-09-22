@@ -1,0 +1,69 @@
+--- orig/Holy-bot-main/bot.js	2026-09-21 13:40:29.000000000 +0000
++++ Holy-bot-main/bot.js	2026-09-22 08:02:15.794979196 +0000
+@@ -1176,6 +1176,30 @@
+     return;
+   }
+ 
++  // RACE-CONDITION GUARD: a mentee can have several pending requests out at
++  // once (they messaged multiple mentors). If another mentor already accepted
++  // one of those requests, bail out here instead of creating a second active
++  // assignment — the follow-up reconciliation below still catches the rare
++  // case where two accepts land within the same instant.
++  const { data: existingActive } = await supabase
++    .from('mentorship_assignments')
++    .select('mentor_id')
++    .eq('user_id', userId)
++    .eq('is_active', true)
++    .maybeSingle();
++
++  if (existingActive) {
++    await supabase.from('mentorship_requests').update({
++      status: 'rejected',
++      admin_note: 'Mentee already matched with another mentor',
++      updated_at: new Date().toISOString()
++    }).eq('mentor_id', mentorId).eq('user_id', userId);
++    const { data: menteeInfo } = await supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', userId).single();
++    const menteeName = menteeInfo?.user_settings?.display_name || menteeInfo?.anonymous_id || 'A mentee';
++    await safeSend(mentorId, tSync(mentorLang, 'mentorship_request_cancelled_elsewhere', { nick: mdEscape(menteeName) }));
++    return;
++  }
++
+   // CRITICAL FIX: Ensure mentor_id is the mentor, user_id is the mentee
+   const { error } = await supabase.from('mentorship_assignments').insert({
+     mentor_id: mentorId,
+@@ -1227,11 +1251,17 @@
+ 
+ async function rejectOtherPendingRequestsForUser(userId, acceptedMentorId, exceptRequestId) {
+   try {
++    // Includes 'accepted' as well as 'pending': if two mentors accepted the
++    // same mentee within the same instant, the DB trigger
++    // (enforce_single_active_assignment) already resolved which assignment
++    // is truly active, but the loser's request row can be left stuck on
++    // 'accepted' with no matching active assignment and no notification.
++    // Sweeping both statuses here reconciles that stale state.
+     let query = supabase
+       .from('mentorship_requests')
+       .select('*, user:user_id(anonymous_id, user_settings(display_name))')
+       .eq('user_id', userId)
+-      .eq('status', 'pending')
++      .in('status', ['pending', 'accepted'])
+       .neq('mentor_id', acceptedMentorId);
+ 
+     // Only applied when explicitly provided — .neq('id', undefined) would
+--- orig/Holy-bot-main/frontend/admin.html	2026-09-21 13:40:29.000000000 +0000
++++ Holy-bot-main/frontend/admin.html	2026-09-22 08:02:23.874409716 +0000
+@@ -2844,7 +2844,13 @@
+         /* ── Realtime (Socket.IO) ─────────────────────────────────────── */
+         function connectWS() {
+             try {
+-                wsConn = io(API, { transports: ['websocket', 'polling'] });
++                wsConn = io(API, {
++                    transports: ['websocket', 'polling'],
++                    auth: {
++                        initData: window.Telegram?.WebApp?.initData || '',
++                        telegram_id: String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || ''),
++                    },
++                });
+                 wsConn.on('connect', () => setWSStatus(true));
+                 wsConn.on('disconnect', () => setWSStatus(false));
+                 wsConn.on('connect_error', () => setWSStatus(false));
