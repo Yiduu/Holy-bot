@@ -4029,26 +4029,89 @@ textarea.form-control {
   }
 }
 
-/* ── Thread reply indentation ───────────────────────────────── */
-.replies-container {
+/* ── Telegram-style reply quote ──────────────────────────────
+   Replies are normal bubbles in the normal chronological flow. The quoted
+   original (sender + one-line snippet) sits at the top of the bubble. */
+.reply-quote {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 4px;
-  padding-left: 14px;
-  border-left: 2px solid rgba(201, 168, 76, 0.22);
+  gap: 1px;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0 0 6px;
+  padding: 5px 10px 5px 9px;
+  border-left: 3px solid var(--gold);
+  border-radius: 6px 10px 10px 6px;
+  background: rgba(201, 168, 76, 0.12);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.thread-sent>.replies-container {
-  padding-left: 0;
-  padding-right: 14px;
-  border-left: none;
-  border-right: 2px solid rgba(201, 168, 76, 0.22);
+.reply-quote:active {
+  filter: brightness(0.92);
 }
 
-/* Nested bubbles slightly narrower */
-.replies-container .message-bubble {
-  max-width: 88%;
+.reply-quote-name {
+  font-weight: 700;
+  color: var(--gold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reply-quote-text {
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Sent bubbles are solid gold, so the quote goes dark-on-gold */
+.message-bubble.sent .reply-quote {
+  background: rgba(26, 18, 0, 0.14);
+  border-left-color: rgba(26, 18, 0, 0.6);
+}
+
+.message-bubble.sent .reply-quote-name {
+  color: rgba(26, 18, 0, 0.85);
+}
+
+.message-bubble.sent .reply-quote-text {
+  color: rgba(26, 18, 0, 0.7);
+}
+
+/* Original was deleted or is older than the loaded history */
+.reply-quote-missing {
+  cursor: default;
+  border-left-color: var(--text3);
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.reply-quote-missing .reply-quote-text {
+  font-style: italic;
+  color: var(--text3);
+}
+
+.message-bubble.sent .reply-quote-missing {
+  border-left-color: rgba(26, 18, 0, 0.35);
+}
+
+.message-bubble.sent .reply-quote-missing .reply-quote-text {
+  color: rgba(26, 18, 0, 0.55);
+}
+
+/* Brief highlight when jumping to the original from a quote. A transition
+   (not an animation) so it can't retrigger the bubble's entrance animation. */
+.message-bubble {
+  transition: box-shadow 0.35s ease;
+}
+
+.message-bubble.msg-flash {
+  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.65), 0 1px 6px rgba(0, 0, 0, 0.18);
 }
 
 /* ── Reply indicator bar (above input) ───────────────────────

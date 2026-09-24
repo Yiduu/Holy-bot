@@ -564,29 +564,99 @@ async function handleFileAction(btn) {
   }
 }
 
-function buildMessageTree(messages) {
-  const map = new Map();
-  const roots = [];
-  messages.forEach(msg => {
-    map.set(msg.id, { ...msg, replies: [] });
-  });
-  messages.forEach(msg => {
-    const parentMsg = msg.parent_id ? map.get(msg.parent_id) : null;
-    if (parentMsg && !parentMsg.is_deleted) {
-      parentMsg.replies.push(map.get(msg.id));
+/* ── Telegram-style replies ──────────────────────────────────────
+   Messages are always rendered in ONE flat, chronological list. A reply is
+   an ordinary bubble that carries a small quote of the message it answers
+   (sender + snippet) at the top; tapping the quote jumps to the original.
+   This replaced the old nested tree (buildMessageTree), which pulled every
+   reply up underneath its parent and broke the real message order. */
+
+// One-line description of a message: its text, or a label for attachments.
+function getReplyPreviewText(msg, max = 100) {
+  let preview = String(msg?.content || '').replace(/\s+/g, ' ').trim();
+  if (!preview && msg?.file_type) {
+    preview = msg.file_type === 'photo' ? '📷 Photo'
+      : msg.file_type === 'voice' ? '🎤 Voice message'
+      : `📎 ${msg.file_type}`;
+  }
+  if (preview.length > max) preview = preview.substring(0, max) + '…';
+  return preview;
+}
+
+function getReplySenderLabel(msg, fallback = 'them') {
+  const isSent = String(msg?.from_id) === String(currentUser?.telegram_id);
+  return isSent ? 'You' : (window.chatState?.name || fallback);
+}
+
+const REPLY_QUOTE_UNAVAILABLE = 'Original message unavailable';
+
+// The quoted snippet shown at the top of a reply bubble ('' for normal messages).
+function renderReplyQuote(msg) {
+  if (!msg?.parent_id) return '';
+  const parentId = escapeHtml(String(msg.parent_id));
+  const parent = window._chatMessagesMap?.get(String(msg.parent_id));
+
+  // Parent deleted, or older than the loaded history window.
+  if (!parent || parent.is_deleted) {
+    return `<div class="reply-quote reply-quote-missing" data-reply-to="${parentId}"><span class="reply-quote-text">${REPLY_QUOTE_UNAVAILABLE}</span></div>`;
+  }
+
+  return `<div class="reply-quote" role="button" tabindex="0" data-reply-to="${parentId}">
+            <span class="reply-quote-name">${escapeHtml(getReplySenderLabel(parent, 'Them'))}</span>
+            <span class="reply-quote-text">${escapeHtml(getReplyPreviewText(parent))}</span>
+          </div>`;
+}
+
+// Scrolls the chat to a message and briefly highlights its bubble.
+function scrollToMessage(msgId) {
+  const container = $('chatMessages');
+  if (!container) return false;
+  const thread = container.querySelector(`.message-thread[data-msg-id="${CSS.escape(String(msgId))}"]`);
+  if (!thread) {
+    showToast('Original message is no longer available', 'info');
+    return false;
+  }
+  // Scroll the message list itself (not scrollIntoView, which can also shift
+  // the fixed-height page around it).
+  const cRect = container.getBoundingClientRect();
+  const tRect = thread.getBoundingClientRect();
+  const target = container.scrollTop + (tRect.top - cRect.top) - (container.clientHeight - tRect.height) / 2;
+  container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+
+  const bubble = thread.querySelector('.message-bubble');
+  if (bubble) {
+    bubble.classList.add('msg-flash');
+    setTimeout(() => bubble.classList.remove('msg-flash'), 1200);
+  }
+  haptic('selection');
+  return true;
+}
+
+// One delegated listener covers every quote, including ones added later.
+document.addEventListener('click', (e) => {
+  const quote = e.target.closest?.('.reply-quote[data-reply-to]:not(.reply-quote-missing)');
+  if (quote) scrollToMessage(quote.dataset.replyTo);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const quote = e.target.closest?.('.reply-quote[data-reply-to]:not(.reply-quote-missing)');
+  if (quote) { e.preventDefault(); scrollToMessage(quote.dataset.replyTo); }
+});
+
+// Keep already-rendered quotes in sync when their original is edited/deleted.
+function refreshReplyQuotesFor(msgId, updatedMsg) {
+  const sel = `#chatMessages .reply-quote[data-reply-to="${CSS.escape(String(msgId))}"]`;
+  document.querySelectorAll(sel).forEach((q) => {
+    if (updatedMsg) {
+      const textEl = q.querySelector('.reply-quote-text');
+      if (textEl) textEl.textContent = getReplyPreviewText(updatedMsg);
     } else {
-      const mappedMsg = map.get(msg.id);
-      if (mappedMsg) {
-        // Fallback for missing/deleted parent messages: treat as root
-        mappedMsg.parent_id = null;
-        roots.push(mappedMsg);
-      }
+      q.classList.add('reply-quote-missing');
+      q.removeAttribute('role');
+      q.removeAttribute('tabindex');
+      q.innerHTML = `<span class="reply-quote-text">${REPLY_QUOTE_UNAVAILABLE}</span>`;
     }
   });
-  roots.forEach(root => {
-    root.replies.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-  });
-  return roots;
 }
 
 /* ── SVG icon constants ──────────────────────────────────────── */
@@ -662,11 +732,11 @@ function renderThread(messages, isRoot = true) {
     const editedMark = msg.edited_at
       ? '<span class="msg-edited">edited</span>'
       : '';
-    const hasReplies = msg.replies && msg.replies.filter(r => !r.is_deleted).length > 0;
 
     html += `
       <div class="message-thread ${isSent ? 'thread-sent' : 'thread-received'}" data-msg-id="${msg.id}">
-        <div class="message-bubble ${isSent ? 'sent' : 'received'}">
+        <div class="message-bubble ${isSent ? 'sent' : 'received'}${msg.parent_id ? ' has-reply' : ''}">
+          ${renderReplyQuote(msg)}
           <div class="message-text">${msg.file_type ? renderFileAttachment(msg) : ''}${msg.content ? `<div class="${msg.file_type ? 'message-caption' : ''}">${escapeHtml(msg.content)}</div>` : ''}${editedMark}</div>
           <div class="message-footer">
             <span class="message-time">${formatTime(msg.created_at)}</span>
@@ -688,7 +758,6 @@ function renderThread(messages, isRoot = true) {
             </span>
           </div>
         </div>
-        ${hasReplies ? `<div class="replies-container">${renderThread(msg.replies, false)}</div>` : ''}
       </div>
     `;
   }
@@ -738,32 +807,6 @@ function addMessageToChat(msg) {
   const stickToBottom = wasNearBottom || isMine;
 
   const html = renderThread([msg], false);
-
-  if (msg.parent_id) {
-    const parentThread = container.querySelector(`.message-thread[data-msg-id="${msg.parent_id}"]`);
-    if (parentThread) {
-      let repliesContainer = parentThread.querySelector('.replies-container');
-      if (!repliesContainer) {
-        repliesContainer = document.createElement('div');
-        repliesContainer.className = 'replies-container';
-        parentThread.appendChild(repliesContainer);
-      }
-      repliesContainer.insertAdjacentHTML('beforeend', html);
-
-      const newThread = repliesContainer.lastElementChild;
-      newThread?.classList.add('msg-enter'); // entrance animation only for NEW messages
-
-      // If temporary sending message, style the bubble
-      if (msg.is_sending) {
-        const bubble = newThread?.querySelector('.message-bubble');
-        if (bubble) bubble.classList.add('sending');
-      }
-
-      hydratePhotoMessages(repliesContainer);
-      if (stickToBottom) container.scrollTop = container.scrollHeight;
-      return;
-    }
-  }
 
   const groupHeader = getDateGroupHeader(msg.created_at);
   const dividers = container.querySelectorAll('.chat-date-divider span');
@@ -986,6 +1029,8 @@ async function deleteMessageInline(msgId) {
 // Turns the main composer into a reply box for `messageId`, Telegram-style:
 // shows the reply banner above the textarea instead of a per-message form.
 function setReplyTo(messageId) {
+  // An unsent ("temp_…") bubble has no server id yet, so it can't be a parent.
+  if (String(messageId).startsWith('temp_')) return;
   cancelEditMessage(); // reply and edit are mutually exclusive
 
   const msg = window._chatMessagesMap?.get(String(messageId));
@@ -993,16 +1038,8 @@ function setReplyTo(messageId) {
 
   window.replyToId = messageId;
 
-  const isSent = msg.from_id === currentUser?.telegram_id;
-  const senderLabel = isSent ? 'You' : (window.chatState?.name || 'them');
-
-  let preview = (msg.content || '').trim();
-  if (!preview && msg.file_type) {
-    preview = msg.file_type === 'photo' ? '📷 Photo'
-      : msg.file_type === 'voice' ? '🎤 Voice message'
-      : `📎 ${msg.file_type}`;
-  }
-  if (preview.length > 60) preview = preview.substring(0, 60) + '…';
+  const senderLabel = getReplySenderLabel(msg);
+  const preview = getReplyPreviewText(msg, 60);
 
   const label = $('replyIndicatorLabel');
   if (label) label.textContent = `Replying to ${senderLabel}`;
@@ -1042,8 +1079,12 @@ function editMessage() {
 async function deleteMessage() {
   if (!currentMessageId) return;
   if (!confirm('Delete this message for everyone?')) return;
+  const deletingId = currentMessageId;
   try {
-    await apiFetch(`/api/messages/${currentMessageId}`, { method: 'DELETE' });
+    await apiFetch(`/api/messages/${deletingId}`, { method: 'DELETE' });
+    // Drop it from the cache now so replies re-rendered by the reload below
+    // show "unavailable" instead of quoting a message that no longer exists.
+    window._chatMessagesMap?.delete(String(deletingId));
     closeMessageOptions();
     loadMessages(window.chatState.with);
     haptic('medium');
@@ -1595,6 +1636,7 @@ function connectSocket() {
     const cached = window._chatMessagesMap?.get(String(editedMsg.id));
     if (cached) Object.assign(cached, editedMsg);
     if (currentPage !== 'chat' || !window.chatState?.with) return;
+    refreshReplyQuotesFor(editedMsg.id, cached || editedMsg);
     const threadEl = document.querySelector(`#chatMessages .message-thread[data-msg-id="${editedMsg.id}"]`);
     if (!threadEl) return;
     const captionEl = threadEl.querySelector('.message-caption');
@@ -1612,14 +1654,9 @@ function connectSocket() {
     if (!id) return;
     window._chatMessagesMap?.delete(String(id));
     if (currentPage !== 'chat' || !window.chatState?.with) return;
-    const threadEl = document.querySelector(`#chatMessages .message-thread[data-msg-id="${id}"]`);
-    if (!threadEl) return;
-    // A message with replies needs the tree rebuilt; a leaf can just go.
-    if (threadEl.querySelector('.replies-container .message-thread')) {
-      loadMessages(window.chatState.with).catch(() => { });
-    } else {
-      threadEl.remove();
-    }
+    // Replies to the deleted message stay in place; their quote just updates.
+    refreshReplyQuotesFor(id, null);
+    document.querySelector(`#chatMessages .message-thread[data-msg-id="${id}"]`)?.remove();
   });
 
   // Fired the instant a session actually goes live (first participant/host
@@ -5058,8 +5095,8 @@ async function loadMessages(with_id, opts = {}) {
       .map(el => el.outerHTML).join('');
 
     try {
-      const messageTree = buildMessageTree(messages);
-      container.innerHTML = renderThread(messageTree) + pending;
+      // Flat, chronological list; replies carry a quote of their original.
+      container.innerHTML = renderThread(messages) + pending;
       hydratePhotoMessages(container);
     } catch (renderError) {
       console.error('[loadMessages] Render error:', renderError);
