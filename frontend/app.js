@@ -1484,6 +1484,9 @@ function connectSocket() {
     if (_hasConnectedOnce && !socket.recovered) {
       if (currentPage === 'chat' && window.chatState?.with) loadMessages(window.chatState.with).catch(() => { });
       updateMessageBadge();
+      updateRequestsBadge();
+      updateSessionsBadge();
+      checkPendingRating();
     }
     _hasConnectedOnce = true;
   });
@@ -1627,6 +1630,19 @@ function connectSocket() {
       haptic('success');
       showToast('A mentorship request was accepted \u2713', 'success');
     }
+  });
+
+  // The other side ended the mentorship (or an admin did). Refresh what depends
+  // on it, and pop the rating prompt for a mentee straight away instead of
+  // waiting for their next app launch.
+  socket.on('mentorship_ended', ({ by } = {}) => {
+    haptic('warning');
+    showToast(t('mentorship_ended') || 'Mentorship has ended.', 'info');
+    updateMessageBadge();
+    if (currentUser?.role === 'user') checkPendingRating();
+    if (currentPage === 'chat') loadChat();
+    else if (currentPage === 'mentors') loadMentors();
+    else if (currentPage === 'my-mentees') loadMyMentees();
   });
 
   // Edits and deletes are applied to the bubble in place. They used to reload

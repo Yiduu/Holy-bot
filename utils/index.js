@@ -178,8 +178,19 @@ async function endMenteeSideOnPromotion(supabase, telegramId) {
   return ended;
 }
 
+/**
+ * Push an event to every device a user has open (their `user:<id>` room).
+ * emitToUser() above only reaches the most recent socket. Best-effort, like it.
+ */
+function emitToUserRoom(telegram_id, event, payload) {
+  const io = global.io || global._io;
+  if (!io || !telegram_id) return;
+  io.to(`user:${telegram_id}`).emit(event, payload);
+}
+
 module.exports = {
-  generateJitsiJWT, supabaseQuery, emitToUser,
+  generateJitsiJWT, supabaseQuery, emitToUser, emitToUserRoom,
   closeAssignment, recordMentorRating, endMenteeSideOnPromotion
 };
+
 

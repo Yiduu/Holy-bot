@@ -1016,6 +1016,11 @@ async function endMentorship(chatId, partnerId, initiatorRole, opts = {}) {
     if (!opts.skipRatingPrompt) await promptRating(chatId, partnerId);
   }
 
+  // Live update for the other person (rating prompt, chat, badges) if the app is open.
+  if (global._io) {
+    global._io.to(`user:${partnerId}`).emit('mentorship_ended', { by: initiatorRole });
+  }
+
   // Check waiting list for now-available mentor
   const { data: mt } = await supabase.from('mentor_topics').select('topic_id').eq('telegram_id',
     initiatorRole === 'mentor' ? chatId : partnerId
@@ -1245,9 +1250,10 @@ async function acceptMentorship(mentorId, userId, topicId) {
 
   // Notify mini app via socket so it refreshes without needing a manual reload
   try {
+    // Sockets join `user:<id>` (the old bare-id room had no members).
     const io = global._io;
     if (io) {
-      io.to(String(mentorId)).emit('mentorship_request_updated', { status: 'accepted' });
+      io.to(`user:${mentorId}`).to(`user:${userId}`).emit('mentorship_request_updated', { status: 'accepted' });
     }
   } catch (e) {
     console.error('[bot] socket emit error (non-fatal):', e.message);
@@ -1265,7 +1271,7 @@ async function rejectMentorship(mentorId, userId) {
   await safeSend(mentorId, tSync(mentorLang, 'reject_confirmed'));
   const io = global._io;
   if (io) {
-    io.to(String(mentorId)).emit('mentorship_request_updated', { status: 'rejected' });
+    io.to(`user:${mentorId}`).to(`user:${userId}`).emit('mentorship_request_updated', { status: 'rejected' });
   }
 }
 

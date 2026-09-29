@@ -408,6 +408,10 @@ module.exports = function mentorControlRoutes(supabase, requireAuth, requireAdmi
       console.error('[mentor-control] Failed to notify parties of forced unassign:', notifyErr.message);
     }
 
+    const { emitToUserRoom } = require('../utils');
+    emitToUserRoom(mentee_id, 'mentorship_ended', { by: 'admin', assignment_id: assignment.id });
+    emitToUserRoom(mentor_id, 'mentorship_ended', { by: 'admin', assignment_id: assignment.id });
+
     await logAudit(admin_id, 'admin_unassign_mentee', mentor_id, 'mentor', { mentee_id, assignment_id: assignment.id });
     res.json({ success: true });
   });

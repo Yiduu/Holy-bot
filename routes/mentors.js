@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const { emitToUserRoom } = require('../utils');
 
 // PostgREST caps a response at 1000 rows and very long `in (...)` lists can
 // overflow the URL, so batched lookups go through here: ids are sent in chunks
@@ -346,6 +347,10 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     const { notifyMentorshipRequest } = require('../bot');
     await notifyMentorshipRequest(mentor_id, user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData?.name);
 
+    // Live badge/toast if the mentor has the app open. The client already had
+    // a handler for this event, but nothing ever sent it.
+    emitToUserRoom(mentor_id, 'new_mentorship_request', { requestId: result.data?.id });
+
     res.status(201).json(result.data);
   });
 
@@ -431,13 +436,11 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
 
     // Emit socket event so the mini app refreshes in real-time
     try {
-      const io = req.app.get('io');
-      if (io) {
-        io.to(String(mentor_id)).emit('mentorship_request_updated', {
-          requestId: req.params.id,
-          status: action
-        });
-      }
+      // Sockets join `user:<id>`; the old bare-id room had no members, so this
+      // never arrived. Tell the mentor's other devices and the mentee.
+      const payload = { requestId: req.params.id, status: action };
+      emitToUserRoom(mentor_id, 'mentorship_request_updated', payload);
+      emitToUserRoom(reqData.user_id, 'mentorship_request_updated', payload);
     } catch (socketErr) {
       console.error('[mentors] socket emit error (non-fatal):', socketErr.message);
     }
@@ -1108,12 +1111,22 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
   // DELETE /api/mentors/end-mentorship/:assignment_id
   router.delete('/end-mentorship/:assignment_id', requireAuth, async (req, res) => {
     const { id: mentor_id } = req.telegramUser;
+    const { data: existing } = await supabase
+      .from('mentorship_assignments')
+      .select('user_id')
+      .eq('id', req.params.assignment_id)
+      .eq('mentor_id', mentor_id)
+      .eq('is_active', true)
+      .maybeSingle();
     const { error } = await supabase
       .from('mentorship_assignments')
       .update({ is_active: false, ended_at: new Date().toISOString() })
       .eq('id', req.params.assignment_id)
       .eq('mentor_id', mentor_id);
     if (error) return res.status(500).json({ error: error.message });
+    if (existing?.user_id) {
+      emitToUserRoom(existing.user_id, 'mentorship_ended', { by: 'mentor', assignment_id: req.params.assignment_id });
+    }
     res.json({ success: true });
   });
 
