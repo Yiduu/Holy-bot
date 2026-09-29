@@ -240,18 +240,24 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     // select('*') already returns file_id, file_type, file_size, mime_type,
     // duration and file_name once those columns exist on the table, so the
     // mini app gets attachment metadata alongside regular text messages.
-    // Soft-deleted rows are filtered here so the "last 100" window stays
+    // Soft-deleted rows are filtered here so the window stays
     // meaningful. `is_deleted` predates its own tracked migration, so older
     // rows may have it NULL rather than false — match both.
+    let historyQuery = supabase
+      .from('messages')
+      .select('*')
+      .or(`and(from_id.eq.${my_id},to_id.eq.${other_id}),and(from_id.eq.${other_id},to_id.eq.${my_id})`)
+      .or('is_deleted.eq.false,is_deleted.is.null');
+
+    if (req.query.before) {
+      historyQuery = historyQuery.lt('created_at', req.query.before);
+    }
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 100));
+    historyQuery = historyQuery.order('created_at', { ascending: false }).limit(limit);
+
     const [allowed, historyRes] = await Promise.all([
       hasActiveMentorship(my_id, other_id),
-      supabase
-        .from('messages')
-        .select('*')
-        .or(`and(from_id.eq.${my_id},to_id.eq.${other_id}),and(from_id.eq.${other_id},to_id.eq.${my_id})`)
-        .or('is_deleted.eq.false,is_deleted.is.null')
-        .order('created_at', { ascending: false })
-        .limit(100),
+      historyQuery,
     ]);
 
     if (!allowed) return res.status(403).json({ error: 'No active mentorship with this user' });

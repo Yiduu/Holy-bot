@@ -172,5 +172,6 @@
     "goal_already_done": "This goal is already marked as done.",
     "goal_not_found": "Goal not found or already removed.",
     "apply_end_mentorship_first": "You're currently working with a mentor. Before you apply to become a mentor, open the app, end your mentorship, rate your mentor and tell us why you're leaving.",
-    "btn_open_app": "Open App"
+    "btn_open_app": "Open App",
+    "btn_load_earlier": "Load earlier messages"
 }

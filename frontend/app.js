@@ -5074,6 +5074,92 @@ function openChat(partnerId) {
   navigate('chat');
 }
 
+function indexChatMessages(list) {
+  if (!list || !list.length) return;
+  if (!window._chatMessagesMap) window._chatMessagesMap = new Map();
+  for (const m of list) {
+    window._chatMessagesMap.set(String(m.id), m);
+    if (m.replies && m.replies.length) indexChatMessages(m.replies);
+  }
+}
+
+function getLoadEarlierHtml() {
+  if (!window._hasEarlierMessages) return '';
+  return `
+    <div id="loadEarlierContainer" class="load-earlier-container">
+      <button id="loadEarlierBtn" class="load-earlier-btn" onclick="loadEarlierMessages()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+        <span data-i18n="btn_load_earlier">${t('btn_load_earlier') || 'Load earlier messages'}</span>
+      </button>
+    </div>
+  `;
+}
+
+async function loadEarlierMessages() {
+  if (window._isLoadingEarlier || !window.chatState?.with || !window._chatEarliestDate) return;
+  const btn = $('loadEarlierBtn');
+  const container = $('chatMessages');
+  if (!container) return;
+
+  window._isLoadingEarlier = true;
+  haptic('light');
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btn.innerHTML = `<span class="loading-spinner" style="width:13px;height:13px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px"></span><span>${t('loading') || 'Loading…'}</span>`;
+  }
+
+  try {
+    const with_id = window.chatState.with;
+    const beforeParam = encodeURIComponent(window._chatEarliestDate);
+    const olderMessages = await apiFetch(`/api/messages/${with_id}?before=${beforeParam}`);
+
+    if (window.chatState?.with && String(window.chatState.with) !== String(with_id)) return;
+
+    if (!olderMessages || !olderMessages.length) {
+      window._hasEarlierMessages = false;
+      $('loadEarlierContainer')?.remove();
+      showToast(t('no_earlier_messages') || 'No earlier messages', 'info');
+      return;
+    }
+
+    window._hasEarlierMessages = olderMessages.length >= 100;
+    window._chatEarliestDate = olderMessages[0].created_at;
+
+    indexChatMessages(olderMessages);
+
+    // Save scroll position relative to content
+    const prevScrollHeight = container.scrollHeight;
+    const prevScrollTop = container.scrollTop;
+
+    // Remove old load earlier button
+    $('loadEarlierContainer')?.remove();
+
+    // Prepend older messages with date headers
+    const earlierHtml = getLoadEarlierHtml() + renderThread(olderMessages, true);
+    container.insertAdjacentHTML('afterbegin', earlierHtml);
+    hydratePhotoMessages(container);
+
+    // Preserve exact scroll position so the view doesn't jump
+    const newScrollHeight = container.scrollHeight;
+    container.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight);
+    haptic('selection');
+  } catch (e) {
+    console.error('Failed to load earlier messages:', e);
+    showToast(e.message || 'Failed to load earlier messages', 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      btn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+        <span data-i18n="btn_load_earlier">${t('btn_load_earlier') || 'Load earlier messages'}</span>
+      `;
+    }
+  } finally {
+    window._isLoadingEarlier = false;
+  }
+}
+
 async function loadMessages(with_id, opts = {}) {
   const container = $('chatMessages');
 
@@ -5085,33 +5171,41 @@ async function loadMessages(with_id, opts = {}) {
     // from must not overwrite the one they're looking at now.
     if (window.chatState?.with && String(window.chatState.with) !== String(with_id)) return;
 
-    if (!window._chatMessagesMap) window._chatMessagesMap = new Map();
-    function indexMessages(list) {
-      if (!list || !list.length) return;
-      for (const m of list) {
-        window._chatMessagesMap.set(String(m.id), m);
-        if (m.replies && m.replies.length) indexMessages(m.replies);
+    const sameChat = container.dataset.chatWith === String(with_id);
+
+    // Track earliest date for pagination
+    if (messages && messages.length) {
+      if (!sameChat || !window._chatEarliestDate) {
+        window._chatEarliestDate = messages[0].created_at;
+        window._hasEarlierMessages = messages.length >= 100;
       }
+    } else {
+      window._chatEarliestDate = null;
+      window._hasEarlierMessages = false;
     }
+
+    if (!window._chatMessagesMap) window._chatMessagesMap = new Map();
 
     // Skip the re-render when nothing changed. Reconnect re-syncs, duplicate
     // socket events, badge refreshes and visibility changes all call this;
     // rebuilding up to 100 bubbles (and losing scroll position) each time was
     // a major source of flicker and lag. Compare what's on screen (ids + edit
     // state) with what the server returned.
-    const domSig = Array.from(container.querySelectorAll('.message-thread[data-msg-id]'))
+    const renderedThreads = Array.from(container.querySelectorAll('.message-thread[data-msg-id]'));
+    const domSig = renderedThreads
       .map(el => el.dataset.msgId)
       .filter(id => !String(id).startsWith('temp_'))
       .map(id => `${id}:${window._chatMessagesMap.get(String(id))?.edited_at || ''}`)
       .sort().join('|');
     const serverSig = messages.map(m => `${m.id}:${m.edited_at || ''}`).sort().join('|');
-    const sameChat = container.dataset.chatWith === String(with_id);
-    if (!opts.force && sameChat && domSig === serverSig) {
+
+    // If earlier messages have been prepended, do not collapse DOM back on non-forced refresh
+    if (!opts.force && sameChat && (domSig === serverSig || (renderedThreads.length > messages.length && domSig.includes(serverSig)))) {
       updateMessageBadge();
       return;
     }
 
-    indexMessages(messages);
+    indexChatMessages(messages);
 
     // Keep the user's place: stick to the bottom only if they were already
     // there (or this is a fresh conversation); otherwise restore scroll.
@@ -5124,7 +5218,7 @@ async function loadMessages(with_id, opts = {}) {
 
     try {
       // Flat, chronological list; replies carry a quote of their original.
-      container.innerHTML = renderThread(messages) + pending;
+      container.innerHTML = getLoadEarlierHtml() + renderThread(messages) + pending;
       hydratePhotoMessages(container);
     } catch (renderError) {
       console.error('[loadMessages] Render error:', renderError);

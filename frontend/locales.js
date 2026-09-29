@@ -458,7 +458,9 @@ const I18N = {
     "end_to_apply_done": "Mentorship ended. You can now apply.",
     "end_to_apply_warn_title": "Warning",
     "end_to_apply_warn_msg": "You are going to end your mentorship first before becoming a mentor. Are you sure you want to continue?",
-    "end_to_apply_warn_continue": "Yes, continue"
+    "end_to_apply_warn_continue": "Yes, continue",
+    "btn_load_earlier": "Load earlier messages",
+    "no_earlier_messages": "No earlier messages"
   },
   am: {
     "btn_find_mentor": "አማካሪ ፈልግ",
@@ -915,6 +917,8 @@ const I18N = {
     "end_to_apply_done": "የምክር አገልግሎቱ ተቋርጧል። አሁን ማመልከት ይችላሉ።",
     "end_to_apply_warn_title": "ማስጠንቀቂያ",
     "end_to_apply_warn_msg": "አማካሪ ከመሆንዎ በፊት መጀመሪያ የምክር አገልግሎትዎን ማቋረጥ አለብዎት። መቀጠል እርግጠኛ ነዎት?",
-    "end_to_apply_warn_continue": "አዎ፣ ቀጥል"
+    "end_to_apply_warn_continue": "አዎ፣ ቀጥል",
+    "btn_load_earlier": "የቀደሙ መልእክቶችን ጫን",
+    "no_earlier_messages": "ምንም የቀደሙ መልእክቶች የሉም"
   }
 };

@@ -10193,3 +10193,43 @@ textarea.form-control {
   min-height: 44px;
 }
 
+/* ─── Load Earlier Messages Button ───────────────────────────── */
+.load-earlier-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 12px 0 8px 0;
+  width: 100%;
+}
+
+.load-earlier-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--gold);
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.load-earlier-btn:hover {
+  background: var(--gold-dim);
+  border-color: var(--gold);
+}
+
+.load-earlier-btn:active {
+  transform: scale(0.97);
+}
+
+.load-earlier-btn.loading {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+
