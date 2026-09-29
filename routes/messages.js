@@ -85,6 +85,31 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     })().catch((err) => console.error('[messages] offline notification failed:', err.message));
   }
 
+  // Quoted-message previews for replies whose original isn't in the payload the
+  // client already has (older than the last-100 window, or a reply arriving live
+  // to an old message). Restricted to THIS conversation and to non-deleted rows,
+  // so a forged parent_id can't leak a message from anywhere else. Best-effort:
+  // any failure just means the client shows "unavailable", as before.
+  async function fetchParentPreviews(parentIds, a, b) {
+    const ids = [...new Set((parentIds || []).filter(Boolean).map(String))];
+    if (!ids.length) return new Map();
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('id, from_id, to_id, content, file_type, created_at')
+        .in('id', ids)
+        .or(`and(from_id.eq.${a},to_id.eq.${b}),and(from_id.eq.${b},to_id.eq.${a})`)
+        .or('is_deleted.eq.false,is_deleted.is.null');
+      if (error) throw error;
+      return new Map((data || []).map(m => [String(m.id), {
+        id: m.id, from_id: m.from_id, content: m.content, file_type: m.file_type || null
+      }]));
+    } catch (e) {
+      console.error('[messages] parent preview lookup failed:', e.message);
+      return new Map();
+    }
+  }
+
   // Push to the recipient's devices and require an ack from the client. If
   // nobody is connected — or a zombie connection never acks within 4 s — fall
   // back to the Telegram notification so the message can't silently vanish.
@@ -235,6 +260,19 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     const data = historyRes.data || [];
     const ordered = data.slice().reverse();
 
+    // A reply can quote a message older than this 100-message window. The admin
+    // panel loads everything, but here the client only has the window, so it
+    // showed "Original message unavailable". Send the missing originals' previews.
+    const inWindow = new Set(data.map(m => String(m.id)));
+    const missingParents = ordered.filter(m => m.parent_id && !inWindow.has(String(m.parent_id))).map(m => m.parent_id);
+    if (missingParents.length) {
+      const previews = await fetchParentPreviews(missingParents, my_id, other_id);
+      ordered.forEach(m => {
+        const p = m.parent_id && previews.get(String(m.parent_id));
+        if (p) m.parent_preview = p;
+      });
+    }
+
     // Only write when there is actually something to mark. Most loads (tab
     // switches, reconnects) have nothing unread, so this skips a DB write.
     const hasUnread = data.length >= 100 || data.some(m => Number(m.to_id) === my_id && !m.read_at);
@@ -282,6 +320,11 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     const is_flagged = containsProfanity(content);
     const trimmed = content.trim();
 
+    // Started now so it overlaps the insert instead of adding to send latency.
+    const parentPreviewPromise = parent_id
+      ? fetchParentPreviews([parent_id], from_id, to_id)
+      : Promise.resolve(new Map());
+
     const insertPromise = (async () => {
       const { data: row, error } = await supabase
         .from('messages')
@@ -302,6 +345,8 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     }
 
     const payload = withClientId(msg);
+    const parentPreview = msg.parent_id ? (await parentPreviewPromise).get(String(msg.parent_id)) : null;
+    if (parentPreview) payload.parent_preview = parentPreview;
 
     // Real-time push to every device the recipient has open (with fallback).
     deliverToRecipient(to_id, payload, () => notifyOffline(to_id, from_id, trimmed));

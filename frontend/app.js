@@ -597,7 +597,18 @@ function renderReplyQuote(msg) {
   const parentId = escapeHtml(String(msg.parent_id));
   const parent = window._chatMessagesMap?.get(String(msg.parent_id));
 
-  // Parent deleted, or older than the loaded history window.
+  // Original is older than the loaded history window: the server sends a small
+  // preview with the reply. Shown as a plain quote (not tappable), since the
+  // original isn't on screen to scroll to.
+  if (!parent && msg.parent_preview) {
+    const p = msg.parent_preview;
+    return `<div class="reply-quote" style="cursor:default">
+            <span class="reply-quote-name">${escapeHtml(getReplySenderLabel(p, 'Them'))}</span>
+            <span class="reply-quote-text">${escapeHtml(getReplyPreviewText(p))}</span>
+          </div>`;
+  }
+
+  // Parent deleted (or no longer exists).
   if (!parent || parent.is_deleted) {
     return `<div class="reply-quote reply-quote-missing" data-reply-to="${parentId}"><span class="reply-quote-text">${REPLY_QUOTE_UNAVAILABLE}</span></div>`;
   }
