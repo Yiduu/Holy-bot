@@ -75,5 +75,111 @@ function emitToUser(telegram_id, event, payload) {
   if (socketId) global.io.to(socketId).emit(event, payload);
 }
 
-module.exports = { generateJitsiJWT, supabaseQuery, emitToUser };
+/**
+ * Close a mentorship assignment and record why it ended.
+ * If the end_reason / ended_by columns haven't been migrated yet, falls back
+ * to the original two-column update so nothing breaks before the SQL is run.
+ *
+ * @param {object} supabase
+ * @param {string} assignmentId
+ * @param {{reason?: string, endedBy?: 'mentee'|'mentor'|'system'}} [opts]
+ * @returns {Promise<object|null>} the Supabase error, or null on success
+ */
+async function closeAssignment(supabase, assignmentId, { reason = null, endedBy = null } = {}) {
+  const endedAt = new Date().toISOString();
+  let { error } = await supabase
+    .from('mentorship_assignments')
+    .update({ is_active: false, ended_at: endedAt, end_reason: reason, ended_by: endedBy })
+    .eq('id', assignmentId);
+  if (error && /end_reason|ended_by/i.test(error.message || '')) {
+    ({ error } = await supabase
+      .from('mentorship_assignments')
+      .update({ is_active: false, ended_at: endedAt })
+      .eq('id', assignmentId));
+  }
+  return error || null;
+}
+
+/**
+ * Save a 1-5 star rating for a mentor and keep users.rating / rating_count in
+ * step. Re-rating replaces the earlier score instead of adding a second one,
+ * same as POST /api/mentors/rate and the bot's submitRating.
+ *
+ * @returns {Promise<{rating:number, rating_count:number}>}
+ */
+async function recordMentorRating(supabase, mentorId, userId, stars) {
+  const { data: mentor, error: mentorErr } = await supabase
+    .from('users').select('rating, rating_count').eq('telegram_id', mentorId).single();
+  if (mentorErr || !mentor) throw new Error('Mentor not found');
+
+  const { data: existing } = await supabase
+    .from('mentor_ratings').select('stars')
+    .eq('mentor_id', mentorId).eq('user_id', userId).maybeSingle();
+
+  const oldCount = mentor.rating_count || 0;
+  const oldRating = mentor.rating || 0;
+  let newCount, newRating;
+  if (existing) {
+    newCount = oldCount;
+    newRating = oldCount > 0 ? (oldRating * oldCount - existing.stars + stars) / oldCount : stars;
+  } else {
+    newCount = oldCount + 1;
+    newRating = (oldRating * oldCount + stars) / newCount;
+  }
+
+  const { error: updErr } = await supabase
+    .from('users').update({ rating: newRating, rating_count: newCount }).eq('telegram_id', mentorId);
+  if (updErr) throw new Error(updErr.message);
+
+  const { error: upErr } = await supabase
+    .from('mentor_ratings')
+    .upsert({ mentor_id: mentorId, user_id: userId, stars, created_at: new Date().toISOString() },
+      { onConflict: 'mentor_id,user_id' });
+  if (upErr) throw new Error(upErr.message);
+
+  return { rating: newRating, rating_count: newCount };
+}
+
+/**
+ * Safety net for the moment someone becomes a mentor (application approved or
+ * an admin flips their role). The mini app already makes applicants end and
+ * rate their mentorship first, but a user can still get matched while an
+ * application is pending, and older pending applications predate the check.
+ * Ends any active mentorship where they are the mentee and cancels their
+ * pending mentor requests so they don't keep a mentee side.
+ *
+ * @returns {Promise<{assignmentId:string, mentorId:number}|null>} the mentorship that was ended, if any
+ */
+async function endMenteeSideOnPromotion(supabase, telegramId) {
+  const { data: active } = await supabase
+    .from('mentorship_assignments').select('id, mentor_id')
+    .eq('user_id', telegramId).eq('is_active', true).maybeSingle();
+
+  let ended = null;
+  if (active) {
+    const err = await closeAssignment(supabase, active.id, {
+      reason: 'Became a mentor (ended automatically)',
+      endedBy: 'system'
+    });
+    if (!err) ended = { assignmentId: active.id, mentorId: active.mentor_id };
+  }
+
+  // One row at a time: UNIQUE(user_id, mentor_id, status) can reject a bulk
+  // pending -> cancelled update if a cancelled row already exists for that pair.
+  const { data: pending } = await supabase
+    .from('mentorship_requests').select('id')
+    .eq('user_id', telegramId).eq('status', 'pending');
+  for (const r of pending || []) {
+    await supabase.from('mentorship_requests')
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .eq('id', r.id);
+  }
+
+  return ended;
+}
+
+module.exports = {
+  generateJitsiJWT, supabaseQuery, emitToUser,
+  closeAssignment, recordMentorRating, endMenteeSideOnPromotion
+};
 

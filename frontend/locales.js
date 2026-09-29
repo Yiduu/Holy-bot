@@ -444,7 +444,18 @@ const I18N = {
     "faq_a4": "Mentors create 1-on-1 or group session slots. You will get a notification reminder before the scheduled time with an instant join button.",
     "faq_q5": "How can I contact admin for support?",
     "faq_a5": "Tap 'Contact Admin' or message our admin directly on Telegram at @YIDIDIYATAMIRUU. You can also submit support requests directly in the app.",
-    "contact_admin_telegram": "Or message admin on Telegram:"
+    "contact_admin_telegram": "Or message admin on Telegram:",
+    "end_to_apply_title": "End your mentorship first",
+    "end_to_apply_intro": "To become a mentor, you first need to end your mentorship with {name}. Rate them and tell us why you're leaving.",
+    "end_to_apply_mentor_fallback": "your mentor",
+    "end_to_apply_rating_label": "How was your experience?",
+    "end_to_apply_reason_label": "Why are you ending the mentorship?",
+    "end_to_apply_reason_placeholder": "Write your reason here...",
+    "end_to_apply_btn": "End mentorship & continue",
+    "end_to_apply_rating_required": "Please rate your mentor.",
+    "end_to_apply_reason_required": "Please tell us why you're ending the mentorship.",
+    "end_to_apply_reason_too_long": "Please keep your reason under {max} characters.",
+    "end_to_apply_done": "Mentorship ended. You can now apply."
   },
   am: {
     "btn_find_mentor": "አማካሪ ፈልግ",
@@ -887,6 +898,17 @@ const I18N = {
     "faq_a4": "አማካሪዎች በሚስማሙበት ሰዓት የድምፅ ወይም የቪዲዮ ክፍለ-ጊዜዎችን ያዘጋጃሉ። ክፍለ-ጊዜው ከመጀመሩ በፊት የሚቀላቀሉበትን ማስፈንጠሪያ የያዘ ማሳወቂያ ይደርስዎታል።",
     "faq_q5": "ከአስተዳዳሪ ጋር እንዴት መገናኘት እችላለሁ?",
     "faq_a5": "በመገለጫዎ ውስጥ 'አስተዳዳሪን አግኝ' የሚለውን በመጫን ወይም በቀጥታ በቴሌግራም @YIDIDIYATAMIRUU ላይ መልእክት በመላክ ማግኘት ይችላሉ። እንዲሁም በመተግበሪያው የድጋፍ ጥያቄ መላክ ይችላሉ።",
-    "contact_admin_telegram": "ወይም አስተዳዳሪውን በቴሌግራም ያነጋግሩ:"
+    "contact_admin_telegram": "ወይም አስተዳዳሪውን በቴሌግራም ያነጋግሩ:",
+    "end_to_apply_title": "መጀመሪያ የምክር አገልግሎትዎን ያቁሙ",
+    "end_to_apply_intro": "አማካሪ ለመሆን መጀመሪያ ከ{name} ጋር ያለዎትን የምክር አገልግሎት ማቋረጥ አለብዎት። አማካሪዎን ይገምግሙ እና ለምን እንደሚያቋርጡ ይንገሩን።",
+    "end_to_apply_mentor_fallback": "አማካሪዎ",
+    "end_to_apply_rating_label": "ተሞክሮዎ እንዴት ነበር?",
+    "end_to_apply_reason_label": "የምክር አገልግሎቱን ለምን ያቋርጣሉ?",
+    "end_to_apply_reason_placeholder": "ምክንያትዎን እዚህ ይጻፉ...",
+    "end_to_apply_btn": "አገልግሎቱን አቋርጥ እና ቀጥል",
+    "end_to_apply_rating_required": "እባክዎ አማካሪዎን ይገምግሙ።",
+    "end_to_apply_reason_required": "እባክዎ የምክር አገልግሎቱን የሚያቋርጡበትን ምክንያት ይጻፉ።",
+    "end_to_apply_reason_too_long": "እባክዎ ምክንያትዎን ከ{max} ፊደላት በታች ያድርጉ።",
+    "end_to_apply_done": "የምክር አገልግሎቱ ተቋርጧል። አሁን ማመልከት ይችላሉ።"
   }
 };

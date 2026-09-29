@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const { closeAssignment, recordMentorRating } = require('../utils');
 
 // ─── Stats cache (1 hour TTL) ─────────────────────────────────────────────────
 let statsCache = null;
@@ -152,6 +153,23 @@ module.exports = function userRoutes(supabase, requireAuth) {
     // Check not already a mentor
     const { data: user } = await supabase.from('users').select('role').eq('telegram_id', telegram_id).single();
     if (user?.role === 'mentor') return res.status(409).json({ error: 'Already a mentor' });
+
+    // A current mentee has to end their mentorship (and rate the mentor)
+    // before applying, otherwise they'd keep a mentee side after approval.
+    // The mini app catches this earlier and opens the end-and-rate sheet;
+    // this is the server-side guarantee.
+    const { data: activeAssignment } = await supabase
+      .from('mentorship_assignments')
+      .select('id')
+      .eq('user_id', telegram_id)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (activeAssignment) {
+      return res.status(409).json({
+        error: 'End your current mentorship and rate your mentor before applying to become a mentor.',
+        code: 'ACTIVE_MENTORSHIP'
+      });
+    }
 
     // Check no pending application
     const { data: existing } = await supabase.from('mentor_applications').select('id').eq('telegram_id', telegram_id).eq('status', 'pending').single();
@@ -349,6 +367,79 @@ module.exports = function userRoutes(supabase, requireAuth) {
           display_name: mentor?.user_settings?.display_name || mentor?.anonymous_id || 'Your mentor'
         }
       });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/users/end-mentorship-and-rate
+  // Used when a mentee wants to become a mentor: ends the current mentorship,
+  // saves the star rating and stores why they're leaving. All three are
+  // required. The reason is kept on the assignment and in the audit log for
+  // admins; it is not sent to the mentor.
+  const END_REASON_MIN = 3;
+  const END_REASON_MAX = 500;
+
+  router.post('/end-mentorship-and-rate', requireAuth, async (req, res) => {
+    const { id: telegram_id } = req.telegramUser;
+    const stars = parseInt(req.body.stars, 10);
+    const reason = String(req.body.reason || '').trim();
+
+    if (!Number.isInteger(stars) || stars < 1 || stars > 5) {
+      return res.status(400).json({ error: 'Please rate your mentor (1-5 stars).', code: 'RATING_REQUIRED' });
+    }
+    if (reason.length < END_REASON_MIN) {
+      return res.status(400).json({ error: 'Please tell us why you are ending the mentorship.', code: 'REASON_REQUIRED' });
+    }
+    if (reason.length > END_REASON_MAX) {
+      return res.status(400).json({ error: `Reason must be ${END_REASON_MAX} characters or fewer.`, code: 'REASON_TOO_LONG' });
+    }
+
+    try {
+      const { data: assignment, error } = await supabase
+        .from('mentorship_assignments')
+        .select('id, mentor_id')
+        .eq('user_id', telegram_id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (error) return res.status(500).json({ error: error.message });
+      if (!assignment) {
+        return res.status(404).json({ error: 'No active mentorship found', code: 'NO_ACTIVE_MENTORSHIP' });
+      }
+
+      const closeErr = await closeAssignment(supabase, assignment.id, { reason, endedBy: 'mentee' });
+      if (closeErr) return res.status(500).json({ error: closeErr.message });
+
+      // Notify the mentor and clear unread badges. skipRatingPrompt because
+      // the rating is being collected right here. Never fail the request over
+      // a Telegram hiccup: the mentorship is already closed.
+      try {
+        const { endMentorship: botEndMentorship } = require('../bot');
+        await botEndMentorship(telegram_id, assignment.mentor_id, 'mentee', { skipRatingPrompt: true });
+      } catch (botErr) {
+        console.error('[end-mentorship-and-rate] bot notification failed:', botErr);
+      }
+
+      // Saved after the bot call on purpose: the bot's own update rewrites
+      // ended_at, and pending-rating only counts a rating made after ended_at.
+      let ratingResult = null;
+      try {
+        ratingResult = await recordMentorRating(supabase, assignment.mentor_id, telegram_id, stars);
+      } catch (rateErr) {
+        console.error('[end-mentorship-and-rate] rating failed:', rateErr);
+      }
+
+      const { error: auditErr } = await supabase.from('audit_logs').insert({
+        admin_id: telegram_id,
+        action: 'mentee_ended_mentorship_to_become_mentor',
+        target_id: assignment.mentor_id,
+        target_type: 'mentorship',
+        details: { assignment_id: assignment.id, stars, reason }
+      });
+      if (auditErr) console.error('[end-mentorship-and-rate] audit log failed:', auditErr.message);
+
+      res.json({ success: true, assignment_id: assignment.id, rated: !!ratingResult });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

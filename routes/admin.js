@@ -2,6 +2,7 @@
 
 const express = require('express');
 const axios = require('axios');
+const { endMenteeSideOnPromotion } = require('../utils');
 
 // Prefix shown above an admin's custom message, localized by the applicant's
 // preferred language (user_settings.language). Falls back to English.
@@ -16,6 +17,23 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
 
   async function logAudit(admin_id, action, target_id, target_type, details = {}) {
     await supabase.from('audit_logs').insert({ admin_id, action, target_id, target_type, details });
+  }
+
+  // A user who becomes a mentor shouldn't keep a mentee side. Ends their active
+  // mentorship (if any), cancels their pending requests and lets the old mentor
+  // know. Never throws: promoting someone must not fail because of cleanup.
+  async function cleanUpMenteeSide(telegram_id) {
+    try {
+      const ended = await endMenteeSideOnPromotion(supabase, telegram_id);
+      if (ended) {
+        const { endMentorship: botEndMentorship } = require('../bot');
+        await botEndMentorship(telegram_id, ended.mentorId, 'mentee');
+      }
+      return ended;
+    } catch (e) {
+      console.error('[Admin] mentee-side cleanup failed for', telegram_id, e);
+      return null;
+    }
   }
 
   // Shared formatter: turns a video_sessions row (with host + session_participants
@@ -177,6 +195,7 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     if (role === 'mentor') {
       await supabase.from('mentors').upsert({ telegram_id }, { onConflict: 'telegram_id' });
       await supabase.from('user_settings').upsert({ telegram_id }, { onConflict: 'telegram_id' });
+      await cleanUpMenteeSide(telegram_id);
     }
 
     await logAudit(admin_id, 'change_role', telegram_id, 'user', { new_role: role });
@@ -255,6 +274,7 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
 
       await supabase.from('users').update(updateData).eq('telegram_id', app.telegram_id);
       await supabase.from('mentors').upsert({ telegram_id: app.telegram_id }, { onConflict: 'telegram_id' });
+      await cleanUpMenteeSide(app.telegram_id);
       const { notifyMentorApproved } = require('../bot');
       await notifyMentorApproved(app.telegram_id);
     } else {

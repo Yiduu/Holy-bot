@@ -1443,6 +1443,31 @@
     </div>
   </div>
 
+  <!-- ─── End Mentorship Before Applying Modal ──────────────────── -->
+  <div id="endToApplyModal" class="modal-overlay" onclick="if(event.target===this)closeEndToApplyModal()">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title" data-i18n="end_to_apply_title">End your mentorship first</div>
+      <p id="endToApplyIntro" class="text-sm text-dim mb-16"></p>
+
+      <div class="form-group">
+        <label class="form-label" data-i18n="end_to_apply_rating_label">How was your experience?</label>
+        <div class="big-stars end-to-apply-stars" id="endToApplyStars" role="radiogroup"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="endToApplyReason" data-i18n="end_to_apply_reason_label">Why are you ending the mentorship?</label>
+        <textarea id="endToApplyReason" class="form-control" rows="4" maxlength="500"
+          data-i18n="end_to_apply_reason_placeholder" placeholder="Write your reason here..."></textarea>
+      </div>
+
+      <div class="flex gap-8">
+        <button class="btn btn-ghost flex-1" onclick="closeEndToApplyModal()" data-i18n="btn_cancel">Cancel</button>
+        <button id="endToApplySubmitBtn" class="btn btn-primary flex-1" onclick="submitEndToApply()"
+          data-i18n="end_to_apply_btn">End mentorship &amp; continue</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ─── Select Mentee Modal (for Sessions) ────────────────────── -->
   <div id="menteeSelectModal" class="modal-overlay" onclick="if(event.target===this)closeMenteeSelectModal()">
     <div class="modal-sheet">
@@ -2188,8 +2213,8 @@
     </div>
   </div>
 
-  <script src="locales.js"></script>
-  <script src="app.js?v=1.6"></script>
+  <script src="locales.js?v=1.1"></script>
+  <script src="app.js?v=1.7"></script>
 
   <script>
     /* ── Offline banner ──────────────────────────────────────── */

@@ -955,9 +955,29 @@ async function submitRating(chatId, mentorId, stars) {
   await showMainMenu(chatId);
 }
 
+// ─── Mentee → mentor guard ────────────────────────────────────────────────────
+
+// A current mentee has to end their mentorship, rate the mentor and give a
+// reason before applying, and that form lives in the mini app. Returns true
+// (after pointing them there) when the user still has an active mentor.
+async function blockApplyIfActiveMentee(chatId, lang) {
+  const { data: active } = await supabase
+    .from('mentorship_assignments').select('id')
+    .eq('user_id', chatId).eq('is_active', true).maybeSingle();
+  if (!active) return false;
+  await safeSend(chatId, tSync(lang, 'apply_end_mentorship_first'), {
+    reply_markup: {
+      inline_keyboard: [[{ text: tSync(lang, 'btn_open_app'), web_app: { url: APP_URL } }]]
+    }
+  });
+  return true;
+}
+
 // ─── End Mentorship ───────────────────────────────────────────────────────────
 
-async function endMentorship(chatId, partnerId, initiatorRole) {
+// opts.skipRatingPrompt: the caller already collected a rating (mini app's
+// end-and-rate flow), so don't send the Telegram rating prompt as well.
+async function endMentorship(chatId, partnerId, initiatorRole, opts = {}) {
   // Get initiator and partner details
   const [{ data: initiator }, { data: partner }] = await Promise.all([
     supabase.from('users').select('anonymous_id').eq('telegram_id', chatId).single(),
@@ -993,7 +1013,7 @@ async function endMentorship(chatId, partnerId, initiatorRole) {
     // Mentee ended it → notify mentor
     await safeSend(chatId, tSync(initiatorLang, 'mentorship_ended'));
     await safeSend(partnerId, tSync(partnerLang, 'mentorship_ended_by_mentee', { mentee: initiatorName }));
-    await promptRating(chatId, partnerId);
+    if (!opts.skipRatingPrompt) await promptRating(chatId, partnerId);
   }
 
   // Check waiting list for now-available mentor
@@ -1725,6 +1745,7 @@ bot.on('message', async (msg) => {
         const { data: ex } = await supabase.from('mentor_applications').select('id')
           .eq('telegram_id', chatId).eq('status', 'pending').single();
         if (ex) return safeSend(chatId, await t(chatId, 'application_pending'));
+        if (await blockApplyIfActiveMentee(chatId, await getUserLang(chatId))) return;
         setState(chatId, 'awaiting_mentor_q1');
         return safeSend(chatId, await t(chatId, 'apply_q1'));
       }
@@ -1867,6 +1888,7 @@ bot.on('message', async (msg) => {
     if (user?.role === 'mentor' || user?.role === 'admin') return safeSend(chatId, tSync(lang, 'already_mentor'));
     const { data: ex } = await supabase.from('mentor_applications').select('id').eq('telegram_id', chatId).eq('status', 'pending').single();
     if (ex) return safeSend(chatId, tSync(lang, 'application_pending'));
+    if (await blockApplyIfActiveMentee(chatId, lang)) return;
     setState(chatId, 'awaiting_mentor_sex');
     return safeSend(chatId, tSync(lang, 'apply_q1'), {
       reply_markup: {
@@ -1910,6 +1932,12 @@ bot.on('message', async (msg) => {
         await safeSend(chatId, '❌ Missing information. Please start over with /apply.');
         clearState(chatId);
         return showMainMenu(chatId);
+      }
+
+      // They may have been matched with a mentor while answering the questions.
+      if (await blockApplyIfActiveMentee(chatId, await getUserLang(chatId))) {
+        clearState(chatId);
+        return;
       }
 
       const { error } = await supabase.from('mentor_applications').insert({
@@ -2630,6 +2658,9 @@ bot.on('callback_query', async (query) => {
       return bot.answerCallbackQuery(query.id, { text: tSync(lang, 'already_mentor'), show_alert: true });
     const { data: ex } = await supabase.from('mentor_applications').select('id').eq('telegram_id', chatId).eq('status', 'pending').single();
     if (ex) return bot.answerCallbackQuery(query.id, { text: tSync(lang, 'application_pending'), show_alert: true });
+    if (await blockApplyIfActiveMentee(chatId, lang)) {
+      return bot.answerCallbackQuery(query.id).catch(() => { });
+    }
     setState(chatId, 'awaiting_mentor_sex');
     await safeSend(chatId, tSync(lang, 'apply_q1'), {
       reply_markup: {

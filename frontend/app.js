@@ -122,6 +122,7 @@ async function apiFetch(path, opts = {}) {
     const err = await res.json().catch(() => ({}));
     const e = new Error(err.error || `HTTP ${res.status}`);
     if (err.nickname_taken) e.nickname_taken = true;
+    if (err.code) e.code = err.code;
     e.status = res.status;
     throw e;
   }
@@ -6108,8 +6109,22 @@ function selectMenteeSex(value, labelText) {
 }
 
 // ─── Mentor Application ───────────────────────────────────────
-function openApplyModal() {
+async function openApplyModal() {
   haptic('light');
+  // A current mentee has to end their mentorship, rate the mentor and give a
+  // reason before applying. The server enforces this too (409 ACTIVE_MENTORSHIP).
+  try {
+    const current = await apiFetch('/api/users/my-mentor');
+    if (current && current.mentor_id) {
+      const m = current.mentor;
+      openEndToApplyModal(m?.user_settings?.display_name || m?.anonymous_id || '');
+      return;
+    }
+  } catch (e) { /* non-fatal: fall through, the server re-checks on submit */ }
+  showApplyForm();
+}
+
+function showApplyForm() {
   selectApplySex('', t('Select…') || 'Select…');
   $('applyEdu').value = '';
   $('applyAbout').value = '';
@@ -6168,7 +6183,96 @@ async function submitApplication() {
     haptic('success');
     showToast('Application submitted! 🙏', 'success');
     closeApplyModal();
-  } catch (e) { haptic('error'); showToast(e.message, 'error'); }
+  } catch (e) {
+    haptic('error');
+    if (e.code === 'ACTIVE_MENTORSHIP') {
+      // Matched with a mentor after the form was opened: send them through
+      // the end-and-rate step instead of showing a raw error.
+      closeApplyModal();
+      openApplyModal();
+      return;
+    }
+    showToast(e.message, 'error');
+  }
+}
+
+// ─── End mentorship before applying to become a mentor ────────
+const END_TO_APPLY_REASON_MAX = 500;
+const END_TO_APPLY_REASON_MIN = 3;
+let endToApplyStars = 0;
+
+function paintEndToApplyStars(n) {
+  const wrap = $('endToApplyStars');
+  if (!wrap) return;
+  wrap.innerHTML = [1, 2, 3, 4, 5].map(i => `
+    <svg width="30" height="30" viewBox="0 0 24 24" data-star="${i}" role="radio"
+      aria-checked="${i === n}" aria-label="${i}"
+      fill="${i <= n ? '#C9A84C' : 'none'}" stroke="${i <= n ? 'none' : '#867F76'}" stroke-width="1.5"
+      style="cursor:pointer">
+      <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-4.045-7.416 4.045 1.48-8.279-6.064-5.828 8.332-1.151z"/>
+    </svg>`).join('');
+  wrap.querySelectorAll('svg').forEach(svg => {
+    svg.onclick = () => {
+      haptic('selection');
+      endToApplyStars = parseInt(svg.dataset.star, 10);
+      paintEndToApplyStars(endToApplyStars);
+    };
+  });
+}
+
+function openEndToApplyModal(mentorName) {
+  endToApplyStars = 0;
+  paintEndToApplyStars(0);
+  $('endToApplyReason').value = '';
+  const name = mentorName || t('end_to_apply_mentor_fallback');
+  $('endToApplyIntro').textContent = t('end_to_apply_intro', { name });
+  const btn = $('endToApplySubmitBtn');
+  if (btn) btn.disabled = false;
+  $('endToApplyModal').classList.add('open');
+}
+
+function closeEndToApplyModal() {
+  haptic('light');
+  $('endToApplyModal').classList.remove('open');
+}
+
+async function submitEndToApply() {
+  const reason = ($('endToApplyReason').value || '').trim();
+  const fail = (msg) => { haptic('error'); showToast(msg, 'error'); };
+
+  if (!endToApplyStars) return fail(t('end_to_apply_rating_required'));
+  if (reason.length < END_TO_APPLY_REASON_MIN) return fail(t('end_to_apply_reason_required'));
+  if (reason.length > END_TO_APPLY_REASON_MAX) {
+    return fail(t('end_to_apply_reason_too_long', { max: END_TO_APPLY_REASON_MAX }));
+  }
+
+  const btn = $('endToApplySubmitBtn');
+  if (btn) btn.disabled = true;
+  haptic('medium');
+  try {
+    await apiFetch('/api/users/end-mentorship-and-rate', {
+      method: 'POST',
+      body: { stars: endToApplyStars, reason }
+    });
+  } catch (e) {
+    // NO_ACTIVE_MENTORSHIP: it was already ended (other device, or the mentor
+    // ended it first). Nothing left to end, so just carry on to the form.
+    if (e.code !== 'NO_ACTIVE_MENTORSHIP') {
+      if (btn) btn.disabled = false;
+      const byCode = {
+        RATING_REQUIRED: 'end_to_apply_rating_required',
+        REASON_REQUIRED: 'end_to_apply_reason_required'
+      };
+      if (e.code === 'REASON_TOO_LONG') return fail(t('end_to_apply_reason_too_long', { max: END_TO_APPLY_REASON_MAX }));
+      return fail(byCode[e.code] ? t(byCode[e.code]) : e.message);
+    }
+  }
+
+  haptic('success');
+  showToast(t('end_to_apply_done'), 'success');
+  closeEndToApplyModal();
+  updateMessageBadge();
+  showApplyForm();
 }
 
 // ─── Support Tickets ──────────────────────────────────────────
