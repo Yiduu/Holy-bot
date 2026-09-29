@@ -10183,3 +10183,13 @@ textarea.form-control {
   color: var(--text);
   letter-spacing: -0.2px;
 }
+
+/* ─── End To Apply Modal ─────────────────────────────────────── */
+#endToApplySubmitBtn {
+  white-space: normal;
+  text-align: center;
+  line-height: 1.35;
+  height: auto;
+  min-height: 44px;
+}
+
