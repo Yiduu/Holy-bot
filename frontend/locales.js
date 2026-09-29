@@ -455,7 +455,10 @@ const I18N = {
     "end_to_apply_rating_required": "Please rate your mentor.",
     "end_to_apply_reason_required": "Please tell us why you're ending the mentorship.",
     "end_to_apply_reason_too_long": "Please keep your reason under {max} characters.",
-    "end_to_apply_done": "Mentorship ended. You can now apply."
+    "end_to_apply_done": "Mentorship ended. You can now apply.",
+    "end_to_apply_warn_title": "Warning",
+    "end_to_apply_warn_msg": "You are going to end your mentorship first before becoming a mentor. Are you sure you want to continue?",
+    "end_to_apply_warn_continue": "Yes, continue"
   },
   am: {
     "btn_find_mentor": "አማካሪ ፈልግ",
@@ -909,6 +912,9 @@ const I18N = {
     "end_to_apply_rating_required": "እባክዎ አማካሪዎን ይገምግሙ።",
     "end_to_apply_reason_required": "እባክዎ የምክር አገልግሎቱን የሚያቋርጡበትን ምክንያት ይጻፉ።",
     "end_to_apply_reason_too_long": "እባክዎ ምክንያትዎን ከ{max} ፊደላት በታች ያድርጉ።",
-    "end_to_apply_done": "የምክር አገልግሎቱ ተቋርጧል። አሁን ማመልከት ይችላሉ።"
+    "end_to_apply_done": "የምክር አገልግሎቱ ተቋርጧል። አሁን ማመልከት ይችላሉ።",
+    "end_to_apply_warn_title": "ማስጠንቀቂያ",
+    "end_to_apply_warn_msg": "አማካሪ ከመሆንዎ በፊት መጀመሪያ የምክር አገልግሎትዎን ማቋረጥ አለብዎት። መቀጠል እርግጠኛ ነዎት?",
+    "end_to_apply_warn_continue": "አዎ፣ ቀጥል"
   }
 };

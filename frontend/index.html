@@ -1443,6 +1443,19 @@
     </div>
   </div>
 
+  <!-- ─── Warning: ending mentorship before becoming a mentor ───── -->
+  <div id="endToApplyWarnModal" class="modal-overlay" onclick="if(event.target===this)closeEndToApplyWarning()">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div class="modal-title" data-i18n="end_to_apply_warn_title">Warning</div>
+      <p class="text-sm text-dim mb-16" data-i18n="end_to_apply_warn_msg">You are going to end your mentorship first before becoming a mentor. Are you sure you want to continue?</p>
+      <div class="flex gap-8">
+        <button class="btn btn-ghost flex-1" onclick="closeEndToApplyWarning()" data-i18n="btn_cancel">Cancel</button>
+        <button class="btn btn-danger flex-1" onclick="confirmEndToApplyWarning()" data-i18n="end_to_apply_warn_continue">Yes, continue</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ─── End Mentorship Before Applying Modal ──────────────────── -->
   <div id="endToApplyModal" class="modal-overlay" onclick="if(event.target===this)closeEndToApplyModal()">
     <div class="modal-sheet">
@@ -2213,8 +2226,8 @@
     </div>
   </div>
 
-  <script src="locales.js?v=1.1"></script>
-  <script src="app.js?v=1.7"></script>
+  <script src="locales.js?v=1.2"></script>
+  <script src="app.js?v=1.8"></script>
 
   <script>
     /* ── Offline banner ──────────────────────────────────────── */

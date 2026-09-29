@@ -6117,7 +6117,7 @@ async function openApplyModal() {
     const current = await apiFetch('/api/users/my-mentor');
     if (current && current.mentor_id) {
       const m = current.mentor;
-      openEndToApplyModal(m?.user_settings?.display_name || m?.anonymous_id || '');
+      openEndToApplyWarning(m?.user_settings?.display_name || m?.anonymous_id || '');
       return;
     }
   } catch (e) { /* non-fatal: fall through, the server re-checks on submit */ }
@@ -6218,6 +6218,26 @@ function paintEndToApplyStars(n) {
       paintEndToApplyStars(endToApplyStars);
     };
   });
+}
+
+// Step 1: warn that ending the mentorship comes first. Only "Yes, continue"
+// moves on to the rate-and-reason sheet.
+let endToApplyMentorName = '';
+
+function openEndToApplyWarning(mentorName) {
+  endToApplyMentorName = mentorName || '';
+  $('endToApplyWarnModal').classList.add('open');
+}
+
+function closeEndToApplyWarning() {
+  haptic('light');
+  $('endToApplyWarnModal').classList.remove('open');
+}
+
+function confirmEndToApplyWarning() {
+  haptic('medium');
+  $('endToApplyWarnModal').classList.remove('open');
+  openEndToApplyModal(endToApplyMentorName);
 }
 
 function openEndToApplyModal(mentorName) {
