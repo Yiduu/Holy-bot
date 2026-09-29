@@ -2,6 +2,25 @@
 
 const express = require('express');
 
+// PostgREST caps a response at 1000 rows and very long `in (...)` lists can
+// overflow the URL, so batched lookups go through here: ids are sent in chunks
+// and each chunk is paged until it comes back short.
+const IN_CHUNK = 200;
+const PAGE_SIZE_ROWS = 1000;
+async function fetchInChunks(ids, buildQuery) {
+  const rows = [];
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    const slice = ids.slice(i, i + IN_CHUNK);
+    for (let from = 0; ; from += PAGE_SIZE_ROWS) {
+      const { data, error } = await buildQuery(slice).range(from, from + PAGE_SIZE_ROWS - 1);
+      if (error) throw error;
+      rows.push(...(data || []));
+      if (!data || data.length < PAGE_SIZE_ROWS) break;
+    }
+  }
+  return rows;
+}
+
 module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
   const router = express.Router();
 
@@ -103,37 +122,56 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       .eq('status', 'pending');
     const pendingMentorIds = new Set((pendingRows || []).map(r => r.mentor_id));
 
-    // Enrich with mentee counts and expertise topics
-    const enriched = await Promise.all((data || []).map(async (mentor) => {
-      const { count } = await supabase.from('mentorship_assignments')
-        .select('id', { count: 'exact', head: true })
-        .eq('mentor_id', mentor.telegram_id)
-        .eq('is_active', true);
+    // Enrich with mentee counts and expertise topics. Batched: three queries
+    // for the whole list instead of three per mentor, so this page costs the
+    // same at 20 mentors or 500.
+    const mentorIds = (data || []).map(m => m.telegram_id);
+    const menteeCounts = new Map();
+    const topicIdsByMentor = new Map();
+    const topicById = new Map();
 
-      // Fetch mentor's topic IDs
-      const { data: mtRows } = await supabase.from('mentor_topics')
-        .select('topic_id')
-        .eq('telegram_id', mentor.telegram_id);
-      const topicIds = (mtRows || []).map(t => t.topic_id);
+    if (mentorIds.length) {
+      try {
+        const [activeRows, mtRows] = await Promise.all([
+          fetchInChunks(mentorIds, ids => supabase
+            .from('mentorship_assignments').select('mentor_id')
+            .eq('is_active', true).in('mentor_id', ids)),
+          fetchInChunks(mentorIds, ids => supabase
+            .from('mentor_topics').select('telegram_id, topic_id')
+            .in('telegram_id', ids)),
+        ]);
 
-      let expertise_topics = [];
-      let topics_list = [];
-      if (topicIds.length) {
-        const { data: topics } = await supabase.from('topics')
-          .select('id, name')
-          .in('id', topicIds);
-        expertise_topics = (topics || []).map(t => t.name);
-        topics_list = topics || [];
+        activeRows.forEach(r => menteeCounts.set(r.mentor_id, (menteeCounts.get(r.mentor_id) || 0) + 1));
+        mtRows.forEach(r => {
+          if (!topicIdsByMentor.has(r.telegram_id)) topicIdsByMentor.set(r.telegram_id, []);
+          topicIdsByMentor.get(r.telegram_id).push(r.topic_id);
+        });
+
+        const allTopicIds = [...new Set(mtRows.map(r => r.topic_id))];
+        if (allTopicIds.length) {
+          const topicRows = await fetchInChunks(allTopicIds, ids => supabase
+            .from('topics').select('id, name').in('id', ids));
+          topicRows.forEach(t => topicById.set(t.id, t));
+        }
+      } catch (e) {
+        // Same as before: a failed lookup leaves counts/topics empty rather
+        // than failing the whole list. Capacity is re-checked on /request.
+        console.error('[Mentors] list enrichment failed:', e.message || e);
       }
+    }
 
+    const enriched = (data || []).map(mentor => {
+      const topics_list = (topicIdsByMentor.get(mentor.telegram_id) || [])
+        .map(id => topicById.get(id))
+        .filter(Boolean);
       return {
         ...mentor,
-        mentee_count: count || 0,
-        expertise_topics,
+        mentee_count: menteeCounts.get(mentor.telegram_id) || 0,
+        expertise_topics: topics_list.map(t => t.name),
         topics: topics_list,
         request_pending: pendingMentorIds.has(mentor.telegram_id),
       };
-    }));
+    });
 
     res.json(enriched);
   });
