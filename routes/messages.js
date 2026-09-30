@@ -76,12 +76,12 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
   // this used to be awaited INSIDE the send request, so every message to an
   // offline user waited on 2 DB queries + a Telegram API call (often 1-3 s,
   // more when Telegram rate-limits) before the sender saw it as sent.
-  function notifyOffline(toId, fromId, content) {
+  function notifyOffline(toId, fromId, content, messageId) {
     (async () => {
       const name = await getSenderName(fromId);
       if (!name) return;
       const { notifyMessage } = require('../bot');
-      await notifyMessage(toId, name, content, fromId);
+      await notifyMessage(toId, name, content, fromId, messageId);
     })().catch((err) => console.error('[messages] offline notification failed:', err.message));
   }
 
@@ -355,7 +355,7 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     if (parentPreview) payload.parent_preview = parentPreview;
 
     // Real-time push to every device the recipient has open (with fallback).
-    deliverToRecipient(to_id, payload, () => notifyOffline(to_id, from_id, trimmed));
+    deliverToRecipient(to_id, payload, () => notifyOffline(to_id, from_id, trimmed, msg.id));
 
     // Also push to the sender's OTHER devices/tabs. The originating socket is
     // excluded (x-socket-id) — before, it received its own message back over
@@ -407,6 +407,11 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
 
     io.to([userRoom(msg.to_id), userRoom(user_id)]).emit('message_edited', data);
 
+    // Also update the bot's Telegram copy, if one was sent. Fire-and-forget.
+    getSenderName(user_id)
+      .then(name => name && require('../bot').syncNotificationEdit(messageId, name, data.content, user_id))
+      .catch(() => { });
+
     res.json(data);
   }));
 
@@ -425,6 +430,14 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
         return res.status(400).json({ error: 'Invalid partner ID' });
       }
 
+      // Telegram notifications for this conversation, so they can be removed
+      // too. (Table missing / query failing just means nothing is synced.)
+      const { data: notifs } = await supabase
+        .from('message_tg_notifications')
+        .select('message_id')
+        .or(`and(from_id.eq.${user_id},to_id.eq.${partner_id}),and(from_id.eq.${partner_id},to_id.eq.${user_id})`)
+        .limit(500);
+
       // Soft delete all messages between user_id and partner_id
       const { error } = await supabase
         .from('messages')
@@ -435,6 +448,10 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
 
       // Notify the partner via socket if online
       io.to(userRoom(partner_id)).emit('chat_cleared', { by_id: user_id });
+
+      if (notifs?.length) {
+        require('../bot').syncNotificationDelete(notifs.map(n => n.message_id)).catch(() => { });
+      }
 
       return res.json({ success: true, message: 'Conversation cleared' });
     }
@@ -457,6 +474,9 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
     if (error) return res.status(500).json({ error: error.message });
 
     io.to([userRoom(msg.to_id), userRoom(user_id)]).emit('message_deleted', { id: messageId, is_deleted: true });
+
+    // Also remove the bot's Telegram copy, if one was sent. Fire-and-forget.
+    require('../bot').syncNotificationDelete([messageId]).catch(() => { });
 
     res.json({ success: true });
   }));

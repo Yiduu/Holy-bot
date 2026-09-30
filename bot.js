@@ -1534,10 +1534,9 @@ async function notifyMentorshipRejected(userId, mentorName) {
   await safeSend(userId, text);
 }
 
-// Plain text offline message notification with optional deep link
-async function notifyMessage(recipientId, senderName, messageContent, fromId = null) {
-  const lang = await getUserLang(recipientId);
-
+// Text + "Open Chat" button for a chat notification. Shared by the first send
+// and by later edits so an edited notification looks identical (plus a tag).
+function buildMessageNotification(lang, senderName, content, fromId, { edited = false } = {}) {
   let inlineKeyboard = [];
   if (fromId) {
     inlineKeyboard = [[{
@@ -1545,20 +1544,88 @@ async function notifyMessage(recipientId, senderName, messageContent, fromId = n
       web_app: { url: `${APP_URL}?start=chat_${fromId}` }
     }]];
   }
+  const head = lang === 'am' ? `አዲስ መልእክት ከ ${senderName}` : `New message from ${senderName}`;
+  const tag = edited ? (lang === 'am' ? ' (ተስተካክሏል)' : ' (edited)') : '';
+  return {
+    text: `${head}${tag}\n\n${content}`,
+    reply_markup: inlineKeyboard.length > 0 ? { inline_keyboard: inlineKeyboard } : undefined
+  };
+}
 
-  const text = lang === 'am'
-    ? `አዲስ መልእክት ከ ${senderName}\n\n${messageContent}`
-    : `New message from ${senderName}\n\n${messageContent}`;
+async function notifyMessage(recipientId, senderName, messageContent, fromId = null, messageId = null) {
+  const lang = await getUserLang(recipientId);
+  const { text, reply_markup } = buildMessageNotification(lang, senderName, messageContent, fromId);
 
   // parse_mode: undefined → plain text. safeSend defaults to Markdown, and this
   // text contains raw user input plus anonymous handles like "Warrior_9XkL2".
   // A stray "_", "*", "[" or backtick makes Telegram reject the message
   // ("can't parse entities"), and safeSend swallows the error — so offline
   // recipients silently got no notification.
-  await safeSend(recipientId, text, {
-    parse_mode: undefined,
-    reply_markup: inlineKeyboard.length > 0 ? { inline_keyboard: inlineKeyboard } : undefined
-  });
+  const sent = await safeSend(recipientId, text, { parse_mode: undefined, reply_markup });
+
+  // Remember the Telegram message so app-side edits/deletes can follow it.
+  if (sent && messageId) {
+    const { error } = await supabase.from('message_tg_notifications').upsert({
+      message_id: messageId,
+      chat_id: sent.chat.id,
+      tg_message_id: sent.message_id,
+      from_id: fromId,
+      to_id: recipientId,
+    });
+    if (error) console.warn('[Bot] Could not store notification mapping:', error.message);
+  }
+  return sent;
+}
+
+// The user edited a message in the app → edit the Telegram notification too.
+async function syncNotificationEdit(messageId, senderName, newContent, fromId) {
+  try {
+    const { data: n } = await supabase
+      .from('message_tg_notifications')
+      .select('chat_id, tg_message_id')
+      .eq('message_id', messageId)
+      .maybeSingle();
+    if (!n) return; // recipient was online, so no Telegram copy exists
+    const lang = await getUserLang(n.chat_id);
+    const { text, reply_markup } = buildMessageNotification(lang, senderName, newContent, fromId, { edited: true });
+    // Omitting reply_markup would strip the "Open Chat" button, so resend it.
+    await bot.editMessageText(text, { chat_id: n.chat_id, message_id: n.tg_message_id, reply_markup });
+  } catch (e) {
+    if (!/message is not modified/i.test(e.message || '')) {
+      console.warn('[Bot] Edit sync failed:', e.message);
+    }
+  }
+}
+
+// Messages deleted in the app (one, or a whole cleared conversation) → delete
+// the Telegram notifications too.
+async function syncNotificationDelete(messageIds) {
+  const ids = [...new Set((messageIds || []).filter(Boolean))];
+  if (!ids.length) return;
+  try {
+    const { data: rows } = await supabase
+      .from('message_tg_notifications')
+      .select('message_id, chat_id, tg_message_id')
+      .in('message_id', ids);
+    for (const r of rows || []) {
+      try {
+        await bot.deleteMessage(r.chat_id, r.tg_message_id);
+      } catch {
+        // Telegram may refuse to delete older messages; blank it out instead
+        // so the deleted text at least isn't left readable.
+        try {
+          const lang = await getUserLang(r.chat_id);
+          await bot.editMessageText(lang === 'am' ? '🗑 መልእክቱ ተሰርዟል' : '🗑 This message was deleted.', {
+            chat_id: r.chat_id, message_id: r.tg_message_id, reply_markup: { inline_keyboard: [] }
+          });
+        } catch { /* already gone */ }
+      }
+      await new Promise(res => setTimeout(res, 100)); // stay under Telegram rate limits
+    }
+    await supabase.from('message_tg_notifications').delete().in('message_id', ids);
+  } catch (e) {
+    console.warn('[Bot] Delete sync failed:', e.message);
+  }
 }
 
 // ─── Goal Tracking Notifications ───────────────────────────────────────────
@@ -3093,6 +3160,8 @@ module.exports = {
   notifyMentorshipAccepted,
   notifyMentorshipRejected,
   notifyMessage,
+  syncNotificationEdit,
+  syncNotificationDelete,
   notifyNewGoal,
   notifyGoalDueReminder,
   notifyGoalMissed,
