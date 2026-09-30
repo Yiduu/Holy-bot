@@ -8411,12 +8411,8 @@ const HB_BOT_USERNAME = 'holynessforchristbot';
 (function initMediaShortcuts() {
   if (!HB_BOT_USERNAME) return;
 
-  const SEEN_KEY = 'hb_media_hint_seen';
   const FALLBACK_HINT = 'Voice messages and files are sent from the bot chat. They appear here too.';
   let hintTimer = 0;
-
-  const seen = () => { try { return localStorage.getItem(SEEN_KEY) === '1'; } catch { return false; } };
-  const markSeen = () => { try { localStorage.setItem(SEEN_KEY, '1'); } catch { } };
 
   function hintText() {
     try {
@@ -8425,11 +8421,26 @@ const HB_BOT_USERNAME = 'holynessforchristbot';
     } catch { return FALLBACK_HINT; }
   }
 
+  function actionBtnText() {
+    try {
+      const lang = localStorage.getItem('holy_lang') || 'am';
+      return lang === 'am' ? 'ወደ ቦቱ ሂድ ↗' : 'Open Bot ↗';
+    } catch { return 'Open Bot ↗'; }
+  }
+
   function openBotChat() {
     const url = 'https://t.me/' + HB_BOT_USERNAME.replace(/^@/, '');
     const tg = window.Telegram?.WebApp;
-    if (tg && typeof tg.openTelegramLink === 'function') tg.openTelegramLink(url);
-    else window.open(url, '_blank', 'noopener');
+    if (tg) {
+      if (typeof tg.openTelegramLink === 'function') {
+        tg.openTelegramLink(url);
+      }
+      setTimeout(() => {
+        try { tg.close(); } catch { }
+      }, 100);
+    } else {
+      window.open(url, '_blank', 'noopener');
+    }
   }
 
   function hideHint() {
@@ -8440,22 +8451,30 @@ const HB_BOT_USERNAME = 'holynessforchristbot';
   function onOutside(e) { if (!e.target.closest('.hb-hint, .hb-media-btn')) hideHint(); }
 
   function showHint(row) {
+    const existing = row.querySelector('.hb-hint');
+    if (existing) {
+      hideHint();
+      return;
+    }
     hideHint();
     const el = document.createElement('div');
     el.className = 'hb-hint';
     el.setAttribute('role', 'status');
-    el.textContent = hintText();
-    el.addEventListener('click', () => { hideHint(); openBotChat(); });
+    el.innerHTML = `<div style="margin-bottom:6px;">${hintText()}</div>` +
+      `<button type="button" style="display:inline-block;padding:5px 14px;border-radius:12px;background:var(--gold,#c9a84c);color:#111;font-weight:600;font-size:0.75rem;border:none;cursor:pointer;">${actionBtnText()}</button>`;
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideHint();
+      openBotChat();
+    });
     row.appendChild(el);
-    hintTimer = setTimeout(hideHint, 4500);
+    hintTimer = setTimeout(hideHint, 6000);
     document.addEventListener('pointerdown', onOutside, true);
   }
 
   function onTap(row) {
     try { if (typeof haptic === 'function') haptic('light'); } catch { }
-    if (!seen()) { markSeen(); showHint(row); return; } // first tap: explain
-    hideHint();
-    openBotChat();                                      // later taps: open the bot chat
+    showHint(row);
   }
 
   const ICON_CLIP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 11.6l-7.6 7.6a5 5 0 0 1-7.07-7.07l8.13-8.13a3.33 3.33 0 0 1 4.71 4.71l-8.13 8.13a1.67 1.67 0 0 1-2.36-2.36l7.42-7.42" fill="none" stroke="url(#hbGold)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
