@@ -886,13 +886,17 @@ async function forwardFileMessage(fromId, toId, fileType, meta, caption = '') {
   if (recipient?.chat_id) {
     const lang = await getUserLang(toId);
     const roleLabel = sender?.role === 'mentor' ? tSync(lang, 'role_mentor') : tSync(lang, 'role_mentee');
-    const fileLabels = { voice: '🎙️ voice message', audio: '🎵 audio', video: '🎬 video', photo: '🖼️ photo', document: '📎 file' };
-    // tSync falls back to returning the key itself when the locale string is
-    // missing, so we detect that and fall back to a plain English label.
-    const translated = tSync(lang, 'msg_from_partner_file', { role: roleLabel, nick: mdEscape(sender?.anonymous_id), type: fileLabels[fileType] || 'file' });
-    const label = translated === 'msg_from_partner_file'
-      ? `📎 New ${fileLabels[fileType] || 'file'} from ${roleLabel} @${mdEscape(sender?.anonymous_id)}`
-      : translated;
+    // e.g. "🎙️ Your mentee, Lotus, sent you a voice message."
+    // (Wording lives in local/*.json: msg_from_partner_file + file_label_*.
+    // No "@": these are anonymous handles, not Telegram usernames, and an "@"
+    // makes Telegram render them as a tappable mention of a real account.)
+    const fileIcons = { voice: '🎙️', audio: '🎵', video: '🎬', photo: '🖼️', document: '📎' };
+    const label = tSync(lang, 'msg_from_partner_file', {
+      icon: fileIcons[fileType] || '📎',
+      role: roleLabel,
+      nick: mdEscape(sender?.anonymous_id),
+      type: tSync(lang, `file_label_${fileType}`)
+    });
     // Same keyboard reattachment as forwardMessage — see comment there.
     await safeSend(recipient.chat_id, label, {
       reply_markup: buildPersistentKeyboard(recipient.role || 'user', lang)
