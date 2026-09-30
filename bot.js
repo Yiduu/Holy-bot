@@ -15,7 +15,15 @@ const { emitToUser } = require('./utils');
 require('dotenv').config();
 
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { autoRefreshToken: false, persistSession: false },
+  global: {
+    // Without a timeout, a stalled DB leaves scheduler queries hanging forever
+    // and they keep holding connections. Fail fast instead.
+    fetch: (url, opts = {}) =>
+      fetch(url, { ...opts, signal: opts.signal || AbortSignal.timeout(15000) }),
+  },
+});
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
 // Handle polling/network errors gracefully to prevent process crashes and clean up logs
@@ -2924,7 +2932,13 @@ setInterval(async () => {
 // picked up on the next tick, the reminder goes out, and the flag is set —
 // so it can't be re-sent on a later tick no matter how the minute boundary
 // lines up against the actual scheduled_at second.
+let sessionReminderRunning = false;
 setInterval(async () => {
+  // Skip this tick if the previous one is still running (slow DB), otherwise
+  // ticks pile up and make the overload worse.
+  if (sessionReminderRunning) return;
+  sessionReminderRunning = true;
+  try {
   const nowIso = new Date().toISOString();
   const windowEndIso = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
@@ -2949,6 +2963,11 @@ setInterval(async () => {
     await supabase.from('video_sessions').update({ reminder_sent: true }).eq('id', s.id);
   }
   console.log(`[Scheduler] Sent starting-soon reminder for ${dueSessions.length} session(s), ${sent} message(s).`);
+  } catch (e) {
+    console.error('[Scheduler] Session reminder tick failed:', e.message);
+  } finally {
+    sessionReminderRunning = false;
+  }
 }, 60 * 1000);
 
 // Goal due-date reminder — fires once daily at 23:57 Ethiopia time.

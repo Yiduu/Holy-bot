@@ -2336,10 +2336,11 @@ function startApp() {
   connectSocket();
   keepAlive();
   navigate('dashboard');
-  updateMessageBadge();
-  updateRequestsBadge();
-  updateSessionsBadge();
-  checkPendingRating();
+  // Non-critical: let the dashboard's own requests go first.
+  setTimeout(updateMessageBadge, 800);
+  setTimeout(updateRequestsBadge, 1600);
+  setTimeout(updateSessionsBadge, 2400);
+  setTimeout(checkPendingRating, 3200);
 
 
   if (String(currentUser?.telegram_id) === String(window.ADMIN_ID)) {

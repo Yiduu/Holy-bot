@@ -314,14 +314,17 @@ app.use('/api/journal', require('./routes/journal')(supabase, requireAuth));
 app.use('/api/avatar', require('./routes/avatar')(supabase, requireAuth, bot));
 
 // ─── Health check (enhanced – probes DB connection) ──────────────────────────
+let healthCache = { at: 0, body: null };
 app.get('/health', async (req, res) => {
+  if (healthCache.body && Date.now() - healthCache.at < 30000) return res.json(healthCache.body);
   try {
     const { error } = await supabase
       .from('users')
       .select('telegram_id', { count: 'exact', head: true })
       .limit(1);
     if (error) throw error;
-    res.json({ status: 'ok', db: 'connected', ts: new Date().toISOString() });
+    healthCache = { at: Date.now(), body: { status: 'ok', db: 'connected', ts: new Date().toISOString() } };
+    res.json(healthCache.body);
   } catch (e) {
     logger.error('Health check failed', { error: e.message });
     res.status(503).json({ status: 'unhealthy', error: e.message });

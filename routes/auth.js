@@ -86,7 +86,10 @@ module.exports = function authRoutes(supabase, requireAuth) {
   });
 
   // GET /api/auth/verse – today's daily verse
+  let verseCache = { dayIndex: -1, verse: null };
   router.get('/verse', async (req, res) => {
+    const todayIdx = Math.floor(Date.now() / 86400000);
+    if (verseCache.verse && verseCache.dayIndex === todayIdx) return res.json(verseCache.verse);
     // IMPORTANT: this must use the exact same "which day is it" and "which
     // row is today's" formulas as bot.js (handleDailyVerse / the hourly
     // verse scheduler), or the mini app and the bot will show two
@@ -138,6 +141,7 @@ module.exports = function authRoutes(supabase, requireAuth) {
     if (error || !data?.length) return res.json({ reference: 'ፊልጵ 4:13', text: 'ኃይልን በሚሰጠኝ በክርስቶስ ሁሉን እችላለሁ።' });
 
     const verse = data[dayIndex % data.length];
+    verseCache = { dayIndex, verse };
     res.json(verse);
   });
 
