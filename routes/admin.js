@@ -403,16 +403,19 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
 
     if (error) return res.status(500).json({ error: error.message });
 
-    // Dedupe: a mentor/mentee pair can have multiple assignment rows
-    // (e.g. ended + re-matched), but they share the same message thread,
-    // so only keep the most recent assignment per pair.
-    const seen = new Set();
-    const assignments = (assignmentsRaw || []).filter(a => {
-      const key = `${a.mentor_id}_${a.user_id}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    // Dedupe: two people share ONE message thread no matter who is the
+    // mentor, so the key must ignore direction. (Keying on mentor_user
+    // showed the same chat twice when a pair had assignment rows in both
+    // directions, e.g. role swapped while testing or a re-match the other
+    // way round.) Prefer an active assignment, then the most recent one;
+    // rows arrive ordered by assigned_at desc.
+    const byPair = new Map();
+    for (const a of (assignmentsRaw || [])) {
+      const key = [String(a.mentor_id), String(a.user_id)].sort().join('_');
+      const kept = byPair.get(key);
+      if (!kept || (!kept.is_active && a.is_active)) byPair.set(key, a);
+    }
+    const assignments = [...byPair.values()];
 
     if (!assignments || assignments.length === 0) {
       return res.json({ conversations: [], total: 0, page, pages: 0 });
@@ -453,11 +456,12 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     // Paginate in memory
     const paginatedConvs = conversations.slice(offset, offset + limit);
 
+    // Count AFTER dedupe; the raw `count` includes the duplicate rows.
     res.json({
       conversations: paginatedConvs,
-      total: count || conversations.length,
+      total: conversations.length,
       page,
-      pages: Math.ceil((count || conversations.length) / limit)
+      pages: Math.ceil(conversations.length / limit)
     });
   });
 
