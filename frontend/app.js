@@ -8402,3 +8402,110 @@ document.addEventListener('click', (e) => {
     start();
   }
 })();
+
+/* ── Voice & file shortcuts in the chat input ───────────────────
+   Opens the bot chat, where voice messages and files are sent.
+   Leave HB_BOT_USERNAME empty to switch the feature off.        */
+const HB_BOT_USERNAME = 'holynessforchristbot';
+
+(function initMediaShortcuts() {
+  if (!HB_BOT_USERNAME) return;
+
+  const SEEN_KEY = 'hb_media_hint_seen';
+  const FALLBACK_HINT = 'Voice messages and files are sent from the bot chat. They appear here too.';
+  let hintTimer = 0;
+
+  const seen = () => { try { return localStorage.getItem(SEEN_KEY) === '1'; } catch { return false; } };
+  const markSeen = () => { try { localStorage.setItem(SEEN_KEY, '1'); } catch { } };
+
+  function hintText() {
+    try {
+      const s = typeof t === 'function' ? t('media_hint') : '';
+      return s && s !== 'media_hint' ? s : FALLBACK_HINT;
+    } catch { return FALLBACK_HINT; }
+  }
+
+  function openBotChat() {
+    const url = 'https://t.me/' + HB_BOT_USERNAME.replace(/^@/, '');
+    const tg = window.Telegram?.WebApp;
+    if (tg && typeof tg.openTelegramLink === 'function') tg.openTelegramLink(url);
+    else window.open(url, '_blank', 'noopener');
+  }
+
+  function hideHint() {
+    clearTimeout(hintTimer);
+    document.querySelectorAll('.hb-hint').forEach(el => el.remove());
+    document.removeEventListener('pointerdown', onOutside, true);
+  }
+  function onOutside(e) { if (!e.target.closest('.hb-hint, .hb-media-btn')) hideHint(); }
+
+  function showHint(row) {
+    hideHint();
+    const el = document.createElement('div');
+    el.className = 'hb-hint';
+    el.setAttribute('role', 'status');
+    el.textContent = hintText();
+    el.addEventListener('click', () => { hideHint(); openBotChat(); });
+    row.appendChild(el);
+    hintTimer = setTimeout(hideHint, 4500);
+    document.addEventListener('pointerdown', onOutside, true);
+  }
+
+  function onTap(row) {
+    try { if (typeof haptic === 'function') haptic('light'); } catch { }
+    if (!seen()) { markSeen(); showHint(row); return; } // first tap: explain
+    hideHint();
+    openBotChat();                                      // later taps: open the bot chat
+  }
+
+  const ICON_CLIP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 11.6l-7.6 7.6a5 5 0 0 1-7.07-7.07l8.13-8.13a3.33 3.33 0 0 1 4.71 4.71l-8.13 8.13a1.67 1.67 0 0 1-2.36-2.36l7.42-7.42" fill="none" stroke="url(#hbGold)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const ICON_MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11.5" rx="3" fill="none" stroke="url(#hbGold)" stroke-width="1.7"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.2M8.6 21.2h6.8" fill="none" stroke="url(#hbGold)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  function mount() {
+    const input = document.getElementById('chatInput');
+    const send = document.querySelector('.chat-send-btn');
+    const row = send?.parentElement;
+    if (!input || !row) return;
+    if (row.querySelector('.hb-media-actions')) return; // already mounted
+
+    const display = getComputedStyle(row).display;
+    if (display.includes('grid')) {                     // don't disturb a grid layout
+      console.warn('[media-shortcuts] input row uses CSS grid; not mounted');
+      return;
+    }
+    if (!display.includes('flex')) row.classList.add('hb-row');
+    if (getComputedStyle(row).position === 'static') row.style.position = 'relative';
+
+    const field = Array.from(row.children).find(c => c === input || c.contains(input));
+    if (field) field.classList.add('hb-field');
+
+    if (!document.getElementById('hbGold')) {
+      document.body.insertAdjacentHTML('beforeend',
+        '<svg class="hb-svg-defs" aria-hidden="true"><defs><linearGradient id="hbGold" x1="4" y1="3" x2="20" y2="21" gradientUnits="userSpaceOnUse">' +
+        '<stop offset="0" style="stop-color:var(--gold,#c9a84c)"/><stop offset="1" style="stop-color:var(--gold-dim,#a87a28)"/></linearGradient></defs></svg>');
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'hb-media-actions';
+    wrap.innerHTML =
+      '<button type="button" class="hb-media-btn" data-hb="file" aria-label="Send a file">' + ICON_CLIP + '</button>' +
+      '<button type="button" class="hb-media-btn" data-hb="voice" aria-label="Send a voice message">' + ICON_MIC + '</button>';
+    wrap.addEventListener('click', () => onTap(row));
+    row.insertBefore(wrap, send);
+
+    try { if (typeof syncChatInputHeight === 'function') syncChatInputHeight(); } catch { }
+  }
+
+  // The chat view may be built after load, so mount whenever the input appears.
+  let queued = false;
+  const check = () => {
+    queued = false;
+    const send = document.querySelector('.chat-send-btn');
+    if (send && !send.parentElement.querySelector('.hb-media-actions')) mount();
+  };
+  const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(check); } };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule);
+  else schedule();
+  new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
+})();

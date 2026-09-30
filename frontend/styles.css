@@ -10232,4 +10232,75 @@ textarea.form-control {
   opacity: 0.7;
 }
 
+/* ─── Chat input: voice & file shortcuts ─────────────────────── */
+.hb-row { display: flex; align-items: flex-end; gap: 8px; }   /* only applied if the row isn't already flex */
+.hb-field { flex: 1 1 auto; min-width: 0; }                    /* the text field shrinks; the buttons never do */
+
+.hb-media-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  align-self: flex-end;
+}
+
+.hb-media-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-dim);
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .15s var(--ease-premium, ease), background .2s ease, border-color .2s ease;
+}
+.hb-media-btn svg { width: 20px; height: 20px; display: block; }
+.hb-media-btn:active { transform: scale(.92); background: rgba(201, 168, 76, 0.14); border-color: var(--gold); }
+.hb-media-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+@media (hover: hover) {
+  .hb-media-btn:hover { background: rgba(201, 168, 76, 0.10); border-color: var(--gold-dim, var(--gold)); }
+}
+
+/* Hidden SVG holding the shared gold gradient (must not be display:none) */
+.hb-svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* One-line hint above the input row */
+.hb-hint {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(100% + 10px);
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-dim);
+  background: linear-gradient(180deg, var(--bg3), var(--bg2));
+  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0,0,0,.35));
+  font-size: .8rem;
+  line-height: 1.4;
+  text-align: center;
+  cursor: pointer;
+  z-index: 30;
+  animation: hbHintIn .22s var(--ease-premium, ease) both;
+}
+.hb-hint::before {              /* same gold hairline as your modals */
+  content: '';
+  position: absolute;
+  top: 0; left: 12%; right: 12%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: .8;
+}
+@keyframes hbHintIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 360px) {
+  .hb-media-btn { width: 36px; height: 36px; }
+  .hb-media-actions { gap: 4px; }
+  .hb-row { gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) { .hb-hint { animation: none; } }
+
+
 

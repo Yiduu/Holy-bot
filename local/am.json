@@ -95,6 +95,7 @@
   "file_label_video": "ቪዲዮ",
   "file_label_photo": "ፎቶ",
   "file_label_document": "ፋይል",
+  "media_hint": "የድምፅ መልእክቶችና ፋይሎች የሚላኩት ከቦት ቻቱ ነው። እዚህም ይታያሉ።",
   "rate_mentor_prompt": "ከ {name} ጋር ያለዎትን ልምድ rate ያድርጉ?",
   "rating_submitted": "አስተያየትዎን ስለላኩ እናመሰግናለን! {stars} ሰጥተዋል።",
   "no_active_mentor": "አሁን ንቁ አማካሪ የለዎትም። ከታች ያግኙ:",

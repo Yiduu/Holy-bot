@@ -95,6 +95,7 @@
     "file_label_video": "a video",
     "file_label_photo": "a photo",
     "file_label_document": "a file",
+    "media_hint": "Voice messages and files are sent from the bot chat. They appear here too.",
     "rate_mentor_prompt": "How would you rate your experience with {name}?",
     "rating_submitted": "Thank you for your feedback! You gave {stars}",
     "no_active_mentor": "You don't have an active mentor yet. Find one below:",

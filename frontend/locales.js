@@ -460,7 +460,8 @@ const I18N = {
     "end_to_apply_warn_msg": "You are going to end your mentorship first before becoming a mentor. Are you sure you want to continue?",
     "end_to_apply_warn_continue": "Yes, continue",
     "btn_load_earlier": "Load earlier messages",
-    "no_earlier_messages": "No earlier messages"
+    "no_earlier_messages": "No earlier messages",
+    "media_hint": "Voice messages and files are sent from the bot chat. They appear here too."
   },
   am: {
     "btn_find_mentor": "አማካሪ ፈልግ",
@@ -919,6 +920,7 @@ const I18N = {
     "end_to_apply_warn_msg": "አማካሪ ከመሆንዎ በፊት መጀመሪያ የምክር አገልግሎትዎን ማቋረጥ አለብዎት። መቀጠል እርግጠኛ ነዎት?",
     "end_to_apply_warn_continue": "አዎ፣ ቀጥል",
     "btn_load_earlier": "የቀደሙ መልእክቶችን ጫን",
-    "no_earlier_messages": "ምንም የቀደሙ መልእክቶች የሉም"
+    "no_earlier_messages": "ምንም የቀደሙ መልእክቶች የሉም",
+    "media_hint": "የድምፅ መልእክቶችና ፋይሎች የሚላኩት ከቦት ቻቱ ነው። እዚህም ይታያሉ።"
   }
 };
