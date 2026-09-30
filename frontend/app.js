@@ -1184,7 +1184,10 @@ function toggleTheme() {
 setTheme(localStorage.getItem('theme') || 'dark');
 
 // ─── Init ─────────────────────────────────────────────────────
+let __initStarted = false;
 async function init() {
+  if (__initStarted) return;
+  __initStarted = true;
   const tg = window.Telegram?.WebApp;
   if (tg) { tg.ready(); tg.expand(); }
   applyAppHeight();
@@ -1199,8 +1202,9 @@ async function init() {
   requestAnimationFrame(() => requestAnimationFrame(applyAppHeight));
   setTimeout(applyAppHeight, 300);
 
+  let failed = false;
   try {
-    const data = await apiFetch('/api/auth/me');
+    const data = await fetchMeWithRetry();
     window.ADMIN_ID = data.admin_id;
     if (!data.registered) {
       showOnboarding();
@@ -1215,11 +1219,38 @@ async function init() {
     }
   } catch (e) {
     console.error(e);
-    showToast('Connection error', 'error');
-    showOnboarding();
+    failed = true;
+    showConnectionError(e);
   } finally {
-    $('loadingScreen')?.classList.add('hidden');
+    if (!failed) $('loadingScreen')?.classList.add('hidden');
   }
+}
+
+async function fetchMeWithRetry() {
+  let lastErr;
+  for (let i = 0; i < 3; i++) {
+    try {
+      return await apiFetch('/api/auth/me', { timeout: 25000, retry: false });
+    } catch (e) {
+      lastErr = e;
+      if (e.status && e.status < 500) throw e; // 401/403/429: retrying won't help
+      await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
+function showConnectionError(err) {
+  const ls = $('loadingScreen');
+  if (!ls) return;
+  ls.classList.remove('hidden');
+  const msg = err?.status === 401
+    ? 'Session expired. Please close and reopen the app.'
+    : 'Could not reach the server.';
+  ls.innerHTML = `<div style="padding:32px;text-align:center;color:#D4AF37;font-family:Cinzel,serif">
+    <p style="margin-bottom:20px">${msg}</p>
+    <button onclick="location.reload()" style="padding:12px 28px;border-radius:12px;border:1px solid #D4AF37;background:transparent;color:#D4AF37;font-family:inherit">Try again</button>
+  </div>`;
 }
 
 function handleDeepLink() {

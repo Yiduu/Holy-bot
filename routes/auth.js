@@ -20,15 +20,15 @@ module.exports = function authRoutes(supabase, requireAuth) {
       .from('users')
       .select('*, user_settings(*)')
       .eq('telegram_id', telegram_id)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
+    if (error) return res.status(500).json({ error: error.message });
 
     if (!data) return res.json({ registered: false });
     if (data.is_banned) return res.status(403).json({ error: 'Account banned' });
 
     // Update last_active
-    await supabase.from('users').update({ last_active: new Date().toISOString() }).eq('telegram_id', telegram_id);
+    supabase.from('users').update({ last_active: new Date().toISOString() }).eq('telegram_id', telegram_id).then(() => {}, () => {});
 
     res.json({ registered: true, user: data, admin_id: process.env.ADMIN_TELEGRAM_ID });
   });
