@@ -679,7 +679,7 @@ async function getActiveChatPartners(chatId) {
   return null;
 }
 
-async function forwardMessage(fromId, toId, text) {
+async function forwardMessage(fromId, toId, text, srcMessageId = null) {
   // Insert message into database
   const { data: msg, error } = await supabase
     .from('messages')
@@ -706,10 +706,25 @@ async function forwardMessage(fromId, toId, text) {
     // often the first message a recipient sees in a session, and without a
     // keyboard field on it the client can be left showing no keyboard at
     // all until the user types /start.
-    await safeSend(recipient.chat_id, msgText, {
+    const sentCopy = await safeSend(recipient.chat_id, msgText, {
       reply_markup: buildPersistentKeyboard(recipient.role || 'user', lang)
     });
     setState(toId, 'chat_active', fromId);
+
+    // Remember both Telegram messages so an edit in the bot chat can follow
+    // (sender's own message -> app row -> recipient's copy).
+    if (srcMessageId || sentCopy) {
+      const { error: mapErr } = await supabase.from('message_tg_notifications').upsert({
+        message_id: msg.id,
+        chat_id: sentCopy?.chat.id ?? null,
+        tg_message_id: sentCopy?.message_id ?? null,
+        src_chat_id: srcMessageId ? fromId : null,
+        src_tg_message_id: srcMessageId || null,
+        from_id: fromId,
+        to_id: toId,
+      });
+      if (mapErr) console.warn('[Bot] Could not store message mapping:', mapErr.message);
+    }
   }
 
   // ✨ NEW: Emit socket event for mini app real-time update
@@ -1582,11 +1597,24 @@ async function syncNotificationEdit(messageId, senderName, newContent, fromId) {
   try {
     const { data: n } = await supabase
       .from('message_tg_notifications')
-      .select('chat_id, tg_message_id')
+      .select('chat_id, tg_message_id, src_chat_id')
       .eq('message_id', messageId)
       .maybeSingle();
-    if (!n) return; // recipient was online, so no Telegram copy exists
+    if (!n || !n.chat_id || !n.tg_message_id) return; // recipient was online, so no Telegram copy exists
     const lang = await getUserLang(n.chat_id);
+
+    if (n.src_chat_id) {
+      // Copy was produced by forwardMessage() (the sender typed in the bot
+      // chat): same "Message from your mentor [nick]" layout, and it carries
+      // no inline keyboard (its reply keyboard can't be set via an edit).
+      const { data: sender } = await supabase.from('users').select('anonymous_id, role').eq('telegram_id', fromId).maybeSingle();
+      const roleLabel = sender?.role === 'mentor' ? tSync(lang, 'role_mentor') : tSync(lang, 'role_mentee');
+      const tag = lang === 'am' ? '(ተስተካክሏል)' : '(edited)';
+      const body = tSync(lang, 'msg_from_partner', { role: roleLabel, nick: mdEscape(sender?.anonymous_id), text: mdEscape(newContent) });
+      await bot.editMessageText(`${body}\n\n${tag}`, { chat_id: n.chat_id, message_id: n.tg_message_id, parse_mode: 'Markdown' });
+      return;
+    }
+
     const { text, reply_markup } = buildMessageNotification(lang, senderName, newContent, fromId, { edited: true });
     // Omitting reply_markup would strip the "Open Chat" button, so resend it.
     await bot.editMessageText(text, { chat_id: n.chat_id, message_id: n.tg_message_id, reply_markup });
@@ -1608,6 +1636,7 @@ async function syncNotificationDelete(messageIds) {
       .select('message_id, chat_id, tg_message_id')
       .in('message_id', ids);
     for (const r of rows || []) {
+      if (!r.chat_id || !r.tg_message_id) continue;
       try {
         await bot.deleteMessage(r.chat_id, r.tg_message_id);
       } catch {
@@ -2224,8 +2253,52 @@ bot.on('message', async (msg) => {
 
   // 🛡️ CHAT SHIELD: Only allow forwarding if NOT in a flow state
   if (!state || state.step === 'chat_active') {
-    const targetId = await resolveChatTarget(chatId, state, { type: 'text', content: text.trim() });
-    if (targetId) await forwardMessage(chatId, targetId, text.trim());
+    const targetId = await resolveChatTarget(chatId, state, { type: 'text', content: text.trim(), srcMessageId: msg.message_id });
+    if (targetId) await forwardMessage(chatId, targetId, text.trim(), msg.message_id);
+  }
+});
+
+// ─── Edited messages (user edited their message inside the bot chat) ─────────
+// Telegram sends the bot an `edited_message` update for edits. It sends NOTHING
+// when a user deletes a message in a private chat, so deletes can't be synced.
+bot.on('edited_message', async (edited) => {
+  try {
+    if (!edited.text || edited.chat.type !== 'private') return;
+    const chatId = edited.chat.id;
+    const { data: map } = await supabase
+      .from('message_tg_notifications')
+      .select('message_id')
+      .eq('src_chat_id', chatId)
+      .eq('src_tg_message_id', edited.message_id)
+      .maybeSingle();
+    if (!map) return; // not a chat message we forwarded (a command, an answer to a flow prompt, ...)
+
+    const { data: row } = await supabase
+      .from('messages')
+      .select('id, from_id, to_id, created_at, is_deleted')
+      .eq('id', map.message_id)
+      .single();
+    if (!row || row.is_deleted || String(row.from_id) !== String(chatId)) return;
+    // Same 2-day edit window the app enforces.
+    if (Date.now() - new Date(row.created_at).getTime() > 2 * 24 * 60 * 60 * 1000) return;
+
+    const content = edited.text.trim();
+    if (!content) return;
+
+    const { data: updated, error } = await supabase
+      .from('messages')
+      .update({ content, edited_at: new Date().toISOString() })
+      .eq('id', row.id)
+      .select()
+      .single();
+    if (error) throw error;
+
+    // Live-update the mini app for both people, then the other person's Telegram copy.
+    const io = global._io || global.io;
+    if (io) io.to([`user:${row.to_id}`, `user:${row.from_id}`]).emit('message_edited', updated);
+    await syncNotificationEdit(row.id, null, content, row.from_id);
+  } catch (e) {
+    console.warn('[Bot] edited_message handling failed:', e.message);
   }
 });
 
@@ -2279,7 +2352,7 @@ bot.on('callback_query', async (query) => {
     if (pending.type === 'file') {
       await forwardFileMessage(chatId, targetId, pending.fileType, pending.meta, pending.caption);
     } else {
-      await forwardMessage(chatId, targetId, pending.content);
+      await forwardMessage(chatId, targetId, pending.content, pending.srcMessageId || null);
     }
 
     setState(chatId, 'chat_active', targetId);
