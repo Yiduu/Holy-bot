@@ -20,8 +20,20 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
   global: {
     // Without a timeout, a stalled DB leaves scheduler queries hanging forever
     // and they keep holding connections. Fail fast instead.
-    fetch: (url, opts = {}) =>
-      fetch(url, { ...opts, signal: opts.signal || AbortSignal.timeout(15000) }),
+    // Re-throw timeouts as AbortError: supabase-js retries reads 3x (67s total)
+    // on anything else, but never on an AbortError.
+    fetch: async (url, opts = {}) => {
+      try {
+        return await fetch(url, { ...opts, signal: opts.signal || AbortSignal.timeout(15000) });
+      } catch (e) {
+        if (e && e.name === 'TimeoutError') {
+          const err = new Error('Supabase request timed out after 15000ms');
+          err.name = 'AbortError';
+          throw err;
+        }
+        throw e;
+      }
+    },
   },
 });
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });

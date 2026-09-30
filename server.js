@@ -38,14 +38,29 @@ const { bot, notifyMessage, notifySessionInvite, notifyMentorApproved, broadcast
 // which is what makes the chat "spin" and never send. Failing fast (15 s)
 // lets the client retry instead.
 const SUPABASE_TIMEOUT_MS = 15000;
+// supabase-js silently retries reads 3x (1s/2s/4s backoff) on network errors,
+// but never on an AbortError. A plain fetch timeout throws "TimeoutError", so
+// every read used to take 4 x 15s + 7s = 67s to fail. Re-throwing it as an
+// AbortError makes it fail after 15s instead.
+async function supabaseFetch(url, opts = {}) {
+  try {
+    return await fetch(url, { ...opts, signal: opts.signal || AbortSignal.timeout(SUPABASE_TIMEOUT_MS) });
+  } catch (e) {
+    if (e && e.name === 'TimeoutError') {
+      const err = new Error(`Supabase request timed out after ${SUPABASE_TIMEOUT_MS}ms`);
+      err.name = 'AbortError';
+      throw err;
+    }
+    throw e;
+  }
+}
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
   {
     auth: { autoRefreshToken: false, persistSession: false },
     global: {
-      fetch: (url, opts = {}) =>
-        fetch(url, { ...opts, signal: opts.signal || AbortSignal.timeout(SUPABASE_TIMEOUT_MS) }),
+      fetch: supabaseFetch,
     },
   }
 );
