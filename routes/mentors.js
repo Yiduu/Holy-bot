@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { emitToUserRoom } = require('../utils');
+const { emitToUserRoom, closeAssignment } = require('../utils');
 const { isGoalPastDue } = require('../utils/goalRules');
 
 // PostgREST caps a response at 1000 rows and very long `in (...)` lists can
@@ -1127,11 +1127,17 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       .eq('mentor_id', mentor_id)
       .eq('is_active', true)
       .maybeSingle();
-    const { error } = await supabase
-      .from('mentorship_assignments')
-      .update({ is_active: false, ended_at: new Date().toISOString() })
-      .eq('id', req.params.assignment_id)
-      .eq('mentor_id', mentor_id);
+    let error;
+    if (existing) {
+      // Also records that the mentor ended it
+      error = await closeAssignment(supabase, req.params.assignment_id, { endedBy: 'mentor' });
+    } else {
+      ({ error } = await supabase
+        .from('mentorship_assignments')
+        .update({ is_active: false, ended_at: new Date().toISOString() })
+        .eq('id', req.params.assignment_id)
+        .eq('mentor_id', mentor_id));
+    }
     if (error) return res.status(500).json({ error: error.message });
     if (existing?.user_id) {
       emitToUserRoom(existing.user_id, 'mentorship_ended', { by: 'mentor', assignment_id: req.params.assignment_id });

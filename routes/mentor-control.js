@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const { closeAssignment } = require('../utils');
 
 // Localized copy for the Telegram notifications this module sends. Mirrors
 // the pattern used in routes/admin.js (CONTACT_PREFIX) and bot.js.
@@ -380,9 +381,7 @@ module.exports = function mentorControlRoutes(supabase, requireAuth, requireAdmi
     if (fetchErr) return res.status(500).json({ error: fetchErr.message });
     if (!assignment) return res.status(404).json({ error: 'Active pairing not found' });
 
-    const { error } = await supabase.from('mentorship_assignments')
-      .update({ is_active: false, ended_at: new Date().toISOString() })
-      .eq('id', assignment.id);
+    const error = await closeAssignment(supabase, assignment.id, { endedBy: 'admin' });
     if (error) return res.status(500).json({ error: error.message });
 
     await supabase.from('messages')

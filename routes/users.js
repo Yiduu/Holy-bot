@@ -345,11 +345,8 @@ module.exports = function userRoutes(supabase, requireAuth) {
         .eq('telegram_id', assignment.mentor_id)
         .single();
 
-      // Update assignment
-      const { error: updateErr } = await supabase
-        .from('mentorship_assignments')
-        .update({ is_active: false, ended_at: new Date().toISOString() })
-        .eq('id', assignment.id);
+      // Update assignment (also records that the mentee ended it)
+      const updateErr = await closeAssignment(supabase, assignment.id, { endedBy: 'mentee' });
 
       if (updateErr) {
         return res.status(500).json({ error: updateErr.message });

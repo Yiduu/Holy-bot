@@ -1903,6 +1903,14 @@
                     </svg>
                     Mentorship
                 </div>
+                <div class="nav-item" onclick="showTab('mentorship-analytics')" id="nav-mentorship-analytics">
+                    <svg viewBox="0 0 24 24">
+                        <line x1="18" y1="20" x2="18" y2="10" />
+                        <line x1="12" y1="20" x2="12" y2="4" />
+                        <line x1="6" y1="20" x2="6" y2="14" />
+                    </svg>
+                    Mentorship Analytics
+                </div>
                 <div class="nav-item" onclick="showTab('mentor-control')" id="nav-mentor-control">
                     <svg viewBox="0 0 24 24">
                         <path d="M12 2l8 3.2v6c0 5-3.4 8.7-8 10.8-4.6-2.1-8-5.8-8-10.8v-6z" />
@@ -2382,6 +2390,82 @@
                     </div>
                 </div>
 
+                <!-- ── Mentorship Analytics ──────────────────────────── -->
+                <div class="pane" id="pane-mentorship-analytics">
+                    <div class="toolbar">
+                        <select class="filter-select" id="maRange" onchange="loadMentorshipAnalytics()">
+                            <option value="0">All time</option>
+                            <option value="7">Last 7 days</option>
+                            <option value="30">Last 30 days</option>
+                            <option value="90">Last 90 days</option>
+                            <option value="365">Last 12 months</option>
+                        </select>
+                    </div>
+                    <div id="maNotice" style="display:none;margin-bottom:14px;padding:12px 14px;border:1px solid var(--gold);border-radius:10px;font-size:12.5px;line-height:1.5"></div>
+
+                    <div class="section-title">Matched</div>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-num" id="ma-matched-users" style="color:var(--gold)">–</div>
+                            <div class="stat-label">Unique users matched</div>
+                            <div class="stat-sub" id="ma-matched-users-sub" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-num" id="ma-matched-mentees" style="color:var(--accent)">–</div>
+                            <div class="stat-label">Unique mentees</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-num" id="ma-matched-mentors" style="color:var(--gold)">–</div>
+                            <div class="stat-label">Unique mentors</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-num" id="ma-active" style="color:var(--success)">–</div>
+                            <div class="stat-label">Active right now</div>
+                            <div class="stat-sub" id="ma-total-matches" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+                        </div>
+                    </div>
+
+                    <div class="section-title" style="margin-top:22px">Ended</div>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-num" id="ma-ended-users" style="color:var(--danger)">–</div>
+                            <div class="stat-label">Unique users whose mentorship ended</div>
+                            <div class="stat-sub" id="ma-ended-total" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-num" id="ma-self" style="color:var(--accent)">–</div>
+                            <div class="stat-label">Ended by the mentee (self)</div>
+                            <div class="stat-sub" id="ma-self-sub" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-num" id="ma-mentor" style="color:var(--gold)">–</div>
+                            <div class="stat-label">Ended by the mentor</div>
+                            <div class="stat-sub" id="ma-mentor-sub" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap" style="margin-top:18px">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Who ended it</th>
+                                    <th>Mentorships ended</th>
+                                    <th>Unique mentees</th>
+                                    <th>Unique mentors</th>
+                                </tr>
+                            </thead>
+                            <tbody id="maBreakdownBody">
+                                <tr><td colspan="4" class="loading">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="margin-top:10px;font-size:11.5px;color:var(--text3);line-height:1.5">
+                        "Unique" counts people, not mentorships: someone matched or ended twice counts once.
+                        A person who has been both a mentee and a mentor counts once in "Unique users".
+                        Matches are counted by the date they were made, endings by the date they ended.
+                    </div>
+                </div>
+
                 <!-- ── Mentorship Request Log ────────────────────────── -->
                 <div class="pane" id="pane-mentorship-requests">
                     <div class="toolbar">
@@ -2811,7 +2895,7 @@
 
         /* ── Tab nav ────────────────────────────────────────────────── */
         const TITLES = {
-            overview: 'Overview', users: 'Users', conversations: 'Conversations', 'live-sessions': 'Live Sessions', mentorship: 'Mentorship', 'mentor-control': 'Mentor Control', applications: 'Mentor Applications',
+            overview: 'Overview', users: 'Users', conversations: 'Conversations', 'live-sessions': 'Live Sessions', mentorship: 'Mentorship', 'mentorship-analytics': 'Mentorship Analytics', 'mentor-control': 'Mentor Control', applications: 'Mentor Applications',
             messages: 'Message Moderation', tickets: 'Support Requests', topics: 'Counseling Topics',
             'mentorship-requests': 'Request Log',
             broadcast: 'Broadcast', audit: 'Audit Log'
@@ -2825,7 +2909,7 @@
             document.getElementById('topbarTitle').textContent = TITLES[tab] || tab;
             activeTab = tab; closeSidebar();
             const loaders = {
-                overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), 'live-sessions': () => switchSessionsView(currentSessionsView), mentorship: () => loadMentorship(1), 'mentor-control': () => { loadMentorControl(1); loadMcStats(); }, applications: () => loadApps(1),
+                overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), 'live-sessions': () => switchSessionsView(currentSessionsView), mentorship: () => loadMentorship(1), 'mentorship-analytics': loadMentorshipAnalytics, 'mentor-control': () => { loadMentorControl(1); loadMcStats(); }, applications: () => loadApps(1),
                 messages: () => loadMessages(1), tickets: loadTickets, topics: loadTopics,
                 'mentorship-requests': () => loadMentorshipRequests(1),
                 broadcast: () => { }, audit: () => loadAudit(1)
@@ -3527,6 +3611,67 @@
     </tr>`).join('');
                 pager('auditPager', page, Math.ceil((d.total || 0) / 50), 'loadAudit');
             } catch (e) { body.innerHTML = `<tr><td colspan="5" class="loading">${e.message}</td></tr>`; }
+        }
+
+        /* ── Mentorship Analytics ──────────────────────────────────── */
+        async function loadMentorshipAnalytics() {
+            const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+            const days = document.getElementById('maRange')?.value || '0';
+            const body = document.getElementById('maBreakdownBody');
+            try {
+                const d = await api(`/api/admin/analytics/mentorship?days=${encodeURIComponent(days)}`);
+                const m = d.matched || {}, e = d.ended || {}, by = e.by || {};
+                const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+                set('ma-matched-users', m.unique_users ?? 0);
+                set('ma-matched-users-sub', 'mentees and mentors combined');
+                set('ma-matched-mentees', m.unique_mentees ?? 0);
+                set('ma-matched-mentors', m.unique_mentors ?? 0);
+                set('ma-active', m.active_now ?? 0);
+                set('ma-total-matches', `${plural(m.total_matches ?? 0, 'match')} in this period`);
+
+                set('ma-ended-users', e.unique_users ?? 0);
+                set('ma-ended-total', plural(e.total ?? 0, 'mentorship') + ' ended');
+
+                const tracked = d.ended_by_tracking !== false;
+                const self = by.mentee || {}, mentor = by.mentor || {};
+                set('ma-self', tracked ? (self.unique_mentees ?? 0) : '–');
+                set('ma-self-sub', tracked ? plural(self.endings ?? 0, 'mentorship') : 'not tracked yet');
+                set('ma-mentor', tracked ? (mentor.unique_mentors ?? 0) : '–');
+                set('ma-mentor-sub', tracked ? plural(mentor.endings ?? 0, 'mentorship') : 'not tracked yet');
+
+                const notice = document.getElementById('maNotice');
+                const unknown = by.unknown?.endings ?? 0;
+                if (!tracked) {
+                    notice.style.display = 'block';
+                    notice.textContent = 'Who ended each mentorship is not being recorded yet. Run migrations/20260929_mentorship_end_reason.sql in Supabase, then new endings will be split by mentee / mentor.';
+                } else if (unknown > 0) {
+                    notice.style.display = 'block';
+                    notice.textContent = `${plural(unknown, 'ending')} happened before "who ended it" was recorded, so they can't be split into mentee or mentor and are listed as "Not recorded". Only new endings are tracked.`;
+                } else {
+                    notice.style.display = 'none';
+                }
+
+                const rows = [
+                    ['mentee', 'Mentee (self)', 'var(--accent)'],
+                    ['mentor', 'Mentor', 'var(--gold)'],
+                    ['admin', 'Admin', 'var(--danger)'],
+                    ['system', 'System (became a mentor)', 'var(--text2)'],
+                    ['unknown', 'Not recorded (older endings)', 'var(--text3)'],
+                ];
+                body.innerHTML = rows.map(([k, label, color]) => {
+                    const r = by[k] || {};
+                    return `<tr>
+      <td style="color:${color};font-weight:600">${label}</td>
+      <td>${r.endings ?? 0}</td>
+      <td>${r.unique_mentees ?? 0}</td>
+      <td>${r.unique_mentors ?? 0}</td>
+    </tr>`;
+                }).join('');
+            } catch (err) {
+                body.innerHTML = `<tr><td colspan="4" class="loading">Could not load analytics: ${esc(err.message)}</td></tr>`;
+                toast(err.message, 'error');
+            }
         }
 
         /* ── Mentorship Request Log ────────────────────────────────── */

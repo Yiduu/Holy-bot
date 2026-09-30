@@ -1027,6 +1027,13 @@ async function endMentorship(chatId, partnerId, initiatorRole, opts = {}) {
   const initiatorName = initiator?.anonymous_id || 'Someone';
   const partnerName = partner?.anonymous_id || 'the other user';
 
+  // Record who ended it on the still-active row (analytics). Ignored if the
+  // ended_by column hasn't been migrated yet.
+  await supabase.from('mentorship_assignments')
+    .update({ ended_by: initiatorRole === 'mentor' ? 'mentor' : 'mentee' })
+    .eq('is_active', true)
+    .or(`and(mentor_id.eq.${chatId},user_id.eq.${partnerId}),and(mentor_id.eq.${partnerId},user_id.eq.${chatId})`);
+
   // Update assignment: mark it inactive
   await supabase.from('mentorship_assignments')
     .update({ is_active: false, ended_at: new Date().toISOString() })

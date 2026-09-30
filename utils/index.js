@@ -82,7 +82,7 @@ function emitToUser(telegram_id, event, payload) {
  *
  * @param {object} supabase
  * @param {string} assignmentId
- * @param {{reason?: string, endedBy?: 'mentee'|'mentor'|'system'}} [opts]
+ * @param {{reason?: string, endedBy?: 'mentee'|'mentor'|'admin'|'system'}} [opts]
  * @returns {Promise<object|null>} the Supabase error, or null on success
  */
 async function closeAssignment(supabase, assignmentId, { reason = null, endedBy = null } = {}) {

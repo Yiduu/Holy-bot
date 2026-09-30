@@ -2,7 +2,8 @@
 
 const express = require('express');
 const axios = require('axios');
-const { endMenteeSideOnPromotion } = require('../utils');
+const { endMenteeSideOnPromotion, closeAssignment } = require('../utils');
+const { summarize } = require('../utils/mentorshipAnalytics');
 
 // Prefix shown above an admin's custom message, localized by the applicant's
 // preferred language (user_settings.language). Falls back to English.
@@ -88,6 +89,44 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
   }
 
   // ==================== STATS ====================
+  // GET /api/admin/analytics/mentorship?days=0|7|30|90|365
+  // Unique people matched, unique people whose mentorship ended, and who
+  // ended it (mentee themselves / mentor / admin / system). days=0 = all time.
+  router.get('/analytics/mentorship', async (req, res) => {
+    try {
+      const days = Math.min(Math.max(parseInt(req.query.days, 10) || 0, 0), 3650);
+      const sinceMs = days ? Date.now() - days * 86400000 : 0;
+      const sinceIso = days ? new Date(sinceMs).toISOString() : null;
+
+      // Pull rows in pages (PostgREST returns at most 1000 per request).
+      async function fetchAll(columns) {
+        const out = [];
+        for (let from = 0; ; from += 1000) {
+          let q = supabase.from('mentorship_assignments').select(columns)
+            .order('assigned_at', { ascending: true }).range(from, from + 999);
+          if (sinceIso) q = q.or(`assigned_at.gte.${sinceIso},ended_at.gte.${sinceIso}`);
+          const { data, error } = await q;
+          if (error) return { error };
+          out.push(...data);
+          if (data.length < 1000) return { rows: out };
+        }
+      }
+
+      let tracking = true;
+      let result = await fetchAll('user_id, mentor_id, is_active, assigned_at, ended_at, ended_by');
+      if (result.error && /ended_by/i.test(result.error.message || '')) {
+        // Column not migrated yet: still report matches and total endings.
+        tracking = false;
+        result = await fetchAll('user_id, mentor_id, is_active, assigned_at, ended_at');
+      }
+      if (result.error) return res.status(500).json({ error: result.error.message });
+
+      res.json({ days, ended_by_tracking: tracking, ...summarize(result.rows, sinceMs) });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   router.get('/stats', async (req, res) => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
 
@@ -863,10 +902,20 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
 
     await supabase.from('users').update({ role: 'user' }).eq('telegram_id', telegram_id);
     await supabase.from('mentors').update({ is_active: false }).eq('telegram_id', telegram_id);
-    await supabase.from('mentorship_assignments')
-      .update({ is_active: false, ended_at: new Date().toISOString() })
-      .eq('mentor_id', telegram_id)
-      .eq('is_active', true);
+    const { data: activeAssignments, error: activeErr } = await supabase
+      .from('mentorship_assignments').select('id')
+      .eq('mentor_id', telegram_id).eq('is_active', true);
+    if (activeErr) {
+      // Couldn't list them: fall back to the original bulk close.
+      await supabase.from('mentorship_assignments')
+        .update({ is_active: false, ended_at: new Date().toISOString() })
+        .eq('mentor_id', telegram_id)
+        .eq('is_active', true);
+    } else {
+      for (const a of activeAssignments || []) {
+        await closeAssignment(supabase, a.id, { endedBy: 'admin' });
+      }
+    }
 
     await logAudit(admin_id, 'disqualify_mentor', telegram_id, 'mentor');
     res.json({ success: true });
