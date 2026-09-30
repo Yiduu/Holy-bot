@@ -178,6 +178,7 @@
   "goal_marked_done_confirm": "እንደ ተጠናቀቀ ምልክት ተደርጓል።",
   "goal_already_done": "ይህ ግብ ቀድሞውኑ ተጠናቅቋል።",
   "goal_not_found": "ያ ግብ አልተገኘም — ተነስቶ ሊሆን ይችላል።",
+  "goal_past_due": "የዚህ ግብ ቀነ-ገደብ አልፏል፤ ስለዚህ እንደተጠናቀቀ ምልክት ማድረግ አይቻልም።",
   "book_mapping": {
     "Psalm": "መዝሙረ ዳዊት",
     "Romans": "ሮሜ",

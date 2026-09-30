@@ -178,6 +178,7 @@
     "goal_marked_done_confirm": "Marked as done.",
     "goal_already_done": "This goal is already marked as done.",
     "goal_not_found": "Goal not found or already removed.",
+    "goal_past_due": "This goal's due date has passed, so it can't be marked as done any more.",
     "apply_end_mentorship_first": "You're currently working with a mentor. Before you apply to become a mentor, open the app, end your mentorship, rate your mentor and tell us why you're leaving.",
     "btn_open_app": "Open App",
     "btn_load_earlier": "Load earlier messages"

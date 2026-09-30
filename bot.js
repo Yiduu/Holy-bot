@@ -9,6 +9,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
+const { isGoalPastDue } = require('./utils/goalRules');
 const fs = require('fs');
 const path = require('path');
 const { emitToUser } = require('./utils');
@@ -1744,8 +1745,8 @@ async function notifyGoalMissed(menteeId, goal) {
   const chatId = await resolveChatId(menteeId);
   const title = goal.title;
   const text = lang === 'am'
-    ? `ያለፈ ግብ ማሳሰቢያ\n\nየ"${title}" ግብዎ ቀነ-ገደብ አልፏል። በማንኛውም ጊዜ አጠናቀው ምልክት ማድረግ ይችላሉ።`
-    : `Goal Missed\n\n"${title}" passed its due date without being marked done. You can still complete and mark it done at any time.`;
+    ? `ያለፈ ግብ ማሳሰቢያ\n\nየ"${title}" ግብዎ ቀነ-ገደብ አልፏል። ችግር የለም — አሁንም መሥራት ከፈለጉ፣ አማካሪዎን አዲስ ቀነ-ገደብ እንዲሰጥዎ ይጠይቁ።`
+    : `Goal Missed\n\n"${title}" passed its due date without being marked done. That's okay. If you'd still like to work on it, ask your mentor to set a new due date.`;
   await safeSend(chatId, text);
 }
 
@@ -2379,6 +2380,12 @@ bot.on('callback_query', async (query) => {
     }
     if (goal.is_done) {
       await bot.answerCallbackQuery(query.id, { text: tSync(lang, 'goal_already_done') });
+      return;
+    }
+    // Due date already passed: the goal is closed, so drop the button.
+    if (isGoalPastDue(goal.due_date)) {
+      await bot.answerCallbackQuery(query.id, { text: tSync(lang, 'goal_past_due'), show_alert: true });
+      try { await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: query.message.message_id }); } catch { }
       return;
     }
 

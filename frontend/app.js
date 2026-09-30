@@ -2810,15 +2810,33 @@ function myGoalsProgress() {
   return { total, done, pct: total ? Math.round((done / total) * 100) : 0 };
 }
 
+// A goal whose due date has passed is closed: its tick box is disabled. The
+// server enforces the same rule (PATCH /goals/:id), this just reflects it.
+// "Today" is Ethiopia's date, matching the server and the nightly missed-goal job.
+function isGoalLocked(g) {
+  if (!g?.due_date) return false;
+  let today;
+  try { today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Addis_Ababa' }); }
+  catch { today = new Date().toISOString().substring(0, 10); }
+  return String(g.due_date).substring(0, 10) < today;
+}
+
+function goalCheckboxAttrs(g) {
+  return isGoalLocked(g)
+    ? { cls: ' is-locked', title: ` title="${t('mentee_goal_locked')}"`, input: 'disabled' }
+    : { cls: '', title: '', input: '' };
+}
+
 function renderMyGoalItem(g) {
-  const missed = !g.is_done && g.is_missed;
+  const missed = !g.is_done && (g.is_missed || isGoalLocked(g));
+  const cb = goalCheckboxAttrs(g);
   const due = g.due_date
     ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}${missed ? ` <span class="goal-missed-badge">${t('mentee_goal_missed')}</span>` : ''}</div>`
     : '';
   return `
     <div class="my-goal-item ${g.is_done ? 'done' : ''} ${missed ? 'missed' : ''}" data-goal-id="${g.id}">
-      <label class="premium-checkbox">
-        <input type="checkbox" ${g.is_done ? 'checked' : ''} onchange="toggleMyGoalDone('${g.id}', this.checked)">
+      <label class="premium-checkbox${cb.cls}"${cb.title}>
+        <input type="checkbox" ${g.is_done ? 'checked' : ''} ${cb.input} onchange="toggleMyGoalDone('${g.id}', this.checked)">
         <span class="premium-checkbox-box">
           <svg class="premium-checkbox-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
         </span>
@@ -7071,14 +7089,15 @@ function syncMentorGoalTicker(menteeId) {
 }
 
 function renderMentorGoalItem(g, menteeId) {
-  const missed = !g.is_done && g.is_missed;
+  const missed = !g.is_done && (g.is_missed || isGoalLocked(g));
+  const cb = goalCheckboxAttrs(g);
   const due = g.due_date
     ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}${missed ? ` <span class="goal-missed-badge">${t('mentee_goal_missed')}</span>` : ''}</div>`
     : '';
   return `
     <div class="goal-item ${g.is_done ? 'done' : ''} ${missed ? 'missed' : ''}" data-goal-id="${g.id}">
-      <label class="premium-checkbox">
-        <input type="checkbox" ${g.is_done ? 'checked' : ''} onchange="toggleMenteeGoalDone('${g.id}', '${menteeId}', this.checked)">
+      <label class="premium-checkbox${cb.cls}"${cb.title}>
+        <input type="checkbox" ${g.is_done ? 'checked' : ''} ${cb.input} onchange="toggleMenteeGoalDone('${g.id}', '${menteeId}', this.checked)">
         <span class="premium-checkbox-box">
           <svg class="premium-checkbox-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
         </span>

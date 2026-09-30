@@ -2,6 +2,7 @@
 
 const express = require('express');
 const { emitToUserRoom } = require('../utils');
+const { isGoalPastDue } = require('../utils/goalRules');
 
 // PostgREST caps a response at 1000 rows and very long `in (...)` lists can
 // overflow the URL, so batched lookups go through here: ids are sent in chunks
@@ -746,11 +747,13 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
   // Completion (is_done) can be toggled by the mentor OR the mentee
   // themselves — the mentee is the one actually doing the work being
   // tracked. Editing the title/due_date stays mentor-only.
+  // Once the due date has passed the goal is closed: is_done can't be changed
+  // any more (a mentor reopens it by setting a new due date).
   router.patch('/goals/:id', requireAuth, async (req, res) => {
     const caller_id = req.telegramUser.id;
     const { is_done, title, due_date } = req.body;
 
-    const { data: goal } = await supabase.from('mentor_mentee_goals').select('mentor_id, mentee_id').eq('id', req.params.id).single();
+    const { data: goal } = await supabase.from('mentor_mentee_goals').select('mentor_id, mentee_id, due_date').eq('id', req.params.id).single();
     if (!goal) return res.status(404).json({ error: 'Goal not found' });
 
     const isMentor = String(goal.mentor_id) === String(caller_id);
@@ -759,10 +762,16 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
 
     const updates = {};
     if (typeof is_done === 'boolean') {
+      // If the mentor is moving the due date in this same request, judge
+      // against the new date, otherwise against the stored one.
+      const effectiveDue = (isMentor && due_date !== undefined) ? (due_date || null) : goal.due_date;
+      if (isGoalPastDue(effectiveDue)) {
+        return res.status(409).json({
+          error: "This goal's due date has passed, so it can't be changed any more. A mentor can set a new due date to reopen it."
+        });
+      }
       updates.is_done = is_done;
       updates.completed_at = is_done ? new Date().toISOString() : null;
-      // Completing a goal clears any "missed" flag it had picked up —
-      // late is still done.
       if (is_done) { updates.is_missed = false; updates.missed_flagged_at = null; }
     }
     if (isMentor) {

@@ -5864,6 +5864,18 @@ textarea.form-control {
   z-index: 1;
 }
 
+/* Closed goal (due date passed): tick box is inactive. */
+.premium-checkbox.is-locked,
+.premium-checkbox.is-locked input[type="checkbox"] {
+  cursor: not-allowed;
+}
+.premium-checkbox.is-locked {
+  opacity: 0.4;
+}
+.premium-checkbox.is-locked input:active~.premium-checkbox-box {
+  transform: none;
+}
+
 .premium-checkbox-box {
   position: absolute;
   inset: 0;
