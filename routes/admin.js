@@ -2,6 +2,7 @@
 
 const express = require('express');
 const axios = require('axios');
+const multer = require('multer');
 const { endMenteeSideOnPromotion, closeAssignment } = require('../utils');
 const { summarize } = require('../utils/mentorshipAnalytics');
 
@@ -11,6 +12,14 @@ const CONTACT_PREFIX = {
   en: 'Message from the Mentorship Team\nRegarding your mentor application:',
   am: 'መልእክት ከአማካሪ ቡድን\nስለ አማካሪነት ማመልከቻዎ፦',
 };
+
+// Broadcast attachments are held in memory just long enough to hand them to
+// Telegram (50 MB is the Bot API upload ceiling).
+const BROADCAST_MEDIA_MAX = 50 * 1024 * 1024;
+const broadcastUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: BROADCAST_MEDIA_MAX },
+});
 
 module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
   const router = express.Router();
@@ -779,21 +788,76 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
   });
 
   // ==================== BROADCAST ====================
-  router.post('/broadcast', async (req, res) => {
+  // Parks the file in the admin's own Telegram chat purely to mint a reusable
+  // file_id (same approach as avatars). Every member then gets that file_id, so
+  // the bytes are uploaded once no matter how many people receive it. The kind
+  // is read back from Telegram's reply, so a video it re-labels as a document
+  // is still sent the right way.
+  async function storeBroadcastMedia(file, adminId) {
+    const { bot } = require('../bot');
+    const chatId = process.env.ADMIN_TELEGRAM_ID || adminId;
+    const mime = file.mimetype || '';
+    const opts = { disable_notification: true };
+    const fileOpts = { filename: file.originalname, contentType: mime };
+
+    let sent;
+    if (mime === 'image/gif') sent = await bot.sendAnimation(chatId, file.buffer, opts, fileOpts);
+    else if (mime.startsWith('image/') && file.size <= 10 * 1024 * 1024) sent = await bot.sendPhoto(chatId, file.buffer, opts, fileOpts);
+    else if (mime.startsWith('video/')) sent = await bot.sendVideo(chatId, file.buffer, opts, fileOpts);
+    else if (mime === 'audio/ogg') sent = await bot.sendVoice(chatId, file.buffer, opts, fileOpts);
+    else if (mime.startsWith('audio/')) sent = await bot.sendAudio(chatId, file.buffer, opts, fileOpts);
+    else sent = await bot.sendDocument(chatId, file.buffer, opts, fileOpts);
+
+    if (sent.photo) return { type: 'photo', file_id: sent.photo[sent.photo.length - 1].file_id };
+    if (sent.animation) return { type: 'animation', file_id: sent.animation.file_id };
+    if (sent.video) return { type: 'video', file_id: sent.video.file_id };
+    if (sent.voice) return { type: 'voice', file_id: sent.voice.file_id };
+    if (sent.audio) return { type: 'audio', file_id: sent.audio.file_id };
+    if (sent.document) return { type: 'document', file_id: sent.document.file_id };
+    throw new Error('Telegram did not return a file');
+  }
+
+  // Accepts JSON ({ message, role_filter }) for text-only broadcasts, or
+  // multipart/form-data (message, role_filter, media) when a file is attached.
+  router.post('/broadcast', (req, res, next) => {
+    if (!req.is('multipart/form-data')) return next();
+    broadcastUpload.single('media')(req, res, (err) => {
+      if (!err) return next();
+      const tooBig = err.code === 'LIMIT_FILE_SIZE';
+      res.status(tooBig ? 413 : 400).json({ error: tooBig ? 'That file is over 50 MB.' : err.message });
+    });
+  }, async (req, res) => {
     const admin_id = req.telegramUser.id;
-    const { message, role_filter } = req.body;
-    if (!message) return res.status(400).json({ error: 'message required' });
+    const role_filter = req.body.role_filter || undefined;
+    const message = typeof req.body.message === 'string' ? req.body.message.trim() : '';
+    const file = req.file;
 
-    let query = supabase.from('users').select('telegram_id, chat_id').eq('is_banned', false);
-    if (role_filter) query = query.eq('role', role_filter);
-    const { data: users } = await query;
+    if (!message && !file) return res.status(400).json({ error: 'Add a message or attach a file.' });
+    // Telegram caps captions at 1024 characters and plain messages at 4096.
+    if (message.length > (file ? 1024 : 4096)) {
+      return res.status(400).json({ error: file ? 'Captions can be up to 1024 characters.' : 'Message is too long.' });
+    }
 
-    io.emit('broadcast', { message, from: 'admin' });
-    const { broadcastToAll } = require('../bot');
-    await broadcastToAll(message, role_filter);
+    try {
+      const media = file ? await storeBroadcastMedia(file, admin_id) : null;
+      if (message) io.emit('broadcast', { message, from: 'admin' });
 
-    await logAudit(admin_id, 'broadcast', null, 'all', { message: message.substring(0, 100), role_filter });
-    res.json({ sent_to: users?.length || 0 });
+      const { broadcastToAll } = require('../bot');
+      const result = await broadcastToAll(message, role_filter, media);
+
+      await logAudit(admin_id, 'broadcast', null, 'all', {
+        message: message.substring(0, 100),
+        role_filter,
+        media_type: media?.type,
+        file_id: media?.file_id,
+        sent: result.sent,
+        failed: result.failed,
+      });
+      res.json({ sent_to: result.sent, failed: result.failed });
+    } catch (err) {
+      console.error('[admin] broadcast failed:', err.message);
+      res.status(500).json({ error: 'Broadcast failed. Check that the bot can message the admin chat.' });
+    }
   });
 
   // ==================== AUDIT LOGS ====================

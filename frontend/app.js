@@ -1613,6 +1613,7 @@ function connectSocket() {
   });
 
   socket.on('broadcast', ({ message }) => {
+    if (!message) return;
     showToast(`📢 ${message}`);
   });
 

@@ -988,6 +988,16 @@
             line-height: 1.6;
         }
 
+        .bc-file { display: flex; align-items: center; gap: 10px; flex-wrap: wrap }
+        .bc-file-name {
+            font-size: 12.5px; color: var(--text2);
+            max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap
+        }
+        .bc-thumb {
+            display: block; max-width: 100%; max-height: 220px;
+            border-radius: var(--radius-sm); margin-bottom: 10px
+        }
+
         .preview-label {
             font-size: 10px;
             text-transform: uppercase;
@@ -2536,6 +2546,18 @@
                                 oninput="updateBroadcastPreview()"></textarea>
                             <div class="char-counter"><span id="broadcastLen">0</span>/1000</div>
                         </div>
+                        <div class="form-group">
+                            <label class="form-label">Attachment (optional)</label>
+                            <div class="bc-file">
+                                <input type="file" id="broadcastFile" style="display:none"
+                                    onchange="onBroadcastFile()">
+                                <button type="button" class="btn btn-ghost btn-sm"
+                                    onclick="document.getElementById('broadcastFile').click()">Choose file</button>
+                                <button type="button" class="btn btn-ghost btn-sm" id="broadcastFileClear"
+                                    style="display:none" onclick="clearBroadcastFile()">Remove</button>
+                                <span class="bc-file-name" id="broadcastFileName">Photo, video, audio, voice note or any file, up to 50 MB</span>
+                            </div>
+                        </div>
                         <div id="broadcastPreviewWrap" style="display:none">
                             <div class="preview-label">Preview</div>
                             <div class="broadcast-preview" id="broadcastPreview"></div>
@@ -3568,25 +3590,63 @@
         }
 
         /* ── Broadcast ──────────────────────────────────────────────── */
+        let broadcastThumbUrl = null;
+        const BC_HINT = 'Photo, video, audio, voice note or any file, up to 50 MB';
         function updateBroadcastPreview() {
             const msg = document.getElementById('broadcastMsg').value;
             document.getElementById('broadcastLen').textContent = msg.length;
+            const file = document.getElementById('broadcastFile').files[0];
             const wrap = document.getElementById('broadcastPreviewWrap');
             const prev = document.getElementById('broadcastPreview');
-            if (msg.trim()) { wrap.style.display = 'block'; prev.textContent = msg; }
-            else { wrap.style.display = 'none'; }
+            if (!msg.trim() && !file) { wrap.style.display = 'none'; return; }
+            wrap.style.display = 'block';
+            prev.innerHTML = '';
+            if (file && broadcastThumbUrl) {
+                const el = document.createElement(file.type.startsWith('video/') ? 'video' : 'img');
+                el.src = broadcastThumbUrl; el.className = 'bc-thumb';
+                if (el.tagName === 'VIDEO') el.controls = true;
+                prev.appendChild(el);
+            } else if (file) {
+                const n = document.createElement('div');
+                n.textContent = file.name; n.style.marginBottom = '8px';
+                prev.appendChild(n);
+            }
+            if (msg.trim()) { const t = document.createElement('div'); t.textContent = msg; prev.appendChild(t); }
+        }
+        function onBroadcastFile() {
+            const input = document.getElementById('broadcastFile');
+            if (broadcastThumbUrl) { URL.revokeObjectURL(broadcastThumbUrl); broadcastThumbUrl = null; }
+            let file = input.files[0];
+            if (file && file.size > 50 * 1024 * 1024) { input.value = ''; file = null; toast('That file is over 50 MB', 'error'); }
+            if (file && /^(image|video)\//.test(file.type)) broadcastThumbUrl = URL.createObjectURL(file);
+            document.getElementById('broadcastFileName').textContent = file ? file.name : BC_HINT;
+            document.getElementById('broadcastFileClear').style.display = file ? '' : 'none';
+            updateBroadcastPreview();
+        }
+        function clearBroadcastFile() {
+            document.getElementById('broadcastFile').value = '';
+            onBroadcastFile();
         }
         async function sendBroadcast() {
             const message = document.getElementById('broadcastMsg').value.trim();
-            const role_filter = document.getElementById('broadcastRole').value || undefined;
-            if (!message) { toast('Write a message first', 'error'); return; }
+            const role_filter = document.getElementById('broadcastRole').value || '';
+            const file = document.getElementById('broadcastFile').files[0];
+            if (!message && !file) { toast('Add a message or a file first', 'error'); return; }
             if (!confirm(`Send broadcast${role_filter ? ' to ' + role_filter + 's' : ' to all members'}?`)) return;
             try {
-                const d = await api('/api/admin/broadcast', { method: 'POST', body: { message, role_filter } });
-                document.getElementById('broadcastResult').textContent = `✓ Sent to ${d.sent_to || 0} members`;
+                // multipart so a file can ride along; the browser sets the boundary itself
+                const form = new FormData();
+                form.append('message', message);
+                form.append('role_filter', role_filter);
+                if (file) form.append('media', file);
+                const headers = hdrs(); delete headers['Content-Type'];
+                const res = await fetch(`${API}/api/admin/broadcast`, { method: 'POST', headers, body: form });
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+                document.getElementById('broadcastResult').textContent =
+                    `✓ Delivered to ${d.sent_to || 0} members` + (d.failed ? ` · ${d.failed} couldn't be reached` : '');
                 document.getElementById('broadcastMsg').value = '';
-                document.getElementById('broadcastLen').textContent = '0';
-                document.getElementById('broadcastPreviewWrap').style.display = 'none';
+                clearBroadcastFile();
                 toast('Broadcast sent!', 'success');
             } catch (e) { toast(e.message, 'error'); }
         }

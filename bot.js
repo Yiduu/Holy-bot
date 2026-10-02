@@ -1422,16 +1422,64 @@ async function notifyMentorRejected(chatId) {
   await safeSend(chatId, msg);
 }
 
-async function broadcastToAll(message, roleFilter) {
-  let query = supabase.from('users').select('telegram_id, user_settings(language)').eq('is_banned', false);
-  if (roleFilter) query = query.eq('role', roleFilter);
-  const { data: users } = await query;
-  if (users) {
-    for (const u of users) {
-      const lang = u.user_settings?.language || 'en';
-      await safeSend(u.telegram_id, `${tSync(lang, 'broadcast')}\n\n${message}`);
+// Delivers one broadcast item (plain text, or media with an optional caption)
+// to a single chat. Returns true when Telegram accepted it. The admin's text is
+// tried as Markdown first; if Telegram rejects the formatting (a stray * or _),
+// the same content goes out as plain text instead of being dropped.
+async function sendBroadcastItem(chatId, { text, media }) {
+  const send = (parseMode) => {
+    const opts = parseMode ? { parse_mode: parseMode } : {};
+    if (!media) return bot.sendMessage(chatId, text, opts);
+    if (text) opts.caption = text;
+    switch (media.type) {
+      case 'photo': return bot.sendPhoto(chatId, media.file_id, opts);
+      case 'video': return bot.sendVideo(chatId, media.file_id, opts);
+      case 'animation': return bot.sendAnimation(chatId, media.file_id, opts);
+      case 'voice': return bot.sendVoice(chatId, media.file_id, opts);
+      case 'audio': return bot.sendAudio(chatId, media.file_id, opts);
+      default: return bot.sendDocument(chatId, media.file_id, opts);
     }
+  };
+  try {
+    await send('Markdown');
+    return true;
+  } catch (err) {
+    let lastErr = err;
+    if (/can't parse entities/i.test(err.message)) {
+      try { await send(); return true; } catch (retryErr) { lastErr = retryErr; }
+    }
+    console.error(`[Broadcast] Failed to send to ${chatId}:`, lastErr.message);
+    return false;
   }
+}
+
+// `media` is { type, file_id } as minted by the admin broadcast route. Nothing
+// is added around the admin's text: members get exactly what was written.
+async function broadcastToAll(message, roleFilter, media = null) {
+  const users = [];
+  for (let from = 0; ; from += 1000) {
+    let query = supabase.from('users').select('telegram_id').eq('is_banned', false);
+    if (roleFilter) query = query.eq('role', roleFilter);
+    const { data, error } = await query.order('telegram_id').range(from, from + 999);
+    if (error) throw new Error(error.message);
+    users.push(...data);
+    if (data.length < 1000) break;
+  }
+
+  // Telegram allows ~30 messages/second overall, so go out in batches of 20
+  // and never faster than one batch per second.
+  const BATCH = 20;
+  let sent = 0, failed = 0;
+  for (let i = 0; i < users.length; i += BATCH) {
+    const startedAt = Date.now();
+    const results = await Promise.all(
+      users.slice(i, i + BATCH).map((u) => sendBroadcastItem(u.telegram_id, { text: message, media }))
+    );
+    results.forEach((ok) => (ok ? sent++ : failed++));
+    const wait = 1000 - (Date.now() - startedAt);
+    if (wait > 0 && i + BATCH < users.length) await new Promise((r) => setTimeout(r, wait));
+  }
+  return { sent, failed, total: users.length };
 }
 
 async function notifySessionInvite(chatId, sessionInfo) {
