@@ -737,20 +737,38 @@
     $('shareScreenBtn')?.classList.add('hidden'); // header button is covered by the full-screen call; the bar has its own
     $('ctlShare')?.classList.toggle('hidden', !show);
   };
+  // Phone browsers and in-app WebViews do not expose getDisplayMedia, so no web page
+  // (ours or Jitsi's) can share a phone screen. Don't send people to a browser that
+  // has the same limit — offer the two things that do work.
+  function screenShareUnavailable() {
+    const d = A.data;
+    const webUrl = window.buildExternalSessionUrl(d, A.prefs);
+    const appUrl = `org.jitsi.meet://${d.jitsi_domain}/${d.room_name}` + (d.jitsi_token ? `?jwt=${d.jitsi_token}` : '');
+    const pw = d.room_password;
+    const actions = [];
+    if (isTouchDevice()) {
+      actions.push({ label: sr('share_open_app', 'Open in Jitsi Meet app'), onClick: () => { window.location.href = appUrl; } });
+    }
+    actions.push({
+      label: sr('share_copy_link', 'Copy link to open on a computer'),
+      kind: 'ghost',
+      onClick: async () => {
+        try { await navigator.clipboard.writeText(webUrl); showToast(sr('copied', 'Copied'), 'success'); }
+        catch (_) { showToast(webUrl, 'info'); }
+      },
+    });
+    actions.push({ label: sr('cancel', 'Cancel'), kind: 'ghost' });
+    sheet({
+      title: sr('share_title', 'Screen sharing isn\'t available on phones'),
+      body: esc(sr('share_body', 'Phone browsers can\'t share the screen. Share from a computer, or use the free Jitsi Meet app (it supports screen sharing).'))
+        + (pw ? `<br><br>${esc(sr('pass_label', 'If you\'re asked for a password'))}: <code>${esc(pw)}</code>` : ''),
+      actions,
+    });
+  }
   window.toggleScreenShare = function () {
     if (!A?.api) return;
     haptic('medium');
-    if (!window.supportsScreenShare()) {
-      if (window.isIOSDevice()) {
-        showToast(sr('ios_share', 'Screen sharing over the web needs iOS 17 or later. Camera and mic still work fine.'), 'info');
-        return;
-      }
-      return sheet({
-        title: sr('share_title', 'Screen sharing isn\'t available here'),
-        body: esc(sr('share_body', 'Open the session in your phone\'s browser to share your screen.')),
-        actions: [{ label: sr('open_browser', 'Open in browser instead'), onClick: () => window.SR.external() }, { label: sr('cancel', 'Cancel'), kind: 'ghost' }],
-      });
-    }
+    if (!window.supportsScreenShare()) return screenShareUnavailable();
     try { A.api.executeCommand('toggleShareScreen'); }
     catch (e) { console.error(e); showToast(sr('share_fail', 'Could not start screen sharing on this device.'), 'error'); }
   };

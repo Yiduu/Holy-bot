@@ -4492,13 +4492,14 @@ function showScheduleModal(is_group, mentee_id = null) {
     });
   }
 
+  // Default to the current local date/time. (Was now + 1 h, and the date came from
+  // toISOString() which is UTC — in Addis (UTC+3) that gives *yesterday* between
+  // 00:00 and 03:00.) A start time that has already passed is clamped to "now" by
+  // the server, so the default is safe to submit as-is.
   const now = new Date();
-  now.setHours(now.getHours() + 1);
-  const schedYear = now.getFullYear();
-  const schedMonth = String(now.getMonth() + 1).padStart(2, '0');
-  const schedDay = String(now.getDate()).padStart(2, '0');
-  document.getElementById('scheduleDate').value = `${schedYear}-${schedMonth}-${schedDay}`;
-  document.getElementById('scheduleTime').value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const pad2 = (n) => String(n).padStart(2, '0');
+  document.getElementById('scheduleDate').value = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  document.getElementById('scheduleTime').value = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
 
   modal.classList.add('open');
 
