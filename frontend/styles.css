@@ -10438,25 +10438,53 @@ body.in-call .fab-menu { display: none !important; }
 .call-stage.in-call #jitsiContainer { flex: 1; min-height: 0; height: auto; border-radius: 0; }
 .call-controls {
   display: none; flex-shrink: 0; align-items: stretch; justify-content: center; gap: 6px;
-  padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
-  background: rgba(14, 16, 22, .96); border-top: 1px solid var(--gold-dim);
+  padding: 10px 8px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, #141720, #0D0F14);
+  border-top: 1px solid var(--gold-dim);
 }
 .call-stage.in-call .call-controls { display: flex; }
+
+/* Brand line icons: same 24px grid / 1.8 stroke as the bottom-nav icons. */
+.ico {
+  width: 22px; height: 22px; flex-shrink: 0;
+  stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.ico-slash { display: none; }
+.ico.is-off .ico-slash, .ctl.off .ico-slash { display: block; }
+
+/* The call is always on black, so the bar uses fixed dark-brand colours (not the
+   theme tokens, which flip to dark-on-cream in light mode). */
 .ctl {
-  flex: 1 1 0; max-width: 72px; min-width: 0; min-height: 54px; padding: 6px 2px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  border: 0; border-radius: 14px; cursor: pointer; color: #fff;
-  background: rgba(255,255,255,.10); -webkit-tap-highlight-color: transparent;
-  transition: background .15s, transform .08s;
+  flex: 1 1 0; max-width: 72px; min-width: 0; min-height: 56px; padding: 7px 2px 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  border: 1px solid rgba(201, 168, 76, .22); border-radius: 16px; cursor: pointer;
+  color: #F0EDE4; background: rgba(255, 255, 255, .05);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .06);
+  -webkit-tap-highlight-color: transparent;
+  transition: background .15s, border-color .15s, color .15s, transform .08s;
 }
 .ctl:active { transform: scale(.94); }
-.ctl .ctl-ico { font-size: 1.3rem; line-height: 1; }
-.ctl .ctl-lbl { font-size: .62rem; font-weight: 600; opacity: .85; white-space: nowrap; }
-.ctl.off { background: #fff; color: #111; }
-.ctl.active { background: var(--gold); color: #111; }
+.ctl:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.ctl .ctl-ico { display: grid; place-items: center; line-height: 0; }
+.ctl .ctl-lbl {
+  font-family: var(--font-body); font-size: .62rem; font-weight: 700; letter-spacing: .02em;
+  color: #A8A49A; white-space: nowrap; line-height: 1;
+}
+/* Muted / camera off */
+.ctl.off { background: rgba(224, 92, 92, .14); border-color: rgba(224, 92, 92, .5); color: #F08A8A; }
+.ctl.off .ctl-lbl { color: #F08A8A; }
+/* Active (sharing screen) */
+.ctl.active {
+  background: linear-gradient(180deg, var(--gold-light), var(--gold)); border-color: var(--gold-light);
+  color: var(--espresso); box-shadow: var(--shadow-gold);
+}
+.ctl.active .ctl-lbl { color: var(--espresso); }
 .ctl.hidden { display: none; }
-.ctl-leave { background: #e5484d; }
-.ctl-leave .ctl-ico { transform: rotate(135deg); display: inline-block; }
+.ctl-leave { background: var(--danger); border-color: transparent; color: #fff; box-shadow: none; }
+.ctl-leave .ctl-lbl { color: #fff; }
+.ctl-leave .ico { transform: rotate(135deg); }
+.sr-toggle.on .sr-ico { color: var(--gold-light); }
+@media (prefers-reduced-motion: reduce) { .ctl { transition: none; } .ctl:active { transform: none; } }
 .sr-field { display: flex; flex-direction: column; gap: 4px; font-size: .78rem; text-align: left; margin-bottom: 10px; }
 .sr-field select {
   width: 100%; padding: 10px; border-radius: 10px; font-size: .9rem;

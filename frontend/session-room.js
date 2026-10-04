@@ -36,6 +36,13 @@
   const esc = (x) => (typeof escapeHtml === 'function' ? escapeHtml(String(x ?? '')) : String(x ?? ''));
   const tg = () => window.Telegram?.WebApp;
 
+  // Brand line icons (24px grid, 1.8 stroke — same family as the bottom-nav icons).
+  const ICO = {
+    mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line class="ico-slash" x1="3" y1="3" x2="21" y2="21"/>',
+    cam: '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/><line class="ico-slash" x1="3" y1="3" x2="21" y2="21"/>',
+  };
+  const ico = (name, off) => `<svg class="ico${off ? ' is-off' : ''}" viewBox="0 0 24 24" aria-hidden="true">${ICO[name]}</svg>`;
+
   // One mutable state object for the room we're currently in (or null).
   let A = null;
   let hbTimer = null, tickTimer = null, connectTimer = null, wakeLock = null;
@@ -299,10 +306,10 @@
         ${status}
         <div class="sr-toggles">
           <button class="sr-toggle ${prefs.mic ? 'on' : ''}" onclick="SR.toggle('mic')" aria-pressed="${prefs.mic}">
-            <span class="sr-ico">${prefs.mic ? '🎙️' : '🔇'}</span><span>${prefs.mic ? esc(sr('mic_on', 'Mic on')) : esc(sr('mic_off', 'Mic off'))}</span>
+            <span class="sr-ico">${ico('mic', !prefs.mic)}</span><span>${prefs.mic ? esc(sr('mic_on', 'Mic on')) : esc(sr('mic_off', 'Mic off'))}</span>
           </button>
           <button class="sr-toggle ${prefs.cam ? 'on' : ''}" onclick="SR.toggle('cam')" aria-pressed="${prefs.cam}">
-            <span class="sr-ico">${prefs.cam ? '📷' : '🚫'}</span><span>${prefs.cam ? esc(sr('cam_on', 'Camera on')) : esc(sr('cam_off', 'Camera off'))}</span>
+            <span class="sr-ico">${ico('cam', !prefs.cam)}</span><span>${prefs.cam ? esc(sr('cam_on', 'Camera on')) : esc(sr('cam_off', 'Camera off'))}</span>
           </button>
         </div>
         ${prefs.cam ? '' : `<div class="sr-hint">${esc(sr('cam_hint', 'Camera is optional — you can turn it on any time during the call.'))}</div>`}
@@ -453,15 +460,15 @@
 
   function renderControls() {
     if (!A) return;
-    const set = (id, on, icoOn, icoOff, lblOn, lblOff) => {
+    // Icons are static inline SVGs in index.html; only the state and label change.
+    const set = (id, on, lblOn, lblOff) => {
       const b = $(id); if (!b) return;
       b.classList.toggle('off', !on);
       b.setAttribute('aria-pressed', String(on));
-      b.querySelector('.ctl-ico').textContent = on ? icoOn : icoOff;
       b.querySelector('.ctl-lbl').textContent = on ? lblOn : lblOff;
     };
-    set('ctlMic', !A.micMuted, '🎙️', '🔇', sr('mic', 'Mic'), sr('unmute', 'Unmute'));
-    set('ctlCam', !A.camMuted, '📷', '🚫', sr('camera', 'Camera'), sr('start_video', 'Start'));
+    set('ctlMic', !A.micMuted, sr('mic', 'Mic'), sr('unmute', 'Unmute'));
+    set('ctlCam', !A.camMuted, sr('camera', 'Camera'), sr('start_video', 'Start'));
     $('ctlShare')?.classList.toggle('active', !!A.sharing);
   }
 
