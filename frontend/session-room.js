@@ -195,19 +195,19 @@
   window.createSession = async function (is_group = false, mentee_id = null, scheduled_at = null, customTitle = null, participant_ids = []) {
     if (creating) return;
     if (!is_group && !mentee_id && currentUser?.role === 'mentor') {
-      haptic('error'); showToast('Please select a mentee first.', 'error'); return;
+      haptic('error'); showToast(sr('select_mentee_first', 'Please select a mentee first.'), 'error'); return;
     }
     creating = true;
     haptic('light');
     try {
-      const title = customTitle || (is_group ? 'Group Session' : 'Private session');
+      const title = customTitle || (is_group ? sr('group_session_default', 'Group Session') : sr('private_session_default', 'Private session'));
       const finalScheduled = scheduled_at || new Date().toISOString();
       const data = await apiFetch('/api/sessions/create', {
         method: 'POST',
         body: { is_group, title, scheduled_at: finalScheduled, mentee_id: mentee_id || null, participant_ids: participant_ids.length ? participant_ids : undefined },
       });
       haptic('success');
-      showToast(is_group ? 'Group session created!' : 'Private session created!', 'success');
+      showToast(is_group ? sr('group_session_created', 'Group session created!') : sr('private_session_created', 'Private session created!'), 'success');
       const startsNow = new Date(finalScheduled).getTime() <= window.serverNow() + 30000;
       if (startsNow) {
         creating = false;
@@ -234,7 +234,7 @@
     };
     window.activeSession = { sessionId: A.sessionId, isModerator: A.isHost, joinData: data, connected: false };
     navigate('video');
-    $('callTitle').textContent = data.title || 'Live Session';
+    $('callTitle').textContent = data.title || sr('live_session_title', 'Live Session');
     toggleShareScreenButtonVisibility(false);
     tg()?.enableClosingConfirmation?.();
     startHeartbeat();
@@ -300,8 +300,8 @@
 
     $('sessionLobby').innerHTML = `
       <div class="sr-card">
-        <div class="sr-eyebrow">${data.is_group ? 'Group session' : '1-on-1 session'}</div>
-        <div class="sr-title">${esc(data.title || 'Live Session')}</div>
+        <div class="sr-eyebrow">${data.is_group ? esc(sr('group_session_badge', 'Group session')) : esc(sr('1on1_session_badge', '1-on-1 session'))}</div>
+        <div class="sr-title">${esc(data.title || sr('live_session_title', 'Live Session'))}</div>
         <div class="sr-sub">${esc(formatDateTime(data.scheduled_at))}${isHost ? '' : ' · ' + esc(data.host_name)}</div>
         ${status}
         <div class="sr-toggles">
@@ -465,10 +465,17 @@
       const b = $(id); if (!b) return;
       b.classList.toggle('off', !on);
       b.setAttribute('aria-pressed', String(on));
-      b.querySelector('.ctl-lbl').textContent = on ? lblOn : lblOff;
+      const lbl = b.querySelector('.ctl-lbl');
+      if (lbl) lbl.textContent = on ? lblOn : lblOff;
     };
     set('ctlMic', !A.micMuted, sr('mic', 'Mic'), sr('unmute', 'Unmute'));
     set('ctlCam', !A.camMuted, sr('camera', 'Camera'), sr('start_video', 'Start'));
+    const setLbl = (id, lbl) => { const el = $(id)?.querySelector('.ctl-lbl'); if (el) el.textContent = lbl; };
+    setLbl('ctlFlip', sr('flip', 'Flip'));
+    setLbl('ctlShare', sr('share', 'Share'));
+    setLbl('ctlChat', sr('chat', 'Chat'));
+    setLbl('ctlMore', sr('more_btn', 'More'));
+    setLbl('ctlLeave', sr('leave_btn', 'Leave'));
     $('ctlShare')?.classList.toggle('active', !!A.sharing);
   }
 

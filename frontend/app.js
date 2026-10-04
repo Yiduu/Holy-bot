@@ -4179,23 +4179,23 @@ function getSessionState(scheduledAt, status) {
   // A live session stays joinable for as long as it is live — people must be
   // able to rejoin after a dropped connection, however long the call has run.
   if (status === 'active') {
-    return { isJoinable: true, label: '🔴 Live now', labelClass: 'chip chip-live' };
+    return { isJoinable: true, label: t('live_now') || '🔴 Live now', labelClass: 'chip chip-live' };
   }
 
   // Never-started sessions expire (matches the server's 2 h window).
   if (elapsed > SESSION_GRACE_PERIOD_MS) {
-    return { isJoinable: false, label: '✓ Done', labelClass: 'chip chip-muted' };
+    return { isJoinable: false, label: t('session_done_status') || '✓ Done', labelClass: 'chip chip-muted' };
   }
 
   // More than 5 min early: not open yet.
   if (elapsed < -SESSION_EARLY_JOIN_MS) {
-    const startsAtText = t('starts_at').replace('{time}', formatDateTime(scheduledAt));
+    const startsAtText = (t('starts_at') || 'Starts at {time}').replace('{time}', formatDateTime(scheduledAt));
     return { isJoinable: false, label: startsAtText, labelClass: 'chip chip-muted session-not-yet' };
   }
 
   // Lobby is open (5 min before start onward).
   if (elapsed < 0) {
-    return { isJoinable: true, label: 'Lobby open — starting soon', labelClass: 'chip chip-soon' };
+    return { isJoinable: true, label: t('lobby_open_soon') || 'Lobby open — starting soon', labelClass: 'chip chip-soon' };
   }
   return { isJoinable: true, label: '', labelClass: '' };
 }
@@ -4331,13 +4331,13 @@ async function loadSessions() {
             ? `<div style="display:flex; flex-direction:column; gap:6px;">
                 <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${joinSessionBtnLabel()}</button>
                 <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">${joinBrowserBtnLabel()}</button>
-                ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${session.id}')">End Session</button>` : ''}
+                ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${session.id}')">${escapeHtml(t('btn_end_session') || 'End Session')}</button>` : ''}
               </div>`
             : (labelClass === 'chip chip-muted session-not-yet'
               ? `<div style="display:flex; flex-direction:column; gap:6px;">
                   <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinSessionBtnLabel()}</button>
                   <button class="btn btn-outline btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinBrowserBtnLabel()}</button>
-                  ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${session.id}')">End Session</button>` : ''}
+                  ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${session.id}')">${escapeHtml(t('btn_end_session') || 'End Session')}</button>` : ''}
                   <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
                 </div>`
               : `<span class="${labelClass}">${label}</span>`);
@@ -4383,12 +4383,12 @@ async function loadSessions() {
           if (isJoinable) {
             actionHtml = `<div style="display:flex; flex-direction:column; gap:6px;">
                 <button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${joinSessionBtnLabel()}</button>
-                ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')">End Session</button>` : ''}
+                ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')">${escapeHtml(t('btn_end_session') || 'End Session')}</button>` : ''}
               </div>`;
           } else if (labelClass === 'chip chip-muted session-not-yet') {
             actionHtml = `<div style="display:flex; flex-direction:column; gap:6px;">
                 <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinSessionBtnLabel()}</button>
-                ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')">End Session</button>` : ''}
+                ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')">${escapeHtml(t('btn_end_session') || 'End Session')}</button>` : ''}
                 <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
               </div>`;
           } else {
@@ -4396,7 +4396,7 @@ async function loadSessions() {
             // Even if the session is already done, host can still end it? Actually, if it's done, the button is not needed.
             // But we keep it simple: only show if canEnd is true.
             if (canEnd) {
-              actionHtml += `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')" style="margin-top:4px;">End Session</button>`;
+              actionHtml += `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')" style="margin-top:4px;">${escapeHtml(t('btn_end_session') || 'End Session')}</button>`;
             }
           }
 
@@ -5244,7 +5244,7 @@ function joinSessionBtnLabel() {
 }
 
 function joinBrowserBtnLabel() {
-  return `${ICON_JOIN_BROWSER_SVG}<span>Join via Browser</span>`;
+  return `${ICON_JOIN_BROWSER_SVG}<span>${escapeHtml(t('btn_join_browser') || 'Join via Browser')}</span>`;
 }
 
 function autoResizeChatInput() {
