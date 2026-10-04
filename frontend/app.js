@@ -124,6 +124,7 @@ async function apiFetch(path, opts = {}) {
     if (err.nickname_taken) e.nickname_taken = true;
     if (err.code) e.code = err.code;
     e.status = res.status;
+    e.data = err;
     throw e;
   }
   const ct = res.headers.get('content-type') || '';
@@ -1605,12 +1606,17 @@ function connectSocket() {
 
   socket.on('session_invite', (session) => {
     haptic('success');
-    showToast(`${t('session_invite_toast')}: ${session.title}`, 'info');
     updateSessionsBadge();
-    if (confirm('A new session has been scheduled. Go to Sessions page to join?')) {
-      navigate('sessions');
-    }
+    if (currentPage === 'sessions') loadSessions();
+    // Non-blocking, tappable banner (the old confirm() froze the app in some WebViews).
+    window.SRsocket?.invite(session.session_id, session.title);
   });
+
+  // The host arrived — unlock the lobby instantly.
+  socket.on('session_host_joined', ({ session_id } = {}) => window.SRsocket?.hostJoined(session_id));
+  socket.on('session_host_left', ({ session_id } = {}) => window.SRsocket?.hostLeft(session_id));
+  // A mentee is waiting in the lobby and the mentor isn't in the room yet.
+  socket.on('session_participant_waiting', ({ session_id, name } = {}) => window.SRsocket?.waiting(session_id, name));
 
   socket.on('broadcast', ({ message }) => {
     if (!message) return;
@@ -1733,7 +1739,13 @@ function connectSocket() {
 
   // Fired by the server when the host ends a session — refresh the sessions
   // page immediately so the Join button disappears for all participants.
-  socket.on('session_ended', ({ session_id } = {}) => {
+  socket.on('session_ended', ({ session_id, reason } = {}) => {
+    // If we're inside that session's lobby/call, close it properly instead of
+    // leaving the user stranded in a room that no longer exists.
+    if (window.activeSession && String(window.activeSession.sessionId) === String(session_id)) {
+      window.SRsocket?.ended(session_id, reason);
+      return;
+    }
     haptic('warning');
     showToast('The session has ended.', 'info');
     updateSessionsBadge();
@@ -4123,7 +4135,8 @@ async function respondToRequest(requestId, action) {
 // ─── Sessions ─────────────────────────────────────────────────
 
 // How long after the scheduled time a session is still joinable
-const SESSION_GRACE_PERIOD_MS = 60 * 60 * 1000; // 60 minutes
+const SESSION_GRACE_PERIOD_MS = 2 * 60 * 60 * 1000; // 2 h — must match SCHEDULED_EXPIRY_MS in routes/sessions.js
+const SESSION_EARLY_JOIN_MS = 5 * 60 * 1000;         // must match EARLY_JOIN_MS in routes/sessions.js
 
 // Timer that refreshes session labels every 30 s while on the sessions page
 let sessionTimerInterval = null;
@@ -4145,38 +4158,38 @@ function stopSessionTimer() {
  * No countdown is shown — just a static "Starts at [time]" message.
  */
 function getSessionState(scheduledAt, status) {
-  const now = Date.now();
+  // Use the server's clock: a phone that's a few minutes off used to show a Join
+  // button the server then refused (or hide one that was already open).
+  const now = (typeof window.serverNow === 'function') ? window.serverNow() : Date.now();
   const start = new Date(scheduledAt).getTime();
   const elapsed = now - start; // positive = past, negative = future
 
-  // Explicitly ended by host → always done
-  if (status === 'ended' || status === 'cleared') {
+  if (status === 'ended' || status === 'cleared' || status === 'cancelled') {
     return { isJoinable: false, label: t('session_ended_status'), labelClass: 'chip chip-muted' };
   }
 
-  // Grace period expired even if status is still 'scheduled' or 'active'
+  // A live session stays joinable for as long as it is live — people must be
+  // able to rejoin after a dropped connection, however long the call has run.
+  if (status === 'active') {
+    return { isJoinable: true, label: '🔴 Live now', labelClass: 'chip chip-live' };
+  }
+
+  // Never-started sessions expire (matches the server's 2 h window).
   if (elapsed > SESSION_GRACE_PERIOD_MS) {
     return { isJoinable: false, label: '✓ Done', labelClass: 'chip chip-muted' };
   }
 
-  // Future session: not joinable until the exact scheduled time arrives
-  if (elapsed < 0) {
-    // Show a static "Starts at [time]" message; buttons will be disabled
-    const formattedTime = formatDateTime(scheduledAt);
-    const startsAtText = t('starts_at').replace('{time}', formattedTime);
-    return {
-      isJoinable: false,
-      label: startsAtText,
-      labelClass: 'chip chip-muted session-not-yet',
-    };
+  // More than 5 min early: not open yet.
+  if (elapsed < -SESSION_EARLY_JOIN_MS) {
+    const startsAtText = t('starts_at').replace('{time}', formatDateTime(scheduledAt));
+    return { isJoinable: false, label: startsAtText, labelClass: 'chip chip-muted session-not-yet' };
   }
 
-  // Scheduled time has passed (within grace period) — show the Join button.
-  return {
-    isJoinable: true,
-    label: '',
-    labelClass: ''
-  };
+  // Lobby is open (5 min before start onward).
+  if (elapsed < 0) {
+    return { isJoinable: true, label: 'Lobby open — starting soon', labelClass: 'chip chip-soon' };
+  }
+  return { isJoinable: true, label: '', labelClass: '' };
 }
 
 /**
@@ -4275,6 +4288,7 @@ function refreshSessionLabels() {
 }
 
 async function loadSessions() {
+  if (typeof window.syncServerClock === 'function') await window.syncServerClock();
   // Stop any previous timer, start a fresh 30-second label refresh
   stopSessionTimer();
   sessionTimerInterval = setInterval(refreshSessionLabels, 30 * 1000);
@@ -4413,125 +4427,7 @@ async function clearSessionHistory() {
   } catch (e) { haptic('error'); showToast(e.message, 'error'); }
 }
 
-// ── Live-session compatibility guard ────────────────────────────────
-// Some in-app browsers (Plus Messenger, Nicegram, older Telegram WebViews,
-// some embedded Android WebViews) either lack WebRTC entirely or block it,
-// which is what causes Jitsi's own "your browser doesn't support..." error
-// page and silent video/audio failures. Rather than embed the call and let
-// that fail, we check up front and — whenever the current environment
-// looks unreliable — offer the external-browser link, which always works.
-function detectUnreliableSessionEnvironment() {
-  const ua = navigator.userAgent || '';
-  const isKnownUnreliableWrapper = /Plus|TelegramPlus|Nicegram|OWM|Bookmarks/i.test(ua);
-  const hasWebRTC = !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
-  const hasRTCPeerConnection = typeof window.RTCPeerConnection === 'function';
-  return isKnownUnreliableWrapper || !hasWebRTC || !hasRTCPeerConnection;
-}
-
-function isIOSDevice() {
-  const ua = navigator.userAgent || '';
-  // Modern iPadOS reports as "Mac" UA with touch support — distinguish
-  // it from an actual Mac laptop/desktop.
-  return /iPad|iPhone|iPod/.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1);
-}
-
-// Builds the fallback URL used when we send someone to open the session in
-// their phone's own browser instead of our embedded mini-app view.
-//
-// Jitsi's web client hides the screen-share ("desktop") toolbar button on
-// mobile browsers by default and nudges people to install the native app
-// instead — that's why "share screen" previously looked unavailable on
-// mobile even when the browser itself could technically support it. These
-// URL-hash config overrides force the button to show and disable that
-// app-install nudge, so screen sharing actually works in-browser wherever
-// the underlying platform supports it (modern Android Chrome/Firefox; iOS
-// Safari only from iOS 17 onward — that's an Apple platform limitation no
-// config can work around).
-function buildExternalSessionUrl(data) {
-  const forcedToolbarButtons = ['microphone', 'camera', 'desktop', 'chat', 'raisehand', 'tileview', 'fullscreen', 'hangup', 'security'];
-  const params = [
-    'config.disableDeepLinking=true',
-    `config.toolbarButtons=${encodeURIComponent(JSON.stringify(forcedToolbarButtons))}`,
-    'interfaceConfig.MOBILE_APP_PROMO=false',
-    'interfaceConfig.SHOW_JITSI_WATERMARK=false',
-    `userInfo.displayName=${encodeURIComponent(data.display_name)}`,
-  ];
-  if (data.jitsi_token) params.push(`jwt=${data.jitsi_token}`);
-  return `https://${data.jitsi_domain}/${data.room_name}#${params.join('&')}`;
-}
-
-async function joinSession(session_id) {
-  haptic('medium');
-  try {
-    const data = await apiFetch(`/api/sessions/${session_id}/join`);
-
-    if (detectUnreliableSessionEnvironment()) {
-      if (confirm("⚠️ Your current app may not support video calls reliably.\nOpen in your phone's browser instead? (Recommended)")) {
-        window.open(buildExternalSessionUrl(data), '_blank');
-        return;
-      }
-      // User chose to try anyway — fall through and attempt the embedded call.
-    }
-
-    launchJitsi(data.room_name, data.room_password, data.display_name, data.jitsi_token, data.is_moderator, data.session_id || null, data);
-  } catch (e) {
-    haptic('error');
-    showToast(e.message, 'error');
-  }
-}
-async function openSessionInBrowser(session_id) {
-  try {
-    const data = await apiFetch(`/api/sessions/${session_id}/join`);
-    const url = `https://${data.jitsi_domain}/${data.room_name}#config.disableDeepLinking=true&userInfo.displayName=${encodeURIComponent(data.display_name)}`;
-    window.open(url, '_blank');
-  } catch (e) {
-    showToast(e.message, 'error');
-  }
-}
-async function createSession(is_group = false, mentee_id = null, scheduled_at = null, customTitle = null, participant_ids = []) {
-  haptic('light');
-  try {
-    // mentee_id is always resolved before createSession is called for 1-on-1 sessions.
-    // If somehow still missing (e.g. called programmatically), just show an error.
-    if (!is_group && !mentee_id && currentUser?.role === 'mentor') {
-      haptic('error');
-      showToast('Please select a mentee first.', 'error');
-      return;
-    }
-
-    const title = customTitle || (is_group ? prompt('Session title (or leave blank):') : 'Private session');
-    const finalScheduled = scheduled_at || new Date().toISOString();
-
-    const data = await apiFetch('/api/sessions/create', {
-      method: 'POST',
-      body: {
-        is_group,
-        title,
-        scheduled_at: finalScheduled,
-        mentee_id: mentee_id || null,
-        participant_ids: participant_ids.length ? participant_ids : undefined
-      }
-    });
-
-    haptic('success');
-    showToast(is_group ? 'Group session created!' : 'Private session created!', 'success');
-    if (new Date(finalScheduled) <= new Date()) {
-      // Creator is always the host/moderator when launching immediately
-      const joinData = {
-        room_name: data.room_name,
-        jitsi_domain: data.jitsi_domain,
-        jitsi_token: data.jitsi_token,
-        display_name: currentUser.anonymous_id,
-      };
-      launchJitsi(data.room_name, data.room_password, currentUser.anonymous_id, data.jitsi_token, true, data.session.id, joinData);
-    } else {
-      loadSessions();
-    }
-  } catch (e) {
-    haptic('error');
-    showToast(e.message, 'error');
-  }
-}
+// Join / create / launch / leave now live in session-room.js.
 // ─── End a session (mentor/host only) ─────────────────────────────
 async function endSession(session_id) {
   if (!confirm('End this session for all participants? This action cannot be undone.')) return;
@@ -4706,228 +4602,7 @@ async function openPrivateSessionFlow() {
   }
 }
 
-// Detects whether the current browser/WebView can plausibly do screen
-// sharing (getDisplayMedia). Even when it can't, we still show the button
-// for the host — Jitsi itself will tell them if it fails — but we use this
-// to decide whether to proactively suggest the "open in browser" fallback
-// instead of a silent/broken attempt.
-function supportsScreenShare() {
-  return !!(navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === 'function');
-}
-
-function launchJitsi(roomName, roomPassword, displayName, token, isModerator = false, sessionId = null, joinData = null) {
-  navigate('video');
-  const container = $('jitsiContainer');
-  if (!container) return;
-  container.innerHTML = '';
-
-  window.activeSession = {
-    sessionId,
-    isModerator,
-    joinData,
-    connected: false,
-  };
-
-  toggleShareScreenButtonVisibility(isModerator);
-
-  const initJitsi = () => {
-    const options = {
-      roomName,
-      width: '100%',
-      height: '100%',
-      parentNode: container,
-      userInfo: { displayName },
-      // Explicitly grant the embedded iframe camera/mic/screen-share
-      // permission delegation. Without this, some mobile WebViews (where
-      // the host page never explicitly requests these permissions) never
-      // pass them down to the Jitsi iframe, which is one of the ways
-      // video/audio joining silently fails on mobile.
-      iframeAttributes: {
-        allow: 'camera; microphone; display-capture; autoplay; clipboard-write; fullscreen',
-        allowFullScreen: true,
-      },
-      configOverwrite: {
-        startWithAudioMuted: !isModerator,   // mentor joins unmuted by default
-        startWithVideoMuted: !isModerator,   // mentor's video on by default
-        enableClosePage: false,
-        disableDeepLinking: true,
-        // Disable Jitsi's "first joiner becomes moderator" behaviour.
-        // On a self-hosted server with JWT this is enforced server-side;
-        // on the public server we rely on the password so only the
-        // mentor can start the room and naturally holds moderator status.
-        requireDisplayName: false,
-        enableUserRolesBasedOnToken: false,
-        // Prevent participants from kicking / muting others
-        disableRemoteMute: !isModerator,
-        disableKick: !isModerator,
-        // Let the host's screen-share attempt use the full desktop/tab
-        // picker on platforms that support it (mainly helps on mobile
-        // Chrome, which supports tab/whole-screen capture).
-        desktopSharingFrameRate: { min: 5, max: 15 },
-        ...(roomPassword ? { password: roomPassword } : {}),
-      },
-      interfaceConfigOverwrite: {
-        TOOLBAR_BUTTONS: isModerator
-          ? ['microphone', 'camera', 'desktop', 'chat', 'raisehand', 'fullscreen', 'tileview', 'hangup', 'mute-everyone', 'security']
-          : ['microphone', 'camera', 'chat', 'raisehand', 'fullscreen', 'tileview', 'hangup'],
-        SHOW_JITSI_WATERMARK: false,
-        MOBILE_APP_PROMO: false,
-      },
-      ...(token ? { jwt: token } : {}),
-    };
-
-    if (window.jitsiApi) {
-      try { window.jitsiApi.dispose(); } catch (e) { console.error(e); }
-    }
-
-    window.jitsiApi = new JitsiMeetExternalAPI('meet.opensuse.org', options);
-
-    // ── Join watchdog ──────────────────────────────────────────────
-    // If the call hasn't actually connected within 18s, don't leave the
-    // user staring at a stuck/blank frame — this is what "sometimes video
-    // or audio just fails" usually looks like from their side. Offer the
-    // working external-browser fallback instead.
-    const joinTimeout = setTimeout(() => {
-      if (window.activeSession && !window.activeSession.connected) {
-        haptic('error');
-        const openExternally = joinData && confirm(
-          "⚠️ The session is taking too long to connect — this browser may not support it well.\nOpen in your phone's browser instead? (Recommended)"
-        );
-        if (openExternally) {
-          window.open(buildExternalSessionUrl(joinData), '_blank');
-        } else {
-          showToast('Still connecting… if audio/video doesn\u2019t start, try "Open in Browser".', 'info');
-        }
-      }
-    }, 18000);
-
-    window.jitsiApi.addEventListener('videoConferenceJoined', () => {
-      if (window.activeSession) window.activeSession.connected = true;
-      clearTimeout(joinTimeout);
-      // If this user is the moderator, set the password so the room is
-      // locked for anyone who doesn't already have it (extra guard on
-      // public servers).
-      if (isModerator && roomPassword) {
-        window.jitsiApi.executeCommand('password', roomPassword);
-      }
-    });
-
-    // Surfaces hard Jitsi-side failures (e.g. connection dropped, media
-    // permission denied) with an actionable fallback instead of leaving
-    // the call silently broken.
-    window.jitsiApi.addEventListener('errorOccurred', (err) => {
-      console.error('[Jitsi] errorOccurred:', err);
-      haptic('error');
-      const msg = err?.error?.message || err?.type || 'A connection problem occurred.';
-      showToast(`Session issue: ${msg}. Try "Open in Browser" if this continues.`, 'error');
-    });
-
-    window.jitsiApi.addEventListener('videoConferenceLeft', async () => {
-      clearTimeout(joinTimeout);
-      if (isModerator && sessionId) {
-        try {
-          await apiFetch(`/api/sessions/${sessionId}/end`, { method: 'PATCH' });
-        } catch (e) {
-          console.error('Failed to end session:', e);
-        }
-      }
-      window.activeSession = null;
-      toggleShareScreenButtonVisibility(false);
-      if (window.jitsiApi) {
-        try { window.jitsiApi.dispose(); window.jitsiApi = null; } catch (e) { }
-      }
-      navigate('sessions');
-    });
-    window.jitsiApi.addEventListener('passwordRequired', () => {
-      if (roomPassword) window.jitsiApi.executeCommand('password', roomPassword);
-    });
-  };
-
-  if (window.JitsiMeetExternalAPI) {
-    initJitsi();
-  } else {
-    const script = document.createElement('script');
-    script.src = 'https://meet.jit.si/external_api.js';
-    script.onload = initJitsi;
-    script.onerror = () => {
-      haptic('error');
-      showToast('Could not load the video engine. Check your connection and try again.', 'error');
-    };
-    document.head.appendChild(script);
-  }
-
-  $('sessionPasswordDisplay').textContent = roomPassword ? `Password: ${roomPassword}` : '';
-}
-
-// ── Dedicated mobile-friendly "Share Screen" control ────────────────
-// Jitsi's own screen-share ("desktop") toolbar button can end up buried
-// under a "more options" overflow menu on small screens, making it hard
-// for a host to find on a phone. This gives the host one obvious, always-
-// visible button for it instead.
-function toggleShareScreenButtonVisibility(show) {
-  const btn = $('shareScreenBtn');
-  if (!btn) return;
-  btn.classList.toggle('hidden', !show);
-}
-
-function toggleScreenShare() {
-  if (!window.jitsiApi) return;
-  haptic('medium');
-  if (!supportsScreenShare()) {
-    const joinData = window.activeSession?.joinData;
-    if (isIOSDevice()) {
-      // Screen sharing over the web is an Apple platform limitation on
-      // iOS below version 17 — no config or fallback link can work
-      // around that, so be upfront about it instead of offering a link
-      // that won't actually help.
-      showToast('Screen sharing over the web needs iOS 17 or later on iPhone/iPad. Camera and mic still work fine.', 'info');
-      return;
-    }
-    if (joinData && confirm(
-      "⚠️ This browser may not support screen sharing here.\nOpen the session in your phone's browser to share your screen instead?"
-    )) {
-      window.open(buildExternalSessionUrl(joinData), '_blank');
-      return;
-    }
-  }
-  try {
-    window.jitsiApi.executeCommand('toggleShareScreen');
-  } catch (e) {
-    console.error('Screen share failed:', e);
-    const joinData = window.activeSession?.joinData;
-    if (joinData && confirm('Could not start screen sharing here.\nOpen the session in your phone\u2019s browser instead?')) {
-      window.open(buildExternalSessionUrl(joinData), '_blank');
-    } else {
-      showToast('Could not start screen sharing on this device.', 'error');
-    }
-  }
-}
-
-async function leaveCurrentSession() {
-  haptic('medium');
-  if (window.activeSession) {
-    const { sessionId, isModerator } = window.activeSession;
-    if (isModerator && sessionId) {
-      if (confirm('End the session for all participants?')) {
-        try {
-          await apiFetch(`/api/sessions/${sessionId}/end`, { method: 'PATCH' });
-        } catch (e) {
-          console.error('Failed to end session:', e);
-        }
-      }
-    }
-  }
-  if (window.jitsiApi) {
-    try {
-      window.jitsiApi.dispose();
-      window.jitsiApi = null;
-    } catch (e) {
-      console.error(e);
-    }
-  }
-  window.activeSession = null;
-  navigate('sessions');
-}
+// Screen share + leave handling now live in session-room.js.
 
 // ─── Chat ─────────────────────────────────────────────────────
 window.chatState = {};

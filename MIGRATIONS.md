@@ -43,3 +43,11 @@ A couple of notes on why this looks the way it does:
 This works as-is, but the three-folder split should get collapsed into a
 single ordered migration history the next time someone has a spare afternoon
 and a scratch Supabase project to test against.
+
+## Live-session lifecycle (2026-10-04)
+
+`migrations/20261004_session_lifecycle.sql` must be applied **before** deploying
+the matching code. It adds `session_participants.last_seen_at` and `via_external`
+(presence tracking), and widens the `video_sessions.status` CHECK to allow
+`'cleared'` (which the old code wrote but the constraint rejected).
+

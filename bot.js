@@ -1527,6 +1527,23 @@ async function notifySessionReminder(chatId, sessionInfo) {
   });
 }
 
+// "Your mentee is waiting" ping — sent to the host when a participant is in the
+// lobby before the host has arrived. Callers throttle this per session.
+async function notifySessionWaiting(chatId, sessionInfo) {
+  const lang = await getUserLang(chatId);
+  const text = lang === 'am'
+    ? `አንድ ተሳታፊ እየጠበቀዎት ነው\n\n${sessionInfo.waiting_name || ''}\n${sessionInfo.title || ''}`
+    : `Someone is waiting for you\n\n${sessionInfo.waiting_name || 'A participant'} is in the lobby:\n${sessionInfo.title || ''}`;
+  await safeSend(chatId, text, {
+    reply_markup: {
+      inline_keyboard: [[{
+        text: tSync(lang, 'btn_join_session'),
+        web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` }
+      }]]
+    }
+  });
+}
+
 // "Session has started" ping — sent the moment a session actually goes live.
 async function notifySessionStarted(chatId, sessionInfo) {
   const lang = await getUserLang(chatId);
@@ -3294,6 +3311,7 @@ module.exports = {
   notifySessionInvite,
   notifySessionReminder,
   notifySessionStarted,
+  notifySessionWaiting,
   notifyMentorshipRequest,
   notifyAdminNewMentorApplication,
   notifyMentorshipAccepted,

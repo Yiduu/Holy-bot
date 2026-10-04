@@ -8,13 +8,23 @@ const jwt = require('jsonwebtoken');
  * @param {object} userInfo - User context (e.g., { displayName, moderator }).
  * @returns {string|null} Signed JWT token.
  */
+// ── Single source of truth for the Jitsi server ─────────────────────────────
+// The mini app's embedded call and its "open in browser" fallback MUST use the
+// same server, otherwise the two sides of a session end up in different rooms.
+// The default matches the server the embedded client has always connected to.
+const JITSI_DOMAIN = process.env.JITSI_DOMAIN || 'meet.opensuse.org';
+const PUBLIC_JITSI_DOMAINS = ['meet.jit.si', 'meet.opensuse.org'];
+function isPublicJitsi(domain = JITSI_DOMAIN) {
+  return PUBLIC_JITSI_DOMAINS.includes(domain);
+}
+
 function generateJitsiJWT(roomName, userInfo) {
   const appId = process.env.JITSI_APP_ID;
   const secret = process.env.JITSI_JWT_SECRET;
-  const domain = process.env.JITSI_DOMAIN || 'meet.jit.si';
+  const domain = JITSI_DOMAIN;
 
-  // If no secret/appId or using public domain, skip token generation.
-  if (!appId || !secret || domain === 'meet.jit.si') {
+  // If no secret/appId or using a public domain, skip token generation.
+  if (!appId || !secret || isPublicJitsi(domain)) {
     return null;
   }
 
@@ -189,7 +199,7 @@ function emitToUserRoom(telegram_id, event, payload) {
 }
 
 module.exports = {
-  generateJitsiJWT, supabaseQuery, emitToUser, emitToUserRoom,
+  generateJitsiJWT, JITSI_DOMAIN, isPublicJitsi, supabaseQuery, emitToUser, emitToUserRoom,
   closeAssignment, recordMentorRating, endMenteeSideOnPromotion
 };
 
