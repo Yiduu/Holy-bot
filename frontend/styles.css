@@ -10420,8 +10420,23 @@ textarea.form-control {
 }
 
 /* ── In-call: full-screen stage with an always-visible control bar ─────────── */
+/* .page is transformed (translateZ + will-change + animation) and overflow:hidden,
+   which makes it the containing block for position:fixed children. That is why the
+   "full-screen" stage was boxed inside the page and the bar slid under .bottom-nav
+   (z-index 9999). Drop all of that for the call page, and hide the app chrome. */
+#page-video.in-call-page {
+  transform: none; -webkit-transform: none; will-change: auto;
+  animation: none; overflow: visible;
+  backface-visibility: visible; -webkit-backface-visibility: visible;
+}
+body.in-call { overflow: hidden; }
+body.in-call .bottom-nav,
+body.in-call .fab-main,
+body.in-call .fab-menu { display: none !important; }
+
 .call-stage.in-call {
   position: fixed; inset: 0; z-index: 9000; gap: 0; background: #000;
+  height: var(--app-height, 100dvh);
   padding: env(safe-area-inset-top, 0px) 0 0;
 }
 .call-stage.in-call .call-status { color: #fff; padding: 8px 14px; background: rgba(0,0,0,.6); }

@@ -238,9 +238,19 @@
   }
 
   // ── lobby ──────────────────────────────────────────────────────────────────
+  // While the call is on screen the app chrome (bottom nav, FAB) must get out of
+  // the way, and #page-video must stop being a transformed box: .page has
+  // transform/will-change, which turns it into the containing block for the
+  // position:fixed call stage, clips it, and traps its z-index under .bottom-nav.
+  function setCallChrome(on) {
+    document.body.classList.toggle('in-call', !!on);
+    $('page-video')?.classList.toggle('in-call-page', !!on);
+  }
+
   function showStage(which) {
     $('sessionLobby').classList.toggle('hidden', which !== 'lobby');
     $('callStage').classList.toggle('hidden', which !== 'call');
+    setCallChrome(which === 'call');
   }
 
   function renderLobby() {
@@ -659,6 +669,7 @@
     closeSheet();
     toggleShareScreenButtonVisibility(false);
     $('callStage')?.classList.remove('in-call');
+    setCallChrome(false);
     const c = $('jitsiContainer'); if (c) c.innerHTML = '';
     const l = $('sessionLobby'); if (l) l.innerHTML = '';
     const timer = $('callTimer'); if (timer) timer.textContent = '00:00';
