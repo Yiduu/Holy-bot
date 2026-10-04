@@ -331,6 +331,10 @@
     haptic('medium');
     A.phase = 'call';
     showStage('call');
+    $('callStage').classList.add('in-call');
+    A.micMuted = !A.prefs.mic; A.camMuted = !A.prefs.cam; A.sharing = false; A.hand = false; A.tiles = false;
+    $('ctlFlip').classList.toggle('hidden', !isTouchDevice());
+    renderControls();
     setStatus('connecting');
     toggleShareScreenButtonVisibility(A.isHost);
     acquireWakeLock();
@@ -363,11 +367,11 @@
         disableRemoteMute: !isHost,
         disableKick: !isHost,
         desktopSharingFrameRate: { min: 5, max: 15 },
+        // Our own control bar (below) replaces Jitsi's auto-hiding toolbar.
+        toolbarButtons: [],
+        hideConferenceSubject: true,
       },
       interfaceConfigOverwrite: {
-        TOOLBAR_BUTTONS: isHost
-          ? ['microphone', 'camera', 'desktop', 'chat', 'raisehand', 'fullscreen', 'tileview', 'hangup', 'mute-everyone', 'security']
-          : ['microphone', 'camera', 'chat', 'raisehand', 'fullscreen', 'tileview', 'hangup'],
         SHOW_JITSI_WATERMARK: false,
         MOBILE_APP_PROMO: false,
       },
@@ -404,6 +408,11 @@
       haptic('success');
       if (isHost && data.room_password) { try { api.executeCommand('password', data.room_password); } catch (_) { /* best effort */ } }
     });
+    api.addEventListener('audioMuteStatusChanged', (e) => { A.micMuted = !!e.muted; renderControls(); });
+    api.addEventListener('videoMuteStatusChanged', (e) => { A.camMuted = !!e.muted; renderControls(); });
+    api.addEventListener('screenSharingStatusChanged', (e) => { A.sharing = !!e.on; renderControls(); });
+    api.addEventListener('raiseHandUpdated', (e) => { if (e && e.handRaised !== undefined) { A.hand = !!e.handRaised; } });
+    api.addEventListener('tileViewChanged', (e) => { A.tiles = !!e.enabled; });
     api.addEventListener('passwordRequired', () => { if (data.room_password) api.executeCommand('password', data.room_password); });
     api.addEventListener('participantJoined', () => { refreshPeers(); hideBanner(); });
     api.addEventListener('participantLeft', refreshPeers);
@@ -417,6 +426,75 @@
     const onHangup = () => { if (A && !A.ending && A.phase === 'call') handleHangup(); };
     api.addEventListener('videoConferenceLeft', onHangup);
     api.addEventListener('readyToClose', onHangup);
+  }
+
+  // ── call controls ──────────────────────────────────────────────────────────
+  function isTouchDevice() { return (navigator.maxTouchPoints || 0) > 0; }
+
+  function renderControls() {
+    if (!A) return;
+    const set = (id, on, icoOn, icoOff, lblOn, lblOff) => {
+      const b = $(id); if (!b) return;
+      b.classList.toggle('off', !on);
+      b.setAttribute('aria-pressed', String(on));
+      b.querySelector('.ctl-ico').textContent = on ? icoOn : icoOff;
+      b.querySelector('.ctl-lbl').textContent = on ? lblOn : lblOff;
+    };
+    set('ctlMic', !A.micMuted, '🎙️', '🔇', sr('mic', 'Mic'), sr('unmute', 'Unmute'));
+    set('ctlCam', !A.camMuted, '📷', '🚫', sr('camera', 'Camera'), sr('start_video', 'Start'));
+    $('ctlShare')?.classList.toggle('active', !!A.sharing);
+  }
+
+  function cmd(name, ...args) {
+    if (!A?.api) return false;
+    try { A.api.executeCommand(name, ...args); return true; }
+    catch (e) { console.error('[Call] command failed:', name, e); return false; }
+  }
+
+  function moreSheet() {
+    const items = [
+      { label: sr('devices', 'Audio & video settings'), onClick: devicesSheet },
+      { label: A.hand ? sr('lower_hand', 'Lower hand') : sr('raise_hand', 'Raise hand'), onClick: () => { A.hand = !A.hand; cmd('toggleRaiseHand'); } },
+      { label: sr('participants', 'Participants'), onClick: () => cmd('toggleParticipantsPane', true) },
+      { label: A.tiles ? sr('speaker_view', 'Speaker view') : sr('tile_view', 'Grid view'), onClick: () => { A.tiles = !A.tiles; cmd('toggleTileView'); } },
+    ];
+    if (A.isHost) items.push({ label: sr('mute_all', 'Mute everyone'), onClick: () => { cmd('muteEveryone'); showToast(sr('muted_all', 'Everyone has been muted.'), 'success'); } });
+    items.push({ label: sr('open_browser', 'Open in browser instead'), onClick: () => window.SR.external() });
+    sheet({ title: sr('more', 'More'), actions: items.map(i => ({ ...i, kind: 'ghost' })) });
+  }
+
+  // Pick microphone / camera / speaker (Jitsi device list via the IFrame API).
+  async function devicesSheet() {
+    if (!A?.api) return;
+    let list = {}, cur = {};
+    try { list = await A.api.getAvailableDevices(); } catch (_) { /* may be unsupported */ }
+    try { cur = await A.api.getCurrentDevices(); } catch (_) { /* ignore */ }
+    const field = (key, label, kind) => {
+      const opts = list[key] || [];
+      if (!opts.length) return '';
+      const sel = cur[key]?.deviceId;
+      return `<label class="sr-field"><span>${esc(label)}</span><select data-kind="${kind}">` +
+        opts.map(d => `<option value="${esc(d.deviceId)}" data-label="${esc(d.label)}" ${d.deviceId === sel ? 'selected' : ''}>${esc(d.label || 'Default')}</option>`).join('') +
+        '</select></label>';
+    };
+    const html = field('audioInput', sr('microphone', 'Microphone'), 'audioInput') +
+      field('videoInput', sr('camera_lbl', 'Camera'), 'videoInput') +
+      field('audioOutput', sr('speaker', 'Speaker'), 'audioOutput');
+    const el = sheet({
+      title: sr('devices', 'Audio & video settings'),
+      body: html || esc(sr('no_devices', 'No devices found. Check that camera and microphone permissions are allowed.')),
+      actions: [{ label: sr('done', 'Done'), kind: 'ghost' }],
+    });
+    el.addEventListener('change', (ev) => {
+      const s = ev.target.closest('select[data-kind]'); if (!s || !A?.api) return;
+      const opt = s.selectedOptions[0]; const label = opt.dataset.label, id = s.value;
+      try {
+        if (s.dataset.kind === 'audioInput') A.api.setAudioInputDevice(label, id);
+        else if (s.dataset.kind === 'videoInput') A.api.setVideoInputDevice(label, id);
+        else A.api.setAudioOutputDevice(label, id);
+        haptic('selection');
+      } catch (e) { showToast(sr('device_fail', 'Could not switch that device.'), 'error'); }
+    });
   }
 
   function refreshPeers() {
@@ -580,6 +658,7 @@
     hideBanner();
     closeSheet();
     toggleShareScreenButtonVisibility(false);
+    $('callStage')?.classList.remove('in-call');
     const c = $('jitsiContainer'); if (c) c.innerHTML = '';
     const l = $('sessionLobby'); if (l) l.innerHTML = '';
     const timer = $('callTimer'); if (timer) timer.textContent = '00:00';
@@ -619,7 +698,10 @@
   window.addEventListener('online', () => { if (A) { startHeartbeat(); if (A.phase === 'call') setStatus('live'); } });
 
   // ── screen share (host) ────────────────────────────────────────────────────
-  window.toggleShareScreenButtonVisibility = function (show) { $('shareScreenBtn')?.classList.toggle('hidden', !show); };
+  window.toggleShareScreenButtonVisibility = function (show) {
+    $('shareScreenBtn')?.classList.add('hidden'); // header button is covered by the full-screen call; the bar has its own
+    $('ctlShare')?.classList.toggle('hidden', !show);
+  };
   window.toggleScreenShare = function () {
     if (!A?.api) return;
     haptic('medium');
@@ -659,6 +741,14 @@
 
   // ── handlers for inline onclick in the lobby ───────────────────────────────
   window.SR = {
+    mic() { haptic('selection'); if (!cmd('toggleAudio')) showToast(sr('ctl_fail', 'Controls are not ready yet.'), 'info'); },
+    cam() { haptic('selection'); if (!cmd('toggleVideo')) showToast(sr('ctl_fail', 'Controls are not ready yet.'), 'info'); },
+    flip() {
+      haptic('selection');
+      if (!cmd('toggleCamera')) devicesSheet(); // fall back to the camera picker
+    },
+    chat() { haptic('selection'); cmd('toggleChat'); },
+    more() { haptic('light'); if (A) moreSheet(); },
     toggle(which) {
       if (!A) return;
       A.prefs[which] = !A.prefs[which]; savePrefs(A.prefs); haptic('selection'); renderLobby();
