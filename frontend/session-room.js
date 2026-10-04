@@ -239,12 +239,22 @@
 
   // ── lobby ──────────────────────────────────────────────────────────────────
   // While the call is on screen the app chrome (bottom nav, FAB) must get out of
-  // the way, and #page-video must stop being a transformed box: .page has
-  // transform/will-change, which turns it into the containing block for the
-  // position:fixed call stage, clips it, and traps its z-index under .bottom-nav.
+  // the way. The stage is also moved to <body>: inside #page-video it is trapped by
+  // ancestors that break position:fixed on phones — .page is transformed +
+  // overflow:hidden (containing block), and #app has its own z-index stacking
+  // context. On <body> it is always measured against the real screen.
+  let stageHome = null;
   function setCallChrome(on) {
     document.body.classList.toggle('in-call', !!on);
-    $('page-video')?.classList.toggle('in-call-page', !!on);
+    const stage = $('callStage');
+    if (!stage) return;
+    if (on) {
+      if (!stageHome) stageHome = stage.parentElement;
+      if (stage.parentElement !== document.body) document.body.appendChild(stage);
+    } else if (stageHome && stage.parentElement !== stageHome) {
+      stage.classList.add('hidden');
+      stageHome.appendChild(stage);
+    }
   }
 
   function showStage(which) {

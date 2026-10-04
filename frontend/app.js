@@ -214,9 +214,17 @@ function timeAgo(dateStr) {
   return t('time_days_ago', { count: Math.floor(diff / 86400000) });
 }
 
-function formatTime(dateStr) {
-  const tz = 'Africa/Addis_Ababa';
+function getUserTimezone() {
   try {
+    return currentUser?.user_settings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Addis_Ababa';
+  } catch (_) {
+    return 'Africa/Addis_Ababa';
+  }
+}
+
+function formatTime(dateStr) {
+  try {
+    const tz = getUserTimezone();
     return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: tz });
   } catch (e) {
     return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -224,8 +232,8 @@ function formatTime(dateStr) {
 }
 
 function formatDateTime(dateStr) {
-  const tz = 'Africa/Addis_Ababa';
   try {
+    const tz = getUserTimezone();
     return new Date(dateStr).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', timeZone: tz });
   } catch (e) {
     return new Date(dateStr).toLocaleString();
@@ -693,7 +701,7 @@ function getLocalDateParts(date, timezone) {
 }
 
 function getDateGroupHeader(dateStr) {
-  const tz = currentUser?.user_settings?.timezone || 'Africa/Addis_Ababa';
+  const tz = getUserTimezone();
   const msgDate = new Date(dateStr);
   const now = new Date();
 
@@ -4486,8 +4494,11 @@ function showScheduleModal(is_group, mentee_id = null) {
 
   const now = new Date();
   now.setHours(now.getHours() + 1);
-  document.getElementById('scheduleDate').value = now.toISOString().split('T')[0];
-  document.getElementById('scheduleTime').value = now.toTimeString().slice(0, 5);
+  const schedYear = now.getFullYear();
+  const schedMonth = String(now.getMonth() + 1).padStart(2, '0');
+  const schedDay = String(now.getDate()).padStart(2, '0');
+  document.getElementById('scheduleDate').value = `${schedYear}-${schedMonth}-${schedDay}`;
+  document.getElementById('scheduleTime').value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
   modal.classList.add('open');
 
