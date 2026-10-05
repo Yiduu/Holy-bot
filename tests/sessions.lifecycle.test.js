@@ -11,7 +11,7 @@ require.cache[require.resolve(root + '/bot')] = { id: 'bot', filename: 'bot', lo
 const express = require('express');
 
 // ── minimal query-builder fake ──
-const db = { users: [], video_sessions: [], session_participants: [], mentorship_assignments: [] };
+const db = { users: [], video_sessions: [], session_participants: [], mentorship_assignments: [], user_settings: [] };
 const PK = { video_sessions: ['id'], session_participants: ['session_id', 'telegram_id'], users: ['telegram_id'] };
 let seq = 0;
 function from(table) {
@@ -98,6 +98,11 @@ let port;
   emitted.length = 0;
   r = await call(MENTOR, 'GET', `/${sid}/join`);
   assert.equal(r.body.status, 'active'); assert.equal(r.body.is_moderator, true); assert.equal(r.body.host_name, 'Shepherd_1');
+  // nicknames: sessions show the Settings nickname, falling back to the anonymous ID
+  db.user_settings.push({ telegram_id: MENTOR, display_name: '  Pastor Sam ' }, { telegram_id: MENTEE, display_name: '   ' });
+  r = await call(MENTOR, 'GET', `/${sid}/join`); assert.equal(r.body.display_name, 'Pastor Sam'); ok('host joins under their nickname (trimmed)');
+  r = await call(MENTEE, 'GET', `/${sid}/join`); assert.equal(r.body.host_name, 'Pastor Sam'); assert.equal(r.body.display_name, 'Warrior_2'); ok('mentee sees the host nickname; blank nickname falls back to anonymous ID');
+  db.user_settings.length = 0;
   assert.ok(emitted.some(e => e[0] === `user:${MENTEE}` && e[1] === 'session_host_joined')); ok('host join activates + unlocks mentee lobby');
   let hb = await call(MENTEE, 'POST', `/${sid}/heartbeat`); assert.equal(hb.body.host_present, true); ok('heartbeat reports host_present');
 

@@ -41,6 +41,19 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     }));
   }
 
+  // The name shown in calls: the nickname set in Settings, else the anonymous ID
+  // (same rule as the rest of the app). Returns Map<String(telegram_id), name>.
+  async function displayNames(ids) {
+    const names = new Map();
+    const [{ data: users }, { data: settings }] = await Promise.all([
+      supabase.from('users').select('telegram_id, anonymous_id').in('telegram_id', ids),
+      supabase.from('user_settings').select('telegram_id, display_name').in('telegram_id', ids),
+    ]);
+    (users || []).forEach(u => names.set(String(u.telegram_id), u.anonymous_id));
+    (settings || []).forEach(u => { const n = (u.display_name || '').trim(); if (n) names.set(String(u.telegram_id), n); });
+    return names;
+  }
+
   function jitsiTokenFor(roomName, displayName, moderator) {
     if (isPublicJitsi()) return null;
     return generateJitsiJWT(roomName, { displayName, moderator });
@@ -86,6 +99,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
 
       const { data: hostUser } = await supabase.from('users').select('role, anonymous_id').eq('telegram_id', host_id).single();
       if (!hostUser || hostUser.role !== 'mentor') return res.status(403).json({ error: 'Only mentors can create sessions' });
+      const hostName = (await displayNames([host_id])).get(String(host_id)) || hostUser.anonymous_id;
 
       // Normalise the start time. Past/missing → "now"; garbage → 400.
       let scheduledDate = scheduled_at ? new Date(scheduled_at) : new Date();
@@ -161,19 +175,19 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       }
 
       io.emit('admin:session_activity', {
-        type: 'created', session_id: session.id, host: hostUser.anonymous_id,
+        type: 'created', session_id: session.id, host: hostName,
         title: session.title, is_group: !!is_group, at: nowIso(),
       });
 
       // Invites go out in the background; the mentor gets their response now.
-      const invite = { session_id: session.id, host: hostUser.anonymous_id, title: session.title, scheduled_at: session.scheduled_at };
+      const invite = { session_id: session.id, host: hostName, title: session.title, scheduled_at: session.scheduled_at };
       background(inviteeIds.map(async id => {
         // No room credentials over the socket — they're issued by /join only.
-        emitToUserRoom(id, 'session_invite', { session_id: session.id, host: hostUser.anonymous_id, title: session.title, scheduled_at: session.scheduled_at });
+        emitToUserRoom(id, 'session_invite', { session_id: session.id, host: hostName, title: session.title, scheduled_at: session.scheduled_at });
         await notifySessionInvite(id, invite);
       }));
 
-      const jitsiToken = jitsiTokenFor(roomName, hostUser.anonymous_id, true);
+      const jitsiToken = jitsiTokenFor(roomName, hostName, true);
       res.status(201).json({
         session,
         room_name: roomName,
@@ -278,9 +292,9 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
         await supabase.from('video_sessions').update({ status, started_at: nowIso() }).eq('id', session.id).eq('status', 'scheduled');
       }
 
-      const { data: users } = await supabase.from('users').select('telegram_id, anonymous_id').in('telegram_id', [telegram_id, session.host_id]);
-      const myName = users?.find(u => same(u.telegram_id, telegram_id))?.anonymous_id || 'Anonymous';
-      const hostName = users?.find(u => same(u.telegram_id, session.host_id))?.anonymous_id || 'Your mentor';
+      const names = await displayNames([telegram_id, session.host_id]);
+      const myName = names.get(String(telegram_id)) || 'Anonymous';
+      const hostName = names.get(String(session.host_id)) || 'Your mentor';
 
       const others = participants.filter(p => !same(p.telegram_id, telegram_id));
 

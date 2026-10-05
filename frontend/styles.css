@@ -10360,7 +10360,18 @@ textarea.form-control {
 .sr-pass { text-align: left; background: var(--bg3, #1d212c); border-radius: 12px; padding: 10px 12px; }
 .sr-pass-label { font-size: .72rem; opacity: .65; margin-bottom: 6px; }
 .sr-pass-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.sr-pass-row code { font-size: 1.05rem; letter-spacing: .06em; user-select: all; }
+.sr-pass-row code { font-size: 1.15rem; letter-spacing: .06em; user-select: all; -webkit-user-select: all; word-break: break-all; }
+.sr-pass .sr-pass-label { margin: 8px 0 0; }
+
+/* Hand-off page: numbered steps (copy password → open browser / app) */
+.sr-step { display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.sr-step-head { display: flex; align-items: center; gap: 10px; font-size: .88rem; font-weight: 600; }
+.sr-step-no {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center;
+  font-size: .75rem; font-weight: 700; color: var(--espresso, #1a120b); background: var(--gold);
+}
+.sr-install { font-size: .8rem; opacity: .75; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 8px; }
+.sr-install .sr-link { padding: 4px 6px; opacity: 1; color: var(--gold-light); }
 
 /* Call stage: fill the viewport instead of a fixed 55vh strip */
 .call-stage { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 8px; }

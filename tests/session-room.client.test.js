@@ -115,8 +115,40 @@ const base = (o = {}) => ({ session_id: 's1', room_name: 'holy-x', room_password
   ({ w, log } = boot({ isHost: false, api: async (p) => base({ host_present: true }) }));
   await w.joinSession('s1', { external: true }); await sleep(20);
   assert.ok(log.calls[log.calls.length - 1][1].includes('?via=external') || log.calls.some(c => c[1].includes('via=external'))); ok('browser mode registers as external on the server');
-  assert.ok(log.opened.startsWith('https://meet.example.org/holy-x#')); ok('external URL uses the same server-issued domain as the embed');
-  assert.ok(w.$('sessionLobby').textContent.includes('PW123')); ok('password shown + copyable in browser mode (was: user stuck on a password prompt)');
+  assert.equal(log.opened, undefined); ok('browser mode: the browser is NOT opened automatically (it used to cover the password)');
+  let hp = w.$('sessionLobby'); assert.ok(hp.textContent.includes('PW123') && hp.textContent.includes('Copy the room password')); ok('hand-off page shows the password and "Copy" step before anything opens');
+  assert.ok(hp.textContent.includes('Open browser')); ok('hand-off page has an "Open browser" button');
+  await w.SR.copyPass(); assert.ok(log.toasts.some(t => t[0].includes('Could not copy'))); assert.ok(!w.$('sessionLobby').textContent.includes('Copied')); ok('copy failure is reported (not silently "copied")');
+  w.document.execCommand = (c) => { log.execCopy = c; return true; }; // WebView without async clipboard
+  await w.SR.copyPass(); assert.equal(log.execCopy, 'copy'); assert.ok(w.$('sessionLobby').textContent.includes('Copied')); ok('copy button works via fallback when async clipboard is missing');
+  await w.SR.openHandoff();
+  assert.ok(log.opened.startsWith('https://meet.example.org/holy-x#')); ok('Open browser → external URL uses the same server-issued domain as the embed');
+  assert.ok(w.$('sessionLobby').textContent.includes('Open again') && w.$('sessionLobby').textContent.includes('leave session')); ok('after opening: "Open again" + "I\'m done" are offered');
+
+  // ── hand-off with no password: still no auto-open, just the button
+  ({ w, log } = boot({ isHost: false, api: async () => base({ host_present: true, room_password: null }) }));
+  await w.joinSession('s1', { external: true }); await sleep(20);
+  assert.equal(log.opened, undefined); assert.ok(!w.$('sessionLobby').textContent.includes('Copy the room password')); assert.ok(w.$('sessionLobby').textContent.includes('Open browser')); ok('no password → no copy step, button still gates the browser');
+
+  // ── phone screen share (host): no getDisplayMedia → hand-off to the Jitsi Meet app
+  ({ w, log } = boot({ isHost: true, api: async (p) => p.includes('/join') ? base({ is_moderator: true, host_present: true, jitsi_token: 'JWT1' }) : { ended: false, host_present: true, present_count: 2 } }));
+  Object.defineProperty(w.navigator, 'maxTouchPoints', { value: 5 });
+  assert.equal(w.supportsScreenShare(), false);
+  assert.equal(w.buildAppSessionUrl(base({ jitsi_token: 'JWT1' })), 'org.jitsi.meet://meet.example.org/holy-x?jwt=JWT1'); ok('app deep link: org.jitsi.meet://<server>/<room>?jwt=…');
+  await w.joinSession('s1'); await sleep(20);
+  assert.ok(w.$('sessionLobby').textContent.includes('Share my phone screen')); ok('host lobby on a phone offers "Share my phone screen"');
+  w.SR.start(); await sleep(30); w.__jitsi.emit('videoConferenceJoined');
+  w.toggleScreenShare(); const ss = w.document.getElementById('srSheet').textContent;
+  assert.ok(ss.includes('Share your phone screen') && ss.includes('Continue')); ok('Share button on a phone explains + offers to continue (not a dead end)');
+  w.document.getElementById('srSheet').querySelectorAll('button')[0].click(); await sleep(30);
+  assert.ok(log.disposed >= 1 && w.$('sessionLobby').textContent.includes('Open Jitsi Meet app') && w.$('sessionLobby').textContent.includes('PW123')); ok('Continue → embedded call closed; app hand-off page shows password + "Open Jitsi Meet app"');
+  assert.ok(w.$('sessionLobby').textContent.includes('Google Play') && w.$('sessionLobby').textContent.includes('App Store')); ok('install links shown for the app');
+  assert.ok(log.calls.some(c => c[1].includes('via=external'))); ok('app hand-off registers the host as an external participant');
+  // opening on a phone browser hand-off page for a host explains the limit and links to the app
+  ({ w, log } = boot({ isHost: true, api: async () => base({ is_moderator: true, host_present: true }) }));
+  Object.defineProperty(w.navigator, 'maxTouchPoints', { value: 5 });
+  await w.joinSession('s1', { external: true }); await sleep(20);
+  assert.ok(w.$('sessionLobby').textContent.includes("Phone browsers can't share your screen")); assert.ok(w.$('sessionLobby').textContent.includes('Share my phone screen')); ok('browser page on a phone: says why no Share, links to the app');
 
   console.log('\nALL CLIENT CHECKS PASSED'); process.exit(0);
 })().catch(e => { console.error('\nFAIL:', e.message, '\n', e.stack.split('\n').slice(1, 4).join('\n')); process.exit(1); });

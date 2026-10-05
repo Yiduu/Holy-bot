@@ -317,28 +317,125 @@
         <button class="btn btn-primary sr-primary" ${canEnter ? '' : 'disabled'} onclick="SR.start()">${esc(primary)}</button>
         ${(!isHost && !hostPresent && A.waitedMs > 20000) ? `<button class="btn btn-outline sr-secondary" onclick="SR.start()">${esc(sr('join_anyway', 'Mentor not showing as online? Join anyway'))}</button>` : ''}
         <button class="btn ${unreliable ? 'btn-primary' : 'btn-outline'} sr-secondary" onclick="SR.external()">${esc(sr('open_browser', 'Open in browser instead'))}</button>
+        ${(isHost && isTouchDevice() && !window.supportsScreenShare()) ? `<button class="btn btn-outline sr-secondary" onclick="SR.shareApp()">${esc(sr('share_phone', 'Share my phone screen (Jitsi Meet app)'))}</button>` : ''}
         <button class="sr-link" onclick="SR.cancelLobby()">${esc(sr('not_now', 'Not now'))}</button>
       </div>`;
   }
 
-  // ── external-browser mode ──────────────────────────────────────────────────
-  function openExternal() {
+  // ── hand-off page: browser / Jitsi Meet app ────────────────────────────────
+  // The old flow opened the browser immediately, which buried this screen — so
+  // the room password (Jitsi's own page asks for it) was never seen or copied.
+  // Now NOTHING opens until the person taps the button, and the password with a
+  // Copy button is the first thing on the page.
+  //   mode 'browser' → Jitsi in the phone/desktop browser
+  //   mode 'app'     → the free Jitsi Meet mobile app (the only way to share a
+  //                    phone screen: mobile browsers have no getDisplayMedia)
+  const STORE_ANDROID = 'https://play.google.com/store/apps/details?id=org.jitsi.meet';
+  const STORE_IOS = 'https://apps.apple.com/app/jitsi-meet/id1165103905';
+
+  window.buildAppSessionUrl = function (data) {
+    return `org.jitsi.meet://${data.jitsi_domain}/${data.room_name}` + (data.jitsi_token ? `?jwt=${data.jitsi_token}` : '');
+  };
+
+  async function copyText(text) {
+    try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } } catch (_) { /* try the fallback */ }
+    // Some WebViews have no async clipboard — fall back to a selected textarea.
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+      const ok = document.execCommand('copy'); ta.remove();
+      return !!ok;
+    } catch (_) { return false; }
+  }
+
+  function openHandoff(mode) {
     A.phase = 'external';
     A.external = true;
+    A.handoff = mode === 'app' ? 'app' : 'browser';
+    A.handoffOpened = false;
+    A.passCopied = false;
     window.activeSession.connected = true;
-    openExternalUrl(window.buildExternalSessionUrl(A.data, A.prefs));
+    renderHandoff();
+  }
+  const openExternal = () => openHandoff('browser');
+
+  function renderHandoff() {
+    if (!A) return;
     showStage('lobby');
-    const pw = A.data.room_password;
+    const { data, isHost } = A;
+    const isApp = A.handoff === 'app';
+    const pw = data.room_password;
+    const opened = !!A.handoffOpened;
+    const touch = isTouchDevice();
+    const ios = window.isIOSDevice();
+    const android = /Android/i.test(navigator.userAgent || '');
+
+    const openLabel = opened
+      ? sr('open_again', 'Open again')
+      : (isApp ? sr('open_app_btn', 'Open Jitsi Meet app') : sr('open_browser_btn', 'Open browser'));
+    const copyLabel = A.passCopied ? sr('copied_btn', 'Copied ✓') : sr('copy_pass', 'Copy password');
+    const stepNo = (n) => `<span class="sr-step-no">${n}</span>`;
+
+    const passStep = pw ? `
+      <div class="sr-step">
+        <div class="sr-step-head">${stepNo(1)}<span>${esc(sr('step_copy', 'Copy the room password'))}</span></div>
+        <div class="sr-pass">
+          <div class="sr-pass-row"><code>${esc(pw)}</code>
+            <button class="btn ${A.passCopied ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="SR.copyPass()">${esc(copyLabel)}</button></div>
+          <div class="sr-pass-label">${esc(sr('pass_hint', 'Paste it when the page asks for a password.'))}</div>
+        </div>
+      </div>` : '';
+
+    const openStep = `
+      <div class="sr-step">
+        ${pw ? `<div class="sr-step-head">${stepNo(2)}<span>${esc(isApp ? sr('step_open_app', 'Open the Jitsi Meet app') : sr('step_open_browser', 'Open the browser'))}</span></div>` : ''}
+        <button class="btn btn-primary sr-primary" onclick="SR.openHandoff()">${esc(openLabel)}</button>
+      </div>`;
+
+    // App mode: install links (the app is a separate download) + a way to carry on elsewhere.
+    const installLinks = isApp ? `
+      <div class="sr-install">${esc(sr('install_app', 'Don\'t have the app yet?'))}
+        ${(!ios ? `<button class="sr-link" onclick="SR.store('android')">${esc(sr('install_android', 'Google Play'))}</button>` : '')}
+        ${(!android ? `<button class="sr-link" onclick="SR.store('ios')">${esc(sr('install_ios', 'App Store'))}</button>` : '')}
+      </div>
+      <button class="sr-link" onclick="SR.copyLink()">${esc(sr('share_copy_link', 'Copy link to open on a computer'))}</button>` : '';
+
+    // Browser mode on a phone: say plainly why there is no Share button there.
+    const shareNote = (!isApp && isHost && touch) ? `
+      <div class="sr-warn">${esc(sr('share_phone_note', 'Phone browsers can\'t share your screen. The free Jitsi Meet app can.'))}</div>
+      <button class="btn btn-outline sr-secondary" onclick="SR.shareApp()">${esc(sr('share_phone', 'Share my phone screen (Jitsi Meet app)'))}</button>` : '';
+    const switchToBrowser = isApp ? `<button class="btn btn-outline sr-secondary" onclick="SR.external()">${esc(sr('open_browser', 'Open in browser instead'))}</button>` : '';
+
     $('sessionLobby').innerHTML = `
       <div class="sr-card">
-        <div class="sr-eyebrow">${esc(sr('ext_eyebrow', 'Opened in your browser'))}</div>
-        <div class="sr-title">${esc(A.data.title || 'Live Session')}</div>
-        <div class="sr-sub">${esc(sr('ext_sub', 'Your call is running in your phone\'s browser. Come back here when you\'re done.'))}</div>
-        ${pw ? `<div class="sr-pass"><div class="sr-pass-label">${esc(sr('pass_label', 'If you\'re asked for a password'))}</div>
-          <div class="sr-pass-row"><code>${esc(pw)}</code><button class="btn btn-outline btn-sm" onclick="SR.copyPass()">${esc(sr('copy', 'Copy'))}</button></div></div>` : ''}
-        <button class="btn btn-outline sr-secondary" onclick="SR.reopenExternal()">${esc(sr('open_again', 'Open again'))}</button>
-        <button class="btn btn-primary sr-primary" onclick="SR.leave()">${esc(sr('im_done', 'I\'m done — leave session'))}</button>
+        <div class="sr-eyebrow">${esc(isApp ? sr('hand_eyebrow_app', 'Share your phone screen') : sr('hand_eyebrow_browser', 'Open in your browser'))}</div>
+        <div class="sr-title">${esc(data.title || sr('live_session_title', 'Live Session'))}</div>
+        <div class="sr-sub">${esc(opened
+          ? sr('ext_sub', 'Your call is running outside this app. Come back here when you\'re done.')
+          : (pw ? sr('hand_sub_pw', 'Copy the password first — it won\'t be visible once the next app opens.')
+                : sr('hand_sub_nopw', 'Tap the button below when you\'re ready.')))}</div>
+        ${passStep}
+        ${openStep}
+        ${installLinks}
+        ${shareNote}
+        ${switchToBrowser}
+        <button class="${opened ? 'btn btn-primary sr-primary' : 'sr-link'}" onclick="SR.leave()">${esc(opened ? sr('im_done', 'I\'m done — leave session') : sr('cancel', 'Cancel'))}</button>
       </div>`;
+  }
+
+  // Takes the person out of the embedded call and onto the hand-off page.
+  async function switchToHandoff(mode) {
+    if (!A) return;
+    const a = A;
+    closeSheet(); clearTimeout(connectTimer);
+    a.phase = 'switching'; // so disposing the embed isn't mistaken for a hang-up
+    try { a.api?.dispose(); } catch (_) { /* ignore */ }
+    a.api = null; window.jitsiApi = null;
+    // Re-register as an external participant: Jitsi's own page / app can't heartbeat.
+    try { a.data = await apiFetch(`/api/sessions/${a.sessionId}/join?via=external`, { retry: false }); } catch (_) { /* keep existing credentials */ }
+    if (A === a) openHandoff(mode);
   }
 
   // ── the call ───────────────────────────────────────────────────────────────
@@ -717,7 +814,9 @@
     if (!A) return;
     if (A.phase === 'call') acquireWakeLock();
     startHeartbeat(); // immediate state refresh after returning
-    if (A.phase === 'external' && hiddenAt && Date.now() - hiddenAt > 15000 && !document.getElementById('srSheet')) {
+    // Only ask "back from your browser?" once the browser/app was really opened —
+    // not when someone merely locked their phone on the hand-off page.
+    if (A.phase === 'external' && A.handoffOpened && hiddenAt && Date.now() - hiddenAt > 15000 && !document.getElementById('srSheet')) {
       sheet({
         title: sr('back_title', 'Back from your browser?'),
         body: esc(sr('back_body', 'Is your session finished, or are you still in the call?')),
@@ -738,30 +837,26 @@
     $('ctlShare')?.classList.toggle('hidden', !show);
   };
   // Phone browsers and in-app WebViews do not expose getDisplayMedia, so no web page
-  // (ours or Jitsi's) can share a phone screen. Don't send people to a browser that
-  // has the same limit — offer the two things that do work.
+  // (ours or Jitsi's) can share a phone screen — only the native Jitsi Meet app can.
+  // Explain that once, then hand off to a page with the password + an Open-app button.
   function screenShareUnavailable() {
-    const d = A.data;
-    const webUrl = window.buildExternalSessionUrl(d, A.prefs);
-    const appUrl = `org.jitsi.meet://${d.jitsi_domain}/${d.room_name}` + (d.jitsi_token ? `?jwt=${d.jitsi_token}` : '');
-    const pw = d.room_password;
+    const touch = isTouchDevice();
     const actions = [];
-    if (isTouchDevice()) {
-      actions.push({ label: sr('share_open_app', 'Open in Jitsi Meet app'), onClick: () => { window.location.href = appUrl; } });
-    }
+    if (touch) actions.push({ label: sr('share_continue', 'Continue — share from the app'), onClick: () => window.SR.shareApp() });
     actions.push({
       label: sr('share_copy_link', 'Copy link to open on a computer'),
       kind: 'ghost',
       onClick: async () => {
-        try { await navigator.clipboard.writeText(webUrl); showToast(sr('copied', 'Copied'), 'success'); }
-        catch (_) { showToast(webUrl, 'info'); }
+        const ok = await copyText(window.buildExternalSessionUrl(A.data, A.prefs));
+        showToast(ok ? sr('copied', 'Copied') : sr('copy_fail', 'Could not copy — long-press the password to copy it.'), ok ? 'success' : 'info');
       },
     });
     actions.push({ label: sr('cancel', 'Cancel'), kind: 'ghost' });
     sheet({
-      title: sr('share_title', 'Screen sharing isn\'t available on phones'),
-      body: esc(sr('share_body', 'Phone browsers can\'t share the screen. Share from a computer, or use the free Jitsi Meet app (it supports screen sharing).'))
-        + (pw ? `<br><br>${esc(sr('pass_label', 'If you\'re asked for a password'))}: <code>${esc(pw)}</code>` : ''),
+      title: touch ? sr('share_title', 'Share your phone screen') : sr('share_title_desktop', 'Screen sharing isn\'t available here'),
+      body: esc(touch
+        ? sr('share_body', 'Phone browsers can\'t share the screen — only the free Jitsi Meet app can. We\'ll take you to a page with the room password and a button to open the app.')
+        : sr('share_body_desktop', 'This browser can\'t share the screen. Try Chrome, Edge or Firefox on a computer.')),
       actions,
     });
   }
@@ -807,24 +902,41 @@
       A.prefs[which] = !A.prefs[which]; savePrefs(A.prefs); haptic('selection'); renderLobby();
     },
     start() { if (A && (A.isHost || A.hostPresent || A.waitedMs > 20000)) startCall(); },
-    async external() {
+    // "Open in browser instead" → hand-off page (nothing opens until the button there is tapped).
+    external() { return switchToHandoff('browser'); },
+    // Phone screen share → hand-off page for the Jitsi Meet app.
+    shareApp() { return switchToHandoff('app'); },
+    // The big button on the hand-off page. It is a tap, so copying + opening are both allowed.
+    async openHandoff() {
+      if (!A || A.phase !== 'external') return;
+      const pw = A.data.room_password;
+      // Best effort: put the password on the clipboard too, in case they skipped step 1.
+      if (pw && !A.passCopied) { A.passCopied = await copyText(pw); }
       if (!A) return;
-      const a = A;
-      closeSheet(); clearTimeout(connectTimer);
-      a.phase = 'switching'; // so disposing the embed isn't mistaken for a hang-up
-      try { a.api?.dispose(); } catch (_) { /* ignore */ }
-      a.api = null; window.jitsiApi = null;
-      // Re-register as an external participant: Jitsi's own page can't heartbeat.
-      try { a.data = await apiFetch(`/api/sessions/${a.sessionId}/join?via=external`, { retry: false }); } catch (_) { /* keep existing credentials */ }
-      if (A === a) openExternal();
+      if (A.handoff === 'app') {
+        const url = window.buildAppSessionUrl(A.data);
+        try { window.location.href = url; } catch (_) { /* not supported here */ }
+      } else {
+        openExternalUrl(window.buildExternalSessionUrl(A.data, A.prefs));
+      }
+      A.handoffOpened = true;
+      renderHandoff();
     },
-    reopenExternal() { if (A) openExternalUrl(window.buildExternalSessionUrl(A.data, A.prefs)); },
+    store(which) { openExternalUrl(which === 'ios' ? STORE_IOS : STORE_ANDROID); },
+    async copyLink() {
+      if (!A) return;
+      const ok = await copyText(window.buildExternalSessionUrl(A.data, A.prefs));
+      showToast(ok ? sr('copied', 'Copied') : sr('copy_fail', 'Could not copy — long-press the password to copy it.'), ok ? 'success' : 'info');
+    },
     leave() { if (A?.isHost) hostLeaveSheet(false); else finish({ end: false }); },
     async cancelLobby() { if (!A) return navigate('sessions'); await postLeave(false); teardown(); navigate('sessions'); },
     async copyPass() {
       const pw = A?.data?.room_password; if (!pw) return;
-      try { await navigator.clipboard.writeText(pw); showToast(sr('copied', 'Copied'), 'success'); }
-      catch (_) { showToast(pw, 'info'); }
+      const ok = await copyText(pw);
+      if (!A) return;
+      A.passCopied = ok;
+      if (ok) { haptic('success'); showToast(sr('copied', 'Copied'), 'success'); if (A.phase === 'external') renderHandoff(); }
+      else showToast(sr('copy_fail', 'Could not copy — long-press the password to copy it.'), 'info');
     },
   };
 })();
