@@ -1738,7 +1738,7 @@ function connectSocket() {
   // separate from the bot's 10-minutes-before reminder.
   socket.on('session_started', ({ session_id, title } = {}) => {
     haptic('success');
-    showToast(`🔴 The session has started${title ? `: ${title}` : ''} — join please!`, 'success');
+    showToast(`🔴 Your session has started${title ? `: ${title}` : ''}. Please join us now!`, 'success');
     updateSessionsBadge();
     if (currentPage === 'sessions') {
       loadSessions();
@@ -1755,7 +1755,7 @@ function connectSocket() {
       return;
     }
     haptic('warning');
-    showToast('The session has ended.', 'info');
+    showToast(t('The session has ended.'), 'info');
     updateSessionsBadge();
     if (currentPage === 'sessions') {
       loadSessions();
@@ -4425,12 +4425,12 @@ async function loadSessions() {
 }
 
 async function clearSessionHistory() {
-  if (!confirm('Clear all sessions from your list?')) return;
+  if (!confirm(t('Clear all sessions from your list?'))) return;
   haptic('medium');
   try {
     const res = await apiFetch('/api/sessions/my', { method: 'DELETE' });
     haptic('success');
-    showToast(`Cleared ${res.count || 0} sessions from history`, 'success');
+    showToast(t('sessions_cleared', { count: res.count || 0 }), 'success');
     loadSessions();
   } catch (e) { haptic('error'); showToast(e.message, 'error'); }
 }
@@ -4438,12 +4438,12 @@ async function clearSessionHistory() {
 // Join / create / launch / leave now live in session-room.js.
 // ─── End a session (mentor/host only) ─────────────────────────────
 async function endSession(session_id) {
-  if (!confirm('End this session for all participants? This action cannot be undone.')) return;
+  if (!confirm(t('End this session for all participants? This action cannot be undone.'))) return;
   haptic('medium');
   try {
     await apiFetch(`/api/sessions/${session_id}/end`, { method: 'PATCH' });
     haptic('success');
-    showToast('Session ended.', 'success');
+    showToast(t('Session ended.'), 'success');
     // Reload the sessions list so the status updates immediately
     loadSessions();
   } catch (e) {

@@ -1,0 +1,380 @@
+diff --git a/bot.js b/bot.js
+index 39ba74c..8d6154a 100644
+--- a/bot.js
++++ b/bot.js
+@@ -2796,7 +2796,7 @@ bot.on('callback_query', async (query) => {
+         if (swapped?.length) {
+           await supabase.from('mentorship_assignments')
+             .update({ mentor_id: chatId, user_id: swapped[0].mentor_id }).eq('id', swapped[0].id);
+-          return bot.answerCallbackQuery(query.id, { text: '⚠️ Repaired. Please tap Schedule again.', show_alert: true });
++          return bot.answerCallbackQuery(query.id, { text: '⚠️ We fixed it. Please tap Schedule again.', show_alert: true });
+         }
+         return safeSend(chatId, tSync(lang, 'no_mentees'));
+       }
+diff --git a/frontend/app.js b/frontend/app.js
+index 3891b5c..e54e1a2 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1738,7 +1738,7 @@ function connectSocket() {
+   // separate from the bot's 10-minutes-before reminder.
+   socket.on('session_started', ({ session_id, title } = {}) => {
+     haptic('success');
+-    showToast(`🔴 The session has started${title ? `: ${title}` : ''} — join please!`, 'success');
++    showToast(`🔴 Your session has started${title ? `: ${title}` : ''}. Please join us now!`, 'success');
+     updateSessionsBadge();
+     if (currentPage === 'sessions') {
+       loadSessions();
+@@ -1755,7 +1755,7 @@ function connectSocket() {
+       return;
+     }
+     haptic('warning');
+-    showToast('The session has ended.', 'info');
++    showToast(t('The session has ended.'), 'info');
+     updateSessionsBadge();
+     if (currentPage === 'sessions') {
+       loadSessions();
+@@ -4425,12 +4425,12 @@ async function loadSessions() {
+ }
+ 
+ async function clearSessionHistory() {
+-  if (!confirm('Clear all sessions from your list?')) return;
++  if (!confirm(t('Clear all sessions from your list?'))) return;
+   haptic('medium');
+   try {
+     const res = await apiFetch('/api/sessions/my', { method: 'DELETE' });
+     haptic('success');
+-    showToast(`Cleared ${res.count || 0} sessions from history`, 'success');
++    showToast(t('sessions_cleared', { count: res.count || 0 }), 'success');
+     loadSessions();
+   } catch (e) { haptic('error'); showToast(e.message, 'error'); }
+ }
+@@ -4438,12 +4438,12 @@ async function clearSessionHistory() {
+ // Join / create / launch / leave now live in session-room.js.
+ // ─── End a session (mentor/host only) ─────────────────────────────
+ async function endSession(session_id) {
+-  if (!confirm('End this session for all participants? This action cannot be undone.')) return;
++  if (!confirm(t('End this session for all participants? This action cannot be undone.'))) return;
+   haptic('medium');
+   try {
+     await apiFetch(`/api/sessions/${session_id}/end`, { method: 'PATCH' });
+     haptic('success');
+-    showToast('Session ended.', 'success');
++    showToast(t('Session ended.'), 'success');
+     // Reload the sessions list so the status updates immediately
+     loadSessions();
+   } catch (e) {
+diff --git a/frontend/locales.js b/frontend/locales.js
+index fae0073..48f2c82 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -397,13 +397,13 @@ const I18N = {
+     "edit_indicator_label": "Editing message",
+     "chat_placeholder": "Type a message…",
+     "select_mentee_modal_title": "Select Mentee",
+-    "select_mentee_modal_desc": "Choose which mentee to invite to this private session.",
++    "select_mentee_modal_desc": "Choose the mentee you want to invite to this private session.",
+     "Select Mentee": "Select Mentee",
+-    "Choose which mentee to invite to this private session.": "Choose which mentee to invite to this private session.",
++    "Choose which mentee to invite to this private session.": "Choose the mentee you want to invite to this private session.",
+     "Joined": "Joined",
+-    "no_active_mentees": "No active mentees.",
++    "no_active_mentees": "No active mentees found.",
+     "no_active_mentees_session": "No active mentees to start a session with.",
+-    "loading_mentees": "Loading mentees...",
++    "loading_mentees": "Loading your mentees...",
+     "Schedule 1-on-1 Session": "Schedule 1-on-1 Session",
+     "Schedule Group Session": "Schedule Group Session",
+     "session_1on1_placeholder": "e.g. Bible Study (optional)",
+@@ -412,8 +412,8 @@ const I18N = {
+     "Date": "Date",
+     "Time": "Time",
+     "btn_schedule_action": "Schedule",
+-    "please_pick_datetime": "Please pick date and time",
+-    "invalid_datetime_selected": "Invalid date or time selected",
++    "please_pick_datetime": "Please choose both the date and the time.",
++    "invalid_datetime_selected": "Please choose a date and time that is still ahead.",
+     "Profile": "Profile",
+     "Edit Profile": "Edit Profile",
+     "Notifications": "Notifications",
+@@ -465,9 +465,9 @@ const I18N = {
+     "media_hint": "Voice messages and files are sent from the bot chat. They appear here too.",
+     "sr_too_early": "The room opens at {time}.",
+     "sr_n_waiting": "{n} waiting for you",
+-    "sr_host_ready": "You're the host others will be notified when you start.",
++    "sr_host_ready": "You are the host. Others will be notified when you start.",
+     "sr_host_here": "{name} is here. You can join now.",
+-    "sr_host_wait": "Waiting for {name} to arrive… we'll let you in the moment they do.",
++    "sr_host_wait": "Waiting for {name} to arrive… we will let you in the moment they do.",
+     "sr_start": "Start session",
+     "sr_join_now": "Join now",
+     "sr_waiting": "Waiting for your mentor…",
+@@ -475,28 +475,28 @@ const I18N = {
+     "sr_mic_off": "Mic off",
+     "sr_cam_on": "Camera on",
+     "sr_cam_off": "Camera off",
+-    "sr_cam_hint": "Camera is optional you can turn it on any time during the call.",
+-    "sr_unreliable": "This app may not support video calls reliably.Opening in your phone's browser is recommended.",
++    "sr_cam_hint": "Camera is optional. You can turn it on any time during the call.",
++    "sr_unreliable": "This app may not handle video calls well. We recommend opening it in your phone's browser.",
+     "sr_join_anyway": "Mentor not showing as online? Join anyway",
+     "sr_open_browser": "Open in browser instead",
+     "sr_not_now": "Not now",
+     "sr_ext_eyebrow": "Opened in your browser",
+-    "sr_ext_sub": "Your call is running outside this app. Come back here when you're done.",
+-    "sr_pass_label": "If you're asked for a password",
++    "sr_ext_sub": "Your call is running outside this app. Come back here when you are finished.",
++    "sr_pass_label": "If you are asked for a password",
+     "sr_copy": "Copy",
+     "sr_copied": "Copied",
+     "sr_open_again": "Open again",
+-    "sr_im_done": "I'm done — leave session",
++    "sr_im_done": "I'm done, leave session",
+     "sr_hand_eyebrow_browser": "Open in your browser",
+     "sr_hand_eyebrow_app": "Share your phone screen",
+-    "sr_hand_sub_pw": "Copy the password first — it won't be visible once the next app opens.",
++    "sr_hand_sub_pw": "Copy the password first. You will not see it once the next app opens.",
+     "sr_hand_sub_nopw": "Tap the button below when you're ready.",
+     "sr_step_copy": "Copy the room password",
+     "sr_step_open_browser": "Open the browser",
+     "sr_step_open_app": "Open the Jitsi Meet app",
+     "sr_copy_pass": "Copy password",
+     "sr_copied_btn": "Copied ✓",
+-    "sr_copy_fail": "Could not copy — long-press the password to copy it.",
++    "sr_copy_fail": "Could not copy. Press and hold the password to copy it.",
+     "sr_pass_hint": "Paste it when the page asks for a password.",
+     "sr_open_browser_btn": "Open browser",
+     "sr_open_app_btn": "Open Jitsi Meet app",
+@@ -504,16 +504,16 @@ const I18N = {
+     "sr_install_android": "Google Play",
+     "sr_install_ios": "App Store",
+     "sr_share_phone": "Share my phone screen (Jitsi Meet app)",
+-    "sr_share_phone_note": "Phone browsers can't share your screen. The free Jitsi Meet app can.",
+-    "sr_share_continue": "Continue — share from the app",
+-    "sr_share_title_desktop": "Screen sharing isn't available here",
+-    "sr_share_body_desktop": "This browser can't share the screen. Try Chrome, Edge or Firefox on a computer.",
+-    "sr_engine_fail": "Could not load the video engine. Check your connection and try again.",
+-    "sr_slow_title": "Taking longer than usual",
+-    "sr_slow_body": "The call hasn't connected yet. Your browser may handle it better.",
++    "sr_share_phone_note": "Phone browsers cannot share your screen, but the free Jitsi Meet app can.",
++    "sr_share_continue": "Continue and share from the app",
++    "sr_share_title_desktop": "Screen sharing is not available here",
++    "sr_share_body_desktop": "This browser cannot share the screen. Please try Chrome, Edge or Firefox on a computer.",
++    "sr_engine_fail": "We could not load the video engine. Please check your connection and try again.",
++    "sr_slow_title": "This is taking longer than usual",
++    "sr_slow_body": "The call has not connected yet. Your browser may handle it better.",
+     "sr_keep_waiting": "Keep waiting",
+-    "sr_cam_err": "Camera unavailable — you can continue with audio only.",
+-    "sr_mic_err": "Microphone unavailable — check your permissions.",
++    "sr_cam_err": "Camera is not available. You can continue with audio only.",
++    "sr_mic_err": "Microphone is not available. Please check your permissions.",
+     "sr_mic": "Mic",
+     "sr_unmute": "Unmute",
+     "sr_camera": "Camera",
+@@ -530,19 +530,19 @@ const I18N = {
+     "sr_microphone": "Microphone",
+     "sr_camera_lbl": "Camera",
+     "sr_speaker": "Speaker",
+-    "sr_no_devices": "No devices found. Check that camera and microphone permissions are allowed.",
++    "sr_no_devices": "No devices found. Please make sure camera and microphone permissions are allowed.",
+     "sr_done": "Done",
+-    "sr_device_fail": "Could not switch that device.",
++    "sr_device_fail": "We could not switch that device.",
+     "sr_peers": "{n} in call",
+     "sr_alone_host": "Waiting for others to join…",
+-    "sr_alone_mentee": "Your mentor stepped out. Stay here you'll reconnect automatically when they're back.",
++    "sr_alone_mentee": "Your mentor stepped out. Please stay here, you will reconnect automatically when they are back.",
+     "sr_connecting": "Connecting…",
+     "sr_live": "Live",
+-    "sr_offline": "You're offline — reconnecting…",
++    "sr_offline": "You are offline. Reconnecting…",
+     "sr_problem": "Connection problem",
+     "sr_duration": "You were in the call for {n} min.",
+     "sr_host_leave_title": "Leave the session?",
+-    "sr_host_leave_body": "You can leave and come back  the session stays open for others. Or end it for everyone.",
++    "sr_host_leave_body": "You can leave and come back later, and the session stays open for others. Or you can end it for everyone.",
+     "sr_leave_open": "Leave, keep session open",
+     "sr_end_all": "End for everyone",
+     "sr_rejoin": "Rejoin the call",
+@@ -554,13 +554,13 @@ const I18N = {
+     "sr_back_body": "Is your session finished, or are you still in the call?",
+     "sr_still_in": "I'm still in the call",
+     "sr_leave": "Leave session",
+-    "sr_ios_share": "Screen sharing over the web needs iOS 17 or later. Camera and mic still work fine.",
++    "sr_ios_share": "Screen sharing on the web needs iOS 17 or later. Camera and mic still work fine.",
+     "sr_share_title": "Share your phone screen",
+-    "sr_share_body": "Phone browsers can't share the screen — only the free Jitsi Meet app can. We'll take you to a page with the room password and a button to open the app.",
++    "sr_share_body": "Phone browsers cannot share the screen, only the free Jitsi Meet app can. We will take you to a page with the room password and a button to open the app.",
+     "sr_share_open_app": "Open in Jitsi Meet app",
+     "sr_share_copy_link": "Copy link to open on a computer",
+     "sr_cancel": "Cancel",
+-    "sr_share_fail": "Could not start screen sharing on this device.",
++    "sr_share_fail": "We could not start screen sharing on this device.",
+     "sr_waiting_banner": "{name} is waiting for you",
+     "sr_join": "Join",
+     "sr_invite": "New session",
+@@ -578,8 +578,8 @@ const I18N = {
+     "sr_1on1_session_badge": "1-on-1 session",
+     "sr_group_session_default": "Group Session",
+     "sr_private_session_default": "Private session",
+-    "sr_group_session_created": "Group session created!",
+-    "sr_private_session_created": "Private session created!",
++    "sr_group_session_created": "Your group session is ready.",
++    "sr_private_session_created": "Your private session is ready.",
+     "sr_select_mentee_first": "Please select a mentee first.",
+     "btn_join_browser": "Join via Browser",
+     "btn_end_session": "End Session",
+@@ -587,18 +587,18 @@ const I18N = {
+     "session_ended_status": "Ended",
+     "starts_at": "Starts at {time}",
+     "live_now": "🔴 Live now",
+-    "lobby_open_soon": "Lobby open — starting soon",
++    "lobby_open_soon": "Lobby is open. We start soon.",
+     "session_done_status": "✓ Done",
+     "no_active_sessions": "No active sessions.",
+     "no_upcoming_group_sessions": "No upcoming group sessions.",
+     "no_active_mentees_session": "You don't have any active mentees to schedule a session with.",
+     "no_active_mentees": "No active mentees found.",
+-    "loading_mentees": "Loading mentees...",
++    "loading_mentees": "Loading your mentees...",
+     "no_mentees_to_invite": "No mentees available to invite.",
+-    "please_pick_datetime": "Please select both date and time.",
+-    "invalid_datetime_selected": "Please select a valid future date and time.",
++    "please_pick_datetime": "Please choose both the date and the time.",
++    "invalid_datetime_selected": "Please choose a date and time that is still ahead.",
+     "select_mentee_modal_title": "Select Mentee",
+-    "select_mentee_modal_desc": "Choose which mentee to invite to this private session.",
++    "select_mentee_modal_desc": "Choose the mentee you want to invite to this private session.",
+     "session_title_label": "Session Title",
+     "session_group_placeholder": "e.g. Weekly Group Study",
+     "session_1on1_placeholder": "e.g. Weekly Check-in",
+@@ -612,7 +612,13 @@ const I18N = {
+     "Upcoming Group Sessions": "Upcoming Group Sessions",
+     "Sessions": "Video Sessions",
+     "Date": "Date",
+-    "Time": "Time"
++    "Time": "Time",
++    // ========== HARDCODED TOASTS / CONFIRMS (humanized) ==========
++    "The session has ended.": "The session has ended. Thank you for joining.",
++    "Clear all sessions from your list?": "Do you want to clear all sessions from your list?",
++    "End this session for all participants? This action cannot be undone.": "Do you want to end this session for everyone? This cannot be undone.",
++    "Session ended.": "The session has ended.",
++    "sessions_cleared": "{count} sessions cleared from your history"
+   },
+   am: {
+     "btn_find_mentor": "አማካሪ ፈልግ",
+diff --git a/local/en.json b/local/en.json
+index a96e853..f1e2c83 100644
+--- a/local/en.json
++++ b/local/en.json
+@@ -110,8 +110,8 @@
+     "streak_already_read": "Already read today.",
+     "streak_reminder": "Your {streak}-day streak is waiting today. Take a few moments to read and tap Mark Read in the Holy app.",
+     "streak_reminder_with_freeze": "Your {streak}-day streak is active. You have a Streak Saver available, but taking time to read today keeps your journey going.",
+-    "live_session_reminder": "Session Reminder\n\nYour live session starts within 10 minutes.",
+-    "live_session_started": "Session Started\n\nThe live session has started. Please join now.",
++    "live_session_reminder": "Session Reminder\n\nYour live session begins in 10 minutes. Please get ready to join.",
++    "live_session_started": "Session Started\n\nYour live session has begun. Please join us now.",
+     "verse_title": "Daily Verse",
+     "no_verse": "No verse available today.",
+     "amharic_translation": "Amharic",
+@@ -130,23 +130,23 @@
+     "invalid_hour": "Please enter a valid hour between 0 and 23.",
+     "verse_time_set": "Verse time set to {hour}:00 UTC.",
+     "choose_language": "Choose your language:",
+-    "select_session_type": "Select session type:",
++    "select_session_type": "What kind of session would you like?",
+     "session_private": "1-on-1 (Private)",
+     "session_group": "Group Session",
+-    "enter_date": "Select date:",
+-    "enter_time": "Select time (Ethiopia time):",
+-    "enter_custom_time": "Please type the time in HH:MM AM/PM format (e.g., 02:30 PM):",
+-    "invalid_time_format": "Invalid time format. Please use HH:MM AM/PM (e.g., 02:30 PM).",
+-    "time_past": "The selected time is in the past. Please choose a future time.",
++    "enter_date": "Pick the date:",
++    "enter_time": "Pick the time (Ethiopia time):",
++    "enter_custom_time": "Please type the time like HH:MM AM/PM (for example, 02:30 PM):",
++    "invalid_time_format": "That time format is not right. Please use HH:MM AM/PM (for example, 02:30 PM).",
++    "time_past": "That time has already passed. Please choose a time ahead.",
+     "btn_today": "Today",
+     "btn_tomorrow": "Tomorrow",
+     "btn_pick_day": "Pick another day",
+     "btn_custom_time": "Custom time",
+-    "invalid_datetime": "Invalid format.\n\nUse `YYYY-MM-DD` for date and `HH:MM AM/PM` for time.\n\nExample:\nDate: `2026-05-15`\nTime: `02:30 PM`",
+-    "session_scheduled": "Session scheduled.\n\nJoin link: {link}",
+-    "session_invite": "New Session Scheduled\n\nHost: {host}\nTitle: {title}\nTime: {time}\n\nJoin link: {link}",
+-    "no_mentees": "You have no active mentees.",
+-    "select_mentee": "Select a mentee for this session:",
++    "invalid_datetime": "Sorry, that format is not correct.\n\nPlease write the date as `YYYY-MM-DD` and the time as `HH:MM AM/PM`.\n\nExample:\nDate: `2026-05-15`\nTime: `02:30 PM`",
++    "session_scheduled": "Your session is scheduled.\n\nJoin link: {link}",
++    "session_invite": "A new session has been scheduled for you.\n\nHost: {host}\nTitle: {title}\nTime: {time}\n\nJoin link: {link}",
++    "no_mentees": "You do not have any active mentees yet.",
++    "select_mentee": "Which mentee is this session for?",
+     "my_mentees_title": "My Mentees",
+     "apply_q1": "Which type of user you want to give mentorship :",
+     "apply_q2": "What is your educational background? (e.g., Bachelor's in Psychology)",
+diff --git a/routes/sessions.js b/routes/sessions.js
+index b328370..0a200ca 100644
+--- a/routes/sessions.js
++++ b/routes/sessions.js
+@@ -105,7 +105,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers)
+       let scheduledDate = scheduled_at ? new Date(scheduled_at) : new Date();
+       if (isNaN(scheduledDate.getTime())) return res.status(400).json({ error: 'Invalid start time' });
+       if (scheduledDate.getTime() < Date.now()) scheduledDate = new Date();
+-      if (scheduledDate.getTime() - Date.now() > 90 * 24 * 60 * 60 * 1000) return res.status(400).json({ error: 'Start time is too far in the future' });
++      if (scheduledDate.getTime() - Date.now() > 90 * 24 * 60 * 60 * 1000) return res.status(400).json({ error: 'That start time is too far ahead. Please choose an earlier date.' });
+ 
+       // Work out who is invited — and only ever the host's own active mentees.
+       let inviteeIds = [];
+@@ -240,21 +240,21 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers)
+     try {
+       const { id: telegram_id } = req.telegramUser;
+       const { data: session, error } = await supabase.from('video_sessions').select('*').eq('id', req.params.id).single();
+-      if (error || !session) return res.status(404).json({ error: 'Session not found', code: 'not_found' });
++      if (error || !session) return res.status(404).json({ error: 'We could not find this session', code: 'not_found' });
+ 
+       const now = Date.now();
+       const startMs = new Date(session.scheduled_at).getTime();
+ 
+       if (FINISHED.includes(session.status)) {
+-        return res.status(410).json({ error: 'This session has ended.', code: 'ended' });
++        return res.status(410).json({ error: 'This session has already ended.', code: 'ended' });
+       }
+       if (session.status === 'scheduled') {
+         if (now - startMs > SCHEDULED_EXPIRY_MS) {
+-          return res.status(410).json({ error: 'This session has expired.', code: 'expired' });
++          return res.status(410).json({ error: 'This session has already expired.', code: 'expired' });
+         }
+         if (startMs - now > EARLY_JOIN_MS) {
+           return res.status(403).json({
+-            error: 'Session has not started yet.', code: 'too_early',
++            error: 'This session has not started yet. Please wait a little.', code: 'too_early',
+             starts_at: session.scheduled_at,
+             opens_at: new Date(startMs - EARLY_JOIN_MS).toISOString(),
+             server_time: nowIso(),
+@@ -271,7 +271,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers)
+ 
+       const present = participants.filter(isPresent);
+       if (session.is_group && !me && present.length >= (session.max_participants || 10)) {
+-        return res.status(409).json({ error: 'This session is full.', code: 'full' });
++        return res.status(409).json({ error: 'Sorry, this session is full.', code: 'full' });
+       }
+ 
+       const hostWasPresent = participants.some(p => same(p.telegram_id, session.host_id) && isPresent(p));
+@@ -350,7 +350,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers)
+   router.post('/:id/heartbeat', requireAuth, async (req, res) => {
+     const { id: telegram_id } = req.telegramUser;
+     const { data: session } = await supabase.from('video_sessions').select('id, host_id, status, is_group').eq('id', req.params.id).single();
+-    if (!session) return res.status(404).json({ error: 'Session not found' });
++    if (!session) return res.status(404).json({ error: 'We could not find this session' });
+ 
+     const participants = await getParticipants(session.id);
+     const me = participants.find(p => same(p.telegram_id, telegram_id));
+@@ -381,7 +381,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers)
+   router.post('/:id/leave', requireAuth, async (req, res) => {
+     const { id: telegram_id } = req.telegramUser;
+     const { data: session } = await supabase.from('video_sessions').select('id, host_id, status').eq('id', req.params.id).single();
+-    if (!session) return res.status(404).json({ error: 'Session not found' });
++    if (!session) return res.status(404).json({ error: 'We could not find this session' });
+ 
+     await supabase.from('session_participants').update({ left_at: nowIso() })
+       .eq('session_id', session.id).eq('telegram_id', telegram_id).is('left_at', null);

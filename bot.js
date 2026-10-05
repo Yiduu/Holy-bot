@@ -2796,7 +2796,7 @@ bot.on('callback_query', async (query) => {
         if (swapped?.length) {
           await supabase.from('mentorship_assignments')
             .update({ mentor_id: chatId, user_id: swapped[0].mentor_id }).eq('id', swapped[0].id);
-          return bot.answerCallbackQuery(query.id, { text: '⚠️ Repaired. Please tap Schedule again.', show_alert: true });
+          return bot.answerCallbackQuery(query.id, { text: '⚠️ We fixed it. Please tap Schedule again.', show_alert: true });
         }
         return safeSend(chatId, tSync(lang, 'no_mentees'));
       }

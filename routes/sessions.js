@@ -105,7 +105,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       let scheduledDate = scheduled_at ? new Date(scheduled_at) : new Date();
       if (isNaN(scheduledDate.getTime())) return res.status(400).json({ error: 'Invalid start time' });
       if (scheduledDate.getTime() < Date.now()) scheduledDate = new Date();
-      if (scheduledDate.getTime() - Date.now() > 90 * 24 * 60 * 60 * 1000) return res.status(400).json({ error: 'Start time is too far in the future' });
+      if (scheduledDate.getTime() - Date.now() > 90 * 24 * 60 * 60 * 1000) return res.status(400).json({ error: 'That start time is too far ahead. Please choose an earlier date.' });
 
       // Work out who is invited — and only ever the host's own active mentees.
       let inviteeIds = [];
@@ -240,21 +240,21 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     try {
       const { id: telegram_id } = req.telegramUser;
       const { data: session, error } = await supabase.from('video_sessions').select('*').eq('id', req.params.id).single();
-      if (error || !session) return res.status(404).json({ error: 'Session not found', code: 'not_found' });
+      if (error || !session) return res.status(404).json({ error: 'We could not find this session', code: 'not_found' });
 
       const now = Date.now();
       const startMs = new Date(session.scheduled_at).getTime();
 
       if (FINISHED.includes(session.status)) {
-        return res.status(410).json({ error: 'This session has ended.', code: 'ended' });
+        return res.status(410).json({ error: 'This session has already ended.', code: 'ended' });
       }
       if (session.status === 'scheduled') {
         if (now - startMs > SCHEDULED_EXPIRY_MS) {
-          return res.status(410).json({ error: 'This session has expired.', code: 'expired' });
+          return res.status(410).json({ error: 'This session has already expired.', code: 'expired' });
         }
         if (startMs - now > EARLY_JOIN_MS) {
           return res.status(403).json({
-            error: 'Session has not started yet.', code: 'too_early',
+            error: 'This session has not started yet. Please wait a little.', code: 'too_early',
             starts_at: session.scheduled_at,
             opens_at: new Date(startMs - EARLY_JOIN_MS).toISOString(),
             server_time: nowIso(),
@@ -271,7 +271,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
 
       const present = participants.filter(isPresent);
       if (session.is_group && !me && present.length >= (session.max_participants || 10)) {
-        return res.status(409).json({ error: 'This session is full.', code: 'full' });
+        return res.status(409).json({ error: 'Sorry, this session is full.', code: 'full' });
       }
 
       const hostWasPresent = participants.some(p => same(p.telegram_id, session.host_id) && isPresent(p));
@@ -350,7 +350,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
   router.post('/:id/heartbeat', requireAuth, async (req, res) => {
     const { id: telegram_id } = req.telegramUser;
     const { data: session } = await supabase.from('video_sessions').select('id, host_id, status, is_group').eq('id', req.params.id).single();
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    if (!session) return res.status(404).json({ error: 'We could not find this session' });
 
     const participants = await getParticipants(session.id);
     const me = participants.find(p => same(p.telegram_id, telegram_id));
@@ -381,7 +381,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
   router.post('/:id/leave', requireAuth, async (req, res) => {
     const { id: telegram_id } = req.telegramUser;
     const { data: session } = await supabase.from('video_sessions').select('id, host_id, status').eq('id', req.params.id).single();
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    if (!session) return res.status(404).json({ error: 'We could not find this session' });
 
     await supabase.from('session_participants').update({ left_at: nowIso() })
       .eq('session_id', session.id).eq('telegram_id', telegram_id).is('left_at', null);
