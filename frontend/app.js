@@ -1450,8 +1450,12 @@ function openRatingModal(mentorId, mentorName, assignmentId) {
     starsWrap.querySelectorAll('svg').forEach(svg => {
       svg.style.cursor = 'pointer';
       svg.onclick = () => {
-        selected = parseInt(svg.dataset.star); paintStars(selected);
-        const btn = $('ratingSubmitBtn'); btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
+        const picked = parseInt(svg.dataset.star);
+        selected = (picked === selected) ? 0 : picked;   // tap the same star again = undo
+        paintStars(selected);
+        const btn = $('ratingSubmitBtn');
+        btn.style.opacity = selected ? '1' : '0.5';
+        btn.style.pointerEvents = selected ? 'auto' : 'none';
       };
     });
   };
@@ -6073,7 +6077,8 @@ function paintEndToApplyStars(n) {
   wrap.querySelectorAll('svg').forEach(svg => {
     svg.onclick = () => {
       haptic('selection');
-      endToApplyStars = parseInt(svg.dataset.star, 10);
+      const picked = parseInt(svg.dataset.star, 10);
+      endToApplyStars = (picked === endToApplyStars) ? 0 : picked;   // tap the same star again = undo
       paintEndToApplyStars(endToApplyStars);
     };
   });
