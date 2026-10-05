@@ -336,6 +336,13 @@
   window.buildAppSessionUrl = function (data) {
     return `org.jitsi.meet://${data.jitsi_domain}/${data.room_name}` + (data.jitsi_token ? `?jwt=${data.jitsi_token}` : '');
   };
+  // https page (frontend/open-app.html) that launches the app from a real browser.
+  // Values go in the #fragment so the room token never reaches a server log.
+  window.buildAppLauncherUrl = function (data) {
+    const p = [`d=${encodeURIComponent(data.jitsi_domain)}`, `r=${encodeURIComponent(data.room_name)}`];
+    if (data.jitsi_token) p.push(`j=${encodeURIComponent(data.jitsi_token)}`);
+    return `${window.location.origin}/open-app.html#${p.join('&')}`;
+  };
 
   async function copyText(text) {
     try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } } catch (_) { /* try the fallback */ }
@@ -914,8 +921,10 @@
       if (pw && !A.passCopied) { A.passCopied = await copyText(pw); }
       if (!A) return;
       if (A.handoff === 'app') {
-        const url = window.buildAppSessionUrl(A.data);
-        try { window.location.href = url; } catch (_) { /* not supported here */ }
+        // Never navigate THIS page to org.jitsi.meet:// — Telegram's WebView shows an
+        // error page for unknown schemes. A small launcher page opened in the phone's
+        // real browser starts the app (and falls back to the store if it is missing).
+        openExternalUrl(window.buildAppLauncherUrl(A.data));
       } else {
         openExternalUrl(window.buildExternalSessionUrl(A.data, A.prefs));
       }

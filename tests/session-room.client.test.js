@@ -144,11 +144,26 @@ const base = (o = {}) => ({ session_id: 's1', room_name: 'holy-x', room_password
   assert.ok(log.disposed >= 1 && w.$('sessionLobby').textContent.includes('Open Jitsi Meet app') && w.$('sessionLobby').textContent.includes('PW123')); ok('Continue → embedded call closed; app hand-off page shows password + "Open Jitsi Meet app"');
   assert.ok(w.$('sessionLobby').textContent.includes('Google Play') && w.$('sessionLobby').textContent.includes('App Store')); ok('install links shown for the app');
   assert.ok(log.calls.some(c => c[1].includes('via=external'))); ok('app hand-off registers the host as an external participant');
+  await w.SR.openHandoff();
+  assert.equal(log.opened, 'https://app.test/open-app.html#d=meet.example.org&r=holy-x&j=JWT1'); ok('Open Jitsi Meet app → launcher page opened in the real browser (never navigates the WebView to org.jitsi.meet://)');
+  assert.ok(w.$('sessionLobby').textContent.includes('Open again')); ok('after tapping, "Open again" is offered');
   // opening on a phone browser hand-off page for a host explains the limit and links to the app
   ({ w, log } = boot({ isHost: true, api: async () => base({ is_moderator: true, host_present: true }) }));
   Object.defineProperty(w.navigator, 'maxTouchPoints', { value: 5 });
   await w.joinSession('s1', { external: true }); await sleep(20);
   assert.ok(w.$('sessionLobby').textContent.includes("Phone browsers can't share your screen")); assert.ok(w.$('sessionLobby').textContent.includes('Share my phone screen')); ok('browser page on a phone: says why no Share, links to the app');
+
+  // ── launcher page (frontend/open-app.html): builds the right link per platform
+  const html = fs.readFileSync(require('path').join(__dirname, '..', 'frontend', 'open-app.html'), 'utf8');
+  const launch = (ua, hash) => { const d = new JSDOM(html, { runScripts: 'dangerously', url: 'https://app.test/open-app.html' + hash, pretendToBeVisual: true, beforeParse(win) { Object.defineProperty(win.navigator, 'userAgent', { value: ua }); } }); return d.window.document; };
+  let doc = launch('Mozilla/5.0 (Linux; Android 14) Chrome/120', '#d=meet.example.org&r=holy-x&j=a.b-c_d');
+  assert.ok(doc.getElementById('open').href.startsWith('intent://meet.example.org/holy-x?jwt=a.b-c_d#Intent;scheme=org.jitsi.meet;package=org.jitsi.meet;')); assert.ok(doc.getElementById('open').href.includes('S.browser_fallback_url=')); ok('launcher (Android): intent URL with Play Store fallback');
+  doc = launch('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)', '#d=meet.example.org&r=holy-x');
+  assert.equal(doc.getElementById('open').href, 'org.jitsi.meet://meet.example.org/holy-x'); assert.ok(doc.getElementById('store').href.includes('apps.apple.com')); ok('launcher (iOS): org.jitsi.meet:// link + App Store');
+  doc = launch('Mozilla/5.0 (X11; Linux x86_64) Chrome/120', '#d=meet.example.org&r=holy-x');
+  assert.ok(doc.getElementById('open').classList.contains('hidden') && !doc.getElementById('web').classList.contains('hidden')); ok('launcher (computer): offers the web link instead of the app');
+  doc = launch('Mozilla/5.0 (Linux; Android 14) Chrome/120', '#d=evil.com/x%22%3E&r=holy-x');
+  assert.ok(doc.getElementById('open').classList.contains('hidden') && doc.getElementById('title').textContent.includes('not valid')); ok('launcher rejects malformed parameters');
 
   console.log('\nALL CLIENT CHECKS PASSED'); process.exit(0);
 })().catch(e => { console.error('\nFAIL:', e.message, '\n', e.stack.split('\n').slice(1, 4).join('\n')); process.exit(1); });
