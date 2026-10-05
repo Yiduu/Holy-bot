@@ -426,8 +426,6 @@ async function createVideoSession(chatId, date, time12h) {
       await supabase.from('session_participants').insert({ session_id: sess.id, telegram_id: menteeId });
     }
 
-    const link = `${APP_URL}?start=session_${sess.id}`;
-
     // Format confirmation details for the mentor
     const { data: mentorSettings } = await supabase.from('user_settings').select('timezone').eq('telegram_id', chatId).single();
     let hostTimezone = mentorSettings?.timezone || 'Africa/Addis_Ababa';
@@ -445,9 +443,18 @@ async function createVideoSession(chatId, date, time12h) {
     });
     const typeLabel = state.tempData.type === 'private' ? 'Private' : 'Group';
 
-    const mentorMsg = `✅ Session scheduled!\n\nDate: ${dateStr}\nTime: ${timeStr}\nType: ${typeLabel}\n\nJoin link: ${link}`;
+    const mentorMsg = `✅ Session scheduled!\n\nDate: ${dateStr}\nTime: ${timeStr}\nType: ${typeLabel}`;
 
-    await bot.sendMessage(chatId, mentorMsg);
+    // A button that opens the session page inside the app, instead of a raw
+    // link in the message text (same as the mentee invite and the reminders).
+    await bot.sendMessage(chatId, mentorMsg, {
+      reply_markup: {
+        inline_keyboard: [[{
+          text: tSync(lang, 'btn_join_session'),
+          web_app: { url: `${APP_URL}?start=session_${sess.id}` }
+        }]]
+      }
+    });
     console.log(`[Scheduler] Success: Session ${sess.id} created for mentor ${chatId}`);
 
     if (menteeId && !isGroup) {
