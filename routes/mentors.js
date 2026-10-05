@@ -124,6 +124,14 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       .eq('status', 'pending');
     const pendingMentorIds = new Set((pendingRows || []).map(r => r.mentor_id));
 
+    // Mentors this user asked to be notified about ("Notify me" on a full
+    // mentor). A missing table (migration not run yet) just means "none".
+    const { data: waitRows } = await supabase
+      .from('mentor_waitlist')
+      .select('mentor_id')
+      .eq('user_id', req.telegramUser.id);
+    const waitlistedMentorIds = new Set((waitRows || []).map(r => r.mentor_id));
+
     // Enrich with mentee counts and expertise topics. Batched: three queries
     // for the whole list instead of three per mentor, so this page costs the
     // same at 20 mentors or 500.
@@ -172,10 +180,35 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
         expertise_topics: topics_list.map(t => t.name),
         topics: topics_list,
         request_pending: pendingMentorIds.has(mentor.telegram_id),
+        on_waitlist: waitlistedMentorIds.has(mentor.telegram_id),
       };
     });
 
     res.json(enriched);
+  });
+
+  // POST /api/mentors/waitlist – "Notify me" when a full mentor has a spot
+  router.post('/waitlist', requireAuth, async (req, res) => {
+    const user_id = req.telegramUser.id;
+    const mentor_id = Number(req.body?.mentor_id);
+    if (!mentor_id) return res.status(400).json({ error: 'mentor_id required' });
+    if (mentor_id === Number(user_id)) return res.status(400).json({ error: 'Invalid mentor' });
+    const { error } = await supabase
+      .from('mentor_waitlist')
+      .upsert({ mentor_id, user_id }, { onConflict: 'mentor_id,user_id', ignoreDuplicates: true });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  });
+
+  // DELETE /api/mentors/waitlist/:mentor_id – leave the list
+  router.delete('/waitlist/:mentor_id', requireAuth, async (req, res) => {
+    const { error } = await supabase
+      .from('mentor_waitlist')
+      .delete()
+      .eq('mentor_id', Number(req.params.mentor_id))
+      .eq('user_id', req.telegramUser.id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
   });
 
   // POST /api/mentors/request – request mentorship

@@ -3134,6 +3134,7 @@ function selectMentorMainTopic(topicId, topicName) {
   $('mentorMainTopicDropdown')?.removeAttribute('data-open');
   $('modalFilterTopicDropdown')?.removeAttribute('data-open');
 
+  syncMentorTopicChips();
   updateFilterActiveIndicators();
   renderMentorsList();
 }
@@ -3143,7 +3144,7 @@ function updateFilterActiveIndicators() {
   const isSexActive = !!mentorFilters.sex;
   const isRatingActive = Number(mentorFilters.min_rating) > 0;
   const isAvailActive = !!mentorFilters.availability;
-  const hasActiveFilters = isTopicActive || isSexActive || isRatingActive || isAvailActive;
+  const hasActiveFilters = isSexActive || isRatingActive || isAvailActive;  // topic lives in the chip row
 
   // Filter button active badge
   const dot = $('mentorFilterActiveDot');
@@ -3164,13 +3165,6 @@ function updateFilterActiveIndicators() {
     tagsBar.style.display = 'flex';
     let tagsHtml = '';
 
-    if (isTopicActive) {
-      tagsHtml += `
-        <span class="active-filter-tag-pill" onclick="removeMentorFilter('topic')">
-          <span>${escapeHtml(mentorFilters.topic_name || 'Topic')}</span>
-          <span class="pill-x">✕</span>
-        </span>`;
-    }
     if (isSexActive) {
       const sexName = mentorFilters.sex === 'M' ? (t('sex_male') || 'Male') : (t('sex_female') || 'Female');
       tagsHtml += `
@@ -3223,9 +3217,7 @@ function resetAllMentorFilters() {
   mentorFilters.min_rating = 0;
   mentorFilters.availability = '';
   mentorActiveTopicId = '';
-
-  const labelEl = $('mentorMainTopicDropdownLabel');
-  if (labelEl) labelEl.textContent = t('all_topics') || 'All Topics';
+  syncMentorTopicChips();
 
   updateFilterActiveIndicators();
   renderMentorsList();
@@ -3335,27 +3327,6 @@ function applyMentorFiltersFromModal() {
   renderMentorsList();
 }
 
-function toggleBioExpand(id) {
-  const bioEl = document.getElementById(`bio-${id}`);
-  const btn = event?.currentTarget;
-  if (!bioEl || !btn) return;
-  const isExpanded = bioEl.classList.toggle('expanded');
-  const moreText = btn.dataset.i18nMore || t('btn_more') || 'More';
-  const lessText = btn.dataset.i18nLess || t('btn_less') || 'Less';
-  btn.textContent = isExpanded ? lessText : moreText;
-}
-
-function toggleTopicsExpand(id) {
-  const extraEl = document.getElementById(`topics-extra-${id}`);
-  const btn = event?.currentTarget;
-  if (!extraEl || !btn) return;
-  const isExpanded = extraEl.classList.toggle('expanded');
-  const count = btn.dataset.count || '';
-  btn.textContent = isExpanded
-    ? (btn.dataset.i18nLess || t('btn_less') || 'Less')
-    : `+${count} ${btn.dataset.i18nMore || t('btn_more') || 'more'}`;
-}
-
 function renderHaloAvatar(m, letter, isOnline = false, percent = 0, isAccepting = true) {
   const safeLetter = escapeHtml(letter || '?');
   const r = 25;
@@ -3402,7 +3373,7 @@ function renderModernRating(rating, count) {
     <div class="mentor-stats-row">
       <div class="mentor-stats-stars">${svgs}</div>
       <span class="mentor-rating-val">${Number(rating).toFixed(1)}</span>
-      <span class="mentor-reviews-count">(${count})</span>
+      <span class="mentor-reviews-count">(${count === 1 ? t('reviews_count_one') : t('reviews_count', { n: count })})</span>
     </div>`;
 }
 
@@ -3412,89 +3383,304 @@ const MENTOR_ICON_PENDING = '<svg xmlns="http://www.w3.org/2000/svg" width="13" 
 // ─── Mentors Loader ───────────────────────────────────────────
 async function loadMentors() {
   const container = $('mentorsList');
-
-  if (container) {
-    container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
-  }
-
+  if (container) container.innerHTML = mentorSkeletonHTML(4);
   updateSavedMentorsBadge();
 
   try {
-    // 1. Fetch active mentor for the user (if any)
     hasActiveMentorState = false;
+    activeMentorData = null;
+    myMentorTopicIds = new Set();
     const activeContainer = $('activeMentorContainer');
     if (activeContainer) activeContainer.innerHTML = '';
 
-    if (currentUser?.role === 'user') {
-      try {
-        const activeMentorRes = await apiFetch('/api/users/my-mentor');
-        if (activeMentorRes && activeMentorRes.mentor && activeContainer) {
-          hasActiveMentorState = true;
-          const am = activeMentorRes.mentor;
-          const amName = am.user_settings?.display_name || am.anonymous_id;
-          const amBio = am.user_settings?.bio || "Whatever you're carrying, you don't have to carry it alone. I'm here to encourage you with the hope found in Christ.";
-          const amLetter = amName.charAt(0).toUpperCase();
-          const amRating = am.rating || null;
-          const amReviews = am.rating_count || 0;
-          const sexLabel = am.sex === 'M' ? t('sex_male') : am.sex === 'F' ? t('sex_female') : '';
-          const ageLabel = am.age_range || '';
-          const spec = am.user_settings?.specialization || '';
-          const haloHtml = renderHaloAvatar(am, amLetter, !!am.is_online, 1, true);
-          const specTag = spec ? `<span class="mentor-tag-chip spec-chip">${escapeHtml(spec)}</span>` : '';
+    const isMentee = currentUser?.role === 'user';
+    // Three independent requests, run together so the skeleton is up for one
+    // round-trip instead of three.
+    const [amRes, myTopics, list] = await Promise.all([
+      isMentee
+        ? apiFetch('/api/users/my-mentor').catch(err => { console.error('Error fetching active mentor:', err); return null; })
+        : null,
+      isMentee ? apiFetch('/api/topics/my').catch(() => []) : [],
+      apiFetch('/api/mentors'),
+    ]);
 
-          activeContainer.innerHTML = `
-            <div class="active-mentor-luxury-card">
-              <div class="active-mentor-top-eyebrow">
-                <span class="active-mentor-label">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                  ${t('your_active_mentor') || 'Your Active Mentor'}
-                </span>
-                <span class="active-mentor-status-pill">
-                  <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
-                  ${t('active_mentorship_label') || 'Active Mentorship'}
-                </span>
-              </div>
-              <div class="mentor-card-top">
-                ${haloHtml}
-                <div class="mentor-card-main">
-                  <div class="mentor-name-wrap">
-                    <span class="mentor-name">${escapeHtml(amName)}</span>
-                    <svg class="verified-shield" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-                  </div>
-                  ${renderModernRating(amRating, amReviews)}
-                  <div class="mentor-demographics-row">
-                    ${sexLabel ? `<span class="mentor-pill-demographic">${escapeHtml(sexLabel)}</span>` : ''}
-                    ${ageLabel ? `<span class="mentor-pill-demographic">${escapeHtml(ageLabel)}</span>` : ''}
-                  </div>
-                </div>
-              </div>
-              ${specTag ? `<div class="mentor-tags-full-row">${specTag}</div>` : ''}
-              <div class="mentor-bio-wrap" style="margin-top:8px">
-                <p class="mentor-bio-text" id="bio-active-${am.telegram_id}">${escapeHtml(amBio)}</p>
-                ${amBio.length > 90 ? `<button class="btn-bio-toggle" onclick="toggleBioExpand('active-${am.telegram_id}')" data-i18n-more="${t('btn_more') || 'More'}" data-i18n-less="${t('btn_less') || 'Less'}">${t('btn_more') || 'More'}</button>` : ''}
-              </div>
-              <div class="mentor-card-bottom" style="margin-top:8px">
-                <div style="display:flex;gap:8px;width:100%">
-                  <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${am.telegram_id}')" style="display:flex;align-items:center;justify-content:center;gap:6px">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                    <span>${t('btn_message') || 'Message'}</span>
-                  </button>
-                  <button class="btn btn-danger btn-sm" onclick="endMentorship()">${t('btn_end') || 'End Mentorship'}</button>
-                </div>
-              </div>
-            </div>`;
-          activeContainer.style.display = 'block';
-        }
-      } catch (err) {
-        console.error('Error fetching active mentor:', err);
-      }
+    if (amRes && amRes.mentor) {
+      hasActiveMentorState = true;
+      activeMentorData = amRes.mentor;
     }
+    myMentorTopicIds = new Set((myTopics || []).map(x => Number(x.topic_id)));
+    mentorsCache = list || [];
 
-    // 2. Fetch all mentors from API
-    mentorsCache = await apiFetch('/api/mentors') || [];
+    renderActiveMentorCard();
     renderMentorsList();
   } catch (e) {
     if (container) container.innerHTML = `<div class="empty-state"><span>${escapeHtml(e.message)}</span></div>`;
+  }
+}
+
+// ─── Mentors page helpers ─────────────────────────────────────
+let myMentorTopicIds = new Set();   // topics the mentee picked; drives the match badge + sort
+let activeMentorData = null;        // /api/users/my-mentor payload, if any
+
+function mentorSkeletonHTML(n = 4) {
+  return Array.from({ length: n }, () => '<div class="mc-skel" aria-hidden="true"></div>').join('');
+}
+
+function mentorNameOf(m) {
+  return m.user_settings?.display_name || m.anonymous_id || '';
+}
+
+function mentorMax(m) {
+  return m.user_settings?.max_mentees || 5;
+}
+
+// pending > paused > full > open. "pending" wins so a mentor you already
+// asked never reads as unavailable.
+function mentorState(m) {
+  if (m.request_pending) return 'pending';
+  if (m.accepting_requests === false) return 'paused';
+  if ((m.mentee_count || 0) >= mentorMax(m)) return 'full';
+  return 'open';
+}
+
+function isMentorUnavailable(m) {
+  const s = mentorState(m);
+  return s === 'paused' || s === 'full';
+}
+
+// How many of the mentor's topics are also the mentee's own topics.
+function mentorMatchCount(m) {
+  if (currentUser?.role !== 'user' || !myMentorTopicIds.size) return 0;
+  return (m.topics || []).filter(tp => myMentorTopicIds.has(Number(tp.id))).length;
+}
+
+function mentorStatus(m) {
+  const mentees = m.mentee_count || 0;
+  if (m.accepting_requests === false) return { cls: 'paused', text: t('status_paused') };
+  if (mentees >= mentorMax(m)) return { cls: 'full', text: t('fully_booked') };
+  const open = Math.max(mentorMax(m) - mentees, 0);
+  return { cls: '', text: open === 1 ? t('spot_open_one') : t('spots_open_n', { open }) };
+}
+
+function findMentorById(id) {
+  const cached = (mentorsCache || []).find(x => String(x.telegram_id) === String(id));
+  if (activeMentorData && String(activeMentorData.telegram_id) === String(id)) {
+    return { ...activeMentorData, ...(cached || {}) };
+  }
+  return cached || null;
+}
+
+function mentorBioInline(bio) {
+  const LIMIT = 100;
+  if (bio.length <= LIMIT + 5) return escapeHtml(bio);
+  const cut = bio.slice(0, LIMIT).replace(/\s+\S*$/, '');
+  return `${escapeHtml(cut)}… <span class="mc-more">${t('btn_more')}</span>`;
+}
+
+// "Specialization · Topic +2". The specialization is the part that shrinks
+// (ellipsis); the topic always stays visible. The topic shown is the first
+// one the mentee shares with the mentor.
+function mentorSubLine(m) {
+  const spec = (m.user_settings?.specialization || '').trim();
+  const list = (m.topics && m.topics.length) ? m.topics.map(x => x.name) : (m.expertise_topics || []);
+  const mine = (m.topics || []).find(x => myMentorTopicIds.has(Number(x.id)));
+  const shown = mine ? mine.name : (list[0] || '');
+  const extra = list.length > 1 ? list.length - 1 : 0;
+  if (!spec && !shown) return '';
+  const topicHtml = shown
+    ? `<span class="mc-sub-topic">${spec ? '&nbsp;· ' : ''}${escapeHtml(shown)}${extra ? ` <i>+${extra}</i>` : ''}</span>`
+    : '';
+  return `<div class="mc-sub">${spec ? `<span class="mc-sub-spec">${escapeHtml(spec)}</span>` : ''}${topicHtml}</div>`;
+}
+
+function mentorActionHtml(m, inSheet = false) {
+  if (currentUser?.role === 'mentor') return '';
+  const sz = inSheet ? '' : ' btn-sm';
+  const id = m.telegram_id;
+  switch (mentorState(m)) {
+    case 'pending':
+      return `<button class="btn btn-outline${sz} btn-pending" disabled>${MENTOR_ICON_PENDING} ${t('btn_waiting')}</button>`;
+    case 'paused':
+      return `<button class="btn btn-outline${sz} btn-not-accepting" disabled>${t('not_accepting')}</button>`;
+    case 'full':
+      return m.on_waitlist
+        ? `<button class="btn btn-ghost${sz}" onclick="toggleMentorWaitlist(event, ${id})">${t('btn_on_waitlist')}</button>`
+        : `<button class="btn btn-outline${sz}" onclick="toggleMentorWaitlist(event, ${id})">${t('btn_notify_me')}</button>`;
+    default:
+      return `<button class="btn btn-primary${sz} btn-mentor-request" data-mentor-name="${escapeHtml(mentorNameOf(m))}"
+        onclick="${inSheet ? 'closeMentorSheet();' : ''}handleMentorRequestClick(event, '${id}')" ${hasActiveMentorState ? 'disabled' : ''}>${t('btn_request')}</button>`;
+  }
+}
+
+const MC_ICON_MSG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+const MC_ICON_BOOKMARK = (filled) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>`;
+
+function mentorMatchBadge(n) {
+  return n ? `<div class="mc-match">✦ ${t('match_topics', { n })}</div>` : '';
+}
+
+function mentorCardHtml(m) {
+  const id = m.telegram_id;
+  const name = mentorNameOf(m);
+  const bio = m.user_settings?.bio || "I'm here as a mentor to walk alongside you through faith and life's challenges.";
+  const unavailable = isMentorUnavailable(m);
+  const isAccepting = m.accepting_requests !== false;
+  const max = mentorMax(m);
+  const pct = max > 0 ? (m.mentee_count || 0) / max : 0;
+  const isSaved = savedMentorsSet.has(String(id));
+  const st = mentorStatus(m);
+  const halo = renderHaloAvatar(m, name.charAt(0).toUpperCase(), !!m.is_online, isAccepting ? pct : 1, isAccepting);
+
+  return `
+    <div class="mc-card ${unavailable ? 'muted' : ''}" data-mentor-id="${id}" onclick="mentorCardClick(event, ${id})">
+      <div class="mc-top">
+        ${halo}
+        <div class="mc-main">
+          <div class="mc-name">${escapeHtml(name)}</div>
+          ${renderModernRating(m.rating || null, m.rating_count || 0)}
+        </div>
+        <div class="mc-icons">
+          <button class="mc-icon-btn ${isSaved ? 'saved' : ''}" onclick="toggleSaveMentor(${id})" aria-label="${t('tab_saved')}">${MC_ICON_BOOKMARK(isSaved)}</button>
+          <button class="mc-icon-btn" onclick="openChat('${id}')" aria-label="${t('btn_message')}">${MC_ICON_MSG}</button>
+        </div>
+      </div>
+      ${mentorSubLine(m)}
+      ${unavailable ? '' : mentorMatchBadge(mentorMatchCount(m))}
+      <p class="mc-bio">${mentorBioInline(bio)}</p>
+      <div class="mc-view">${t('btn_view_profile')} ›</div>
+      <div class="mc-bottom">
+        <span class="mc-status ${st.cls}">${st.text}</span>
+        ${mentorActionHtml(m)}
+      </div>
+    </div>`;
+}
+
+// Tap anywhere on the card opens the profile sheet, except on the small
+// buttons and the avatar (which opens the photo viewer).
+function mentorCardClick(event, id) {
+  if (event.target.closest('button, a, [data-avatar-tid]')) return;
+  openMentorSheet(id);
+}
+
+function renderActiveMentorCard() {
+  const c = $('activeMentorContainer');
+  if (!c) return;
+  const am = activeMentorData;
+  if (!am) { c.innerHTML = ''; return; }
+  const name = mentorNameOf(am);
+  const halo = renderHaloAvatar(am, name.charAt(0).toUpperCase(), !!am.is_online, 1, true);
+  c.innerHTML = `
+    <div class="mc-mine" onclick="mentorCardClick(event, ${am.telegram_id})">
+      <div class="mc-eyebrow">${t('your_mentor_label')}<span>● ${t('active_mentorship_label')}</span></div>
+      <div class="mc-top">
+        ${halo}
+        <div class="mc-main">
+          <div class="mc-name">${escapeHtml(name)}</div>
+          ${renderModernRating(am.rating || null, am.rating_count || 0)}
+          <div class="mc-online">${am.is_online ? t('status_online') : t('status_offline')}</div>
+        </div>
+      </div>
+      <div class="mc-mine-actions">
+        <button class="btn btn-primary btn-sm" onclick="openChat('${am.telegram_id}')">${t('btn_message')}</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmEndMentorship()">${t('btn_end')}</button>
+      </div>
+    </div>`;
+  hydrateAvatars(c);
+}
+
+// ─── Mentor profile bottom sheet ──────────────────────────────
+function openMentorSheet(id) {
+  const m = findMentorById(id);
+  const body = $('mentorSheetBody');
+  if (!m || !body) return;
+  haptic('light');
+
+  const isMine = !!activeMentorData && String(activeMentorData.telegram_id) === String(id);
+  const name = mentorNameOf(m);
+  const bio = m.user_settings?.bio || "I'm here as a mentor to walk alongside you through faith and life's challenges.";
+  const spec = (m.user_settings?.specialization || '').trim();
+  const topics = (m.topics && m.topics.length)
+    ? m.topics.map(x => ({ id: x.id, name: x.name }))
+    : (m.expertise_topics || []).map(nm => ({ id: null, name: nm }));
+  const st = mentorStatus(m);
+  const n = (isMine || isMentorUnavailable(m)) ? 0 : mentorMatchCount(m);
+  const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '—';
+  const isAccepting = m.accepting_requests !== false;
+  const max = mentorMax(m);
+  const halo = renderHaloAvatar(m, name.charAt(0).toUpperCase(), !!m.is_online, isAccepting ? (m.mentee_count || 0) / max : 1, isAccepting);
+
+  const actions = isMine
+    ? `<button class="btn btn-primary" onclick="closeMentorSheet();openChat('${id}')">${t('btn_message')}</button>
+       <button class="btn btn-danger" onclick="confirmEndMentorship()">${t('btn_end')}</button>`
+    : `<button class="btn btn-outline" onclick="closeMentorSheet();openChat('${id}')">${t('btn_message')}</button>
+       ${mentorActionHtml(m, true)}`;
+
+  body.innerHTML = `
+    <div class="mc-top">
+      ${halo}
+      <div class="mc-main">
+        <div class="mc-name mc-name-lg">${escapeHtml(name)}</div>
+        ${renderModernRating(m.rating || null, m.rating_count || 0)}
+        <div class="mc-online">${m.is_online ? t('status_online') : t('status_offline')}${isMine ? '' : ' · ' + st.text}</div>
+      </div>
+    </div>
+    ${mentorMatchBadge(n)}
+    <div class="mc-sheet-h">${t('sheet_about')}</div>
+    <p class="mc-sheet-text">${escapeHtml(bio)}</p>
+    ${spec ? `<div class="mc-sheet-h">${t('sheet_specialization')}</div><p class="mc-sheet-text">${escapeHtml(spec)}</p>` : ''}
+    ${topics.length ? `<div class="mc-sheet-h">${t('sheet_topics')}</div>
+      <div class="mc-tags">${topics.map(tp => `<span class="${tp.id != null && myMentorTopicIds.has(Number(tp.id)) ? 'mine' : ''}">${escapeHtml(tp.name)}</span>`).join('')}</div>` : ''}
+    <div class="mc-sheet-h">${t('sheet_details')}</div>
+    <div class="mc-facts">
+      <div>${t('sheet_age')}<b>${escapeHtml(m.age_range || '—')}</b></div>
+      <div>${t('sheet_gender')}<b>${escapeHtml(sexLabel)}</b></div>
+    </div>
+    <div class="mc-sheet-actions">${actions}</div>`;
+  hydrateAvatars(body);
+  $('mentorSheet')?.classList.add('open');
+}
+
+function closeMentorSheet() {
+  $('mentorSheet')?.classList.remove('open');
+}
+
+function confirmEndMentorship() {
+  const body = $('mentorSheetBody');
+  if (!body || !activeMentorData) return;
+  haptic('light');
+  body.innerHTML = `
+    <div class="mc-sheet-h" style="margin-top:4px">${escapeHtml(t('end_mentorship_title', { name: mentorNameOf(activeMentorData) }))}</div>
+    <p class="mc-sheet-text">${t('end_mentorship_body')}</p>
+    <div class="mc-sheet-actions">
+      <button class="btn btn-outline" onclick="closeMentorSheet()">${t('btn_keep_mentor')}</button>
+      <button class="btn btn-danger" onclick="closeMentorSheet();endMentorship(null, true)">${t('btn_end')}</button>
+    </div>`;
+  $('mentorSheet')?.classList.add('open');
+}
+
+// "Notify me" on a full mentor: join/leave the waitlist. Optimistic, rolled
+// back if the request fails.
+async function toggleMentorWaitlist(event, mentorId) {
+  event?.stopPropagation();
+  haptic('light');
+  const m = (mentorsCache || []).find(x => String(x.telegram_id) === String(mentorId));
+  if (!m) return;
+  const joining = !m.on_waitlist;
+  const refresh = () => {
+    renderMentorsList();
+    if ($('mentorSheet')?.classList.contains('open')) openMentorSheet(mentorId);
+  };
+  m.on_waitlist = joining;
+  refresh();
+  try {
+    if (joining) await apiFetch('/api/mentors/waitlist', { method: 'POST', body: { mentor_id: m.telegram_id } });
+    else await apiFetch(`/api/mentors/waitlist/${m.telegram_id}`, { method: 'DELETE' });
+    showToast(t(joining ? 'waitlist_joined' : 'waitlist_left'), 'success');
+  } catch (e) {
+    m.on_waitlist = !joining;
+    refresh();
+    haptic('error');
+    showToast(e.message, 'error');
   }
 }
 
@@ -3509,56 +3695,52 @@ function renderMentorsList() {
   const minRating = Number(mentorFilters.min_rating) || 0;
   const availability = mentorFilters.availability;
 
-  // Filter mentors based on all filter parameters
+  // The active-mentor card only belongs on the Browse tab.
+  const activeContainer = $('activeMentorContainer');
+  if (activeContainer) {
+    activeContainer.style.display = (hasActiveMentorState && mentorActiveTab === 'browse') ? 'block' : 'none';
+  }
+  const activeId = activeMentorData ? String(activeMentorData.telegram_id) : null;
+
   const filtered = (mentorsCache || []).filter(m => {
-    // Search query filter
+    // Your own mentor already has the pinned card above the list.
+    if (activeId && String(m.telegram_id) === activeId) return false;
+
     if (query) {
       const name = (m.user_settings?.display_name || m.anonymous_id || '').toLowerCase();
       const bio = (m.user_settings?.bio || '').toLowerCase();
       const spec = (m.user_settings?.specialization || '').toLowerCase();
       const topics = (m.expertise_topics || []).join(' ').toLowerCase();
-      const matchesQuery = name.includes(query) || bio.includes(query) || spec.includes(query) || topics.includes(query);
-      if (!matchesQuery) return false;
+      if (!(name.includes(query) || bio.includes(query) || spec.includes(query) || topics.includes(query))) return false;
     }
-
-    // Topic filter
     if (selectedTopic) {
-      const topicMatches = (m.topics || []).some(t => String(t.id) === String(selectedTopic)) ||
+      const topicMatches = (m.topics || []).some(tp => String(tp.id) === String(selectedTopic)) ||
                            (m.topic_ids || []).map(String).includes(String(selectedTopic));
       if (!topicMatches) return false;
     }
-
-    // Sex / Gender filter
-    if (selectedSex) {
-      if (m.sex !== selectedSex) return false;
-    }
-
-    // Minimum Rating filter
-    if (minRating > 0) {
-      const rating = Number(m.rating) || 0;
-      if (rating < minRating) return false;
-    }
-
-    // Availability filter
+    if (selectedSex && m.sex !== selectedSex) return false;
+    if (minRating > 0 && (Number(m.rating) || 0) < minRating) return false;
     if (availability === 'available') {
-      const mentees = m.mentee_count || 0;
-      const max = m.user_settings?.max_mentees || 5;
-      const isAccepting = m.accepting_requests !== false;
-      if (!isAccepting || mentees >= max) return false;
+      if (mentorState(m) === 'paused' || mentorState(m) === 'full') return false;
     } else if (availability === 'online') {
       if (!m.is_online) return false;
     }
-
     return true;
   });
 
-  const listToShow = mentorActiveTab === 'saved'
+  const listToShow = (mentorActiveTab === 'saved'
     ? filtered.filter(m => savedMentorsSet.has(String(m.telegram_id)))
-    : filtered;
+    : filtered
+  ).slice().sort((a, b) =>
+    (isMentorUnavailable(a) - isMentorUnavailable(b)) ||        // Full / Paused sink
+    (mentorMatchCount(b) - mentorMatchCount(a)) ||               // best topic match first
+    ((Number(b.rating) || 0) - (Number(a.rating) || 0)) ||
+    ((b.rating_count || 0) - (a.rating_count || 0))
+  );
 
   if (countBadge) {
-    const countText = t('mentors_available_count', { count: listToShow.length }) || `${listToShow.length} available`;
-    countBadge.textContent = countText;
+    const countText = t('mentors_available_count', { count: listToShow.length });
+    countBadge.textContent = hasActiveMentorState ? `${countText} · ${t('requests_paused_note')}` : countText;
   }
 
   if (!listToShow.length) {
@@ -3568,169 +3750,31 @@ function renderMentorsList() {
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:10px">
             <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
           </svg>
-          <p style="font-size:14px;color:var(--gold-light);margin:0 0 4px;font-weight:600">
-            ${t('no_saved_mentors_title') || 'No mentors saved yet'}
-          </p>
-          <p style="font-size:12.5px;margin:0;line-height:1.5">
-            ${t('no_saved_mentors_desc') || "Tap the bookmark icon on a mentor's card to keep track of who you'd like to reach out to."}
-          </p>
+          <p style="font-size:14px;color:var(--gold-light);margin:0 0 4px;font-weight:600">${t('no_saved_mentors_title')}</p>
+          <p style="font-size:12.5px;margin:0;line-height:1.5">${t('no_saved_mentors_desc')}</p>
         </div>`;
     } else {
       let message = 'No mentors found with active filters';
-      if (query) {
-        message = `No mentors matching "${escapeHtml(query)}"`;
-      }
+      if (query) message = `No mentors matching "${escapeHtml(query)}"`;
       container.innerHTML = `
         <div class="empty-state" style="padding:40px 16px;text-align:center;">
           <p style="color:var(--text2);margin-bottom:12px;">${escapeHtml(message)}</p>
-          <button class="btn btn-outline btn-sm" onclick="resetAllMentorFilters()">${t('btn_reset') || 'Reset Filters'}</button>
+          <button class="btn btn-outline btn-sm" onclick="resetAllMentorFilters()">${t('btn_reset')}</button>
         </div>`;
     }
     return;
   }
 
-  const cardHtmls = listToShow.map(m => {
-    const name = m.user_settings?.display_name || m.anonymous_id;
-    const bio = m.user_settings?.bio || "I'm here as a mentor to walk alongside you through faith and life's challenges.";
-    const spec = m.user_settings?.specialization || '';
-    const letter = name.charAt(0).toUpperCase();
-    const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
-    const ageLabel = m.age_range || '';
-    const mentees = m.mentee_count || 0;
-    const max = m.user_settings?.max_mentees || 5;
-    const isAccepting = m.accepting_requests !== false;
-    const isFull = mentees >= max;
-    const canRequest = !hasActiveMentorState && isAccepting && !isFull && !m.request_pending;
-    const isSaved = savedMentorsSet.has(String(m.telegram_id));
-    const isOnline = !!m.is_online;
-    const pct = max > 0 ? (mentees / max) : 0;
-    const spotsOpen = Math.max(max - mentees, 0);
+  const cardHtmls = listToShow.map(mentorCardHtml);
 
-    const rating = m.rating || null;
-    const reviews = m.rating_count || 0;
-
-    const haloHtml = renderHaloAvatar(m, letter, isOnline, isAccepting ? pct : 1, isAccepting);
-
-    let spotsLabel = '';
-    let spotsClass = '';
-    if (!isAccepting) {
-      spotsLabel = t('not_accepting_requests') || 'Not accepting requests';
-      spotsClass = 'paused';
-    } else if (isFull) {
-      spotsLabel = t('fully_booked') || 'Fully booked';
-      spotsClass = 'full';
-    } else {
-      spotsLabel = t('spots_open', { open: spotsOpen, max }) || `${spotsOpen} of ${max} spots open`;
-    }
-
-    // Specialization + Topic chips with expandable more button
-    const specChip = spec ? `<span class="mentor-tag-chip spec-chip">${escapeHtml(spec)}</span>` : '';
-    const topicsList = m.expertise_topics || [];
-    const initialTopics = topicsList.slice(0, 2);
-    const extraTopics = topicsList.slice(2);
-
-    let topicsHtml = initialTopics.map(tp => `<span class="mentor-tag-chip">${escapeHtml(tp)}</span>`).join('');
-    if (extraTopics.length > 0) {
-      topicsHtml += `
-        <span class="mentor-extra-topics" id="topics-extra-${m.telegram_id}">
-          ${extraTopics.map(tp => `<span class="mentor-tag-chip">${escapeHtml(tp)}</span>`).join('')}
-        </span>
-        <button class="btn-topics-more" onclick="toggleTopicsExpand('${m.telegram_id}')" data-count="${extraTopics.length}" data-i18n-more="${t('btn_more') || 'more'}" data-i18n-less="${t('btn_less') || 'Less'}">+${extraTopics.length} ${t('btn_more') || 'more'}</button>`;
-    }
-    const allTagsRow = (specChip || topicsHtml) ? `<div class="mentor-tags-full-row">${specChip}${topicsHtml}</div>` : '';
-
-    const bookmarkFill = isSaved ? 'var(--gold, #CBA05C)' : 'none';
-    const bookmarkStroke = isSaved ? 'var(--gold, #CBA05C)' : 'var(--text3)';
-
-    // Action button
-    let actionBtnHtml = '';
-    if (currentUser?.role === 'mentor') {
-      actionBtnHtml = '';
-    } else if (m.request_pending) {
-      actionBtnHtml = `
-        <button class="btn btn-outline btn-sm btn-pending" disabled title="${t('request_pending_tooltip')}">
-          ${MENTOR_ICON_PENDING} ${t('btn_request_pending')}
-        </button>`;
-    } else if (!isAccepting) {
-      actionBtnHtml = `
-        <button class="btn btn-outline btn-sm btn-not-accepting" disabled title="${t('not_accepting_tooltip')}">
-          ${t('not_accepting') || 'Paused'}
-        </button>`;
-    } else if (isFull) {
-      actionBtnHtml = `
-        <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed;background:var(--bg3);color:var(--text3);" title="${t('capacity_full_tooltip')}">
-          ${t('capacity_full') || 'Full'}
-        </button>`;
-    } else {
-      actionBtnHtml = `
-        <button class="btn btn-primary btn-sm btn-mentor-request" data-mentor-name="${escapeHtml(name)}"
-          onclick="handleMentorRequestClick(event, '${m.telegram_id}')" ${!canRequest ? 'disabled' : ''}>
-          <span>${t('btn_request')}</span>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>`;
-    }
-
-    return `
-      <div class="mentor-card" data-mentor-id="${m.telegram_id}">
-        <div class="mentor-card-top">
-          ${haloHtml}
-          <div class="mentor-card-main">
-            <div class="mentor-card-name-row">
-              <div class="mentor-name-wrap">
-                <span class="mentor-name">${escapeHtml(name)}</span>
-                <svg class="verified-shield" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-              </div>
-              <button class="btn-save-mentor ${isSaved ? 'saved' : ''}" onclick="toggleSaveMentor(${m.telegram_id})" aria-label="Save mentor">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="${bookmarkFill}" stroke="${bookmarkStroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
-                </svg>
-              </button>
-            </div>
-            ${renderModernRating(rating, reviews)}
-            <div class="mentor-demographics-row">
-              ${sexLabel ? `<span class="mentor-pill-demographic">${escapeHtml(sexLabel)}</span>` : ''}
-              ${ageLabel ? `<span class="mentor-pill-demographic">${escapeHtml(ageLabel)}</span>` : ''}
-            </div>
-          </div>
-        </div>
-
-        <!-- Full-width Specialization & Topic Tags row -->
-        ${allTagsRow}
-
-        <!-- Full-width Bio with "More / Less" toggle button -->
-        <div class="mentor-bio-wrap">
-          <p class="mentor-bio-text" id="bio-${m.telegram_id}">${escapeHtml(bio)}</p>
-          ${bio.length > 90 ? `<button class="btn-bio-toggle" onclick="toggleBioExpand('${m.telegram_id}')" data-i18n-more="${t('btn_more') || 'More'}" data-i18n-less="${t('btn_less') || 'Less'}">${t('btn_more') || 'More'}</button>` : ''}
-        </div>
-
-        <!-- Bottom Action Row: Capacity + Message & Request buttons -->
-        <div class="mentor-card-bottom">
-          <span class="mentor-capacity-text ${spotsClass}">${spotsLabel}</span>
-          <div class="mentor-actions-group">
-            <button class="btn-mentor-msg" onclick="openChat('${m.telegram_id}')" title="${t('btn_message') || 'Message'}">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            </button>
-            ${actionBtnHtml}
-          </div>
-        </div>
-      </div>`;
-  });
-
-  // Setting innerHTML to dozens of these cards (each with several inline
-  // SVGs) in one shot is what was making the mentors list feel laggy on
-  // older phones — the browser has to parse/layout/paint the whole batch
-  // before the page becomes responsive again. Below a threshold this is
-  // unnoticeable, so short lists still render in one pass exactly as
-  // before; longer lists paint an initial batch immediately (so the
-  // screen isn't blank) and stream the rest in over a few animation
-  // frames so scrolling/taps stay responsive while it finishes.
+  // Long lists paint an initial batch right away and stream the rest in, so
+  // older phones stay responsive (same approach as before).
   const BATCH_THRESHOLD = 15;
   const BATCH_SIZE = 10;
 
   function finishMentorsRender() {
     applyLanguage();
     hydrateAvatars(container);
-    if ($('activeMentorContainer')) hydrateAvatars($('activeMentorContainer'));
   }
 
   if (cardHtmls.length <= BATCH_THRESHOLD) {
@@ -3746,10 +3790,6 @@ function renderMentorsList() {
       requestAnimationFrame(() => {
         container.insertAdjacentHTML('beforeend', cardHtmls.slice(i, i + BATCH_SIZE).join(''));
         i += BATCH_SIZE;
-        // Re-running these per batch only touches the newly-added nodes —
-        // applyLanguage() re-scans data-i18n attrs and hydrateAvatars()
-        // skips anything already marked .avatar-loaded — so this stays
-        // cheap even though it's called several times.
         finishMentorsRender();
         renderNextBatch();
       });
@@ -3757,43 +3797,29 @@ function renderMentorsList() {
   }
 }
 
+// Topic chip row: "All" + one chip per topic. Built once; selection only
+// toggles the active class so the row doesn't jump back to the start.
 async function loadMentorTopics() {
   try {
     mentorTopicsCache = await apiFetch('/api/topics') || [];
-    const allText = t('all_topics') || 'All Topics';
-
-    // 1. Populate Main Topic Dropdown Menu
-    const mainMenu = $('mentorMainTopicDropdownMenu');
-    if (mainMenu) {
-      mainMenu.innerHTML = `
-        <button type="button" class="dropdown-item ${!mentorFilters.topic_id ? 'selected' : ''}" data-value="" onclick="selectMentorMainTopic('', '')">
-          <span>${allText}</span>
-        </button>
-        ${mentorTopicsCache.map(tp => `
-          <button type="button" class="dropdown-item ${String(mentorFilters.topic_id) === String(tp.id) ? 'selected' : ''}" data-value="${tp.id}" onclick="selectMentorMainTopic(${tp.id}, \`${escapeHtml(tp.name)}\`)">
-            <span>${escapeHtml(tp.name)}</span>
-          </button>
-        `).join('')}
-      `;
-    }
-
-    // 2. Populate Modal Filter Topic Dropdown Menu
-    const modalMenu = $('modalFilterTopicDropdownMenu');
-    if (modalMenu) {
-      modalMenu.innerHTML = `
-        <button type="button" class="dropdown-item ${!mentorModalTempFilters.topic_id ? 'selected' : ''}" data-value="" onclick="selectMentorModalTopic('', '')">
-          <span>${allText}</span>
-        </button>
-        ${mentorTopicsCache.map(tp => `
-          <button type="button" class="dropdown-item ${String(mentorModalTempFilters.topic_id) === String(tp.id) ? 'selected' : ''}" data-value="${tp.id}" onclick="selectMentorModalTopic(${tp.id}, \`${escapeHtml(tp.name)}\`)">
-            <span>${escapeHtml(tp.name)}</span>
-          </button>
-        `).join('')}
-      `;
-    }
+    const row = $('mentorTopicChips');
+    if (!row) return;
+    const chip = (id, label) =>
+      `<button type="button" class="mc-chip" data-id="${escapeHtml(String(id))}" data-name="${escapeHtml(id === '' ? '' : label)}"
+        onclick="selectMentorMainTopic(this.dataset.id, this.dataset.name)">${escapeHtml(label)}</button>`;
+    row.innerHTML = chip('', t('mentor_chip_all')) + mentorTopicsCache.map(tp => chip(tp.id, tp.name)).join('');
+    syncMentorTopicChips();
   } catch (e) {
     console.error('Failed to load topics for filter:', e);
   }
+}
+
+function syncMentorTopicChips() {
+  const row = $('mentorTopicChips');
+  if (!row) return;
+  row.querySelectorAll('.mc-chip').forEach(btn => {
+    btn.classList.toggle('active', String(btn.dataset.id) === String(mentorFilters.topic_id || ''));
+  });
 }
 
 function selectMentorModalTopic(topicId, topicName) {
@@ -7395,7 +7421,7 @@ async function confirmTransfer() {
   }
 }
 
-async function endMentorship(assignId) {
+async function endMentorship(assignId, skipConfirm = false) {
   if (assignId && typeof assignId === 'string') {
     // Mentor Flow (from My Mentees list)
     if (!confirm('End this mentorship assignment?')) return;
@@ -7410,7 +7436,7 @@ async function endMentorship(assignId) {
     } catch (e) { haptic('error'); showToast(e.message, 'error'); }
   } else {
     // Mentee Flow (from Mentors Page)
-    if (!confirm(t('confirm_end_mentorship') || 'Are you sure you want to end your mentorship?')) return;
+    if (!skipConfirm && !confirm(t('confirm_end_mentorship'))) return;
     haptic('medium');
     try {
       const result = await apiFetch('/api/users/end-mentorship', { method: 'POST' });

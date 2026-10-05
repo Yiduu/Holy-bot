@@ -96,6 +96,12 @@ function emitToUser(telegram_id, event, payload) {
  * @returns {Promise<object|null>} the Supabase error, or null on success
  */
 async function closeAssignment(supabase, assignmentId, { reason = null, endedBy = null } = {}) {
+  // Remember whose spot this frees so the waitlist can be told afterwards.
+  let mentorId = null;
+  try {
+    const { data } = await supabase.from('mentorship_assignments').select('mentor_id').eq('id', assignmentId).maybeSingle();
+    mentorId = data?.mentor_id ?? null;
+  } catch (_) { /* best effort */ }
   const endedAt = new Date().toISOString();
   let { error } = await supabase
     .from('mentorship_assignments')
@@ -107,7 +113,49 @@ async function closeAssignment(supabase, assignmentId, { reason = null, endedBy 
       .update({ is_active: false, ended_at: endedAt })
       .eq('id', assignmentId));
   }
+  if (!error && mentorId) notifyMentorWaitlist(supabase, mentorId).catch(() => {});
   return error || null;
+}
+
+/**
+ * After a mentorship ends: if the mentor now has free spots, message the
+ * oldest people on their waitlist (one per free spot) and drop them from it.
+ * Best-effort and never throws - ending a mentorship must not depend on it.
+ */
+async function notifyMentorWaitlist(supabase, mentorId) {
+  try {
+    const { data: mentor } = await supabase
+      .from('users')
+      .select('accepting_requests, anonymous_id, user_settings(display_name, max_mentees)')
+      .eq('telegram_id', mentorId).single();
+    if (!mentor || mentor.accepting_requests === false) return;
+
+    const max = mentor.user_settings?.max_mentees || parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
+    const { count } = await supabase
+      .from('mentorship_assignments')
+      .select('id', { count: 'exact', head: true })
+      .eq('mentor_id', mentorId).eq('is_active', true);
+    const free = max - (count || 0);
+    if (free <= 0) return;
+
+    const { data: waiting } = await supabase
+      .from('mentor_waitlist').select('id, user_id')
+      .eq('mentor_id', mentorId).order('created_at', { ascending: true }).limit(free);
+    if (!waiting || !waiting.length) return;
+
+    const { safeSend, getUserLang } = require('../bot');
+    const name = mentor.user_settings?.display_name || mentor.anonymous_id || 'A mentor';
+    for (const w of waiting) {
+      const lang = await getUserLang(w.user_id).catch(() => 'en');
+      const text = lang === 'am'
+        ? `${name} ክፍት ቦታ አለው። ጥያቄ ለመላክ በHoly ውስጥ የአማካሪዎች ገጽን ይክፈቱ።`
+        : `${name} has a spot open. Open the Mentors page in Holy to send a request.`;
+      await safeSend(w.user_id, text);
+    }
+    await supabase.from('mentor_waitlist').delete().in('id', waiting.map(w => w.id));
+  } catch (e) {
+    console.error('[waitlist] notify failed (non-fatal):', e.message);
+  }
 }
 
 /**
@@ -200,7 +248,7 @@ function emitToUserRoom(telegram_id, event, payload) {
 
 module.exports = {
   generateJitsiJWT, JITSI_DOMAIN, isPublicJitsi, supabaseQuery, emitToUser, emitToUserRoom,
-  closeAssignment, recordMentorRating, endMenteeSideOnPromotion
+  closeAssignment, notifyMentorWaitlist, recordMentorRating, endMenteeSideOnPromotion
 };
 
 

@@ -1,0 +1,1273 @@
+diff --git a/bot.js b/bot.js
+index 8d6154a..404aeea 100644
+--- a/bot.js
++++ b/bot.js
+@@ -1039,6 +1039,9 @@ async function endMentorship(chatId, partnerId, initiatorRole, opts = {}) {
+     .update({ is_active: false, ended_at: new Date().toISOString() })
+     .or(`and(mentor_id.eq.${chatId},user_id.eq.${partnerId}),and(mentor_id.eq.${partnerId},user_id.eq.${chatId})`);
+ 
++  // The mentor just got a spot back - tell anyone waiting on them.
++  require('./utils').notifyMentorWaitlist(supabase, initiatorRole === 'mentor' ? chatId : partnerId).catch(() => {});
++
+   // Mark all unread messages between these two users as read so the badge
+   // clears immediately for both parties without requiring a page reload.
+   await supabase
+diff --git a/frontend/app.js b/frontend/app.js
+index 5de0109..ec22548 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -3134,6 +3134,7 @@ function selectMentorMainTopic(topicId, topicName) {
+   $('mentorMainTopicDropdown')?.removeAttribute('data-open');
+   $('modalFilterTopicDropdown')?.removeAttribute('data-open');
+ 
++  syncMentorTopicChips();
+   updateFilterActiveIndicators();
+   renderMentorsList();
+ }
+@@ -3143,7 +3144,7 @@ function updateFilterActiveIndicators() {
+   const isSexActive = !!mentorFilters.sex;
+   const isRatingActive = Number(mentorFilters.min_rating) > 0;
+   const isAvailActive = !!mentorFilters.availability;
+-  const hasActiveFilters = isTopicActive || isSexActive || isRatingActive || isAvailActive;
++  const hasActiveFilters = isSexActive || isRatingActive || isAvailActive;  // topic lives in the chip row
+ 
+   // Filter button active badge
+   const dot = $('mentorFilterActiveDot');
+@@ -3164,13 +3165,6 @@ function updateFilterActiveIndicators() {
+     tagsBar.style.display = 'flex';
+     let tagsHtml = '';
+ 
+-    if (isTopicActive) {
+-      tagsHtml += `
+-        <span class="active-filter-tag-pill" onclick="removeMentorFilter('topic')">
+-          <span>${escapeHtml(mentorFilters.topic_name || 'Topic')}</span>
+-          <span class="pill-x">✕</span>
+-        </span>`;
+-    }
+     if (isSexActive) {
+       const sexName = mentorFilters.sex === 'M' ? (t('sex_male') || 'Male') : (t('sex_female') || 'Female');
+       tagsHtml += `
+@@ -3223,9 +3217,7 @@ function resetAllMentorFilters() {
+   mentorFilters.min_rating = 0;
+   mentorFilters.availability = '';
+   mentorActiveTopicId = '';
+-
+-  const labelEl = $('mentorMainTopicDropdownLabel');
+-  if (labelEl) labelEl.textContent = t('all_topics') || 'All Topics';
++  syncMentorTopicChips();
+ 
+   updateFilterActiveIndicators();
+   renderMentorsList();
+@@ -3335,27 +3327,6 @@ function applyMentorFiltersFromModal() {
+   renderMentorsList();
+ }
+ 
+-function toggleBioExpand(id) {
+-  const bioEl = document.getElementById(`bio-${id}`);
+-  const btn = event?.currentTarget;
+-  if (!bioEl || !btn) return;
+-  const isExpanded = bioEl.classList.toggle('expanded');
+-  const moreText = btn.dataset.i18nMore || t('btn_more') || 'More';
+-  const lessText = btn.dataset.i18nLess || t('btn_less') || 'Less';
+-  btn.textContent = isExpanded ? lessText : moreText;
+-}
+-
+-function toggleTopicsExpand(id) {
+-  const extraEl = document.getElementById(`topics-extra-${id}`);
+-  const btn = event?.currentTarget;
+-  if (!extraEl || !btn) return;
+-  const isExpanded = extraEl.classList.toggle('expanded');
+-  const count = btn.dataset.count || '';
+-  btn.textContent = isExpanded
+-    ? (btn.dataset.i18nLess || t('btn_less') || 'Less')
+-    : `+${count} ${btn.dataset.i18nMore || t('btn_more') || 'more'}`;
+-}
+-
+ function renderHaloAvatar(m, letter, isOnline = false, percent = 0, isAccepting = true) {
+   const safeLetter = escapeHtml(letter || '?');
+   const r = 25;
+@@ -3402,7 +3373,7 @@ function renderModernRating(rating, count) {
+     <div class="mentor-stats-row">
+       <div class="mentor-stats-stars">${svgs}</div>
+       <span class="mentor-rating-val">${Number(rating).toFixed(1)}</span>
+-      <span class="mentor-reviews-count">(${count})</span>
++      <span class="mentor-reviews-count">(${count === 1 ? t('reviews_count_one') : t('reviews_count', { n: count })})</span>
+     </div>`;
+ }
+ 
+@@ -3412,92 +3383,307 @@ const MENTOR_ICON_PENDING = '<svg xmlns="http://www.w3.org/2000/svg" width="13"
+ // ─── Mentors Loader ───────────────────────────────────────────
+ async function loadMentors() {
+   const container = $('mentorsList');
+-
+-  if (container) {
+-    container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
+-  }
+-
++  if (container) container.innerHTML = mentorSkeletonHTML(4);
+   updateSavedMentorsBadge();
+ 
+   try {
+-    // 1. Fetch active mentor for the user (if any)
+     hasActiveMentorState = false;
++    activeMentorData = null;
++    myMentorTopicIds = new Set();
+     const activeContainer = $('activeMentorContainer');
+     if (activeContainer) activeContainer.innerHTML = '';
+ 
+-    if (currentUser?.role === 'user') {
+-      try {
+-        const activeMentorRes = await apiFetch('/api/users/my-mentor');
+-        if (activeMentorRes && activeMentorRes.mentor && activeContainer) {
+-          hasActiveMentorState = true;
+-          const am = activeMentorRes.mentor;
+-          const amName = am.user_settings?.display_name || am.anonymous_id;
+-          const amBio = am.user_settings?.bio || "Whatever you're carrying, you don't have to carry it alone. I'm here to encourage you with the hope found in Christ.";
+-          const amLetter = amName.charAt(0).toUpperCase();
+-          const amRating = am.rating || null;
+-          const amReviews = am.rating_count || 0;
+-          const sexLabel = am.sex === 'M' ? t('sex_male') : am.sex === 'F' ? t('sex_female') : '';
+-          const ageLabel = am.age_range || '';
+-          const spec = am.user_settings?.specialization || '';
+-          const haloHtml = renderHaloAvatar(am, amLetter, !!am.is_online, 1, true);
+-          const specTag = spec ? `<span class="mentor-tag-chip spec-chip">${escapeHtml(spec)}</span>` : '';
+-
+-          activeContainer.innerHTML = `
+-            <div class="active-mentor-luxury-card">
+-              <div class="active-mentor-top-eyebrow">
+-                <span class="active-mentor-label">
+-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+-                  ${t('your_active_mentor') || 'Your Active Mentor'}
+-                </span>
+-                <span class="active-mentor-status-pill">
+-                  <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+-                  ${t('active_mentorship_label') || 'Active Mentorship'}
+-                </span>
+-              </div>
+-              <div class="mentor-card-top">
+-                ${haloHtml}
+-                <div class="mentor-card-main">
+-                  <div class="mentor-name-wrap">
+-                    <span class="mentor-name">${escapeHtml(amName)}</span>
+-                    <svg class="verified-shield" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+-                  </div>
+-                  ${renderModernRating(amRating, amReviews)}
+-                  <div class="mentor-demographics-row">
+-                    ${sexLabel ? `<span class="mentor-pill-demographic">${escapeHtml(sexLabel)}</span>` : ''}
+-                    ${ageLabel ? `<span class="mentor-pill-demographic">${escapeHtml(ageLabel)}</span>` : ''}
+-                  </div>
+-                </div>
+-              </div>
+-              ${specTag ? `<div class="mentor-tags-full-row">${specTag}</div>` : ''}
+-              <div class="mentor-bio-wrap" style="margin-top:8px">
+-                <p class="mentor-bio-text" id="bio-active-${am.telegram_id}">${escapeHtml(amBio)}</p>
+-                ${amBio.length > 90 ? `<button class="btn-bio-toggle" onclick="toggleBioExpand('active-${am.telegram_id}')" data-i18n-more="${t('btn_more') || 'More'}" data-i18n-less="${t('btn_less') || 'Less'}">${t('btn_more') || 'More'}</button>` : ''}
+-              </div>
+-              <div class="mentor-card-bottom" style="margin-top:8px">
+-                <div style="display:flex;gap:8px;width:100%">
+-                  <button class="btn btn-outline btn-sm flex-1" onclick="openChat('${am.telegram_id}')" style="display:flex;align-items:center;justify-content:center;gap:6px">
+-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+-                    <span>${t('btn_message') || 'Message'}</span>
+-                  </button>
+-                  <button class="btn btn-danger btn-sm" onclick="endMentorship()">${t('btn_end') || 'End Mentorship'}</button>
+-                </div>
+-              </div>
+-            </div>`;
+-          activeContainer.style.display = 'block';
+-        }
+-      } catch (err) {
+-        console.error('Error fetching active mentor:', err);
+-      }
++    const isMentee = currentUser?.role === 'user';
++    // Three independent requests, run together so the skeleton is up for one
++    // round-trip instead of three.
++    const [amRes, myTopics, list] = await Promise.all([
++      isMentee
++        ? apiFetch('/api/users/my-mentor').catch(err => { console.error('Error fetching active mentor:', err); return null; })
++        : null,
++      isMentee ? apiFetch('/api/topics/my').catch(() => []) : [],
++      apiFetch('/api/mentors'),
++    ]);
++
++    if (amRes && amRes.mentor) {
++      hasActiveMentorState = true;
++      activeMentorData = amRes.mentor;
+     }
++    myMentorTopicIds = new Set((myTopics || []).map(x => Number(x.topic_id)));
++    mentorsCache = list || [];
+ 
+-    // 2. Fetch all mentors from API
+-    mentorsCache = await apiFetch('/api/mentors') || [];
++    renderActiveMentorCard();
+     renderMentorsList();
+   } catch (e) {
+     if (container) container.innerHTML = `<div class="empty-state"><span>${escapeHtml(e.message)}</span></div>`;
+   }
+ }
+ 
++// ─── Mentors page helpers ─────────────────────────────────────
++let myMentorTopicIds = new Set();   // topics the mentee picked; drives the match badge + sort
++let activeMentorData = null;        // /api/users/my-mentor payload, if any
++
++function mentorSkeletonHTML(n = 4) {
++  return Array.from({ length: n }, () => '<div class="mc-skel" aria-hidden="true"></div>').join('');
++}
++
++function mentorNameOf(m) {
++  return m.user_settings?.display_name || m.anonymous_id || '';
++}
++
++function mentorMax(m) {
++  return m.user_settings?.max_mentees || 5;
++}
++
++// pending > paused > full > open. "pending" wins so a mentor you already
++// asked never reads as unavailable.
++function mentorState(m) {
++  if (m.request_pending) return 'pending';
++  if (m.accepting_requests === false) return 'paused';
++  if ((m.mentee_count || 0) >= mentorMax(m)) return 'full';
++  return 'open';
++}
++
++function isMentorUnavailable(m) {
++  const s = mentorState(m);
++  return s === 'paused' || s === 'full';
++}
++
++// How many of the mentor's topics are also the mentee's own topics.
++function mentorMatchCount(m) {
++  if (currentUser?.role !== 'user' || !myMentorTopicIds.size) return 0;
++  return (m.topics || []).filter(tp => myMentorTopicIds.has(Number(tp.id))).length;
++}
++
++function mentorStatus(m) {
++  const mentees = m.mentee_count || 0;
++  if (m.accepting_requests === false) return { cls: 'paused', text: t('status_paused') };
++  if (mentees >= mentorMax(m)) return { cls: 'full', text: t('fully_booked') };
++  const open = Math.max(mentorMax(m) - mentees, 0);
++  return { cls: '', text: open === 1 ? t('spot_open_one') : t('spots_open_n', { open }) };
++}
++
++function findMentorById(id) {
++  const cached = (mentorsCache || []).find(x => String(x.telegram_id) === String(id));
++  if (activeMentorData && String(activeMentorData.telegram_id) === String(id)) {
++    return { ...activeMentorData, ...(cached || {}) };
++  }
++  return cached || null;
++}
++
++function mentorBioInline(bio) {
++  const LIMIT = 100;
++  if (bio.length <= LIMIT + 5) return escapeHtml(bio);
++  const cut = bio.slice(0, LIMIT).replace(/\s+\S*$/, '');
++  return `${escapeHtml(cut)}… <span class="mc-more">${t('btn_more')}</span>`;
++}
++
++// "Specialization · Topic +2". The specialization is the part that shrinks
++// (ellipsis); the topic always stays visible. The topic shown is the first
++// one the mentee shares with the mentor.
++function mentorSubLine(m) {
++  const spec = (m.user_settings?.specialization || '').trim();
++  const list = (m.topics && m.topics.length) ? m.topics.map(x => x.name) : (m.expertise_topics || []);
++  const mine = (m.topics || []).find(x => myMentorTopicIds.has(Number(x.id)));
++  const shown = mine ? mine.name : (list[0] || '');
++  const extra = list.length > 1 ? list.length - 1 : 0;
++  if (!spec && !shown) return '';
++  const topicHtml = shown
++    ? `<span class="mc-sub-topic">${spec ? '&nbsp;· ' : ''}${escapeHtml(shown)}${extra ? ` <i>+${extra}</i>` : ''}</span>`
++    : '';
++  return `<div class="mc-sub">${spec ? `<span class="mc-sub-spec">${escapeHtml(spec)}</span>` : ''}${topicHtml}</div>`;
++}
++
++function mentorActionHtml(m, inSheet = false) {
++  if (currentUser?.role === 'mentor') return '';
++  const sz = inSheet ? '' : ' btn-sm';
++  const id = m.telegram_id;
++  switch (mentorState(m)) {
++    case 'pending':
++      return `<button class="btn btn-outline${sz} btn-pending" disabled>${MENTOR_ICON_PENDING} ${t('btn_waiting')}</button>`;
++    case 'paused':
++      return `<button class="btn btn-outline${sz} btn-not-accepting" disabled>${t('not_accepting')}</button>`;
++    case 'full':
++      return m.on_waitlist
++        ? `<button class="btn btn-ghost${sz}" onclick="toggleMentorWaitlist(event, ${id})">${t('btn_on_waitlist')}</button>`
++        : `<button class="btn btn-outline${sz}" onclick="toggleMentorWaitlist(event, ${id})">${t('btn_notify_me')}</button>`;
++    default:
++      return `<button class="btn btn-primary${sz} btn-mentor-request" data-mentor-name="${escapeHtml(mentorNameOf(m))}"
++        onclick="${inSheet ? 'closeMentorSheet();' : ''}handleMentorRequestClick(event, '${id}')" ${hasActiveMentorState ? 'disabled' : ''}>${t('btn_request')}</button>`;
++  }
++}
++
++const MC_ICON_MSG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
++const MC_ICON_BOOKMARK = (filled) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>`;
++
++function mentorMatchBadge(n) {
++  return n ? `<div class="mc-match">✦ ${t('match_topics', { n })}</div>` : '';
++}
++
++function mentorCardHtml(m) {
++  const id = m.telegram_id;
++  const name = mentorNameOf(m);
++  const bio = m.user_settings?.bio || "I'm here as a mentor to walk alongside you through faith and life's challenges.";
++  const unavailable = isMentorUnavailable(m);
++  const isAccepting = m.accepting_requests !== false;
++  const max = mentorMax(m);
++  const pct = max > 0 ? (m.mentee_count || 0) / max : 0;
++  const isSaved = savedMentorsSet.has(String(id));
++  const st = mentorStatus(m);
++  const halo = renderHaloAvatar(m, name.charAt(0).toUpperCase(), !!m.is_online, isAccepting ? pct : 1, isAccepting);
++
++  return `
++    <div class="mc-card ${unavailable ? 'muted' : ''}" data-mentor-id="${id}" onclick="mentorCardClick(event, ${id})">
++      <div class="mc-top">
++        ${halo}
++        <div class="mc-main">
++          <div class="mc-name">${escapeHtml(name)}</div>
++          ${renderModernRating(m.rating || null, m.rating_count || 0)}
++        </div>
++        <div class="mc-icons">
++          <button class="mc-icon-btn ${isSaved ? 'saved' : ''}" onclick="toggleSaveMentor(${id})" aria-label="${t('tab_saved')}">${MC_ICON_BOOKMARK(isSaved)}</button>
++          <button class="mc-icon-btn" onclick="openChat('${id}')" aria-label="${t('btn_message')}">${MC_ICON_MSG}</button>
++        </div>
++      </div>
++      ${mentorSubLine(m)}
++      ${unavailable ? '' : mentorMatchBadge(mentorMatchCount(m))}
++      <p class="mc-bio">${mentorBioInline(bio)}</p>
++      <div class="mc-view">${t('btn_view_profile')} ›</div>
++      <div class="mc-bottom">
++        <span class="mc-status ${st.cls}">${st.text}</span>
++        ${mentorActionHtml(m)}
++      </div>
++    </div>`;
++}
++
++// Tap anywhere on the card opens the profile sheet, except on the small
++// buttons and the avatar (which opens the photo viewer).
++function mentorCardClick(event, id) {
++  if (event.target.closest('button, a, [data-avatar-tid]')) return;
++  openMentorSheet(id);
++}
++
++function renderActiveMentorCard() {
++  const c = $('activeMentorContainer');
++  if (!c) return;
++  const am = activeMentorData;
++  if (!am) { c.innerHTML = ''; return; }
++  const name = mentorNameOf(am);
++  const halo = renderHaloAvatar(am, name.charAt(0).toUpperCase(), !!am.is_online, 1, true);
++  c.innerHTML = `
++    <div class="mc-mine" onclick="mentorCardClick(event, ${am.telegram_id})">
++      <div class="mc-eyebrow">${t('your_mentor_label')}<span>● ${t('active_mentorship_label')}</span></div>
++      <div class="mc-top">
++        ${halo}
++        <div class="mc-main">
++          <div class="mc-name">${escapeHtml(name)}</div>
++          ${renderModernRating(am.rating || null, am.rating_count || 0)}
++          <div class="mc-online">${am.is_online ? t('status_online') : t('status_offline')}</div>
++        </div>
++      </div>
++      <div class="mc-mine-actions">
++        <button class="btn btn-primary btn-sm" onclick="openChat('${am.telegram_id}')">${t('btn_message')}</button>
++        <button class="btn btn-danger btn-sm" onclick="confirmEndMentorship()">${t('btn_end')}</button>
++      </div>
++    </div>`;
++  hydrateAvatars(c);
++}
++
++// ─── Mentor profile bottom sheet ──────────────────────────────
++function openMentorSheet(id) {
++  const m = findMentorById(id);
++  const body = $('mentorSheetBody');
++  if (!m || !body) return;
++  haptic('light');
++
++  const isMine = !!activeMentorData && String(activeMentorData.telegram_id) === String(id);
++  const name = mentorNameOf(m);
++  const bio = m.user_settings?.bio || "I'm here as a mentor to walk alongside you through faith and life's challenges.";
++  const spec = (m.user_settings?.specialization || '').trim();
++  const topics = (m.topics && m.topics.length)
++    ? m.topics.map(x => ({ id: x.id, name: x.name }))
++    : (m.expertise_topics || []).map(nm => ({ id: null, name: nm }));
++  const st = mentorStatus(m);
++  const n = (isMine || isMentorUnavailable(m)) ? 0 : mentorMatchCount(m);
++  const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '—';
++  const isAccepting = m.accepting_requests !== false;
++  const max = mentorMax(m);
++  const halo = renderHaloAvatar(m, name.charAt(0).toUpperCase(), !!m.is_online, isAccepting ? (m.mentee_count || 0) / max : 1, isAccepting);
++
++  const actions = isMine
++    ? `<button class="btn btn-primary" onclick="closeMentorSheet();openChat('${id}')">${t('btn_message')}</button>
++       <button class="btn btn-danger" onclick="confirmEndMentorship()">${t('btn_end')}</button>`
++    : `<button class="btn btn-outline" onclick="closeMentorSheet();openChat('${id}')">${t('btn_message')}</button>
++       ${mentorActionHtml(m, true)}`;
++
++  body.innerHTML = `
++    <div class="mc-top">
++      ${halo}
++      <div class="mc-main">
++        <div class="mc-name mc-name-lg">${escapeHtml(name)}</div>
++        ${renderModernRating(m.rating || null, m.rating_count || 0)}
++        <div class="mc-online">${m.is_online ? t('status_online') : t('status_offline')}${isMine ? '' : ' · ' + st.text}</div>
++      </div>
++    </div>
++    ${mentorMatchBadge(n)}
++    <div class="mc-sheet-h">${t('sheet_about')}</div>
++    <p class="mc-sheet-text">${escapeHtml(bio)}</p>
++    ${spec ? `<div class="mc-sheet-h">${t('sheet_specialization')}</div><p class="mc-sheet-text">${escapeHtml(spec)}</p>` : ''}
++    ${topics.length ? `<div class="mc-sheet-h">${t('sheet_topics')}</div>
++      <div class="mc-tags">${topics.map(tp => `<span class="${tp.id != null && myMentorTopicIds.has(Number(tp.id)) ? 'mine' : ''}">${escapeHtml(tp.name)}</span>`).join('')}</div>` : ''}
++    <div class="mc-sheet-h">${t('sheet_details')}</div>
++    <div class="mc-facts">
++      <div>${t('sheet_age')}<b>${escapeHtml(m.age_range || '—')}</b></div>
++      <div>${t('sheet_gender')}<b>${escapeHtml(sexLabel)}</b></div>
++    </div>
++    <div class="mc-sheet-actions">${actions}</div>`;
++  hydrateAvatars(body);
++  $('mentorSheet')?.classList.add('open');
++}
++
++function closeMentorSheet() {
++  $('mentorSheet')?.classList.remove('open');
++}
++
++function confirmEndMentorship() {
++  const body = $('mentorSheetBody');
++  if (!body || !activeMentorData) return;
++  haptic('light');
++  body.innerHTML = `
++    <div class="mc-sheet-h" style="margin-top:4px">${escapeHtml(t('end_mentorship_title', { name: mentorNameOf(activeMentorData) }))}</div>
++    <p class="mc-sheet-text">${t('end_mentorship_body')}</p>
++    <div class="mc-sheet-actions">
++      <button class="btn btn-outline" onclick="closeMentorSheet()">${t('btn_keep_mentor')}</button>
++      <button class="btn btn-danger" onclick="closeMentorSheet();endMentorship(null, true)">${t('btn_end')}</button>
++    </div>`;
++  $('mentorSheet')?.classList.add('open');
++}
++
++// "Notify me" on a full mentor: join/leave the waitlist. Optimistic, rolled
++// back if the request fails.
++async function toggleMentorWaitlist(event, mentorId) {
++  event?.stopPropagation();
++  haptic('light');
++  const m = (mentorsCache || []).find(x => String(x.telegram_id) === String(mentorId));
++  if (!m) return;
++  const joining = !m.on_waitlist;
++  const refresh = () => {
++    renderMentorsList();
++    if ($('mentorSheet')?.classList.contains('open')) openMentorSheet(mentorId);
++  };
++  m.on_waitlist = joining;
++  refresh();
++  try {
++    if (joining) await apiFetch('/api/mentors/waitlist', { method: 'POST', body: { mentor_id: m.telegram_id } });
++    else await apiFetch(`/api/mentors/waitlist/${m.telegram_id}`, { method: 'DELETE' });
++    showToast(t(joining ? 'waitlist_joined' : 'waitlist_left'), 'success');
++  } catch (e) {
++    m.on_waitlist = !joining;
++    refresh();
++    haptic('error');
++    showToast(e.message, 'error');
++  }
++}
++
+ function renderMentorsList() {
+   const container = $('mentorsList');
+   if (!container) return;
+@@ -3509,56 +3695,52 @@ function renderMentorsList() {
+   const minRating = Number(mentorFilters.min_rating) || 0;
+   const availability = mentorFilters.availability;
+ 
+-  // Filter mentors based on all filter parameters
++  // The active-mentor card only belongs on the Browse tab.
++  const activeContainer = $('activeMentorContainer');
++  if (activeContainer) {
++    activeContainer.style.display = (hasActiveMentorState && mentorActiveTab === 'browse') ? 'block' : 'none';
++  }
++  const activeId = activeMentorData ? String(activeMentorData.telegram_id) : null;
++
+   const filtered = (mentorsCache || []).filter(m => {
+-    // Search query filter
++    // Your own mentor already has the pinned card above the list.
++    if (activeId && String(m.telegram_id) === activeId) return false;
++
+     if (query) {
+       const name = (m.user_settings?.display_name || m.anonymous_id || '').toLowerCase();
+       const bio = (m.user_settings?.bio || '').toLowerCase();
+       const spec = (m.user_settings?.specialization || '').toLowerCase();
+       const topics = (m.expertise_topics || []).join(' ').toLowerCase();
+-      const matchesQuery = name.includes(query) || bio.includes(query) || spec.includes(query) || topics.includes(query);
+-      if (!matchesQuery) return false;
++      if (!(name.includes(query) || bio.includes(query) || spec.includes(query) || topics.includes(query))) return false;
+     }
+-
+-    // Topic filter
+     if (selectedTopic) {
+-      const topicMatches = (m.topics || []).some(t => String(t.id) === String(selectedTopic)) ||
++      const topicMatches = (m.topics || []).some(tp => String(tp.id) === String(selectedTopic)) ||
+                            (m.topic_ids || []).map(String).includes(String(selectedTopic));
+       if (!topicMatches) return false;
+     }
+-
+-    // Sex / Gender filter
+-    if (selectedSex) {
+-      if (m.sex !== selectedSex) return false;
+-    }
+-
+-    // Minimum Rating filter
+-    if (minRating > 0) {
+-      const rating = Number(m.rating) || 0;
+-      if (rating < minRating) return false;
+-    }
+-
+-    // Availability filter
++    if (selectedSex && m.sex !== selectedSex) return false;
++    if (minRating > 0 && (Number(m.rating) || 0) < minRating) return false;
+     if (availability === 'available') {
+-      const mentees = m.mentee_count || 0;
+-      const max = m.user_settings?.max_mentees || 5;
+-      const isAccepting = m.accepting_requests !== false;
+-      if (!isAccepting || mentees >= max) return false;
++      if (mentorState(m) === 'paused' || mentorState(m) === 'full') return false;
+     } else if (availability === 'online') {
+       if (!m.is_online) return false;
+     }
+-
+     return true;
+   });
+ 
+-  const listToShow = mentorActiveTab === 'saved'
++  const listToShow = (mentorActiveTab === 'saved'
+     ? filtered.filter(m => savedMentorsSet.has(String(m.telegram_id)))
+-    : filtered;
++    : filtered
++  ).slice().sort((a, b) =>
++    (isMentorUnavailable(a) - isMentorUnavailable(b)) ||        // Full / Paused sink
++    (mentorMatchCount(b) - mentorMatchCount(a)) ||               // best topic match first
++    ((Number(b.rating) || 0) - (Number(a.rating) || 0)) ||
++    ((b.rating_count || 0) - (a.rating_count || 0))
++  );
+ 
+   if (countBadge) {
+-    const countText = t('mentors_available_count', { count: listToShow.length }) || `${listToShow.length} available`;
+-    countBadge.textContent = countText;
++    const countText = t('mentors_available_count', { count: listToShow.length });
++    countBadge.textContent = hasActiveMentorState ? `${countText} · ${t('requests_paused_note')}` : countText;
+   }
+ 
+   if (!listToShow.length) {
+@@ -3568,169 +3750,31 @@ function renderMentorsList() {
+           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:10px">
+             <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+           </svg>
+-          <p style="font-size:14px;color:var(--gold-light);margin:0 0 4px;font-weight:600">
+-            ${t('no_saved_mentors_title') || 'No mentors saved yet'}
+-          </p>
+-          <p style="font-size:12.5px;margin:0;line-height:1.5">
+-            ${t('no_saved_mentors_desc') || "Tap the bookmark icon on a mentor's card to keep track of who you'd like to reach out to."}
+-          </p>
++          <p style="font-size:14px;color:var(--gold-light);margin:0 0 4px;font-weight:600">${t('no_saved_mentors_title')}</p>
++          <p style="font-size:12.5px;margin:0;line-height:1.5">${t('no_saved_mentors_desc')}</p>
+         </div>`;
+     } else {
+       let message = 'No mentors found with active filters';
+-      if (query) {
+-        message = `No mentors matching "${escapeHtml(query)}"`;
+-      }
++      if (query) message = `No mentors matching "${escapeHtml(query)}"`;
+       container.innerHTML = `
+         <div class="empty-state" style="padding:40px 16px;text-align:center;">
+           <p style="color:var(--text2);margin-bottom:12px;">${escapeHtml(message)}</p>
+-          <button class="btn btn-outline btn-sm" onclick="resetAllMentorFilters()">${t('btn_reset') || 'Reset Filters'}</button>
++          <button class="btn btn-outline btn-sm" onclick="resetAllMentorFilters()">${t('btn_reset')}</button>
+         </div>`;
+     }
+     return;
+   }
+ 
+-  const cardHtmls = listToShow.map(m => {
+-    const name = m.user_settings?.display_name || m.anonymous_id;
+-    const bio = m.user_settings?.bio || "I'm here as a mentor to walk alongside you through faith and life's challenges.";
+-    const spec = m.user_settings?.specialization || '';
+-    const letter = name.charAt(0).toUpperCase();
+-    const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '';
+-    const ageLabel = m.age_range || '';
+-    const mentees = m.mentee_count || 0;
+-    const max = m.user_settings?.max_mentees || 5;
+-    const isAccepting = m.accepting_requests !== false;
+-    const isFull = mentees >= max;
+-    const canRequest = !hasActiveMentorState && isAccepting && !isFull && !m.request_pending;
+-    const isSaved = savedMentorsSet.has(String(m.telegram_id));
+-    const isOnline = !!m.is_online;
+-    const pct = max > 0 ? (mentees / max) : 0;
+-    const spotsOpen = Math.max(max - mentees, 0);
+-
+-    const rating = m.rating || null;
+-    const reviews = m.rating_count || 0;
+-
+-    const haloHtml = renderHaloAvatar(m, letter, isOnline, isAccepting ? pct : 1, isAccepting);
+-
+-    let spotsLabel = '';
+-    let spotsClass = '';
+-    if (!isAccepting) {
+-      spotsLabel = t('not_accepting_requests') || 'Not accepting requests';
+-      spotsClass = 'paused';
+-    } else if (isFull) {
+-      spotsLabel = t('fully_booked') || 'Fully booked';
+-      spotsClass = 'full';
+-    } else {
+-      spotsLabel = t('spots_open', { open: spotsOpen, max }) || `${spotsOpen} of ${max} spots open`;
+-    }
+-
+-    // Specialization + Topic chips with expandable more button
+-    const specChip = spec ? `<span class="mentor-tag-chip spec-chip">${escapeHtml(spec)}</span>` : '';
+-    const topicsList = m.expertise_topics || [];
+-    const initialTopics = topicsList.slice(0, 2);
+-    const extraTopics = topicsList.slice(2);
++  const cardHtmls = listToShow.map(mentorCardHtml);
+ 
+-    let topicsHtml = initialTopics.map(tp => `<span class="mentor-tag-chip">${escapeHtml(tp)}</span>`).join('');
+-    if (extraTopics.length > 0) {
+-      topicsHtml += `
+-        <span class="mentor-extra-topics" id="topics-extra-${m.telegram_id}">
+-          ${extraTopics.map(tp => `<span class="mentor-tag-chip">${escapeHtml(tp)}</span>`).join('')}
+-        </span>
+-        <button class="btn-topics-more" onclick="toggleTopicsExpand('${m.telegram_id}')" data-count="${extraTopics.length}" data-i18n-more="${t('btn_more') || 'more'}" data-i18n-less="${t('btn_less') || 'Less'}">+${extraTopics.length} ${t('btn_more') || 'more'}</button>`;
+-    }
+-    const allTagsRow = (specChip || topicsHtml) ? `<div class="mentor-tags-full-row">${specChip}${topicsHtml}</div>` : '';
+-
+-    const bookmarkFill = isSaved ? 'var(--gold, #CBA05C)' : 'none';
+-    const bookmarkStroke = isSaved ? 'var(--gold, #CBA05C)' : 'var(--text3)';
+-
+-    // Action button
+-    let actionBtnHtml = '';
+-    if (currentUser?.role === 'mentor') {
+-      actionBtnHtml = '';
+-    } else if (m.request_pending) {
+-      actionBtnHtml = `
+-        <button class="btn btn-outline btn-sm btn-pending" disabled title="${t('request_pending_tooltip')}">
+-          ${MENTOR_ICON_PENDING} ${t('btn_request_pending')}
+-        </button>`;
+-    } else if (!isAccepting) {
+-      actionBtnHtml = `
+-        <button class="btn btn-outline btn-sm btn-not-accepting" disabled title="${t('not_accepting_tooltip')}">
+-          ${t('not_accepting') || 'Paused'}
+-        </button>`;
+-    } else if (isFull) {
+-      actionBtnHtml = `
+-        <button class="btn btn-outline btn-sm" disabled style="opacity:0.5;cursor:not-allowed;background:var(--bg3);color:var(--text3);" title="${t('capacity_full_tooltip')}">
+-          ${t('capacity_full') || 'Full'}
+-        </button>`;
+-    } else {
+-      actionBtnHtml = `
+-        <button class="btn btn-primary btn-sm btn-mentor-request" data-mentor-name="${escapeHtml(name)}"
+-          onclick="handleMentorRequestClick(event, '${m.telegram_id}')" ${!canRequest ? 'disabled' : ''}>
+-          <span>${t('btn_request')}</span>
+-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+-        </button>`;
+-    }
+-
+-    return `
+-      <div class="mentor-card" data-mentor-id="${m.telegram_id}">
+-        <div class="mentor-card-top">
+-          ${haloHtml}
+-          <div class="mentor-card-main">
+-            <div class="mentor-card-name-row">
+-              <div class="mentor-name-wrap">
+-                <span class="mentor-name">${escapeHtml(name)}</span>
+-                <svg class="verified-shield" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+-              </div>
+-              <button class="btn-save-mentor ${isSaved ? 'saved' : ''}" onclick="toggleSaveMentor(${m.telegram_id})" aria-label="Save mentor">
+-                <svg width="17" height="17" viewBox="0 0 24 24" fill="${bookmarkFill}" stroke="${bookmarkStroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+-                  <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+-                </svg>
+-              </button>
+-            </div>
+-            ${renderModernRating(rating, reviews)}
+-            <div class="mentor-demographics-row">
+-              ${sexLabel ? `<span class="mentor-pill-demographic">${escapeHtml(sexLabel)}</span>` : ''}
+-              ${ageLabel ? `<span class="mentor-pill-demographic">${escapeHtml(ageLabel)}</span>` : ''}
+-            </div>
+-          </div>
+-        </div>
+-
+-        <!-- Full-width Specialization & Topic Tags row -->
+-        ${allTagsRow}
+-
+-        <!-- Full-width Bio with "More / Less" toggle button -->
+-        <div class="mentor-bio-wrap">
+-          <p class="mentor-bio-text" id="bio-${m.telegram_id}">${escapeHtml(bio)}</p>
+-          ${bio.length > 90 ? `<button class="btn-bio-toggle" onclick="toggleBioExpand('${m.telegram_id}')" data-i18n-more="${t('btn_more') || 'More'}" data-i18n-less="${t('btn_less') || 'Less'}">${t('btn_more') || 'More'}</button>` : ''}
+-        </div>
+-
+-        <!-- Bottom Action Row: Capacity + Message & Request buttons -->
+-        <div class="mentor-card-bottom">
+-          <span class="mentor-capacity-text ${spotsClass}">${spotsLabel}</span>
+-          <div class="mentor-actions-group">
+-            <button class="btn-mentor-msg" onclick="openChat('${m.telegram_id}')" title="${t('btn_message') || 'Message'}">
+-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+-            </button>
+-            ${actionBtnHtml}
+-          </div>
+-        </div>
+-      </div>`;
+-  });
+-
+-  // Setting innerHTML to dozens of these cards (each with several inline
+-  // SVGs) in one shot is what was making the mentors list feel laggy on
+-  // older phones — the browser has to parse/layout/paint the whole batch
+-  // before the page becomes responsive again. Below a threshold this is
+-  // unnoticeable, so short lists still render in one pass exactly as
+-  // before; longer lists paint an initial batch immediately (so the
+-  // screen isn't blank) and stream the rest in over a few animation
+-  // frames so scrolling/taps stay responsive while it finishes.
++  // Long lists paint an initial batch right away and stream the rest in, so
++  // older phones stay responsive (same approach as before).
+   const BATCH_THRESHOLD = 15;
+   const BATCH_SIZE = 10;
+ 
+   function finishMentorsRender() {
+     applyLanguage();
+     hydrateAvatars(container);
+-    if ($('activeMentorContainer')) hydrateAvatars($('activeMentorContainer'));
+   }
+ 
+   if (cardHtmls.length <= BATCH_THRESHOLD) {
+@@ -3746,10 +3790,6 @@ function renderMentorsList() {
+       requestAnimationFrame(() => {
+         container.insertAdjacentHTML('beforeend', cardHtmls.slice(i, i + BATCH_SIZE).join(''));
+         i += BATCH_SIZE;
+-        // Re-running these per batch only touches the newly-added nodes —
+-        // applyLanguage() re-scans data-i18n attrs and hydrateAvatars()
+-        // skips anything already marked .avatar-loaded — so this stays
+-        // cheap even though it's called several times.
+         finishMentorsRender();
+         renderNextBatch();
+       });
+@@ -3757,45 +3797,31 @@ function renderMentorsList() {
+   }
+ }
+ 
++// Topic chip row: "All" + one chip per topic. Built once; selection only
++// toggles the active class so the row doesn't jump back to the start.
+ async function loadMentorTopics() {
+   try {
+     mentorTopicsCache = await apiFetch('/api/topics') || [];
+-    const allText = t('all_topics') || 'All Topics';
+-
+-    // 1. Populate Main Topic Dropdown Menu
+-    const mainMenu = $('mentorMainTopicDropdownMenu');
+-    if (mainMenu) {
+-      mainMenu.innerHTML = `
+-        <button type="button" class="dropdown-item ${!mentorFilters.topic_id ? 'selected' : ''}" data-value="" onclick="selectMentorMainTopic('', '')">
+-          <span>${allText}</span>
+-        </button>
+-        ${mentorTopicsCache.map(tp => `
+-          <button type="button" class="dropdown-item ${String(mentorFilters.topic_id) === String(tp.id) ? 'selected' : ''}" data-value="${tp.id}" onclick="selectMentorMainTopic(${tp.id}, \`${escapeHtml(tp.name)}\`)">
+-            <span>${escapeHtml(tp.name)}</span>
+-          </button>
+-        `).join('')}
+-      `;
+-    }
+-
+-    // 2. Populate Modal Filter Topic Dropdown Menu
+-    const modalMenu = $('modalFilterTopicDropdownMenu');
+-    if (modalMenu) {
+-      modalMenu.innerHTML = `
+-        <button type="button" class="dropdown-item ${!mentorModalTempFilters.topic_id ? 'selected' : ''}" data-value="" onclick="selectMentorModalTopic('', '')">
+-          <span>${allText}</span>
+-        </button>
+-        ${mentorTopicsCache.map(tp => `
+-          <button type="button" class="dropdown-item ${String(mentorModalTempFilters.topic_id) === String(tp.id) ? 'selected' : ''}" data-value="${tp.id}" onclick="selectMentorModalTopic(${tp.id}, \`${escapeHtml(tp.name)}\`)">
+-            <span>${escapeHtml(tp.name)}</span>
+-          </button>
+-        `).join('')}
+-      `;
+-    }
++    const row = $('mentorTopicChips');
++    if (!row) return;
++    const chip = (id, label) =>
++      `<button type="button" class="mc-chip" data-id="${escapeHtml(String(id))}" data-name="${escapeHtml(id === '' ? '' : label)}"
++        onclick="selectMentorMainTopic(this.dataset.id, this.dataset.name)">${escapeHtml(label)}</button>`;
++    row.innerHTML = chip('', t('mentor_chip_all')) + mentorTopicsCache.map(tp => chip(tp.id, tp.name)).join('');
++    syncMentorTopicChips();
+   } catch (e) {
+     console.error('Failed to load topics for filter:', e);
+   }
+ }
+ 
++function syncMentorTopicChips() {
++  const row = $('mentorTopicChips');
++  if (!row) return;
++  row.querySelectorAll('.mc-chip').forEach(btn => {
++    btn.classList.toggle('active', String(btn.dataset.id) === String(mentorFilters.topic_id || ''));
++  });
++}
++
+ function selectMentorModalTopic(topicId, topicName) {
+   haptic('selection');
+   mentorModalTempFilters.topic_id = String(topicId || '');
+@@ -7395,7 +7421,7 @@ async function confirmTransfer() {
+   }
+ }
+ 
+-async function endMentorship(assignId) {
++async function endMentorship(assignId, skipConfirm = false) {
+   if (assignId && typeof assignId === 'string') {
+     // Mentor Flow (from My Mentees list)
+     if (!confirm('End this mentorship assignment?')) return;
+@@ -7410,7 +7436,7 @@ async function endMentorship(assignId) {
+     } catch (e) { haptic('error'); showToast(e.message, 'error'); }
+   } else {
+     // Mentee Flow (from Mentors Page)
+-    if (!confirm(t('confirm_end_mentorship') || 'Are you sure you want to end your mentorship?')) return;
++    if (!skipConfirm && !confirm(t('confirm_end_mentorship'))) return;
+     haptic('medium');
+     try {
+       const result = await apiFetch('/api/users/end-mentorship', { method: 'POST' });
+diff --git a/frontend/index.html b/frontend/index.html
+index 82e3ff2..5a650e1 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -653,19 +653,23 @@
+               </svg>
+             </span></button>
+         </div>
++        <div class="mentor-tabs-segmented mc-header-tabs">
++          <button id="mentorTabBrowse" class="mentor-tab-btn active" onclick="setMentorTab('browse')">
++            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
++            <span data-i18n="tab_browse">Browse</span>
++          </button>
++          <button id="mentorTabSaved" class="mentor-tab-btn" onclick="setMentorTab('saved')">
++            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>
++            <span data-i18n="tab_saved">Saved</span>
++            <span id="savedMentorsBadge" class="mentor-tab-badge" style="display:none">0</span>
++          </button>
++        </div>
+       </div>
+       <div class="page-content mentors-page-content">
+-        <!-- Subheader count & intro -->
+-        <div class="mentors-header-row mb-12">
+-          <div class="page-intro">
+-            <span class="page-intro-eyebrow" data-i18n="Mentorship">Mentorship</span>
+-            <p class="page-intro-text" data-i18n="Connect with an anonymous mentor.">Connect with an anonymous mentor.</p>
+-          </div>
+-          <span id="mentorsAvailableCount" class="mentors-count-badge"></span>
+-        </div>
+-
++        <!-- Search + filter on one row, topic chips below (sticky) -->
++        <div class="mc-sticky">
+         <!-- Search & Filter Bar Row -->
+-        <div class="mentor-search-row mb-12">
++        <div class="mentor-search-row">
+           <div class="mentor-search-wrap">
+             <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+               <circle cx="11" cy="11" r="8"></circle>
+@@ -683,26 +687,7 @@
+             <span id="mentorFilterActiveDot" class="filter-active-badge" style="display:none;"></span>
+           </button>
+         </div>
+-
+-        <!-- Premium Main Topic Selection Dropdown -->
+-        <div class="mentor-topic-dropdown-row mb-12">
+-          <div class="premium-dropdown form-dropdown flex-1" data-dropdown id="mentorMainTopicDropdown">
+-            <button type="button" class="premium-dropdown-btn" data-dropdown-toggle id="mentorMainTopicDropdownBtn">
+-              <div class="flex items-center gap-8" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
+-                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+-                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+-                </svg>
+-                <span class="dropdown-label" id="mentorMainTopicDropdownLabel" data-i18n="all_topics">All Topics</span>
+-              </div>
+-              <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+-                <polyline points="6 9 12 15 18 9"/>
+-              </svg>
+-            </button>
+-            <div class="premium-dropdown-menu" data-dropdown-menu id="mentorMainTopicDropdownMenu" style="max-height:260px;overflow-y:auto;width:100%;">
+-              <!-- Dynamic topics -->
+-            </div>
+-          </div>
++          <div id="mentorTopicChips" class="mc-chips" aria-label="Topics"></div>
+         </div>
+ 
+         <!-- Active Filter Badges Bar -->
+@@ -711,26 +696,10 @@
+           <button class="btn-clear-all-filters" onclick="resetAllMentorFilters()" data-i18n="btn_reset">Reset</button>
+         </div>
+ 
+-        <!-- Segmented Tabs: Browse vs Saved -->
+-        <div class="mentor-tabs-segmented mb-16">
+-          <button id="mentorTabBrowse" class="mentor-tab-btn active" onclick="setMentorTab('browse')">
+-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+-              <circle cx="12" cy="12" r="10"></circle>
+-              <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+-            </svg>
+-            <span data-i18n="tab_browse">Browse</span>
+-          </button>
+-          <button id="mentorTabSaved" class="mentor-tab-btn" onclick="setMentorTab('saved')">
+-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+-              <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+-            </svg>
+-            <span data-i18n="tab_saved">Saved</span>
+-            <span id="savedMentorsBadge" class="mentor-tab-badge" style="display:none">0</span>
+-          </button>
+-        </div>
++        <!-- Active Mentor Container (Browse tab, only if the user has a mentor) -->
++        <div id="activeMentorContainer" class="mb-12"></div>
+ 
+-        <!-- Active Mentor Container (displayed if user has an active mentor) -->
+-        <div id="activeMentorContainer" class="mb-16"></div>
++        <div id="mentorsAvailableCount" class="mc-count"></div>
+ 
+         <!-- Mentors List Container -->
+         <div id="mentorsList" style="display:flex;flex-direction:column;gap:12px">
+@@ -2056,23 +2025,6 @@
+         <button type="button" class="btn btn-ghost btn-sm" onclick="closeMentorFilterModal()" style="padding:4px 8px;font-size:1.1rem;line-height:1;">✕</button>
+       </div>
+ 
+-      <!-- Filter Section: Topic -->
+-      <div class="filter-group mb-16">
+-        <label class="form-label" data-i18n="settings_my_topics">Topic</label>
+-        <div class="premium-dropdown form-dropdown" data-dropdown id="modalFilterTopicDropdown">
+-          <button type="button" class="premium-dropdown-btn" data-dropdown-toggle id="modalFilterTopicDropdownBtn">
+-            <span class="dropdown-label" id="modalFilterTopicDropdownLabel" data-i18n="all_topics">All Topics</span>
+-            <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+-              <polyline points="6 9 12 15 18 9"/>
+-            </svg>
+-          </button>
+-          <div class="premium-dropdown-menu" data-dropdown-menu id="modalFilterTopicDropdownMenu" style="max-height:220px;overflow-y:auto;width:100%;">
+-            <!-- Populated dynamically with topics -->
+-          </div>
+-          <input type="hidden" id="modalFilterTopicSelectedId" value="" />
+-        </div>
+-      </div>
+-
+       <!-- Filter Section: Gender / Sex -->
+       <div class="filter-group mb-16">
+         <label class="form-label" data-i18n="filter_sex_label">Gender</label>
+@@ -2112,7 +2064,15 @@
+     </div>
+   </div>
+ 
+-  <!-- ─── Mentorship Request Topic Picker Modal ──────────────── -->
++    <!-- ─── Mentor profile bottom sheet ─────────────────────────── -->
++  <div id="mentorSheet" class="modal-overlay" onclick="if(event.target===this)closeMentorSheet()">
++    <div class="modal-sheet">
++      <div class="modal-handle"></div>
++      <div id="mentorSheetBody"></div>
++    </div>
++  </div>
++
++<!-- ─── Mentorship Request Topic Picker Modal ──────────────── -->
+   <div id="requestTopicModal" class="modal-overlay" onclick="if(event.target===this)closeRequestTopicModal()">
+     <div class="modal-sheet" style="max-width:400px;margin:0 auto;overflow:visible;">
+       <div class="modal-handle"></div>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 1a7acff..1410c47 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -57,6 +57,32 @@ const I18N = {
+     "mentors_available_count": "{count} available",
+     "tab_browse": "Browse",
+     "tab_saved": "Saved",
++    "mentor_chip_all": "All",
++    "reviews_count": "{n} reviews",
++    "reviews_count_one": "1 review",
++    "match_topics": "Matches {n} of your topics",
++    "spot_open_one": "1 spot open",
++    "spots_open_n": "{open} spots open",
++    "status_paused": "Not accepting requests",
++    "btn_waiting": "Waiting",
++    "btn_notify_me": "Notify me",
++    "btn_on_waitlist": "On the list",
++    "btn_view_profile": "View full profile",
++    "sheet_about": "About",
++    "sheet_specialization": "Specialization",
++    "sheet_topics": "Topics",
++    "sheet_details": "Details",
++    "sheet_age": "Age",
++    "sheet_gender": "Gender",
++    "your_mentor_label": "Your mentor",
++    "status_online": "Online now",
++    "status_offline": "Offline",
++    "waitlist_joined": "You're on the list. We'll message you when a spot opens.",
++    "waitlist_left": "Removed from the list.",
++    "requests_paused_note": "requests are paused while you have a mentor",
++    "end_mentorship_title": "End mentorship with {name}?",
++    "end_mentorship_body": "Your chat history stays. You can request a new mentor right after.",
++    "btn_keep_mentor": "Keep mentor",
+     "no_saved_mentors_title": "No mentors saved yet",
+     "no_saved_mentors_desc": "Tap the bookmark icon on a mentor's card to keep track of who you'd like to reach out to.",
+     "spots_open": "{open} of {max} spots open",
+@@ -678,6 +704,32 @@ const I18N = {
+     "mentors_available_count": "{count} ይገኛሉ",
+     "tab_browse": "ፈልግ",
+     "tab_saved": "የተቀመጡ",
++    "mentor_chip_all": "ሁሉም",
++    "reviews_count": "{n} ግምገማዎች",
++    "reviews_count_one": "1 ግምገማ",
++    "match_topics": "ከርዕሶችዎ {n} ጋር ይዛመዳል",
++    "spot_open_one": "1 ክፍት ቦታ",
++    "spots_open_n": "{open} ክፍት ቦታዎች",
++    "status_paused": "ጥያቄ አይቀበልም",
++    "btn_waiting": "በመጠባበቅ ላይ",
++    "btn_notify_me": "አሳውቁኝ",
++    "btn_on_waitlist": "በዝርዝሩ ላይ",
++    "btn_view_profile": "ሙሉ መገለጫ ይመልከቱ",
++    "sheet_about": "ስለ አማካሪው",
++    "sheet_specialization": "ልዩ ሙያ",
++    "sheet_topics": "ርዕሶች",
++    "sheet_details": "ዝርዝር",
++    "sheet_age": "ዕድሜ",
++    "sheet_gender": "ጾታ",
++    "your_mentor_label": "አማካሪዎ",
++    "status_online": "አሁን መስመር ላይ",
++    "status_offline": "መስመር ላይ አይደለም",
++    "waitlist_joined": "በዝርዝሩ ላይ ተመዝግበዋል። ቦታ ሲከፈት እናሳውቅዎታለን።",
++    "waitlist_left": "ከዝርዝሩ ተወግደዋል።",
++    "requests_paused_note": "አማካሪ ሲኖርዎት ጥያቄዎች ተቋርጠዋል",
++    "end_mentorship_title": "ከ{name} ጋር ያለውን አማካሪነት ማቋረጥ?",
++    "end_mentorship_body": "የውይይት ታሪክዎ ይቆያል። ከዚያ በኋላ አዲስ አማካሪ መጠየቅ ይችላሉ።",
++    "btn_keep_mentor": "አማካሪውን አቆይ",
+     "no_saved_mentors_title": "እስካሁን የተቀመጠ አማካሪ የለም",
+     "no_saved_mentors_desc": "የሚፈልጉትን አማካሪ ምልክት በማድረግ በቀላሉ እዚህ ማግኘት ይችላሉ።",
+     "spots_open": "ከ{max} ውስጥ {open} ክፍት ቦታዎች",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 1e45407..b38f094 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -10506,3 +10506,74 @@ body.in-call .fab-menu { display: none !important; }
+ 
+ 
+ 
++
++/* ═══ Mentors page redesign ═══════════════════════════════════
++   Header tabs, topic chips, compact cards, profile sheet, skeletons.
++   Class names use the mc- prefix because .mentor-card is still used by
++   the requests list. */
++#page-mentors .app-header { flex-wrap: wrap; row-gap: 8px; }
++#page-mentors .mc-header-tabs { order: 3; flex: 1 1 100%; margin: 0; }
++
++.mc-sticky { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-bottom: 2px; margin-bottom: 8px; }
++.mc-sticky .mentor-search-row { margin-bottom: 0; }
++.mc-chips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
++.mc-chips::-webkit-scrollbar { display: none; }
++.mc-chip { flex: none; padding: 6px 13px; border-radius: 99px; font-size: 12.5px; white-space: nowrap;
++  border: 1px solid var(--border-dim); color: var(--text2); background: var(--bg2); }
++.mc-chip.active { background: var(--gold); border-color: var(--gold); color: var(--espresso, #20180a); font-weight: 700; }
++.mc-count { font-size: 12px; color: var(--text3); margin: 0 0 10px; }
++
++.mc-card, .mc-mine { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; cursor: pointer; transition: transform .12s; }
++.mc-card:active, .mc-mine:active { transform: scale(.99); }
++.mc-card.muted { opacity: .55; }
++.mc-mine { background: linear-gradient(135deg, rgba(201,168,76,.16), var(--bg2)); border-color: var(--gold); }
++.mc-eyebrow { display: flex; justify-content: space-between; font-size: 10.5px; letter-spacing: .12em; font-weight: 700;
++  text-transform: uppercase; color: var(--gold-light); margin-bottom: 10px; }
++.mc-eyebrow span { color: var(--success); }
++.mc-mine-actions { display: flex; gap: 8px; margin-top: 12px; }
++.mc-mine-actions .btn { flex: 1; }
++.mc-mine-actions .btn-danger, .mc-sheet-actions .btn-danger { background: transparent; border: 1px solid rgba(224,92,92,.55); color: var(--danger); }
++
++.mc-top { display: flex; gap: 12px; align-items: flex-start; }
++.mc-top .halo-avatar { flex: none; }
++.mc-main { flex: 1; min-width: 0; }
++.mc-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
++.mc-name-lg { font-size: 17px; }
++.mc-online { font-size: 12px; color: var(--text2); margin-top: 2px; }
++.mc-main .mentor-stats-row { margin-top: 2px; }
++.mc-icons { display: flex; gap: 2px; margin: -6px -6px 0 0; }
++.mc-icon-btn { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: var(--text3); background: none; border: 0; }
++.mc-icon-btn.saved { color: var(--gold); }
++
++.mc-sub { display: flex; margin-top: 10px; font-size: 12.5px; color: var(--text2); white-space: nowrap; }
++.mc-sub-spec { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
++.mc-sub-topic { flex: none; max-width: 48%; overflow: hidden; text-overflow: ellipsis; }
++.mc-sub-topic i { font-style: normal; color: var(--text3); }
++.mc-match { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; font-size: 11.5px; font-weight: 700;
++  color: var(--gold-light); background: rgba(201,168,76,.12); border: 1px solid var(--border); border-radius: 99px; padding: 3px 9px; }
++.mc-bio { margin: 8px 0 0; color: var(--text2); font-size: 13px; line-height: 1.45; }
++.mc-more, .mc-view { color: var(--gold-light); font-weight: 700; }
++.mc-more { white-space: nowrap; }
++.mc-view { margin-top: 6px; font-size: 12px; }
++.mc-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
++.mc-status { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; min-width: 0; }
++.mc-status::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
++.mc-status.full::before { background: var(--warn, #E09B3A); }
++.mc-status.paused::before { background: var(--text3); }
++
++.mc-skel { height: 176px; border-radius: var(--radius);
++  background: linear-gradient(90deg, var(--bg2) 25%, var(--bg3) 50%, var(--bg2) 75%); background-size: 200% 100%; animation: mc-shimmer 1.2s infinite; }
++@keyframes mc-shimmer { to { background-position: -200% 0; } }
++@media (prefers-reduced-motion: reduce) { .mc-skel { animation: none; } }
++
++#mentorSheet .modal-sheet { max-width: 440px; margin: 0 auto; }
++.mc-sheet-h { font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: .04em; margin: 18px 0 8px; }
++.mc-sheet-text { margin: 0; color: var(--text2); font-size: 13.5px; line-height: 1.5; }
++.mc-tags { display: flex; flex-wrap: wrap; gap: 6px; }
++.mc-tags span { padding: 4px 11px; border-radius: 99px; background: var(--bg3); font-size: 12.5px; color: var(--text2); }
++.mc-tags span.mine { background: rgba(201,168,76,.15); color: var(--gold-light); border: 1px solid var(--border); }
++.mc-facts { display: flex; gap: 10px; }
++.mc-facts div { flex: 1; background: var(--bg3); border-radius: 12px; padding: 10px 12px; font-size: 12px; color: var(--text3); }
++.mc-facts b { display: block; color: var(--text); font-size: 14px; margin-top: 2px; }
++.mc-sheet-actions { display: flex; gap: 10px; margin-top: 20px; }
++.mc-sheet-actions .btn { flex: 1; padding: 12px; }
+diff --git a/migrations/20261005_mentor_waitlist.sql b/migrations/20261005_mentor_waitlist.sql
+new file mode 100644
+index 0000000..8c0b1b7
+--- /dev/null
++++ b/migrations/20261005_mentor_waitlist.sql
+@@ -0,0 +1,19 @@
++BEGIN;
++
++-- "Notify me" on a full mentor. A mentee joins the list; when the mentor has
++-- a free spot again, the oldest entries (one per free spot) get a Telegram
++-- message and are removed from the list.
++--
++-- Safe to run more than once. GET /api/mentors treats a missing table as an
++-- empty list, so deploy order doesn't matter.
++CREATE TABLE IF NOT EXISTS mentor_waitlist (
++  id         BIGSERIAL PRIMARY KEY,
++  mentor_id  BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
++  user_id    BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
++  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
++  UNIQUE (mentor_id, user_id)
++);
++CREATE INDEX IF NOT EXISTS idx_mentor_waitlist_mentor ON mentor_waitlist (mentor_id, created_at);
++CREATE INDEX IF NOT EXISTS idx_mentor_waitlist_user   ON mentor_waitlist (user_id);
++
++COMMIT;
+diff --git a/routes/mentors.js b/routes/mentors.js
+index 7d1236a..8ce3749 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -124,6 +124,14 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+       .eq('status', 'pending');
+     const pendingMentorIds = new Set((pendingRows || []).map(r => r.mentor_id));
+ 
++    // Mentors this user asked to be notified about ("Notify me" on a full
++    // mentor). A missing table (migration not run yet) just means "none".
++    const { data: waitRows } = await supabase
++      .from('mentor_waitlist')
++      .select('mentor_id')
++      .eq('user_id', req.telegramUser.id);
++    const waitlistedMentorIds = new Set((waitRows || []).map(r => r.mentor_id));
++
+     // Enrich with mentee counts and expertise topics. Batched: three queries
+     // for the whole list instead of three per mentor, so this page costs the
+     // same at 20 mentors or 500.
+@@ -172,12 +180,37 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+         expertise_topics: topics_list.map(t => t.name),
+         topics: topics_list,
+         request_pending: pendingMentorIds.has(mentor.telegram_id),
++        on_waitlist: waitlistedMentorIds.has(mentor.telegram_id),
+       };
+     });
+ 
+     res.json(enriched);
+   });
+ 
++  // POST /api/mentors/waitlist – "Notify me" when a full mentor has a spot
++  router.post('/waitlist', requireAuth, async (req, res) => {
++    const user_id = req.telegramUser.id;
++    const mentor_id = Number(req.body?.mentor_id);
++    if (!mentor_id) return res.status(400).json({ error: 'mentor_id required' });
++    if (mentor_id === Number(user_id)) return res.status(400).json({ error: 'Invalid mentor' });
++    const { error } = await supabase
++      .from('mentor_waitlist')
++      .upsert({ mentor_id, user_id }, { onConflict: 'mentor_id,user_id', ignoreDuplicates: true });
++    if (error) return res.status(500).json({ error: error.message });
++    res.json({ success: true });
++  });
++
++  // DELETE /api/mentors/waitlist/:mentor_id – leave the list
++  router.delete('/waitlist/:mentor_id', requireAuth, async (req, res) => {
++    const { error } = await supabase
++      .from('mentor_waitlist')
++      .delete()
++      .eq('mentor_id', Number(req.params.mentor_id))
++      .eq('user_id', req.telegramUser.id);
++    if (error) return res.status(500).json({ error: error.message });
++    res.json({ success: true });
++  });
++
+   // POST /api/mentors/request – request mentorship
+   router.post('/request', requireAuth, async (req, res) => {
+     const { id: user_id } = req.telegramUser;
+diff --git a/utils/index.js b/utils/index.js
+index 85f57a1..340346a 100644
+--- a/utils/index.js
++++ b/utils/index.js
+@@ -96,6 +96,12 @@ function emitToUser(telegram_id, event, payload) {
+  * @returns {Promise<object|null>} the Supabase error, or null on success
+  */
+ async function closeAssignment(supabase, assignmentId, { reason = null, endedBy = null } = {}) {
++  // Remember whose spot this frees so the waitlist can be told afterwards.
++  let mentorId = null;
++  try {
++    const { data } = await supabase.from('mentorship_assignments').select('mentor_id').eq('id', assignmentId).maybeSingle();
++    mentorId = data?.mentor_id ?? null;
++  } catch (_) { /* best effort */ }
+   const endedAt = new Date().toISOString();
+   let { error } = await supabase
+     .from('mentorship_assignments')
+@@ -107,9 +113,51 @@ async function closeAssignment(supabase, assignmentId, { reason = null, endedBy
+       .update({ is_active: false, ended_at: endedAt })
+       .eq('id', assignmentId));
+   }
++  if (!error && mentorId) notifyMentorWaitlist(supabase, mentorId).catch(() => {});
+   return error || null;
+ }
+ 
++/**
++ * After a mentorship ends: if the mentor now has free spots, message the
++ * oldest people on their waitlist (one per free spot) and drop them from it.
++ * Best-effort and never throws - ending a mentorship must not depend on it.
++ */
++async function notifyMentorWaitlist(supabase, mentorId) {
++  try {
++    const { data: mentor } = await supabase
++      .from('users')
++      .select('accepting_requests, anonymous_id, user_settings(display_name, max_mentees)')
++      .eq('telegram_id', mentorId).single();
++    if (!mentor || mentor.accepting_requests === false) return;
++
++    const max = mentor.user_settings?.max_mentees || parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
++    const { count } = await supabase
++      .from('mentorship_assignments')
++      .select('id', { count: 'exact', head: true })
++      .eq('mentor_id', mentorId).eq('is_active', true);
++    const free = max - (count || 0);
++    if (free <= 0) return;
++
++    const { data: waiting } = await supabase
++      .from('mentor_waitlist').select('id, user_id')
++      .eq('mentor_id', mentorId).order('created_at', { ascending: true }).limit(free);
++    if (!waiting || !waiting.length) return;
++
++    const { safeSend, getUserLang } = require('../bot');
++    const name = mentor.user_settings?.display_name || mentor.anonymous_id || 'A mentor';
++    for (const w of waiting) {
++      const lang = await getUserLang(w.user_id).catch(() => 'en');
++      const text = lang === 'am'
++        ? `${name} ክፍት ቦታ አለው። ጥያቄ ለመላክ በHoly ውስጥ የአማካሪዎች ገጽን ይክፈቱ።`
++        : `${name} has a spot open. Open the Mentors page in Holy to send a request.`;
++      await safeSend(w.user_id, text);
++    }
++    await supabase.from('mentor_waitlist').delete().in('id', waiting.map(w => w.id));
++  } catch (e) {
++    console.error('[waitlist] notify failed (non-fatal):', e.message);
++  }
++}
++
+ /**
+  * Save a 1-5 star rating for a mentor and keep users.rating / rating_count in
+  * step. Re-rating replaces the earlier score instead of adding a second one,
+@@ -200,7 +248,7 @@ function emitToUserRoom(telegram_id, event, payload) {
+ 
+ module.exports = {
+   generateJitsiJWT, JITSI_DOMAIN, isPublicJitsi, supabaseQuery, emitToUser, emitToUserRoom,
+-  closeAssignment, recordMentorRating, endMenteeSideOnPromotion
++  closeAssignment, notifyMentorWaitlist, recordMentorRating, endMenteeSideOnPromotion
+ };
+ 
+ 

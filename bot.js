@@ -1039,6 +1039,9 @@ async function endMentorship(chatId, partnerId, initiatorRole, opts = {}) {
     .update({ is_active: false, ended_at: new Date().toISOString() })
     .or(`and(mentor_id.eq.${chatId},user_id.eq.${partnerId}),and(mentor_id.eq.${partnerId},user_id.eq.${chatId})`);
 
+  // The mentor just got a spot back - tell anyone waiting on them.
+  require('./utils').notifyMentorWaitlist(supabase, initiatorRole === 'mentor' ? chatId : partnerId).catch(() => {});
+
   // Mark all unread messages between these two users as read so the badge
   // clears immediately for both parties without requiring a page reload.
   await supabase

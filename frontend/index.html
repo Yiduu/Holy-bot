@@ -653,19 +653,23 @@
               </svg>
             </span></button>
         </div>
+        <div class="mentor-tabs-segmented mc-header-tabs">
+          <button id="mentorTabBrowse" class="mentor-tab-btn active" onclick="setMentorTab('browse')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+            <span data-i18n="tab_browse">Browse</span>
+          </button>
+          <button id="mentorTabSaved" class="mentor-tab-btn" onclick="setMentorTab('saved')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>
+            <span data-i18n="tab_saved">Saved</span>
+            <span id="savedMentorsBadge" class="mentor-tab-badge" style="display:none">0</span>
+          </button>
+        </div>
       </div>
       <div class="page-content mentors-page-content">
-        <!-- Subheader count & intro -->
-        <div class="mentors-header-row mb-12">
-          <div class="page-intro">
-            <span class="page-intro-eyebrow" data-i18n="Mentorship">Mentorship</span>
-            <p class="page-intro-text" data-i18n="Connect with an anonymous mentor.">Connect with an anonymous mentor.</p>
-          </div>
-          <span id="mentorsAvailableCount" class="mentors-count-badge"></span>
-        </div>
-
+        <!-- Search + filter on one row, topic chips below (sticky) -->
+        <div class="mc-sticky">
         <!-- Search & Filter Bar Row -->
-        <div class="mentor-search-row mb-12">
+        <div class="mentor-search-row">
           <div class="mentor-search-wrap">
             <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="11" cy="11" r="8"></circle>
@@ -683,26 +687,7 @@
             <span id="mentorFilterActiveDot" class="filter-active-badge" style="display:none;"></span>
           </button>
         </div>
-
-        <!-- Premium Main Topic Selection Dropdown -->
-        <div class="mentor-topic-dropdown-row mb-12">
-          <div class="premium-dropdown form-dropdown flex-1" data-dropdown id="mentorMainTopicDropdown">
-            <button type="button" class="premium-dropdown-btn" data-dropdown-toggle id="mentorMainTopicDropdownBtn">
-              <div class="flex items-center gap-8" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
-                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-                </svg>
-                <span class="dropdown-label" id="mentorMainTopicDropdownLabel" data-i18n="all_topics">All Topics</span>
-              </div>
-              <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-            <div class="premium-dropdown-menu" data-dropdown-menu id="mentorMainTopicDropdownMenu" style="max-height:260px;overflow-y:auto;width:100%;">
-              <!-- Dynamic topics -->
-            </div>
-          </div>
+          <div id="mentorTopicChips" class="mc-chips" aria-label="Topics"></div>
         </div>
 
         <!-- Active Filter Badges Bar -->
@@ -711,26 +696,10 @@
           <button class="btn-clear-all-filters" onclick="resetAllMentorFilters()" data-i18n="btn_reset">Reset</button>
         </div>
 
-        <!-- Segmented Tabs: Browse vs Saved -->
-        <div class="mentor-tabs-segmented mb-16">
-          <button id="mentorTabBrowse" class="mentor-tab-btn active" onclick="setMentorTab('browse')">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
-            </svg>
-            <span data-i18n="tab_browse">Browse</span>
-          </button>
-          <button id="mentorTabSaved" class="mentor-tab-btn" onclick="setMentorTab('saved')">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
-            </svg>
-            <span data-i18n="tab_saved">Saved</span>
-            <span id="savedMentorsBadge" class="mentor-tab-badge" style="display:none">0</span>
-          </button>
-        </div>
+        <!-- Active Mentor Container (Browse tab, only if the user has a mentor) -->
+        <div id="activeMentorContainer" class="mb-12"></div>
 
-        <!-- Active Mentor Container (displayed if user has an active mentor) -->
-        <div id="activeMentorContainer" class="mb-16"></div>
+        <div id="mentorsAvailableCount" class="mc-count"></div>
 
         <!-- Mentors List Container -->
         <div id="mentorsList" style="display:flex;flex-direction:column;gap:12px">
@@ -2056,23 +2025,6 @@
         <button type="button" class="btn btn-ghost btn-sm" onclick="closeMentorFilterModal()" style="padding:4px 8px;font-size:1.1rem;line-height:1;">✕</button>
       </div>
 
-      <!-- Filter Section: Topic -->
-      <div class="filter-group mb-16">
-        <label class="form-label" data-i18n="settings_my_topics">Topic</label>
-        <div class="premium-dropdown form-dropdown" data-dropdown id="modalFilterTopicDropdown">
-          <button type="button" class="premium-dropdown-btn" data-dropdown-toggle id="modalFilterTopicDropdownBtn">
-            <span class="dropdown-label" id="modalFilterTopicDropdownLabel" data-i18n="all_topics">All Topics</span>
-            <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-          <div class="premium-dropdown-menu" data-dropdown-menu id="modalFilterTopicDropdownMenu" style="max-height:220px;overflow-y:auto;width:100%;">
-            <!-- Populated dynamically with topics -->
-          </div>
-          <input type="hidden" id="modalFilterTopicSelectedId" value="" />
-        </div>
-      </div>
-
       <!-- Filter Section: Gender / Sex -->
       <div class="filter-group mb-16">
         <label class="form-label" data-i18n="filter_sex_label">Gender</label>
@@ -2112,7 +2064,15 @@
     </div>
   </div>
 
-  <!-- ─── Mentorship Request Topic Picker Modal ──────────────── -->
+    <!-- ─── Mentor profile bottom sheet ─────────────────────────── -->
+  <div id="mentorSheet" class="modal-overlay" onclick="if(event.target===this)closeMentorSheet()">
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div id="mentorSheetBody"></div>
+    </div>
+  </div>
+
+<!-- ─── Mentorship Request Topic Picker Modal ──────────────── -->
   <div id="requestTopicModal" class="modal-overlay" onclick="if(event.target===this)closeRequestTopicModal()">
     <div class="modal-sheet" style="max-width:400px;margin:0 auto;overflow:visible;">
       <div class="modal-handle"></div>

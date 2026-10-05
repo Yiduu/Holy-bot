@@ -10506,3 +10506,74 @@ body.in-call .fab-menu { display: none !important; }
 
 
 
+
+/* ═══ Mentors page redesign ═══════════════════════════════════
+   Header tabs, topic chips, compact cards, profile sheet, skeletons.
+   Class names use the mc- prefix because .mentor-card is still used by
+   the requests list. */
+#page-mentors .app-header { flex-wrap: wrap; row-gap: 8px; }
+#page-mentors .mc-header-tabs { order: 3; flex: 1 1 100%; margin: 0; }
+
+.mc-sticky { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-bottom: 2px; margin-bottom: 8px; }
+.mc-sticky .mentor-search-row { margin-bottom: 0; }
+.mc-chips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.mc-chips::-webkit-scrollbar { display: none; }
+.mc-chip { flex: none; padding: 6px 13px; border-radius: 99px; font-size: 12.5px; white-space: nowrap;
+  border: 1px solid var(--border-dim); color: var(--text2); background: var(--bg2); }
+.mc-chip.active { background: var(--gold); border-color: var(--gold); color: var(--espresso, #20180a); font-weight: 700; }
+.mc-count { font-size: 12px; color: var(--text3); margin: 0 0 10px; }
+
+.mc-card, .mc-mine { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; cursor: pointer; transition: transform .12s; }
+.mc-card:active, .mc-mine:active { transform: scale(.99); }
+.mc-card.muted { opacity: .55; }
+.mc-mine { background: linear-gradient(135deg, rgba(201,168,76,.16), var(--bg2)); border-color: var(--gold); }
+.mc-eyebrow { display: flex; justify-content: space-between; font-size: 10.5px; letter-spacing: .12em; font-weight: 700;
+  text-transform: uppercase; color: var(--gold-light); margin-bottom: 10px; }
+.mc-eyebrow span { color: var(--success); }
+.mc-mine-actions { display: flex; gap: 8px; margin-top: 12px; }
+.mc-mine-actions .btn { flex: 1; }
+.mc-mine-actions .btn-danger, .mc-sheet-actions .btn-danger { background: transparent; border: 1px solid rgba(224,92,92,.55); color: var(--danger); }
+
+.mc-top { display: flex; gap: 12px; align-items: flex-start; }
+.mc-top .halo-avatar { flex: none; }
+.mc-main { flex: 1; min-width: 0; }
+.mc-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-name-lg { font-size: 17px; }
+.mc-online { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.mc-main .mentor-stats-row { margin-top: 2px; }
+.mc-icons { display: flex; gap: 2px; margin: -6px -6px 0 0; }
+.mc-icon-btn { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: var(--text3); background: none; border: 0; }
+.mc-icon-btn.saved { color: var(--gold); }
+
+.mc-sub { display: flex; margin-top: 10px; font-size: 12.5px; color: var(--text2); white-space: nowrap; }
+.mc-sub-spec { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mc-sub-topic { flex: none; max-width: 48%; overflow: hidden; text-overflow: ellipsis; }
+.mc-sub-topic i { font-style: normal; color: var(--text3); }
+.mc-match { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; font-size: 11.5px; font-weight: 700;
+  color: var(--gold-light); background: rgba(201,168,76,.12); border: 1px solid var(--border); border-radius: 99px; padding: 3px 9px; }
+.mc-bio { margin: 8px 0 0; color: var(--text2); font-size: 13px; line-height: 1.45; }
+.mc-more, .mc-view { color: var(--gold-light); font-weight: 700; }
+.mc-more { white-space: nowrap; }
+.mc-view { margin-top: 6px; font-size: 12px; }
+.mc-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.mc-status { font-size: 12px; color: var(--text2); display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mc-status::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+.mc-status.full::before { background: var(--warn, #E09B3A); }
+.mc-status.paused::before { background: var(--text3); }
+
+.mc-skel { height: 176px; border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--bg2) 25%, var(--bg3) 50%, var(--bg2) 75%); background-size: 200% 100%; animation: mc-shimmer 1.2s infinite; }
+@keyframes mc-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .mc-skel { animation: none; } }
+
+#mentorSheet .modal-sheet { max-width: 440px; margin: 0 auto; }
+.mc-sheet-h { font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: .04em; margin: 18px 0 8px; }
+.mc-sheet-text { margin: 0; color: var(--text2); font-size: 13.5px; line-height: 1.5; }
+.mc-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.mc-tags span { padding: 4px 11px; border-radius: 99px; background: var(--bg3); font-size: 12.5px; color: var(--text2); }
+.mc-tags span.mine { background: rgba(201,168,76,.15); color: var(--gold-light); border: 1px solid var(--border); }
+.mc-facts { display: flex; gap: 10px; }
+.mc-facts div { flex: 1; background: var(--bg3); border-radius: 12px; padding: 10px 12px; font-size: 12px; color: var(--text3); }
+.mc-facts b { display: block; color: var(--text); font-size: 14px; margin-top: 2px; }
+.mc-sheet-actions { display: flex; gap: 10px; margin-top: 20px; }
+.mc-sheet-actions .btn { flex: 1; padding: 12px; }
