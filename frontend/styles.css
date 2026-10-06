@@ -2284,7 +2284,7 @@ textarea.form-control {
   flex: 1;
   min-width: 0;
   color: var(--text);
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   font-family: var(--font-body);
 }
 
@@ -2721,11 +2721,11 @@ textarea.form-control {
 }
 
 .mentor-name {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-weight: 700;
-  font-size: 1.02rem;
+  font-size: 0.98rem;
   color: var(--gold-light);
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2809,7 +2809,7 @@ textarea.form-control {
 }
 
 .mentor-rating-val {
-  font-size: 0.75rem;
+  font-size: 0.9rem;
   color: var(--gold-light);
   font-weight: 700;
 }
@@ -2819,7 +2819,7 @@ textarea.form-control {
 }
 
 .mentor-reviews-count {
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   color: var(--text3);
   white-space: nowrap;
   flex: 0 1 auto !important;
@@ -2842,7 +2842,7 @@ textarea.form-control {
 }
 
 .mentor-pill-demographic {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   color: var(--text2);
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -2850,7 +2850,7 @@ textarea.form-control {
   padding: 2px 8px;
   white-space: nowrap;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
 }
 
 [data-theme="light"] .mentor-pill-demographic {
@@ -2870,7 +2870,7 @@ textarea.form-control {
 }
 
 .mentor-tag-chip {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   color: var(--gold-light);
   background: linear-gradient(135deg, rgba(201, 168, 76, 0.1) 0%, rgba(201, 168, 76, 0.03) 100%);
   border: 1px solid rgba(201, 168, 76, 0.24);
@@ -2956,9 +2956,9 @@ textarea.form-control {
 }
 
 .mentor-bio-text {
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   color: var(--text2);
-  line-height: 1.52;
+  line-height: 1.45;
   margin: 0;
   display: -webkit-box;
   line-clamp: 2;
@@ -3028,7 +3028,7 @@ textarea.form-control {
 }
 
 .mentor-capacity-text {
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   color: var(--gold-light);
   font-weight: 600;
   display: inline-flex;
@@ -3107,9 +3107,9 @@ textarea.form-control {
   height: 38px;
   padding: 0 18px;
   border-radius: 11px;
-  font-size: 0.82rem;
+  font-size: 0.83rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3190,15 +3190,15 @@ textarea.form-control {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--gold);
 }
 
 .active-mentor-status-pill {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 999px;
@@ -8041,7 +8041,7 @@ textarea.form-control {
 }
 
 .mentor-capacity {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   color: var(--text3);
   margin-left: 4px;
 }
