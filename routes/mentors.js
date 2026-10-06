@@ -196,7 +196,14 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     const { error } = await supabase
       .from('mentor_waitlist')
       .upsert({ mentor_id, user_id }, { onConflict: 'mentor_id,user_id', ignoreDuplicates: true });
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      // Table missing = migrations/20261005_mentor_waitlist.sql was never run.
+      if (error.code === '42P01' || /mentor_waitlist/i.test(error.message || '')) {
+        console.error('[Mentors] waitlist table missing - run migrations/20261005_mentor_waitlist.sql:', error.message);
+        return res.status(503).json({ error: 'Notify me is not available right now. Please try again later.' });
+      }
+      return res.status(500).json({ error: error.message });
+    }
     res.json({ success: true });
   });
 

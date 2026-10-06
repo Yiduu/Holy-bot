@@ -1289,6 +1289,10 @@ function handleDeepLink() {
       setTimeout(() => navigate('requests'), 100);
       return;
     }
+    if (startParam === 'mentors') {
+      setTimeout(() => navigate('mentors'), 100);
+      return;
+    }
   }
 
   // Fallback for direct browser testing or web_app url query params
@@ -1307,6 +1311,8 @@ function handleDeepLink() {
     } else if (browserStart.startsWith('goal_')) {
       const goalId = browserStart.replace('goal_', '');
       setTimeout(() => openGoalDeepLink(goalId), 100);
+    } else if (browserStart === 'mentors') {
+      setTimeout(() => navigate('mentors'), 100);
     } else if (browserStart === 'requests' || browserStart.startsWith('requests') || browserStart.startsWith('request_')) {
       setTimeout(() => navigate('requests'), 100);
     }
@@ -3369,11 +3375,15 @@ function renderModernRating(rating, count) {
     const fill = n <= r ? 'var(--gold-light, #F0D9A6)' : 'rgba(255,255,255,0.14)';
     svgs += `<svg width="12" height="12" viewBox="0 0 24 24" fill="${fill}" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
   }
+  // Stars and score stay together; the review count sits on its own line below
+  // so it can never wrap into the pill on narrow phones.
   return `
-    <div class="mentor-stats-row">
-      <div class="mentor-stats-stars">${svgs}</div>
-      <span class="mentor-rating-val">${Number(rating).toFixed(1)}</span>
-      <span class="mentor-reviews-count">(${count === 1 ? t('reviews_count_one') : t('reviews_count', { n: count })})</span>
+    <div class="mentor-rating-block">
+      <div class="mentor-stats-row">
+        <div class="mentor-stats-stars">${svgs}</div>
+        <span class="mentor-rating-val">${Number(rating).toFixed(1)}</span>
+      </div>
+      <span class="mentor-reviews-count">${count === 1 ? t('reviews_count_one') : t('reviews_count', { n: count })}</span>
     </div>`;
 }
 
@@ -3477,20 +3487,11 @@ function mentorBioInline(bio) {
   return `${escapeHtml(cut)}… <span class="mc-more">${t('btn_more')}</span>`;
 }
 
-// "Specialization · Topic +2". The specialization is the part that shrinks
-// (ellipsis); the topic always stays visible. The topic shown is the first
-// one the mentee shares with the mentor.
+// Card sub line: the mentor's specialization only. Their topics are in the
+// full profile sheet, so repeating them here just crowded the card.
 function mentorSubLine(m) {
   const spec = (m.user_settings?.specialization || '').trim();
-  const list = (m.topics && m.topics.length) ? m.topics.map(x => x.name) : (m.expertise_topics || []);
-  const mine = (m.topics || []).find(x => myMentorTopicIds.has(Number(x.id)));
-  const shown = mine ? mine.name : (list[0] || '');
-  const extra = list.length > 1 ? list.length - 1 : 0;
-  if (!spec && !shown) return '';
-  const topicHtml = shown
-    ? `<span class="mc-sub-topic">${spec ? '&nbsp;· ' : ''}${escapeHtml(shown)}${extra ? ` <i>+${extra}</i>` : ''}</span>`
-    : '';
-  return `<div class="mc-sub">${spec ? `<span class="mc-sub-spec">${escapeHtml(spec)}</span>` : ''}${topicHtml}</div>`;
+  return spec ? `<div class="mc-sub">${escapeHtml(spec)}</div>` : '';
 }
 
 function mentorActionHtml(m, inSheet = false) {
