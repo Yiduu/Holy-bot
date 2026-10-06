@@ -10524,7 +10524,9 @@ body.in-call .fab-menu { display: none !important; }
 #page-mentors .app-header { flex-wrap: wrap; row-gap: 8px; }
 #page-mentors .mc-header-tabs { order: 3; flex: 1 1 100%; margin: 0; }
 
-.mc-sticky { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-bottom: 2px; margin-bottom: 8px; }
+/* Lives between the page header and the scrolling list (not inside it), so it never scrolls away. */
+.mc-sticky { flex: none; position: relative; z-index: 5; background: var(--bg); padding: 10px 16px 4px; border-bottom: 1px solid var(--border-dim); }
+.mentors-page-content { padding-top: 12px; }
 .mc-sticky .mentor-search-row { margin-bottom: 0; }
 .mc-chips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .mc-chips::-webkit-scrollbar { display: none; }

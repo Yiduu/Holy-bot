@@ -665,30 +665,31 @@
           </button>
         </div>
       </div>
-      <div class="page-content mentors-page-content">
-        <!-- Search + filter on one row, topic chips below (sticky) -->
-        <div class="mc-sticky">
-        <!-- Search & Filter Bar Row -->
-        <div class="mentor-search-row">
-          <div class="mentor-search-wrap">
-            <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <input id="mentorSearchInput" type="text" class="mentor-search-input" placeholder="Search mentors by name, bio, topic…" oninput="handleMentorSearchInput(this.value)" autocomplete="off" />
-            <button id="mentorSearchClearBtn" class="search-clear-btn" onclick="clearMentorSearch()" style="display:none;" aria-label="Clear search">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-          </div>
-          <button id="mentorFilterBtn" class="btn-filter-trigger" onclick="openMentorFilterModal()" aria-label="Filter mentors" title="Filter mentors">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-            </svg>
-            <span id="mentorFilterActiveDot" class="filter-active-badge" style="display:none;"></span>
+      <!-- Search + filter row and topic chips. A sibling ABOVE the scrolling area, so it
+           stays put while the mentors list scrolls (no reliance on position: sticky). -->
+      <div class="mc-sticky">
+      <!-- Search & Filter Bar Row -->
+      <div class="mentor-search-row">
+        <div class="mentor-search-wrap">
+          <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input id="mentorSearchInput" type="text" class="mentor-search-input" data-i18n="search_mentors_placeholder" placeholder="Search mentors by name, bio, topic…" oninput="handleMentorSearchInput(this.value)" autocomplete="off" />
+          <button id="mentorSearchClearBtn" class="search-clear-btn" onclick="clearMentorSearch()" style="display:none;" aria-label="Clear search">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
-          <div id="mentorTopicChips" class="mc-chips" aria-label="Topics"></div>
-        </div>
+        <button id="mentorFilterBtn" class="btn-filter-trigger" onclick="openMentorFilterModal()" aria-label="Filter mentors" title="Filter mentors">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+          </svg>
+          <span id="mentorFilterActiveDot" class="filter-active-badge" style="display:none;"></span>
+        </button>
+      </div>
+        <div id="mentorTopicChips" class="mc-chips" aria-label="Topics"></div>
+      </div>
+      <div class="page-content mentors-page-content">
 
         <!-- Active Filter Badges Bar -->
         <div id="mentorActiveFiltersBar" class="mentor-active-filters-bar mb-12" style="display:none;">
