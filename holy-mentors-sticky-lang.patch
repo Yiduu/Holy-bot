@@ -1,0 +1,269 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 646787a..a0f540d 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -3521,7 +3521,7 @@ function mentorMatchBadge(n) {
+ function mentorCardHtml(m) {
+   const id = m.telegram_id;
+   const name = mentorNameOf(m);
+-  const bio = m.user_settings?.bio || "I'm here as a mentor to walk alongside you through faith and life's challenges.";
++  const bio = m.user_settings?.bio || t('mentor_default_bio');
+   const unavailable = isMentorUnavailable(m);
+   const isAccepting = m.accepting_requests !== false;
+   const max = mentorMax(m);
+@@ -3588,15 +3588,17 @@ function renderActiveMentorCard() {
+ }
+ 
+ // ─── Mentor profile bottom sheet ──────────────────────────────
++let openMentorSheetId = null;
+ function openMentorSheet(id) {
+   const m = findMentorById(id);
+   const body = $('mentorSheetBody');
+   if (!m || !body) return;
+   haptic('light');
++  openMentorSheetId = id;
+ 
+   const isMine = !!activeMentorData && String(activeMentorData.telegram_id) === String(id);
+   const name = mentorNameOf(m);
+-  const bio = m.user_settings?.bio || "I'm here as a mentor to walk alongside you through faith and life's challenges.";
++  const bio = m.user_settings?.bio || t('mentor_default_bio');
+   const spec = (m.user_settings?.specialization || '').trim();
+   const topics = (m.topics && m.topics.length)
+     ? m.topics.map(x => ({ id: x.id, name: x.name }))
+@@ -3640,6 +3642,7 @@ function openMentorSheet(id) {
+ }
+ 
+ function closeMentorSheet() {
++  openMentorSheetId = null;
+   $('mentorSheet')?.classList.remove('open');
+ }
+ 
+@@ -3801,18 +3804,22 @@ function renderMentorsList() {
+ async function loadMentorTopics() {
+   try {
+     mentorTopicsCache = await apiFetch('/api/topics') || [];
+-    const row = $('mentorTopicChips');
+-    if (!row) return;
+-    const chip = (id, label) =>
+-      `<button type="button" class="mc-chip" data-id="${escapeHtml(String(id))}" data-name="${escapeHtml(id === '' ? '' : label)}"
+-        onclick="selectMentorMainTopic(this.dataset.id, this.dataset.name)">${escapeHtml(label)}</button>`;
+-    row.innerHTML = chip('', t('mentor_chip_all')) + mentorTopicsCache.map(tp => chip(tp.id, tp.name)).join('');
+-    syncMentorTopicChips();
++    renderMentorTopicChips();
+   } catch (e) {
+     console.error('Failed to load topics for filter:', e);
+   }
+ }
+ 
++function renderMentorTopicChips() {
++  const row = $('mentorTopicChips');
++  if (!row) return;
++  const chip = (id, label) =>
++    `<button type="button" class="mc-chip" data-id="${escapeHtml(String(id))}" data-name="${escapeHtml(id === '' ? '' : label)}"
++      onclick="selectMentorMainTopic(this.dataset.id, this.dataset.name)">${escapeHtml(label)}</button>`;
++  row.innerHTML = chip('', t('mentor_chip_all')) + (mentorTopicsCache || []).map(tp => chip(tp.id, tp.name)).join('');
++  syncMentorTopicChips();
++}
++
+ function syncMentorTopicChips() {
+   const row = $('mentorTopicChips');
+   if (!row) return;
+@@ -6540,6 +6547,7 @@ function changeLanguage(lang) {
+   currentLanguage = lang;
+   localStorage.setItem('language', lang);
+   applyLanguage();
++  refreshLanguageContent();
+   loadDashboard();
+ }
+ 
+@@ -6549,9 +6557,36 @@ function toggleLanguage() {
+   currentLanguage = next;
+   localStorage.setItem('language', next);
+   applyLanguage();
++  refreshLanguageContent();
+   loadDashboard();
+ }
+ 
++// applyLanguage() only retranslates the static labels in index.html. Anything
++// the JS draws itself (mentor cards, chips, lists) was left in the old language
++// until you left the page and came back. Draw the page you are on again, from
++// what is already loaded where we can, so the switch is instant.
++function refreshLanguageContent() {
++  try {
++    switch (currentPage) {
++      case 'mentors':
++        renderMentorTopicChips();
++        updateFilterActiveIndicators();
++        renderActiveMentorCard();
++        renderMentorsList();
++        if (openMentorSheetId != null && $('mentorSheet')?.classList.contains('open')) openMentorSheet(openMentorSheetId);
++        break;
++      case 'sessions': loadSessions(); break;
++      case 'requests': loadRequests(); break;
++      case 'support': loadUserTickets(); break;
++      case 'journal': loadJournalEntries(); break;
++      case 'my-mentees': flushMentorNotes(); loadMyMentees(); break;
++      // chat and settings hold text being typed, so they are left alone.
++    }
++  } catch (e) {
++    console.error('[i18n] could not redraw the page after switching language:', e);
++  }
++}
++
+ // Kept for backward compatibility with any existing inline onclick handlers.
+ function toggleOnboardingLanguage() {
+   toggleLanguage();
+diff --git a/frontend/index.html b/frontend/index.html
+index 5a650e1..4c8790a 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -665,30 +665,31 @@
+           </button>
+         </div>
+       </div>
+-      <div class="page-content mentors-page-content">
+-        <!-- Search + filter on one row, topic chips below (sticky) -->
+-        <div class="mc-sticky">
+-        <!-- Search & Filter Bar Row -->
+-        <div class="mentor-search-row">
+-          <div class="mentor-search-wrap">
+-            <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+-              <circle cx="11" cy="11" r="8"></circle>
+-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+-            </svg>
+-            <input id="mentorSearchInput" type="text" class="mentor-search-input" placeholder="Search mentors by name, bio, topic…" oninput="handleMentorSearchInput(this.value)" autocomplete="off" />
+-            <button id="mentorSearchClearBtn" class="search-clear-btn" onclick="clearMentorSearch()" style="display:none;" aria-label="Clear search">
+-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+-            </button>
+-          </div>
+-          <button id="mentorFilterBtn" class="btn-filter-trigger" onclick="openMentorFilterModal()" aria-label="Filter mentors" title="Filter mentors">
+-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+-            </svg>
+-            <span id="mentorFilterActiveDot" class="filter-active-badge" style="display:none;"></span>
++      <!-- Search + filter row and topic chips. A sibling ABOVE the scrolling area, so it
++           stays put while the mentors list scrolls (no reliance on position: sticky). -->
++      <div class="mc-sticky">
++      <!-- Search & Filter Bar Row -->
++      <div class="mentor-search-row">
++        <div class="mentor-search-wrap">
++          <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
++            <circle cx="11" cy="11" r="8"></circle>
++            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
++          </svg>
++          <input id="mentorSearchInput" type="text" class="mentor-search-input" data-i18n="search_mentors_placeholder" placeholder="Search mentors by name, bio, topic…" oninput="handleMentorSearchInput(this.value)" autocomplete="off" />
++          <button id="mentorSearchClearBtn" class="search-clear-btn" onclick="clearMentorSearch()" style="display:none;" aria-label="Clear search">
++            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+           </button>
+         </div>
+-          <div id="mentorTopicChips" class="mc-chips" aria-label="Topics"></div>
+-        </div>
++        <button id="mentorFilterBtn" class="btn-filter-trigger" onclick="openMentorFilterModal()" aria-label="Filter mentors" title="Filter mentors">
++          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
++            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
++          </svg>
++          <span id="mentorFilterActiveDot" class="filter-active-badge" style="display:none;"></span>
++        </button>
++      </div>
++        <div id="mentorTopicChips" class="mc-chips" aria-label="Topics"></div>
++      </div>
++      <div class="page-content mentors-page-content">
+ 
+         <!-- Active Filter Badges Bar -->
+         <div id="mentorActiveFiltersBar" class="mentor-active-filters-bar mb-12" style="display:none;">
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 1410c47..5187945 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -60,6 +60,7 @@ const I18N = {
+     "mentor_chip_all": "All",
+     "reviews_count": "{n} reviews",
+     "reviews_count_one": "1 review",
++    "mentor_default_bio": "I'm a mentor here, ready to walk with you through faith and life.",
+     "match_topics": "Matches {n} of your topics",
+     "spot_open_one": "1 spot open",
+     "spots_open_n": "{open} spots open",
+@@ -707,6 +708,7 @@ const I18N = {
+     "mentor_chip_all": "ሁሉም",
+     "reviews_count": "{n} ግምገማዎች",
+     "reviews_count_one": "1 ግምገማ",
++    "mentor_default_bio": "በእምነትና በሕይወት ጉዳዮች ከጎንዎ ሆኜ ለማገዝ እዚህ አለሁ።",
+     "match_topics": "ከርዕሶችዎ {n} ጋር ይዛመዳል",
+     "spot_open_one": "1 ክፍት ቦታ",
+     "spots_open_n": "{open} ክፍት ቦታዎች",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 3e2889f..fe3d284 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -10524,7 +10524,9 @@ body.in-call .fab-menu { display: none !important; }
+ #page-mentors .app-header { flex-wrap: wrap; row-gap: 8px; }
+ #page-mentors .mc-header-tabs { order: 3; flex: 1 1 100%; margin: 0; }
+ 
+-.mc-sticky { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-bottom: 2px; margin-bottom: 8px; }
++/* Lives between the page header and the scrolling list (not inside it), so it never scrolls away. */
++.mc-sticky { flex: none; position: relative; z-index: 5; background: var(--bg); padding: 10px 16px 4px; border-bottom: 1px solid var(--border-dim); }
++.mentors-page-content { padding-top: 12px; }
+ .mc-sticky .mentor-search-row { margin-bottom: 0; }
+ .mc-chips { display: flex; gap: 8px; overflow-x: auto; padding: 10px 0 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+ .mc-chips::-webkit-scrollbar { display: none; }
+diff --git a/package.json b/package.json
+index b0c129e..90fc128 100644
+--- a/package.json
++++ b/package.json
+@@ -6,7 +6,7 @@
+     "scripts": {
+         "start": "node server.js",
+         "dev": "nodemon server.js",
+-        "test": "node tests/sessions.lifecycle.test.js && node tests/session-room.client.test.js && node tests/waitlist.test.js"
++        "test": "node tests/sessions.lifecycle.test.js && node tests/session-room.client.test.js && node tests/waitlist.test.js && node tests/mentors-page.test.js"
+     },
+     "engines": {
+         "node": ">=18.0.0"
+diff --git a/tests/mentors-page.test.js b/tests/mentors-page.test.js
+new file mode 100644
+index 0000000..829addc
+--- /dev/null
++++ b/tests/mentors-page.test.js
+@@ -0,0 +1,42 @@
++// Run: node tests/mentors-page.test.js   (needs devDependency jsdom)
++// Mentors page: fixed search bar, and the language switch redrawing JS-drawn content.
++const assert = require('assert'); const fs = require('fs'); const path = require('path');
++const { JSDOM } = require('jsdom');
++const root = path.join(__dirname, '..');
++const ok = n => console.log('  ✓', n);
++const app = fs.readFileSync(path.join(root, 'frontend/app.js'), 'utf8');
++const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8');
++const loc = fs.readFileSync(path.join(root, 'frontend/locales.js'), 'utf8');
++
++// ── layout: search + chips are a sibling ABOVE the scrolling area, not inside it
++const doc = new JSDOM(html).window.document;
++const page = doc.getElementById('page-mentors');
++const bar = page.querySelector('.mc-sticky'); const scroller = page.querySelector('.page-content');
++assert.ok(bar && scroller && bar.parentElement === page && scroller.parentElement === page); ok('search bar + chips sit outside the scrolling list (siblings under the page)');
++assert.ok(bar.contains(doc.getElementById('mentorSearchInput')) && bar.contains(doc.getElementById('mentorTopicChips')) && bar.contains(doc.getElementById('mentorFilterBtn'))); ok('search, filter button and topic chips are all in the fixed bar');
++assert.ok(bar.compareDocumentPosition(scroller) & 4); ok('fixed bar comes before the scrolling list');
++assert.equal(doc.getElementById('mentorSearchInput').getAttribute('data-i18n'), 'search_mentors_placeholder'); ok('search placeholder is translatable');
++
++// ── language: the new key exists in both languages
++const amAt = loc.indexOf('  am: {');
++for (const k of ['mentor_default_bio', 'search_mentors_placeholder', 'mentor_chip_all']) assert.ok(loc.slice(0, amAt).includes(`"${k}"`) && loc.slice(amAt).includes(`"${k}"`), k);
++ok('default-bio, placeholder and "All" chip strings exist in English and Amharic');
++assert.ok(!/I'm here as a mentor to walk alongside you/.test(app)); ok('no hardcoded English default bio left in the mentor card/profile');
++
++// ── refreshLanguageContent: redraws the mentors page; leaves chat/settings alone
++const grab = (name) => { const i = app.indexOf('function ' + name); let d = 0, j = app.indexOf('{', i); for (let k = j; k < app.length; k++) { if (app[k] === '{') d++; if (app[k] === '}' && --d === 0) return app.slice(i, k + 1); } };
++function run(page, sheetOpen, sheetId) {
++  const calls = [];
++  const names = ['renderMentorTopicChips', 'updateFilterActiveIndicators', 'renderActiveMentorCard', 'renderMentorsList', 'openMentorSheet', 'loadSessions', 'loadRequests', 'loadUserTickets', 'loadJournalEntries', 'flushMentorNotes', 'loadMyMentees'];
++  const stubs = names.map(n => `const ${n} = (...a) => calls.push(['${n}', ...a]);`).join('\n');
++  new Function('calls', 'currentPage', '$', 'openMentorSheetId', `${stubs}\n${grab('refreshLanguageContent')}\nrefreshLanguageContent();`)(
++    calls, page, () => ({ classList: { contains: () => sheetOpen } }), sheetId);
++  return calls.map(c => c[0]);
++}
++assert.deepEqual(run('mentors', false, null), ['renderMentorTopicChips', 'updateFilterActiveIndicators', 'renderActiveMentorCard', 'renderMentorsList']); ok('mentors: chips, filter tags, active-mentor card and list are all redrawn');
++assert.deepEqual(run('mentors', true, 42), ['renderMentorTopicChips', 'updateFilterActiveIndicators', 'renderActiveMentorCard', 'renderMentorsList', 'openMentorSheet']); ok('mentors: an open profile sheet is redrawn too');
++assert.deepEqual(run('sessions', false, null), ['loadSessions']); assert.deepEqual(run('my-mentees', false, null), ['flushMentorNotes', 'loadMyMentees']); ok('other list pages reload (mentor notes are saved first)');
++assert.deepEqual(run('chat', false, null), []); assert.deepEqual(run('settings', false, null), []); ok('chat and settings are left alone (unsaved typing is safe)');
++assert.ok(/applyLanguage\(\);\s*refreshLanguageContent\(\);/.test(grab('toggleLanguage')) && /applyLanguage\(\);\s*refreshLanguageContent\(\);/.test(grab('changeLanguage'))); ok('both language switches (header button + settings) call it');
++
++console.log('\nALL MENTORS-PAGE CHECKS PASSED'); process.exit(0);

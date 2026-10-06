@@ -3521,7 +3521,7 @@ function mentorMatchBadge(n) {
 function mentorCardHtml(m) {
   const id = m.telegram_id;
   const name = mentorNameOf(m);
-  const bio = m.user_settings?.bio || "I'm here as a mentor to walk alongside you through faith and life's challenges.";
+  const bio = m.user_settings?.bio || t('mentor_default_bio');
   const unavailable = isMentorUnavailable(m);
   const isAccepting = m.accepting_requests !== false;
   const max = mentorMax(m);
@@ -3588,15 +3588,17 @@ function renderActiveMentorCard() {
 }
 
 // ─── Mentor profile bottom sheet ──────────────────────────────
+let openMentorSheetId = null;
 function openMentorSheet(id) {
   const m = findMentorById(id);
   const body = $('mentorSheetBody');
   if (!m || !body) return;
   haptic('light');
+  openMentorSheetId = id;
 
   const isMine = !!activeMentorData && String(activeMentorData.telegram_id) === String(id);
   const name = mentorNameOf(m);
-  const bio = m.user_settings?.bio || "I'm here as a mentor to walk alongside you through faith and life's challenges.";
+  const bio = m.user_settings?.bio || t('mentor_default_bio');
   const spec = (m.user_settings?.specialization || '').trim();
   const topics = (m.topics && m.topics.length)
     ? m.topics.map(x => ({ id: x.id, name: x.name }))
@@ -3640,6 +3642,7 @@ function openMentorSheet(id) {
 }
 
 function closeMentorSheet() {
+  openMentorSheetId = null;
   $('mentorSheet')?.classList.remove('open');
 }
 
@@ -3801,16 +3804,20 @@ function renderMentorsList() {
 async function loadMentorTopics() {
   try {
     mentorTopicsCache = await apiFetch('/api/topics') || [];
-    const row = $('mentorTopicChips');
-    if (!row) return;
-    const chip = (id, label) =>
-      `<button type="button" class="mc-chip" data-id="${escapeHtml(String(id))}" data-name="${escapeHtml(id === '' ? '' : label)}"
-        onclick="selectMentorMainTopic(this.dataset.id, this.dataset.name)">${escapeHtml(label)}</button>`;
-    row.innerHTML = chip('', t('mentor_chip_all')) + mentorTopicsCache.map(tp => chip(tp.id, tp.name)).join('');
-    syncMentorTopicChips();
+    renderMentorTopicChips();
   } catch (e) {
     console.error('Failed to load topics for filter:', e);
   }
+}
+
+function renderMentorTopicChips() {
+  const row = $('mentorTopicChips');
+  if (!row) return;
+  const chip = (id, label) =>
+    `<button type="button" class="mc-chip" data-id="${escapeHtml(String(id))}" data-name="${escapeHtml(id === '' ? '' : label)}"
+      onclick="selectMentorMainTopic(this.dataset.id, this.dataset.name)">${escapeHtml(label)}</button>`;
+  row.innerHTML = chip('', t('mentor_chip_all')) + (mentorTopicsCache || []).map(tp => chip(tp.id, tp.name)).join('');
+  syncMentorTopicChips();
 }
 
 function syncMentorTopicChips() {
@@ -6540,6 +6547,7 @@ function changeLanguage(lang) {
   currentLanguage = lang;
   localStorage.setItem('language', lang);
   applyLanguage();
+  refreshLanguageContent();
   loadDashboard();
 }
 
@@ -6549,7 +6557,34 @@ function toggleLanguage() {
   currentLanguage = next;
   localStorage.setItem('language', next);
   applyLanguage();
+  refreshLanguageContent();
   loadDashboard();
+}
+
+// applyLanguage() only retranslates the static labels in index.html. Anything
+// the JS draws itself (mentor cards, chips, lists) was left in the old language
+// until you left the page and came back. Draw the page you are on again, from
+// what is already loaded where we can, so the switch is instant.
+function refreshLanguageContent() {
+  try {
+    switch (currentPage) {
+      case 'mentors':
+        renderMentorTopicChips();
+        updateFilterActiveIndicators();
+        renderActiveMentorCard();
+        renderMentorsList();
+        if (openMentorSheetId != null && $('mentorSheet')?.classList.contains('open')) openMentorSheet(openMentorSheetId);
+        break;
+      case 'sessions': loadSessions(); break;
+      case 'requests': loadRequests(); break;
+      case 'support': loadUserTickets(); break;
+      case 'journal': loadJournalEntries(); break;
+      case 'my-mentees': flushMentorNotes(); loadMyMentees(); break;
+      // chat and settings hold text being typed, so they are left alone.
+    }
+  } catch (e) {
+    console.error('[i18n] could not redraw the page after switching language:', e);
+  }
 }
 
 // Kept for backward compatibility with any existing inline onclick handlers.
