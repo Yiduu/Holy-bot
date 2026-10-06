@@ -3375,15 +3375,13 @@ function renderModernRating(rating, count) {
     const fill = n <= r ? 'var(--gold-light, #F0D9A6)' : 'rgba(255,255,255,0.14)';
     svgs += `<svg width="12" height="12" viewBox="0 0 24 24" fill="${fill}" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
   }
-  // Stars and score stay together; the review count sits on its own line below
-  // so it can never wrap into the pill on narrow phones.
+  // One horizontal line: stars, score, review count. Never wraps (the count
+  // is the part that shortens with an ellipsis on a very narrow card).
   return `
-    <div class="mentor-rating-block">
-      <div class="mentor-stats-row">
-        <div class="mentor-stats-stars">${svgs}</div>
-        <span class="mentor-rating-val">${Number(rating).toFixed(1)}</span>
-      </div>
-      <span class="mentor-reviews-count">${count === 1 ? t('reviews_count_one') : t('reviews_count', { n: count })}</span>
+    <div class="mentor-stats-row">
+      <div class="mentor-stats-stars">${svgs}</div>
+      <span class="mentor-rating-val">${Number(rating).toFixed(1)}</span>
+      <span class="mentor-reviews-count"><span class="rc-full">${count === 1 ? t('reviews_count_one') : t('reviews_count', { n: count })}</span><span class="rc-short">(${count})</span></span>
     </div>`;
 }
 

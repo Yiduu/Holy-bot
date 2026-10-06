@@ -85,8 +85,9 @@ const wait = (id, user, t) => db.mentor_waitlist.push({ id, mentor_id: 1, user_i
   const ctx = new Function('t', 'escapeHtml', `${grab('renderModernRating')}\n${grab('mentorSubLine')}\nreturn { renderModernRating, mentorSubLine };`)(
     (k, v) => (k === 'reviews_count' ? `${v.n} reviews` : k === 'reviews_count_one' ? '1 review' : k), x => String(x).replace(/</g, '&lt;'));
   const html = ctx.renderModernRating(4.6, 12);
-  assert.ok(/mentor-rating-block/.test(html) && html.includes('12 reviews') && !html.includes('(12')); ok('rating: "12 reviews" on its own line under the stars (no brackets)');
-  assert.ok(html.indexOf('mentor-reviews-count') > html.indexOf('mentor-stats-row') && /<\/div>\s*<span class="mentor-reviews-count">/.test(html)); ok('review count sits after (below) the stars pill, outside it');
+  assert.ok(html.includes('<span class="rc-full">12 reviews</span>') && html.includes('<span class="rc-short">(12)</span>')); ok('rating shows "12 reviews" (no brackets)');
+  const row = html.match(/<div class="mentor-stats-row">([\s\S]*)<\/div>\s*$/)[1];
+  assert.ok(row.includes('mentor-stats-stars') && row.includes('mentor-rating-val') && row.includes('mentor-reviews-count') && !html.includes('mentor-rating-block')); ok('stars, score and review count are in ONE horizontal row');
   assert.ok(ctx.renderModernRating(5, 1).includes('1 review')); ok('singular "1 review"');
   assert.equal(ctx.mentorSubLine({ user_settings: { specialization: 'Marriage <b>' }, topics: [{ id: 1, name: 'Grief' }, { id: 2, name: 'Faith' }] }), '<div class="mc-sub">Marriage &lt;b></div>'); ok('card shows specialization only; topics are gone from the card');
   assert.equal(ctx.mentorSubLine({ user_settings: {}, topics: [{ id: 1, name: 'Grief' }] }), ''); ok('no specialization → no sub line (topics stay in the full profile)');
