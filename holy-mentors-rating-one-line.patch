@@ -1,0 +1,100 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 8cb5fab..646787a 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -3375,15 +3375,13 @@ function renderModernRating(rating, count) {
+     const fill = n <= r ? 'var(--gold-light, #F0D9A6)' : 'rgba(255,255,255,0.14)';
+     svgs += `<svg width="12" height="12" viewBox="0 0 24 24" fill="${fill}" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+   }
+-  // Stars and score stay together; the review count sits on its own line below
+-  // so it can never wrap into the pill on narrow phones.
++  // One horizontal line: stars, score, review count. Never wraps (the count
++  // is the part that shortens with an ellipsis on a very narrow card).
+   return `
+-    <div class="mentor-rating-block">
+-      <div class="mentor-stats-row">
+-        <div class="mentor-stats-stars">${svgs}</div>
+-        <span class="mentor-rating-val">${Number(rating).toFixed(1)}</span>
+-      </div>
+-      <span class="mentor-reviews-count">${count === 1 ? t('reviews_count_one') : t('reviews_count', { n: count })}</span>
++    <div class="mentor-stats-row">
++      <div class="mentor-stats-stars">${svgs}</div>
++      <span class="mentor-rating-val">${Number(rating).toFixed(1)}</span>
++      <span class="mentor-reviews-count"><span class="rc-full">${count === 1 ? t('reviews_count_one') : t('reviews_count', { n: count })}</span><span class="rc-short">(${count})</span></span>
+     </div>`;
+ }
+ 
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 9e1820d..3e2889f 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -2791,7 +2791,12 @@ textarea.form-control {
+   border: 1px solid rgba(201, 168, 76, 0.2);
+   font-size: 0.72rem;
+   width: fit-content;
++  max-width: 100%;
++  flex-wrap: nowrap;
++  white-space: nowrap;
+ }
++.mentor-stats-row > * { flex: none; }
++.mentor-reviews-count .rc-short { display: none; }
+ 
+ [data-theme="light"] .mentor-stats-row {
+   background: rgba(201, 168, 76, 0.12);
+@@ -2813,12 +2818,14 @@ textarea.form-control {
+   color: #7A5812;
+ }
+ 
+-.mentor-rating-block { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+ .mentor-reviews-count {
+   font-size: 0.7rem;
+   color: var(--text3);
+   white-space: nowrap;
+-  padding-left: 2px;
++  flex: 0 1 auto !important;
++  min-width: 0;
++  overflow: hidden;
++  text-overflow: ellipsis;
+ }
+ 
+ .no-rating {
+@@ -10543,8 +10550,21 @@ body.in-call .fab-menu { display: none !important; }
+ .mc-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+ .mc-name-lg { font-size: 17px; }
+ .mc-online { font-size: 12px; color: var(--text2); margin-top: 2px; }
+-.mc-main .mentor-rating-block { margin-top: 2px; }
+-.mc-main .mentor-stats-row { margin-top: 0; }
++.mc-main .mentor-stats-row { margin-top: 2px; }
++/* Small phones: tighter stars/pill/icons so the review count stays readable on the same line */
++@media (max-width: 380px) {
++  .mc-main .mentor-stats-row { gap: 4px; padding: 2px 6px; }
++  .mc-main .mentor-stats-stars { gap: 1px; }
++  .mc-main .mentor-stats-stars svg { width: 10px; height: 10px; }
++  .mc-main .mentor-reviews-count { font-size: 0.66rem; }
++  .mc-top { gap: 10px; }
++  .mc-icon-btn { width: 30px; height: 30px; }
++}
++/* Very small phones: just "(124)" so the count is never cut off */
++@media (max-width: 340px) {
++  .mc-main .mentor-reviews-count .rc-full { display: none; }
++  .mc-main .mentor-reviews-count .rc-short { display: inline; }
++}
+ .mc-icons { display: flex; gap: 2px; margin: -6px -6px 0 0; }
+ .mc-icon-btn { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; color: var(--text3); background: none; border: 0; }
+ .mc-icon-btn.saved { color: var(--gold); }
+diff --git a/tests/waitlist.test.js b/tests/waitlist.test.js
+index facdb93..930de2b 100644
+--- a/tests/waitlist.test.js
++++ b/tests/waitlist.test.js
+@@ -85,8 +85,9 @@ const wait = (id, user, t) => db.mentor_waitlist.push({ id, mentor_id: 1, user_i
+   const ctx = new Function('t', 'escapeHtml', `${grab('renderModernRating')}\n${grab('mentorSubLine')}\nreturn { renderModernRating, mentorSubLine };`)(
+     (k, v) => (k === 'reviews_count' ? `${v.n} reviews` : k === 'reviews_count_one' ? '1 review' : k), x => String(x).replace(/</g, '&lt;'));
+   const html = ctx.renderModernRating(4.6, 12);
+-  assert.ok(/mentor-rating-block/.test(html) && html.includes('12 reviews') && !html.includes('(12')); ok('rating: "12 reviews" on its own line under the stars (no brackets)');
+-  assert.ok(html.indexOf('mentor-reviews-count') > html.indexOf('mentor-stats-row') && /<\/div>\s*<span class="mentor-reviews-count">/.test(html)); ok('review count sits after (below) the stars pill, outside it');
++  assert.ok(html.includes('<span class="rc-full">12 reviews</span>') && html.includes('<span class="rc-short">(12)</span>')); ok('rating shows "12 reviews" (no brackets)');
++  const row = html.match(/<div class="mentor-stats-row">([\s\S]*)<\/div>\s*$/)[1];
++  assert.ok(row.includes('mentor-stats-stars') && row.includes('mentor-rating-val') && row.includes('mentor-reviews-count') && !html.includes('mentor-rating-block')); ok('stars, score and review count are in ONE horizontal row');
+   assert.ok(ctx.renderModernRating(5, 1).includes('1 review')); ok('singular "1 review"');
+   assert.equal(ctx.mentorSubLine({ user_settings: { specialization: 'Marriage <b>' }, topics: [{ id: 1, name: 'Grief' }, { id: 2, name: 'Faith' }] }), '<div class="mc-sub">Marriage &lt;b></div>'); ok('card shows specialization only; topics are gone from the card');
+   assert.equal(ctx.mentorSubLine({ user_settings: {}, topics: [{ id: 1, name: 'Grief' }] }), ''); ok('no specialization → no sub line (topics stay in the full profile)');

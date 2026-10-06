@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { closeAssignment, recordMentorRating } = require('../utils');
+const { closeAssignment, recordMentorRating, notifyMentorWaitlist } = require('../utils');
 
 // ─── Stats cache (1 hour TTL) ─────────────────────────────────────────────────
 let statsCache = null;
@@ -125,6 +125,12 @@ module.exports = function userRoutes(supabase, requireAuth) {
     const results = await Promise.all(promises);
     const settingsResult = results[0];
     if (settingsResult.error) return res.status(500).json({ error: settingsResult.error.message });
+
+    // A higher mentee limit, or requests switched back on, can free a spot:
+    // tell anyone waiting for this mentor (it checks the free spots itself).
+    if (req.body.max_mentees !== undefined || req.body.accepting_requests !== undefined) {
+      notifyMentorWaitlist(supabase, id).catch(() => {});
+    }
 
     const merged = {
       ...settingsResult.data,

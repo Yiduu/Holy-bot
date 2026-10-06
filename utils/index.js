@@ -117,18 +117,32 @@ async function closeAssignment(supabase, assignmentId, { reason = null, endedBy 
   return error || null;
 }
 
+const APP_URL = process.env.MINI_APP_URL || 'https://holy-bot-etvy.onrender.com';
+
+// Legacy Telegram Markdown breaks on a lone _ * ` or [ - and anonymous IDs
+// like "Shepherd_1" contain underscores, so an unescaped name made Telegram
+// reject the whole message and nobody on the waitlist was ever told.
+const mdSafe = (str) => String(str ?? '').replace(/([_*`\[])/g, '\\$1');
+
 /**
- * After a mentorship ends: if the mentor now has free spots, message the
- * oldest people on their waitlist (one per free spot) and drop them from it.
- * Best-effort and never throws - ending a mentorship must not depend on it.
+ * When a mentor has free spots, message the oldest people on their waitlist
+ * (one per free spot) and take them off it. Called whenever a spot can open:
+ * a mentorship ends, the mentor raises their limit, or turns requests back on.
+ *
+ * Someone whose message could not be delivered stays on the list for next
+ * time; someone who has found a mentor in the meantime is dropped quietly.
+ * Best-effort and never throws, so the action that triggered it never fails.
+ *
+ * @param {object} [deps] test hook: { safeSend, getUserLang }
+ * @returns {Promise<number>} how many people were notified
  */
-async function notifyMentorWaitlist(supabase, mentorId) {
+async function notifyMentorWaitlist(supabase, mentorId, deps = {}) {
   try {
     const { data: mentor } = await supabase
       .from('users')
       .select('accepting_requests, anonymous_id, user_settings(display_name, max_mentees)')
       .eq('telegram_id', mentorId).single();
-    if (!mentor || mentor.accepting_requests === false) return;
+    if (!mentor || mentor.accepting_requests === false) return 0;
 
     const max = mentor.user_settings?.max_mentees || parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
     const { count } = await supabase
@@ -136,25 +150,38 @@ async function notifyMentorWaitlist(supabase, mentorId) {
       .select('id', { count: 'exact', head: true })
       .eq('mentor_id', mentorId).eq('is_active', true);
     const free = max - (count || 0);
-    if (free <= 0) return;
+    if (free <= 0) return 0;
 
     const { data: waiting } = await supabase
       .from('mentor_waitlist').select('id, user_id')
-      .eq('mentor_id', mentorId).order('created_at', { ascending: true }).limit(free);
-    if (!waiting || !waiting.length) return;
+      .eq('mentor_id', mentorId).order('created_at', { ascending: true }).limit(50);
+    if (!waiting || !waiting.length) return 0;
 
-    const { safeSend, getUserLang } = require('../bot');
-    const name = mentor.user_settings?.display_name || mentor.anonymous_id || 'A mentor';
+    const { data: busy } = await supabase
+      .from('mentorship_assignments').select('user_id')
+      .eq('is_active', true).in('user_id', waiting.map(w => w.user_id));
+    const hasMentor = new Set((busy || []).map(r => String(r.user_id)));
+
+    const { safeSend, getUserLang } = deps.safeSend ? deps : require('../bot');
+    const name = mdSafe(mentor.user_settings?.display_name || mentor.anonymous_id || 'A mentor');
+    const finished = [];
+    let sent = 0;
     for (const w of waiting) {
+      if (hasMentor.has(String(w.user_id))) { finished.push(w.id); continue; }
+      if (sent >= free) break;
       const lang = await getUserLang(w.user_id).catch(() => 'en');
-      const text = lang === 'am'
-        ? `${name} ክፍት ቦታ አለው። ጥያቄ ለመላክ በHoly ውስጥ የአማካሪዎች ገጽን ይክፈቱ።`
-        : `${name} has a spot open. Open the Mentors page in Holy to send a request.`;
-      await safeSend(w.user_id, text);
+      const am = lang === 'am';
+      const ok = await safeSend(w.user_id,
+        am ? `${name} ክፍት ቦታ አለው። ጥያቄ ለመላክ ከታች ያለውን ቁልፍ ይጫኑ።`
+           : `${name} has a spot open now. Tap the button below to see their profile and send a request.`,
+        { reply_markup: { inline_keyboard: [[{ text: am ? 'አማካሪዎችን ክፈት' : 'Open mentors', web_app: { url: `${APP_URL}?start=mentors` } }]] } });
+      if (ok) { sent++; finished.push(w.id); }
     }
-    await supabase.from('mentor_waitlist').delete().in('id', waiting.map(w => w.id));
+    if (finished.length) await supabase.from('mentor_waitlist').delete().in('id', finished);
+    return sent;
   } catch (e) {
     console.error('[waitlist] notify failed (non-fatal):', e.message);
+    return 0;
   }
 }
 
