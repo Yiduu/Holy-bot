@@ -1083,11 +1083,14 @@ async function cmStartRecording(e) {
   // never starts a recording: show the hint and drop it. (Only a touch that the
   // system took over, e.g. the permission sheet, sets autoLock via pointercancel.)
   if (!cmRec.held && !cmRec.autoLock) {
+    const permissionSheet = !!cmRec.touchTaken;
     cmReleaseAudioStream(false);
     cmRec = cmNewRec();
     cmSwipes(true);
     updateComposerMode();
-    showToast(cmT('rec_hold_hint', 'Hold the mic button to record, release to send.'));
+    showToast(permissionSheet
+      ? cmT('rec_mic_ready', 'Microphone allowed. Now hold the mic button to record.')
+      : cmT('rec_hold_hint', 'Hold the mic button to record, release to send.'));
     return;
   }
 
@@ -1344,7 +1347,10 @@ function cmInitComposer() {
     const d = down; down = null;
     if (d.mode !== 'mic') return;
     cmRec.held = false;
-    if (cmRec.state === 'starting') cmRec.autoLock = true;
+    // The touch was taken while the microphone was still opening (Telegram's / Android's
+    // permission sheet). Like Telegram: grant the permission, record nothing, and let the
+    // person press again. Only a touch lost mid-recording locks it so nothing is lost.
+    if (cmRec.state === 'starting') cmRec.touchTaken = true;
     else if (cmRec.state === 'recording') cmLockRecording();
   };
   btn.addEventListener('pointerdown', (e) => {

@@ -151,18 +151,21 @@ function boot({ micDelayMs = 0 } = {}) {
   // 12 — Telegram's swipe-to-close is switched off while holding and back on afterwards
   assert.ok(log.swipes.includes('off') && log.swipes[log.swipes.length - 1] === 'on'); ok('Telegram vertical swipe disabled during a hold, restored after');
 
-  // 13 — first-ever press: the permission sheet takes ~700 ms and eats the touch
+  // 13 — first-ever press: the permission sheet takes ~700 ms and eats the touch.
+  //      Like Telegram: nothing is recorded, a hint says so, and the NEXT press records at once without asking again.
   ({ w, log } = boot({ micDelayMs: 700 }));
   await sleep(50);
   const btn2 = w.document.getElementById('chatSendBtn'), bar2 = w.document.getElementById('recordBar');
   const f2 = (type, x, y, id) => { const e = new w.MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 }); Object.defineProperty(e, 'pointerId', { value: id }); btn2.dispatchEvent(e); };
   f2('pointerdown', 300, 500, 1); await sleep(100); f2('pointercancel', 300, 500, 1);   // touch swallowed by the sheet
   await sleep(900);
-  assert.ok(!bar2.classList.contains('hidden'), 'recording kept');
-  assert.ok(!w.document.getElementById('recTrash').classList.contains('hidden'), 'and locked, so nothing is lost');
+  assert.ok(bar2.classList.contains('hidden'), 'no recording started by itself');
   assert.equal(log.mic.requests, 1); assert.equal(log.added.length, 0);
-  w.document.getElementById('recTrash').click(); await sleep(80);
-  ok('first press eaten by the permission sheet → kept as a locked recording (no second press needed)');
+  assert.ok(log.toasts.some(m => /rec_mic_ready|Microphone allowed/.test(m)), 'tells the person to press again');
+  f2('pointerdown', 300, 500, 2); await sleep(60);
+  assert.ok(!bar2.classList.contains('hidden'), 'second press records'); assert.equal(log.mic.requests, 1, 'permission not asked again');
+  await sleep(1100); f2('pointerup', 300, 500, 2); await sleep(80); assert.equal(log.added.length, 1);
+  ok('permission sheet eats the first press → no auto-recording; next press records and sends');
 
   // 14 — a TAP while the microphone is slow to open (>450 ms) must not turn into a locked recording
   ({ w, log } = boot({ micDelayMs: 700 }));
