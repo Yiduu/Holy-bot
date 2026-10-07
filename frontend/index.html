@@ -14,7 +14,8 @@
   <!-- Non-blocking fonts (text shows in fallback fonts, then swaps) -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" /></noscript>
-  <link rel="stylesheet" href="styles.css?v=2.1" />
+  <link rel="stylesheet" href="styles.css?v=2.2" />
+  <link rel="stylesheet" href="chat-media.css?v=1.0" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
@@ -899,24 +900,110 @@
           </div>
           <button class="edit-cancel" onclick="cancelEditMessage()" aria-label="Cancel edit">✖</button>
         </div>
-        <div class="chat-input-wrapper">
-          <textarea id="chatInput" class="chat-input" rows="1" placeholder="Type a message…"
-            data-i18n="chat_placeholder" oninput="handleChatTyping()"
-            onkeydown="handleChatInputKeydown(event)"></textarea>
-          <button class="emoji-btn" onclick="toggleEmojiPicker()">😊</button>
-          <button id="chatSendBtn" class="chat-send-btn" onclick="sendMessage()">
-            <svg id="chatSendIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        <div id="chatComposer" class="chat-input-wrapper">
+          <!-- Telegram-style field: emoji on the left, text, attach on the right, all in ONE pill -->
+          <div id="composerField" class="composer-field">
+            <button type="button" class="emoji-btn composer-icon-btn" onclick="toggleEmojiPicker()"
+              onpointerdown="event.preventDefault()" aria-label="Emoji">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9.2" />
+                <path d="M8.2 14.2c.9 1.3 2.3 2 3.8 2s2.9-.7 3.8-2" />
+                <circle cx="9" cy="9.9" r=".6" fill="currentColor" />
+                <circle cx="15" cy="9.9" r=".6" fill="currentColor" />
+              </svg>
+            </button>
+            <textarea id="chatInput" class="chat-input" rows="1" placeholder="Type a message…"
+              data-i18n="chat_placeholder" oninput="handleChatTyping()"
+              onkeydown="handleChatInputKeydown(event)"></textarea>
+            <button type="button" id="attachBtn" class="attach-btn composer-icon-btn" onclick="toggleAttachMenu()"
+              onpointerdown="event.preventDefault()" aria-label="Attach" aria-haspopup="menu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                stroke-linejoin="round" aria-hidden="true">
+                <path d="M20.2 11.6l-7.6 7.6a5 5 0 0 1-7.07-7.07l8.13-8.13a3.33 3.33 0 0 1 4.71 4.71l-8.13 8.13a1.67 1.67 0 0 1-2.36-2.36l7.42-7.42" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Replaces the field (same height) while a voice message is being recorded -->
+          <div id="recordBar" class="cm-rec hidden" role="status" aria-live="polite">
+            <button type="button" id="recTrash" class="cm-rec-trash hidden" onclick="cancelRecording()"
+              aria-label="Delete recording">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+                stroke-linejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                <path d="M10 11v6M14 11v6M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              </svg>
+            </button>
+            <span class="cm-rec-dot" aria-hidden="true"></span>
+            <span id="recTime" class="cm-rec-time">0:00,0</span>
+            <canvas id="recWave" class="cm-rec-wave hidden" aria-hidden="true"></canvas>
+            <div id="recHint" class="cm-rec-hint">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" aria-hidden="true">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+              <span id="recHintText" data-i18n="rec_slide_cancel">Slide to cancel</span>
+            </div>
+          </div>
+
+          <!-- One round button: mic when the box is empty, send when there is text, check while editing -->
+          <button id="chatSendBtn" type="button" class="chat-send-btn" data-mode="mic" aria-label="Record voice message">
+            <svg id="chatMicIcon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="9" y="2.8" width="6" height="11.2" rx="3" />
+              <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.6 21h6.8" />
+            </svg>
+            <svg id="chatSendIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
               <line x1="22" y1="2" x2="11" y2="13" />
               <polygon points="22 2 15 22 11 13 2 9 22 2" />
             </svg>
-            <svg id="chatSendEditIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="hidden">
+            <svg id="chatSendEditIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
               <polyline points="20 6 9 17 4 12" />
             </svg>
           </button>
+
+          <!-- Slide-up-to-lock handle shown while the mic is held -->
+          <div id="recLock" class="cm-lock hidden" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+              stroke-linejoin="round">
+              <rect x="5" y="11" width="14" height="10" rx="2.2" />
+              <path id="recLockShackle" d="M8 11V8a4 4 0 0 1 8 0v3" />
+            </svg>
+            <svg class="cm-lock-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 15 12 9 18 15" />
+            </svg>
+          </div>
         </div>
-        <!-- Live character counter -->
+        <!-- Live character counter (only shown when close to the limit) -->
         <div id="charCounter" class="char-counter">0 / 2000</div>
         <div id="emojiPicker" class="emoji-picker hidden"></div>
+        <div id="attachMenu" class="cm-attach-menu hidden" role="menu">
+          <button type="button" role="menuitem" onclick="pickAttachment('media')">
+            <span class="cm-attach-ico cm-attach-ico--media">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+                stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="3" />
+                <circle cx="9" cy="10" r="1.7" />
+                <path d="M21 16l-5-5-8 8" />
+              </svg>
+            </span>
+            <span data-i18n="attach_photo_video">Photo or video</span>
+          </button>
+          <button type="button" role="menuitem" onclick="pickAttachment('file')">
+            <span class="cm-attach-ico cm-attach-ico--file">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"
+                stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 3 14 8 19 8" />
+              </svg>
+            </span>
+            <span data-i18n="attach_file">File</span>
+          </button>
+        </div>
+        <input type="file" id="attachInputMedia" accept="image/*,video/*" multiple hidden />
+        <input type="file" id="attachInputFile" multiple hidden />
       </div>
 
 
@@ -2212,7 +2299,8 @@
   </div>
 
   <script src="locales.js?v=1.5"></script>
-  <script src="app.js?v=2.6"></script>
+  <script src="app.js?v=2.7"></script>
+  <script src="chat-media.js?v=1.0"></script>
   <script src="session-room.js?v=1.4"></script>
 
   <script>

@@ -219,9 +219,14 @@ io.on('connection', (socket) => {
   // Legacy clients emitted 'auth'; identity is now taken from the handshake.
   socket.on('auth', () => { });
 
-  socket.on('typing', ({ to_id } = {}) => {
+  // `action` lets the peer's header read "recording voice message…" /
+  // "sending a file…" like Telegram; anything else is plain typing.
+  socket.on('typing', ({ to_id, action } = {}) => {
     if (to_id == null) return;
-    socket.to(`user:${to_id}`).emit('typing', { from_id: myId });
+    socket.to(`user:${to_id}`).emit('typing', {
+      from_id: myId,
+      action: action === 'voice' || action === 'upload' ? action : 'typing',
+    });
   });
 
   // Support ticket typing indicator — broadcast to everyone else (the ticket
@@ -319,7 +324,7 @@ app.use('/api/auth', require('./routes/auth')(supabase, requireAuth));
 app.use('/api/users', require('./routes/users')(supabase, requireAuth));
 app.use('/api/mentors', require('./routes/mentors')(supabase, requireAuth, io, onlineUsers));
 app.use('/api/sessions', require('./routes/sessions')(supabase, requireAuth, io, onlineUsers));
-app.use('/api/messages', require('./routes/messages')(supabase, requireAuth, io, onlineUsers));
+app.use('/api/messages', require('./routes/messages')(supabase, requireAuth, io, onlineUsers, bot));
 app.use('/api/admin', require('./routes/admin')(supabase, requireAuth, requireAdmin, io));
 app.use('/api/admin/mentor-control', require('./routes/mentor-control')(supabase, requireAuth, requireAdmin));
 app.use('/api/support', require('./routes/support')(supabase, requireAuth, io, onlineUsers));

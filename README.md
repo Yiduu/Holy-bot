@@ -21,6 +21,10 @@ thing from a dashboard in the Mini App.
 
 **Mini App (frontend/)**
 - Onboarding and profile setup
+- Chat with Telegram-style **voice messages** (hold the mic to record, slide
+  left to cancel, slide up to lock) and **file / photo / video attachments**
+  (paperclip menu, preview with caption, upload progress, retry). Files are
+  stored on Telegram, in the chat of `ADMIN_TELEGRAM_ID` — see `MIGRATIONS.md`
 - 1-on-1 and group video calls via Jitsi Meet
 - Bible streak tracking and personal journaling
 - Support ticket system with threaded replies
