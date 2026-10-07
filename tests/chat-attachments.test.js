@@ -260,6 +260,19 @@ async function clientTests() {
   assert.ok(run("attachmentPreviewHtml({file_type:'document', file_name:'<b>x</b>.pdf'})").includes('&lt;b&gt;x&lt;/b&gt;.pdf'));
   ok('reply banner / quote label: SVG mic icon (no emoji), file names escaped');
 
+  // waveform timeline seeking & dragging
+  const vBox = w.document.createElement('div');
+  vBox.innerHTML = run("renderFileAttachment({id:'v9',file_type:'voice',file_id:'V9',duration:20})");
+  const vEl = vBox.firstElementChild;
+  w.document.body.appendChild(vEl);
+  run("cmPaintWaveProgress(document.querySelector('.cm-voice[data-mid=\"v9\"]'), 0.5)");
+  const barsOn = vEl.querySelectorAll('.cm-wave i.on').length;
+  const totalBars = vEl.querySelectorAll('.cm-wave i').length;
+  assert.equal(barsOn, Math.round(totalBars * 0.5));
+  assert.equal(vEl.querySelector('.cm-voice-time').textContent, '0:10');
+  ok('voice timeline drag / seek updates waveform bars and time display');
+  vEl.remove();
+
   // composer mode: mic ⇄ send ⇄ edit
   const btn = w.document.getElementById('chatSendBtn'); const input = w.document.getElementById('chatInput');
   run('updateComposerMode()'); assert.equal(btn.dataset.mode, 'mic');

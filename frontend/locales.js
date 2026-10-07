@@ -773,7 +773,7 @@ const I18N = {
     "status_offline": "መስመር ላይ አይደለም",
     "waitlist_joined": "በዝርዝሩ ላይ ተመዝግበዋል። ቦታ ሲከፈት እናሳውቅዎታለን።",
     "waitlist_left": "ከዝርዝሩ ተወግደዋል።",
-    "requests_paused_note": "አማካሪ ሲኖርዎት አዲስ ማመልከቻ ለጊዜው ቆሟል",
+    "requests_paused_note": "አማካሪ ሲኖርዎት አዲስ ማመልከቻ ለጊዜው ይቆሟል",
     "end_mentorship_title": "ከ{name} ጋር ያለውን አማካሪነት ማቋረጥ ይፈልጋሉ?",
     "end_mentorship_body": "የውይይት ታሪክዎ ይቆያል። ከዚያ በኋላ አዲስ አማካሪ መጠየቅ ይችላሉ።",
     "btn_keep_mentor": "አማካሪውን አቆይ",

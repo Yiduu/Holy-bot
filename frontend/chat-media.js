@@ -290,10 +290,23 @@ function hydratePhotoMessages(container) {
 
 /* ═══ Voice player (one at a time, like Telegram) ══════════════════════════ */
 const cmPlayer = { audio: null, el: null, fileId: null };
+const cmScrub = { active: false, target: null, el: null, box: null, startX: 0, dragged: false };
+
+function cmPaintWaveProgress(box, fraction) {
+  if (!box) return;
+  const p = Math.min(1, Math.max(0, fraction));
+  const bars = box.querySelectorAll('.cm-wave i');
+  const on = Math.round(p * bars.length);
+  bars.forEach((b, i) => b.classList.toggle('on', i < on));
+  const timeEl = box.querySelector('.cm-voice-time');
+  const totalDur = Number(box.dataset.duration) || 0;
+  if (timeEl && totalDur) timeEl.textContent = cmFmtDur(p * totalDur);
+}
 
 function cmPlayerPaint() {
   const { audio, el } = cmPlayer;
   if (!audio || !el || !el.isConnected) return;
+  if (cmScrub.active && cmScrub.target === 'voice' && cmScrub.box === el) return;
   const dur = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : Number(el.dataset.duration) || 0;
   const p = dur ? Math.min(1, audio.currentTime / dur) : 0;
   const bars = el.querySelectorAll('.cm-wave i');
@@ -315,6 +328,86 @@ function cmStopVoice() {
   if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load?.(); }
   cmPlayerReset(el);
   cmPlayer.audio = null; cmPlayer.el = null; cmPlayer.fileId = null;
+}
+
+function cmSeekVoice(box, fraction) {
+  const fileId = box?.dataset?.fileId;
+  if (!fileId) return;
+  const p = Math.min(1, Math.max(0, fraction));
+  cmPaintWaveProgress(box, p);
+
+  if (cmPlayer.audio && cmPlayer.fileId === fileId) {
+    if (cmPlayer.el !== box) { cmPlayerReset(cmPlayer.el); cmPlayer.el = box; }
+    const a = cmPlayer.audio;
+    const dur = isFinite(a.duration) && a.duration > 0 ? a.duration : (Number(box.dataset.duration) || 0);
+    if (dur) a.currentTime = p * dur;
+    if (a.paused) a.play().catch(() => { });
+  } else {
+    cmToggleVoice(box, p);
+  }
+}
+
+function cmSeekPreview(fraction) {
+  if (!cmRec.previewAudio) return;
+  const a = cmRec.previewAudio;
+  const p = Math.min(1, Math.max(0, fraction));
+  const dur = isFinite(a.duration) && a.duration > 0 ? a.duration : (cmRec.previewDuration || 1);
+  a.currentTime = p * dur;
+  cmDrawRecWave(p);
+  const timeEl = $('recTime');
+  if (timeEl) timeEl.textContent = cmFmtDur(a.currentTime);
+}
+
+function cmStartScrubVoice(e, wave) {
+  const box = wave.closest('.cm-voice');
+  if (!box || box.querySelector('.cm-ring')) return;
+  const r = wave.getBoundingClientRect();
+  const p = r.width ? Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) : 0;
+  cmScrub.active = true;
+  cmScrub.target = 'voice';
+  cmScrub.el = wave;
+  cmScrub.box = box;
+  cmScrub.startX = e.clientX;
+  cmScrub.dragged = false;
+  try { wave.setPointerCapture?.(e.pointerId); } catch { }
+  cmSeekVoice(box, p);
+}
+
+function cmStartScrubPreview(e, recWave) {
+  if (cmRec.state !== 'preview' || !cmRec.previewAudio) return;
+  const r = recWave.getBoundingClientRect();
+  const p = r.width ? Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) : 0;
+  cmScrub.active = true;
+  cmScrub.target = 'preview';
+  cmScrub.el = recWave;
+  cmScrub.box = null;
+  cmScrub.startX = e.clientX;
+  cmScrub.dragged = false;
+  try { recWave.setPointerCapture?.(e.pointerId); } catch { }
+  cmSeekPreview(p);
+}
+
+function cmMoveScrub(e) {
+  if (!cmScrub.active || !cmScrub.el) return;
+  const r = cmScrub.el.getBoundingClientRect();
+  const p = r.width ? Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) : 0;
+  if (Math.abs(e.clientX - cmScrub.startX) > 2) cmScrub.dragged = true;
+  if (cmScrub.target === 'voice' && cmScrub.box) {
+    cmSeekVoice(cmScrub.box, p);
+  } else if (cmScrub.target === 'preview') {
+    cmSeekPreview(p);
+  }
+}
+
+function cmEndScrub(e) {
+  if (!cmScrub.active) return;
+  if (cmScrub.el && e?.pointerId != null) {
+    try { cmScrub.el.releasePointerCapture?.(e.pointerId); } catch { }
+  }
+  cmScrub.active = false;
+  cmScrub.target = null;
+  cmScrub.el = null;
+  cmScrub.box = null;
 }
 
 async function cmToggleVoice(box, startAt) {
@@ -371,10 +464,12 @@ async function cmToggleVoice(box, startAt) {
     if (nextVoice && !nextVoice.querySelector('.cm-ring')) cmToggleVoice(nextVoice);   // skip one still uploading
   });
   if (startAt != null) {
-    a.addEventListener('loadedmetadata', () => {
+    const applyStart = () => {
       const dur = isFinite(a.duration) && a.duration > 0 ? a.duration : Number(box.dataset.duration) || 0;
       if (dur) a.currentTime = startAt * dur;
-    }, { once: true });
+    };
+    if (a.readyState >= 1) applyStart();
+    else a.addEventListener('loadedmetadata', applyStart, { once: true });
   }
   a.play().catch(() => { cmPlayerReset(box); });
   haptic('light');
@@ -485,6 +580,23 @@ async function cmFileTap(box) {
   }
 }
 
+/* Delegated pointer scrubbing for chat voice messages and recording preview */
+document.addEventListener('pointerdown', (e) => {
+  const wave = e.target.closest?.('.cm-wave');
+  if (wave && !wave.closest('.cm-voice')?.querySelector('.cm-ring')) {
+    cmStartScrubVoice(e, wave);
+    return;
+  }
+  const recWave = e.target.closest?.('#recWave, .cm-rec-wave');
+  if (recWave && cmRec.state === 'preview') {
+    cmStartScrubPreview(e, recWave);
+    return;
+  }
+});
+window.addEventListener('pointermove', cmMoveScrub, { passive: true });
+window.addEventListener('pointerup', cmEndScrub);
+window.addEventListener('pointercancel', cmEndScrub);
+
 /* One delegated listener for every attachment control in the chat. */
 document.addEventListener('click', (e) => {
   const root = e.target.closest?.('#chatMessages');
@@ -499,8 +611,10 @@ document.addEventListener('click', (e) => {
 
   const wave = e.target.closest('.cm-wave');
   if (wave && !wave.closest('.cm-voice')?.querySelector('.cm-ring')) {
-    const r = wave.getBoundingClientRect();
-    cmToggleVoice(wave.closest('.cm-voice'), Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)));
+    if (!cmScrub.dragged && !cmPlayer.audio) {
+      const r = wave.getBoundingClientRect();
+      cmSeekVoice(wave.closest('.cm-voice'), r.width ? Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) : 0);
+    }
     return;
   }
   const vbtn = e.target.closest('.cm-voice-btn');

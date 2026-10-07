@@ -242,6 +242,10 @@
   width: 100%;
   height: 28px;
   display: block;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: pointer;
 }
 
 .cm-rec-trash {
@@ -897,7 +901,9 @@
   gap: 2px;
   height: 26px;
   cursor: pointer;
-  touch-action: pan-y;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .cm-wave i {
