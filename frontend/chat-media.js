@@ -990,30 +990,36 @@ async function cmAcquireAudioStream() {
     liveTrack.enabled = true;
     return cmCachedStream;
   }
+  // Mono voice capture. echoCancellation is OFF on purpose: nothing plays while
+  // we record, and on Android it switches the mic to the "voice call" source,
+  // which is narrow-band and quiet. AGC + noise suppression stay on so quiet
+  // speakers are still audible.
   const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    audio: {
+      channelCount: { ideal: 1 },
+      sampleRate: { ideal: 48000 },
+      echoCancellation: false,
+      noiseSuppression: true,
+      autoGainControl: true,
+    }
   });
   cmCachedStream = stream;
   return stream;
 }
 
-function cmReleaseAudioStream(forceStop = false) {
+// Always STOP the tracks. Merely disabling them keeps the microphone open: the
+// green "mic in use" dot stays on and Android stays in capture mode, which also
+// makes playback quiet. Telegram remembers the permission, so re-opening the
+// mic on the next press does not ask again.
+function cmReleaseAudioStream() {
   if (!cmCachedStream) return;
-  if (forceStop) {
-    try { cmCachedStream.getTracks?.().forEach(tr => tr.stop()); } catch { }
-    cmCachedStream = null;
-  } else {
-    try {
-      (cmCachedStream.getAudioTracks?.() || cmCachedStream.getTracks?.() || []).forEach(tr => {
-        tr.enabled = false;
-      });
-    } catch { }
-  }
+  try { cmCachedStream.getTracks?.().forEach(tr => tr.stop()); } catch { }
+  cmCachedStream = null;
 }
 
 function cmTeardownRec(forceStop = false) {
   clearInterval(cmRec.timer);
-  cmReleaseAudioStream(forceStop);
+  cmReleaseAudioStream();
   try { cmRec.ctx?.close(); } catch { }
   if (cmRec.previewAudio) {
     try { cmRec.previewAudio.pause(); } catch { }
@@ -1053,7 +1059,7 @@ async function cmStartRecording(e) {
   }
 
   if (cmRec.aborted || cmRec.state !== 'starting') {          // cancelled while the microphone was starting
-    cmReleaseAudioStream(false);
+    cmReleaseAudioStream();
     cmRec = cmNewRec();
     cmSwipes(true);
     updateComposerMode();
@@ -1062,7 +1068,7 @@ async function cmStartRecording(e) {
   if (!cmRec.held && !cmRec.autoLock) {
     if (performance.now() - cmRec.t0 > 450) cmRec.autoLock = true;
     else {
-      cmReleaseAudioStream(false);
+      cmReleaseAudioStream();
       cmRec = cmNewRec();
       cmSwipes(true);
       updateComposerMode();
@@ -1073,15 +1079,21 @@ async function cmStartRecording(e) {
 
   try {
     const mime = cmPickRecMime();
-    const mr = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 32000 });
+    const mr = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: 64000 });
     cmRec.stream = stream;
     cmRec.mr = mr;
     cmRec.mime = mr.mimeType || mime || 'audio/webm';
     mr.ondataavailable = (ev) => { if (ev.data?.size) cmRec.chunks.push(ev.data); };
     mr.onerror = () => { cmCancelRecording(); showToast(cmT('rec_unavailable', 'Recording failed'), 'error'); };
     try {
+      // iOS WebKit can mute or garble a MediaRecorder when an AudioContext taps
+      // the same microphone stream, so the live level meter is skipped there
+      // (the waveform then falls back to the generated one).
+      const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       const AC = window.AudioContext || window.webkitAudioContext;
+      if (isIOS || !AC) throw new Error('no level meter');
       cmRec.ctx = new AC();
+      if (cmRec.ctx.state === 'suspended') cmRec.ctx.resume?.().catch?.(() => { });
       const src = cmRec.ctx.createMediaStreamSource(stream);
       cmRec.analyser = cmRec.ctx.createAnalyser();
       cmRec.analyser.fftSize = 256;
@@ -1099,7 +1111,7 @@ async function cmStartRecording(e) {
     if (cmRec.autoLock) cmLockRecording();
     else if (cmRec.last) cmMoveHold(cmRec.last);              // the finger may have slid while the mic was starting
   } catch {
-    cmReleaseAudioStream(false);
+    cmReleaseAudioStream();
     cmRec = cmNewRec();
     cmSwipes(true);
     cmShowNotice();
@@ -1109,7 +1121,7 @@ async function cmStartRecording(e) {
 function cmOnHidden() {
   if (document.hidden && cmRec.state === 'recording' && !cmRec.locked) cmCancelRecording();
 }
-window.addEventListener('pagehide', () => cmReleaseAudioStream(true));
+window.addEventListener('pagehide', () => cmReleaseAudioStream());
 
 function cmLockRecording() {
   if (cmRec.state !== 'recording' || cmRec.locked) return;
@@ -1133,10 +1145,10 @@ function cmStopToPreview() {
     return;
   }
   clearInterval(cmRec.timer);
-  cmReleaseAudioStream(false);
   cmRec.state = 'preview';
   const mr = cmRec.mr;
   const finishPreview = () => {
+    cmReleaseAudioStream();       // only after the recorder has flushed its tail
     const blob = new Blob(cmRec.chunks, { type: cmRec.mime });
     cmRec.previewBlob = blob;
     cmRec.previewDuration = Math.max(1, Math.round(seconds));

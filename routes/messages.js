@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const { normalizeVoice } = require('../utils/voice');
 
 // ─── Attachment uploads ───────────────────────────────────────────────────────
 // Telegram lets a bot UPLOAD up to 50 MB but only DOWNLOAD (getFile) up to
@@ -581,9 +582,27 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers, 
       const dedupeKey = safeClientId ? `${from_id}:${safeClientId}` : null;
 
       const pipeline = (async () => {
-        const sent = await pushToStorage(getBot(), storageChatId(), kind, file.path, {
-          fileName, mime, duration: clientDuration || undefined, caption: `chat-file ${from_id}>${to_id}`,
-        });
+        // Voice recordings are re-encoded to a loudness-normalised AAC .m4a so
+        // they are audible and playable everywhere (see utils/voice.js). On any
+        // failure the original recording is sent unchanged.
+        let sendPath = file.path, sendName = fileName, sendMime = mime, converted = null;
+        if (kind === 'voice') {
+          converted = await normalizeVoice(file.path, {
+            onError: (e) => console.error('[POST /messages/upload] voice transcode failed, sending original:', e.message),
+          });
+          if (converted) {
+            sendPath = converted.path; sendMime = converted.mime;
+            sendName = `${path.basename(fileName, path.extname(fileName)) || 'voice'}.${converted.ext}`;
+          }
+        }
+        let sent;
+        try {
+          sent = await pushToStorage(getBot(), storageChatId(), kind, sendPath, {
+            fileName: sendName, mime: sendMime, duration: clientDuration || undefined, caption: `chat-file ${from_id}>${to_id}`,
+          });
+        } finally {
+          if (converted) fs.unlink(converted.path, () => { });
+        }
         const tg = describeSent(sent);
         if (!tg?.file_id) throw new Error('Telegram did not return a file');
 
@@ -595,10 +614,10 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers, 
           from_id, to_id, content: caption, is_flagged, parent_id,
           file_id: tg.file_id,
           file_type: fileType,
-          file_size: tg.file_size || file.size,
-          mime_type: mime,
+          file_size: tg.file_size || (converted ? converted.size : file.size),
+          mime_type: sendMime,
           duration: needsDuration ? (clientDuration || tg.duration || null) : null,
-          file_name: fileType === 'voice' || fileType === 'photo' ? null : fileName,
+          file_name: fileType === 'voice' || fileType === 'photo' ? null : sendName,
         };
         if (waveform && fileType === 'voice') row.waveform = waveform;
 

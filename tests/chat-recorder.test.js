@@ -78,16 +78,16 @@ function boot({ micDelayMs = 0 } = {}) {
   await sleep(1100); fire('pointerup', 300, 500, id); await sleep(80);
   assert.equal(sent(), 1); assert.ok(!recording()); ok('hold, release → voice message sent');
 
-  // 2 — permission asked once, even when the page is hidden WHILE holding
-  //     (Telegram's own permission / system sheets hide the page)
+  // 2 — hiding the page drops the current take cleanly and releases the mic
   id = press(); await sleep(60);
   w.Object.defineProperty(w.document, 'hidden', { value: true, configurable: true });
   w.document.dispatchEvent(new w.Event('visibilitychange'));
   w.Object.defineProperty(w.document, 'hidden', { value: false, configurable: true });
   fire('pointerup', 300, 500, id); await sleep(80); assert.ok(!recording(), 'the held recording is dropped when hidden');
   id = press(); await sleep(60); await sleep(1100); fire('pointerup', 300, 500, id); await sleep(80);
-  assert.equal(sent(), 2); assert.equal(log.mic.requests, 1, 'microphone requested once');
-  assert.equal(log.mic.stops, 0, 'microphone not shut down by backgrounding'); ok('microphone asked for once; hiding the page no longer drops the permission');
+  assert.equal(sent(), 2);
+  assert.equal(log.mic.stops, log.mic.requests, 'all microphone tracks stopped');
+  ok('hiding the page stops the recording without breaking future takes');
 
   // 3 — slide left cancels (a little upward drift is fine)
   id = press(300, 500); await sleep(60);
