@@ -955,9 +955,39 @@ function cmRecUi(on) {
   syncChatInputHeight();
 }
 
-function cmTeardownRec() {
+let cmCachedStream = null;
+
+async function cmAcquireAudioStream() {
+  const tracks = cmCachedStream?.getAudioTracks?.() || cmCachedStream?.getTracks?.() || [];
+  const liveTrack = tracks.find(tr => tr.readyState === 'live' || tr.readyState === undefined);
+  if (liveTrack && cmCachedStream) {
+    liveTrack.enabled = true;
+    return cmCachedStream;
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+  });
+  cmCachedStream = stream;
+  return stream;
+}
+
+function cmReleaseAudioStream(forceStop = false) {
+  if (!cmCachedStream) return;
+  if (forceStop) {
+    try { cmCachedStream.getTracks?.().forEach(tr => tr.stop()); } catch { }
+    cmCachedStream = null;
+  } else {
+    try {
+      (cmCachedStream.getAudioTracks?.() || cmCachedStream.getTracks?.() || []).forEach(tr => {
+        tr.enabled = false;
+      });
+    } catch { }
+  }
+}
+
+function cmTeardownRec(forceStop = false) {
   clearInterval(cmRec.timer);
-  try { cmRec.stream?.getTracks().forEach(tr => tr.stop()); } catch { }
+  cmReleaseAudioStream(forceStop);
   try { cmRec.ctx?.close(); } catch { }
   cmRec = cmNewRec();
   cmRecUi(false);
@@ -980,7 +1010,7 @@ async function cmStartRecording(e) {
 
   let stream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    stream = await cmAcquireAudioStream();
   } catch {
     cmRec = cmNewRec();
     cmShowNotice();
@@ -990,7 +1020,7 @@ async function cmStartRecording(e) {
   // The finger may have lifted (or the OS permission sheet swallowed the touch)
   // while the microphone was starting. Never record without a held finger.
   if (cmRec.aborted || cmRec.state !== 'starting' || !cmRec.held) {
-    stream.getTracks().forEach(tr => tr.stop());
+    cmReleaseAudioStream(false);
     cmRec = cmNewRec();
     updateComposerMode();
     showToast(cmT('rec_hold_hint', 'Hold the mic button to record, release to send.'));
@@ -1023,14 +1053,17 @@ async function cmStartRecording(e) {
     haptic('medium');
     document.addEventListener('visibilitychange', cmOnHidden);
   } catch {
-    stream.getTracks().forEach(tr => tr.stop());
+    cmReleaseAudioStream(true);
     cmRec = cmNewRec();
     cmShowNotice();
   }
 }
 
 function cmOnHidden() {
-  if (document.hidden && cmRec.state === 'recording' && !cmRec.locked) cmCancelRecording();
+  if (document.hidden) {
+    if (cmRec.state === 'recording' && !cmRec.locked) cmCancelRecording();
+    cmReleaseAudioStream(true);
+  }
 }
 
 function cmMoveHold(e) {

@@ -332,57 +332,67 @@ async function clientTests() {
   assert.equal(log.added.length, before2 + 1); assert.equal(log.added[before2].content, 'for you'); assert.ok(!w.document.querySelector('.cm-sheet')); ok('preview sheet: caption + Send queues the file and closes');
 
   // ── recorder gestures with a fake microphone ───────────────────────────
-  const mic = { stopped: 0, delay: 0 };
+  const mic = { calls: 0, stopped: 0, delay: 0 };
   w.__mic = mic;
   w.eval(`
     window.MediaRecorder = class { static isTypeSupported(m) { return m === 'audio/webm;codecs=opus'; }
       constructor(stream, o) { this.stream = stream; this.mimeType = o.mimeType; this.state = 'inactive'; }
       start() { this.state = 'recording'; } stop() { this.state = 'inactive'; this.ondataavailable && this.ondataavailable({ data: new Blob([new Uint8Array(400)]) }); this.onstop && this.onstop(); } };
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: async () => {
+      window.__mic.calls++;
       if (window.__mic.delay) await new Promise(r => setTimeout(r, window.__mic.delay));
-      return { getTracks: () => [{ stop: () => window.__mic.stopped++ }] }; } } });
+      const track = { enabled: true, readyState: 'live', stop: () => window.__mic.stopped++ };
+      return { getTracks: () => [track], getAudioTracks: () => [track] }; } } });
   `);
   const press = () => run("cmStartRecording({clientX:100,clientY:100,pointerId:1})");
   const sentBefore = () => log.added.length;
   const composer = w.document.getElementById('chatComposer');
 
-  let n0 = sentBefore(); mic.stopped = 0;
+  let n0 = sentBefore(); mic.stopped = 0; mic.calls = 0;
   await press();
   assert.equal(run('cmRec.state'), 'recording'); assert.ok(composer.classList.contains('is-recording')); assert.ok(!w.document.getElementById('recordBar').classList.contains('hidden'));
   assert.equal(run('cmRec.mime'), 'audio/webm;codecs=opus'); ok('hold → recording starts, the bar replaces the text field');
+  assert.equal(mic.calls, 1);
   run('cmRec.startedAt -= 3000; cmEndHold()'); await sleep(5);
   assert.equal(sentBefore(), n0 + 1); const vm = log.added[n0]; assert.equal(vm.file_type, 'voice'); assert.equal(vm.duration, 3); assert.equal(vm.mime_type, 'audio/webm'); assert.ok(/\.webm$/.test(vm.file_name || 'x.webm'));
-  assert.equal(mic.stopped, 1); assert.equal(run('cmRec.state'), 'idle'); assert.ok(!composer.classList.contains('is-recording')); ok('release → voice message sent, microphone released, bar gone');
+  assert.equal(run('cmRec.state'), 'idle'); assert.ok(!composer.classList.contains('is-recording')); ok('release → voice message sent, bar gone');
 
-  n0 = sentBefore(); mic.stopped = 0; log.toasts.length = 0;
-  await press(); run('cmEndHold()');                                   // released straight away
-  assert.equal(sentBefore(), n0); assert.equal(mic.stopped, 1); assert.ok(log.toasts.some(x => /Hold the mic/.test(x[0]))); ok('a quick tap sends nothing and explains "hold to record"');
+  // Second recording reuses the granted stream: permission / getUserMedia is not asked again
+  await press();
+  assert.equal(mic.calls, 1); ok('second recording reuses permission without calling getUserMedia again');
+  n0 = sentBefore(); log.toasts.length = 0;
+  run('cmEndHold()'); // released straight away
+  assert.equal(sentBefore(), n0); assert.ok(log.toasts.some(x => /Hold the mic/.test(x[0]))); ok('a quick tap sends nothing and explains "hold to record"');
 
-  n0 = sentBefore(); mic.stopped = 0;
+  n0 = sentBefore();
   await press(); run('cmRec.startedAt -= 3000; cmMoveHold({clientX: -50, clientY: 100})');
-  assert.equal(sentBefore(), n0); assert.equal(mic.stopped, 1); assert.equal(run('cmRec.state'), 'idle'); ok('slide left past the threshold → cancelled, nothing sent');
+  assert.equal(sentBefore(), n0); assert.equal(run('cmRec.state'), 'idle'); ok('slide left past the threshold → cancelled, nothing sent');
 
-  n0 = sentBefore(); mic.stopped = 0;
+  n0 = sentBefore();
   await press(); run('cmRec.startedAt -= 4000; cmMoveHold({clientX: 100, clientY: 10})');
   assert.equal(run('cmRec.locked'), true); assert.equal(btn.dataset.mode, 'send'); assert.ok(!w.document.getElementById('recTrash').classList.contains('hidden'));
   run('cmEndHold()'); assert.equal(run('cmRec.state'), 'recording'); ok('slide up → locked: finger can lift, the button becomes Send, trash appears');
   run('cmFinishRecording(true)'); await sleep(5);
-  assert.equal(sentBefore(), n0 + 1); assert.equal(mic.stopped, 1); ok('locked recording is sent by tapping Send');
+  assert.equal(sentBefore(), n0 + 1); ok('locked recording is sent by tapping Send');
 
-  n0 = sentBefore(); mic.stopped = 0;
+  n0 = sentBefore();
   await press(); run('cmRec.startedAt -= 4000; cmMoveHold({clientX: 100, clientY: 10})'); run('cancelRecording()');
-  assert.equal(sentBefore(), n0); assert.equal(mic.stopped, 1); assert.equal(run('cmRec.state'), 'idle'); ok('trash / leaving the chat cancels a locked recording and frees the microphone');
+  assert.equal(sentBefore(), n0); assert.equal(run('cmRec.state'), 'idle'); ok('trash / leaving the chat cancels a locked recording');
+
+  // page hidden completely releases hardware stream
+  run('cmReleaseAudioStream(true)');
+  assert.equal(mic.stopped, 1); ok('hardware stream is cleanly released on unload / background');
 
   // finger lifted (or OS permission sheet ate the touch) before the mic opened
-  n0 = sentBefore(); mic.stopped = 0; mic.delay = 30; log.toasts.length = 0;
+  n0 = sentBefore(); mic.delay = 30; log.toasts.length = 0;
   const pending = press(); run('cmEndHold()'); await pending; mic.delay = 0;
-  assert.equal(run('cmRec.state'), 'idle'); assert.equal(mic.stopped, 1); assert.equal(sentBefore(), n0); assert.ok(log.toasts.length); ok('released before the microphone opened → no recording, microphone closed');
+  assert.equal(run('cmRec.state'), 'idle'); assert.equal(sentBefore(), n0); assert.ok(log.toasts.length); ok('released before the microphone opened → no recording');
 
   // recording is refused while editing / without an open chat
   w.editingMessageId = 'x'; await press(); assert.equal(run('cmRec.state'), 'idle'); w.editingMessageId = null; ok('cannot record while editing a message');
 
   // recording without a microphone API shows the notice, never throws
-  w.eval("Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: undefined })");
+  w.eval("cmReleaseAudioStream(true); Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: undefined })");
   await run("cmStartRecording({clientX:0,clientY:0,pointerId:1})");
   assert.ok(w.document.querySelector('.cm-notice')); assert.equal(run('cmRec.state'), 'idle'); ok('no microphone support → friendly notice, recorder stays idle');
 }
