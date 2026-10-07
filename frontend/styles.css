@@ -4174,57 +4174,137 @@ textarea.form-control {
   border-color: var(--gold);
 }
 
-/* ── Emoji picker ───────────────────────────────────────────── */
+/* ── Emoji picker (Telegram style) ──────────────────────────── */
 .emoji-picker {
   position: absolute;
-  bottom: 52px;
-  right: 0;
+  bottom: calc(100% + 8px);
+  left: 12px;
+  width: min(340px, calc(100vw - 24px));
+  height: 330px;
   background: var(--bg2);
   border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 10px;
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
-  width: 228px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.32);
+  border-radius: 20px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
   z-index: 200;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: cmPop 0.16s var(--ease-premium);
+  transform-origin: bottom left;
 }
 
 .emoji-picker.hidden {
+  display: none !important;
+}
+
+.emoji-picker-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border-dim);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.emoji-picker-tabs::-webkit-scrollbar {
   display: none;
 }
 
-.emoji-picker button {
-  background: none;
-  border: none;
-  font-size: 1.35rem;
-  cursor: pointer;
-  padding: 5px;
-  border-radius: 10px;
-  transition: background 0.12s, transform 0.12s;
-  line-height: 1;
-}
-
-.emoji-picker button:hover {
-  background: var(--gold-dim);
-  transform: scale(1.2);
-}
-
-/* ── Premium SVG emoji (replaces relying on the OS's emoji font, which
-   renders inconsistently — or as blank boxes — on some Android WebViews
-   and older Telegram in-app browsers) ─────────────────────────────── */
-.emoji-picker button.premium-emoji {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.emoji-tab-btn {
+  flex: 0 0 34px;
   width: 34px;
   height: 34px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 1.15rem;
+  cursor: pointer;
+  color: var(--text3);
+  transition: background 0.12s, transform 0.12s, color 0.12s;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.emoji-picker button.premium-emoji svg {
-  display: block;
-  pointer-events: none;
+.emoji-tab-btn:hover {
+  background: rgba(201, 168, 76, 0.12);
+  transform: scale(1.08);
+}
+
+.emoji-tab-btn.active {
+  background: var(--gold-dim);
+  color: var(--gold);
+}
+
+.emoji-picker-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 6px 10px 14px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.emoji-section {
+  margin-bottom: 14px;
+}
+
+.emoji-section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text3);
+  margin: 6px 4px 8px;
+  position: sticky;
+  top: 0;
+  background: var(--bg2);
+  padding: 4px 0;
+  z-index: 2;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+
+.emoji-btn-item {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  font-size: 1.38rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: background 0.1s, transform 0.12s;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.emoji-btn-item:hover,
+.emoji-btn-item:active {
+  background: var(--gold-dim);
+  transform: scale(1.22);
+}
+
+@media (max-width: 360px) {
+  .emoji-grid {
+    grid-template-columns: repeat(7, 1fr);
+  }
+  .emoji-btn-item {
+    width: 32px;
+    height: 32px;
+    font-size: 1.25rem;
+  }
 }
 
 /* ── Premium "join session" video icon on buttons ─────────────────── */

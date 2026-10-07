@@ -5071,83 +5071,280 @@ function handleChatTyping() {
   syncChatInputHeight();
 }
 
-// ── Premium SVG emoji set ──────────────────────────────────────────
-// Native emoji glyphs render inconsistently (or as blank "tofu" boxes)
-// across older Android WebViews / Telegram's in-app browsers, which is
-// exactly the kind of "sometimes just fails" inconsistency we want to
-// eliminate from anything session/reaction related. These are custom,
-// theme-matched SVG icons instead of relying on the OS's emoji font —
-// they always look the same everywhere. The underlying value inserted
-// into the message is still the plain unicode character, so sending,
-// storing, searching and rendering messages elsewhere is unaffected.
-const PREMIUM_EMOJI_ICONS = [
-  { ch: '😊', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><circle cx="8.5" cy="10.5" r="1.1" fill="#2a2114"/><circle cx="15.5" cy="10.5" r="1.1" fill="#2a2114"/><path d="M7.5 14c1 1.6 2.9 2.4 4.5 2.4s3.5-.8 4.5-2.4" fill="none" stroke="#2a2114" stroke-width="1.4" stroke-linecap="round"/>' },
-  { ch: '😂', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><path d="M7 9.5c.6-1 1.6-1.5 2.5-1.2M17 9.5c-.6-1-1.6-1.5-2.5-1.2" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/><path d="M7.5 13.5c1.2 2 3 3 4.5 3s3.3-1 4.5-3" fill="none" stroke="#2a2114" stroke-width="1.6" stroke-linecap="round"/><path d="M5.5 12c-.8 1-1 2.4-.6 3.4M18.5 12c.8 1 1 2.4.6 3.4" stroke="#8fd3ff" stroke-width="1.3" stroke-linecap="round"/>' },
-  { ch: '🤣', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)" transform="rotate(-8 12 12)"/><path d="M6.5 9.8c.7-.9 1.7-1.2 2.4-.9M17.5 9.8c-.7-.9-1.7-1.2-2.4-.9" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/><path d="M7 13.5c1.3 2.2 3.1 3.2 5 3.2s3.7-1 5-3.2" fill="none" stroke="#2a2114" stroke-width="1.6" stroke-linecap="round"/><path d="M4.8 11.5c-.7 1.1-.8 2.6-.3 3.6M19.2 11.5c.7 1.1.8 2.6.3 3.6" stroke="#8fd3ff" stroke-width="1.3" stroke-linecap="round"/>' },
-  { ch: '❤️', svg: '<path d="M12 19.2 4.9 12.4a4.6 4.6 0 0 1 0-6.6 4.9 4.9 0 0 1 7 0l.1.1.1-.1a4.9 4.9 0 0 1 7 0 4.6 4.6 0 0 1 0 6.6z" fill="#E05C5C"/>' },
-  { ch: '👍', svg: '<path d="M9 21H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3m0 9V9m0 12 6.2-.1a2 2 0 0 0 1.9-1.4l2-6a1.5 1.5 0 0 0-1.4-2H14l.5-3.4A1.8 1.8 0 0 0 12.8 5c-.4 0-.7.2-.9.5L9 12" fill="none" stroke="var(--gold-light)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>' },
-  { ch: '🙏', svg: '<path d="M12 5v6m-4-4 4 4 4-4M8.5 12c-.5 3 .3 6 3.5 8 3.2-2 4-5 3.5-8" fill="none" stroke="var(--gold-light)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>' },
-  { ch: '🔥', svg: '<path d="M12 3c1 3-3 4-3 7.5A3.5 3.5 0 0 0 12 14a3.5 3.5 0 0 0 3-5.4c1.4 1 2 2.7 2 4.4a5 5 0 1 1-10 0C7 9.5 9.5 7.5 12 3z" fill="url(#fg)"/>' },
-  { ch: '😍', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><path d="M6.6 10.8a2 1.4 0 1 0 4 0 2 1.4 0 1 0-4 0Zm6.8 0a2 1.4 0 1 0 4 0 2 1.4 0 1 0-4 0Z" fill="#E05C5C"/><path d="M7.5 14c1 1.6 2.9 2.4 4.5 2.4s3.5-.8 4.5-2.4" fill="none" stroke="#2a2114" stroke-width="1.4" stroke-linecap="round"/>' },
-  { ch: '😭', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><path d="M8.5 10.8c0-1 .7-1.7 1.5-1.7s1.5.7 1.5 1.7M12.5 10.8c0-1 .7-1.7 1.5-1.7s1.5.7 1.5 1.7" fill="none" stroke="#2a2114" stroke-width="1.3"/><path d="M8 15.5c1.3-1.2 2.6-1.2 4-1.2s2.7 0 4 1.2" fill="none" stroke="#2a2114" stroke-width="1.4" stroke-linecap="round"/><path d="M7.8 12.5c-.6 1.6-.4 3 .3 4.3M16.2 12.5c.6 1.6.4 3-.3 4.3" stroke="#8fd3ff" stroke-width="1.4" stroke-linecap="round"/>' },
-  { ch: '😘', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><path d="M6.5 10.3c.6-.8 1.5-1 2.2-.7" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/><path d="M13.5 10.5c1.5-.6 3 .6 3 1.8-1 .4-2.3.2-3-1" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/><ellipse cx="8.6" cy="14.4" rx="1.3" ry="1" fill="#f4a3a3"/><path d="M7.5 14.5c1.4 1.6 3.2 2.1 4.5 2.1" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/>' },
-  { ch: '😎', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><rect x="5.8" y="9.6" width="5" height="3" rx="1" fill="#2a2114"/><rect x="13.2" y="9.6" width="5" height="3" rx="1" fill="#2a2114"/><path d="M10.8 11h2.4" stroke="#2a2114" stroke-width="1.2"/><path d="M8 15.4c1.2 1 2.6 1.4 4 1.4s2.8-.4 4-1.4" fill="none" stroke="#2a2114" stroke-width="1.4" stroke-linecap="round"/>' },
-  { ch: '😢', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><circle cx="8.5" cy="10.4" r="1" fill="#2a2114"/><circle cx="15.5" cy="10.4" r="1" fill="#2a2114"/><path d="M8.5 15.6c1-.8 2.2-1.1 3.5-1.1s2.5.3 3.5 1.1" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/><path d="M8.7 12.5c-.5 1.4-.3 2.7.3 3.9" stroke="#8fd3ff" stroke-width="1.3" stroke-linecap="round"/>' },
-  { ch: '😡', svg: '<circle cx="12" cy="12" r="9" fill="url(#ag)"/><path d="M7 9.6 9.4 10.7M17 9.6 14.6 10.7" stroke="#3a1414" stroke-width="1.4" stroke-linecap="round"/><path d="M8.3 16c1.1-1.3 2.4-1.8 3.7-1.8s2.6.5 3.7 1.8" fill="none" stroke="#3a1414" stroke-width="1.4" stroke-linecap="round"/>' },
-  { ch: '😱', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><circle cx="8.6" cy="10.6" r="1.5" fill="#2a2114"/><circle cx="15.4" cy="10.6" r="1.5" fill="#2a2114"/><ellipse cx="12" cy="15.6" rx="2.2" ry="2.6" fill="#2a2114"/><path d="M6.2 8.4c.7-1 1.7-1.3 2.6-1M17.8 8.4c-.7-1-1.7-1.3-2.6-1" fill="none" stroke="#2a2114" stroke-width="1.2" stroke-linecap="round"/>' },
-  { ch: '🤔', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><circle cx="9" cy="10.8" r="1" fill="#2a2114"/><path d="M13.5 10.6c1-.8 2.6-.6 3 .6M9 15c1.3.9 3.6 1 5.2-.6" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/><path d="M13 7.6c.8-.9 2.3-.9 2.6.4.2 1-.7 1.3-1.2 2" fill="none" stroke="var(--gold-light)" stroke-width="1.1" stroke-linecap="round"/>' },
-  { ch: '🙌', svg: '<path d="M7 10 5.6 6.4a1.1 1.1 0 1 1 2.1-.7L9 9M17 10l1.4-3.6a1.1 1.1 0 1 0-2.1-.7L15 9M7 10c0 3.5 2.2 6 5 6s5-2.5 5-6" fill="none" stroke="var(--gold-light)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' },
-  { ch: '👏', svg: '<path d="M9 6.5 15 12l-2.4 2.4a2 2 0 0 1-2.8 0L6.4 11c-.7-.7-.7-1.9 0-2.6.8-.7 2-.7 2.7.1zM15 12l3.2 3.2c1.2 1.2 1.2 3.1 0 4.3-1.2 1.2-3.1 1.2-4.3 0L10.5 16" fill="none" stroke="var(--gold-light)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' },
-  { ch: '🎉', svg: '<path d="M5 19 14 6l4 4L5 19Z" fill="url(#fg)"/><circle cx="17.5" cy="5" r="1" fill="var(--gold-light)"/><circle cx="20" cy="8.5" r="1" fill="var(--gold-light)"/><circle cx="6" cy="6" r=".9" fill="var(--gold-light)"/><path d="M10 4.5 10.7 6" stroke="var(--gold-light)" stroke-width="1.1" stroke-linecap="round"/>' },
-  { ch: '🌟', svg: '<path d="M12 3.5 14 9l5.8.3-4.5 3.7 1.6 5.5L12 15.6l-4.9 2.9 1.6-5.5-4.5-3.7L10 9z" fill="url(#fg)"/>' },
-  { ch: '💡', svg: '<path d="M9 15.5a5 5 0 1 1 6 0c-.6.5-1 1.2-1 2v.5H10v-.5c0-.8-.4-1.5-1-2Z" fill="url(#fg)"/><path d="M10 20.5h4" stroke="var(--gold-light)" stroke-width="1.4" stroke-linecap="round"/>' },
-  { ch: '💯', svg: '<text x="12" y="15.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="url(#fg)" font-family="Arial, sans-serif">100</text><path d="M4 18.5 20 5.5" stroke="var(--gold-light)" stroke-width="1.3" stroke-linecap="round"/>' },
-  { ch: '🤝', svg: '<path d="M3 12h4l3-2 2 1.5M21 12h-4l-3-2-2 1.5M9.5 11.5l-2 2a1.3 1.3 0 0 0 1.8 1.8l1-1M12.5 12l-2.3 2.3a1.3 1.3 0 0 0 1.8 1.8l1-1" fill="none" stroke="var(--gold-light)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' },
-  { ch: '🙄', svg: '<circle cx="12" cy="12" r="9" fill="url(#eg)"/><circle cx="8.7" cy="9" r="1.1" fill="#2a2114"/><circle cx="15.3" cy="9" r="1.1" fill="#2a2114"/><path d="M8 15c1.2-.9 2.6-1.2 4-1.2s2.8.3 4 1.2" fill="none" stroke="#2a2114" stroke-width="1.3" stroke-linecap="round"/>' },
-  { ch: '💔', svg: '<path d="M12 19.2 4.9 12.4a4.6 4.6 0 0 1 0-6.6 4.9 4.9 0 0 1 7 0l.1.1.1-.1a4.9 4.9 0 0 1 7 0 4.6 4.6 0 0 1 0 6.6z" fill="none" stroke="#E05C5C" stroke-width="1.4"/><path d="M12 6.5 10 11l3 1.5-2 5" stroke="#E05C5C" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>' },
+// ── Telegram-style Comprehensive Emoji Picker ─────────────────────────
+const EMOJI_CATEGORIES = [
+  {
+    id: 'smileys',
+    icon: '😊',
+    titleKey: 'emoji_smileys',
+    title: 'Smileys & Emotion',
+    emojis: [
+      '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇',
+      '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '😋', '😛', '😜', '🤪', '😝', '🤑',
+      '🤗', '🤭', '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄', '😬',
+      '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧', '🥵',
+      '🥶', '🥴', '😵', '🤯', '🤠', '🥳', '😎', '🤓', '🧐', '😕', '😟', '🙁', '☹️',
+      '😮', '😯', '😲', '😳', '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭', '😱',
+      '😖', '😣', '😞', '😓', '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿',
+      '💀', '☠️', '💩', '🤡', '👹', '👺', '👻', '👽', '👾', '🤖', '😺', '😸', '😹',
+      '😻', '😼', '😽', '🙀', '😿', '😾', '🙈', '🙉', '🙊'
+    ]
+  },
+  {
+    id: 'gestures',
+    icon: '👋',
+    titleKey: 'emoji_people',
+    title: 'Gestures & People',
+    emojis: [
+      '👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🫰', '🤟', '🤘',
+      '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜',
+      '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🦿', '🦵',
+      '🦶', '👂', '🦻', '👃', '🧠', '🫀', '🫁', '🦷', '🦴', '👀', '👁️', '👅', '👄',
+      '👶', '👧', '🧒', '👦', '👩', '🧑', '👨', '👵', '🧓', '👴', '👲', '👳‍♀️', '👳‍♂️',
+      '🧕', '👮‍♀️', '👮‍♂️', '👷‍♀️', '👷‍♂️', '💂‍♀️', '💂‍♂️', '🕵️‍♀️', '🕵️‍♂️', '👩‍⚕️', '👨‍⚕️', '👩‍🎓', '👨‍🎓',
+      '👩‍🏫', '👨‍🏫', '👩‍⚖️', '👨‍⚖️', '👩‍🌾', '👨‍🌾', '👩‍🍳', '👨‍🍳', '👩‍🔧', '👨‍🔧', '👩‍🏭', '👨‍🏭', '👩‍💼',
+      '👨‍💼', '👩‍🔬', '👨‍🔬', '👩‍💻', '👨‍💻', '👩‍🎤', '👨‍🎤', '👩‍🎨', '👨‍🎨', '👩‍✈️', '👨‍✈️', '👩‍🚀', '👨‍🚀',
+      '👩‍🚒', '👨‍🚒', '🦸‍♀️', '🦸‍♂️', '🦹‍♀️', '🦹‍♂️', '🧙‍♀️', '🧙‍♂️', '🧚‍♀️', '🧚‍♂️', '🧛‍♀️', '🧛‍♂️', '🧜‍♀️',
+      '🧜‍♂️', '🧝‍♀️', '🧝‍♂️', '🧞‍♀️', '🧞‍♂️', '🧟‍♀️', '🧟‍♂️', '🙍‍♀️', '🙍‍♂️', '🙎‍♀️', '🙎‍♂️', '🙅‍♀️', '🙅‍♂️',
+      '🙆‍♀️', '🙆‍♂️', '💁‍♀️', '💁‍♂️', '🙋‍♀️', '🙋‍♂️', '🧏‍♀️', '🧏‍♂️', '🙇‍♀️', '🙇‍♂️', '🤦‍♀️', '🤦‍♂️', '🤷‍♀️', '🤷‍♂️'
+    ]
+  },
+  {
+    id: 'animals',
+    icon: '🐶',
+    titleKey: 'emoji_animals',
+    title: 'Animals & Nature',
+    emojis: [
+      '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐻‍❄️', '🐨', '🐯', '🦁', '🐮',
+      '🐷', '🐽', '🐸', '🐵', '🐒', '🐔', '🐧', '🐦', '🐤', '🐣', '🐥', '🦆', '🦅',
+      '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🪱', '🐛', '🦋', '🐌', '🐞', '🐜',
+      '🪰', '🪲', '🪳', '🦟', '🦗', '🕷️', '🕸️', '🦂', '🐢', '🐍', '🦎', '🦖', '🦕',
+      '🐙', '🦑', '🦐', '🦞', '🦀', '🐡', '🐠', '🐟', '🐬', '🐳', '🐋', '🦈', '🦭',
+      '🐊', '🐅', '🐆', '🦓', '🦍', '🦧', '🦣', '🐘', '🦛', '🦏', '🐪', '🐫', '🦒',
+      '🦘', '🦬', '🐃', '🐂', '🐄', '🐎', '🐖', '🐏', '🐑', '🦙', '🐐', '🦌', '🐕',
+      '🐩', '🦮', '🐕‍🦺', '🐈', '🐈‍⬛', '🪶', '🐓', '🦃', '🦤', '🦚', '🦜', '🦢', '🦩',
+      '🕊️', '🐇', '🦝', '🦨', '🦡', '🦫', '🦦', '🦥', '🐁', '🐀', '🐿️', '🦔', '🌲',
+      '🌳', '🌴', '🌵', '🌾', '🌿', '☘️', '🍀', '🍁', '🍂', '🍃', '🍄', '🌰', '🌸',
+      '💮', '🏵️', '🌹', '🥀', '🌺', '🌻', '🌼', '🌷', '🌱', '🪴', '☀️', '🌤️', '⛅',
+      '🌥️', '☁️', '🌦️', '🌧️', '⛈️', '🌩️', '🌨️', '❄️', '☃️', '⛄', '🌬️', '💨', '🌪️',
+      '🌫️', '🌈', '☔', '💧', '🌊'
+    ]
+  },
+  {
+    id: 'food',
+    icon: '🍔',
+    titleKey: 'emoji_food',
+    title: 'Food & Drink',
+    emojis: [
+      '🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑',
+      '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽',
+      '🥕', '🫒', '🧄', '🧅', '🥔', '🍠', '🥐', '🥯', '🍞', '🥖', '🥨', '🧀', '🥚',
+      '🍳', '🧈', '🥞', '🧇', '🥓', '🥩', '🍗', '🍖', '🦴', '🌭', '🍔', '🍟', '🍕',
+      '🫓', '🥪', '🥙', '🧆', '🌮', '🌯', '🫔', '🥗', '🥘', '🫕', '🥫', '🍝', '🍜',
+      '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮',
+      '🍢', '🍡', '🍧', '🍨', '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫',
+      '🍿', '🍩', '🍪', '🌰', '🥜', '🍯', '🥛', '🍼', '🫖', '☕', '🍵', '🧃', '🥤',
+      '🧋', '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🧉', '🍾', '🧊'
+    ]
+  },
+  {
+    id: 'activities',
+    icon: '⚽',
+    titleKey: 'emoji_activities',
+    title: 'Activities',
+    emojis: [
+      '⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🪀', '🏓', '🏸',
+      '🏒', '🏑', '🥍', '🏏', '🪃', '🥅', '⛳', '🪁', '🏹', '🎣', '🤿', '🥊', '🥋',
+      '🎽', '🛹', '🛼', '🛷', '⛸️', '🥌', '🎿', '⛷️', '🏂', '🪂', '🏋️‍♀️', '🏋️‍♂️', '🤼‍♀️',
+      '🤼‍♂️', '🤸‍♀️', '🤸‍♂️', '⛹️‍♀️', '⛹️‍♂️', '🤺', '🤾‍♀️', '🤾‍♂️', '🏌️‍♀️', '🏌️‍♂️', '🏇', '🧘‍♀️',
+      '🧘‍♂️', '🏄‍♀️', '🏄‍♂️', '🏊‍♀️', '🏊‍♂️', '🤽‍♀️', '🤽‍♂️', '🚣‍♀️', '🚣‍♂️', '🧗‍♀️', '🧗‍♂️', '🚵‍♀️',
+      '🚵‍♂️', '🚴‍♀️', '🚴‍♂️', '🏆', '🥇', '🥈', '🥉', '🏅', '🎖️', '🏵️', '🎗️', '🎫',
+      '🎟️', '🎪', '🤹', '🎭', '🩰', '🎨', '🎬', '🎤', '🎧', '🎼', '🎹', '🥁', '🪘',
+      '🎷', '🎺', '🪗', '🎸', '🪕', '🎻', '🎲', '♟️', '🎯', '🎳', '🎮', '🎰', '🧩'
+    ]
+  },
+  {
+    id: 'travel',
+    icon: '🚗',
+    titleKey: 'emoji_travel',
+    title: 'Travel & Places',
+    emojis: [
+      '🚗', '🚙', '🚕', '🛺', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚',
+      '🚛', '🚜', '🦯', '🦽', '🦼', '🛴', '🚲', '🛵', '🏍️', '🛞', '🚨', '🚔', '🚍',
+      '🚘', '🚖', '🚡', '🚠', '🚟', '🚃', '🚋', '🚞', '🚝', '🚄', '🚅', '🚈', '🚂',
+      '🚆', '🚇', '🚊', '🚉', '✈️', '🛫', '🛬', '🛩️', '💺', '🛰️', '🚀', '🛸', '🚁',
+      '🛶', '⛵', '🚤', '🛥️', '🛳️', '⛴️', '🚢', '⚓', '🛟', '🚧', '⛽', '🚏', '🚥',
+      '🚦', '🗺️', '🗿', '🗽', '🗼', '🏰', '🏯', '🏟️', '🎡', '🎢', '🎠', '⛲', '⛱️',
+      '🏖️', '🏝️', '🏜️', '🌋', '⛰️', '🏔️', '🗻', '🏕️', '⛺', '🛖', '🏠', '🏡', '🏘️',
+      '🏚️', '🏗️', '🏭', '🏢', '🏬', '🏣', '🏤', '🏥', '🏦', '🏨', '🏪', '🏫', '🏩',
+      '💒', '🏛️', '⛪', '🕌', '🛕', '🕍', '⛩️', '🕋', '🛤️', '🛣️', '🗾', '🎑', '🏞️',
+      '🌅', '🌄', '🌠', '🎇', '🎆', '🌇', '🌆', '🏙️', '🌃', '🌌', '🌉', '🌁'
+    ]
+  },
+  {
+    id: 'objects',
+    icon: '💡',
+    titleKey: 'emoji_objects',
+    title: 'Objects',
+    emojis: [
+      '📱', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '📷', '📸', '📹', '🎥', '📽️', '📞', '☎️',
+      '📟', '📠', '📺', '📻', '🎙️', '🎚️', '🎛️', '🧭', '⏱️', '⏲️', '⏰', '🕰️', '⌛',
+      '⏳', '📡', '🔋', '🔌', '💡', '🔦', '🕯️', '🧯', '🗑️', '🛢️', '💸', '💵', '💴',
+      '💶', '💷', '🪙', '💰', '💳', '💎', '⚖️', '🪜', '🧰', '🪛', '🔧', '🔨', '⚒️',
+      '🛠️', '⛏️', '🪚', '🔩', '⚙️', '🪤', '🧱', '⛓️', '🧲', '🔫', '💣', '🧨', '🪓',
+      '🔪', '🗡️', '⚔️', '🛡️', '🚬', '⚰️', '🪦', '⚱️', '🏺', '🔮', '📿', '🧿', '💈',
+      '⚗️', '🔭', '🔬', '🕳️', '🩹', '🩺', '💊', '💉', '🩸', '🧬', '🦠', '🧫', '🧪',
+      '🌡️', '🧹', '🪠', '🧺', '🧻', '🚽', '🚰', '🚿', '🛁', '🛀', '🧼', '🪥', '🪒',
+      '🧽', '🪣', '🧴', '🗝️', '🔑', '🔐', '🔏', '🔒', '🔓', '📦', '🎁', '🎈', '🎉',
+      '🎊', '✉️', '📩', '📨', '📧', '💌', '📮', '📝', '📁', '📂', '📄', '📃', '📊',
+      '📈', '📉', '📜', '📋', '📅', '📆', '📇', '📚', '📖', '📗', '📘', '📙', '📕'
+    ]
+  },
+  {
+    id: 'symbols',
+    icon: '❤️',
+    titleKey: 'emoji_symbols',
+    title: 'Symbols',
+    emojis: [
+      '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞',
+      '💓', '💗', '💖', '💘', '💝', '💟', '☮️', '✝️', '☪️', '🕉️', '☸️', '✡️', '🔯',
+      '🕎', '☯️', '☦️', '🛐', '⛎', '♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐',
+      '♑', '♒', '♓', '🆔', '⚛️', '🉑', '☢️', '☣️', '📴', '📳', '🈶', '🈚', '🈸', '🈺',
+      '🈯', '♨️', '🛑', '🕛', '🕧', '🕐', '🕜', '🕑', '🕝', '🕒', '🕞', '🕓', '🕟', '🕔',
+      '🕠', '🕕', '🕡', '🕖', '🕢', '🕗', '🕣', '🕘', '🕤', '🕙', '🕥', '🕚', '🕦', '✖️',
+      '➕', '➖', '➗', '♾️', '‼️', '⁉️', '❓', '❔', '❕', '❗️', '〰️', '💱', '💲', '⚕️',
+      '♻️', '⚜️', '🔱', '📛', '🔰', '⭕', '✅', '☑️', '✔️', '❌', '❎', '➰', '➿', '〽️',
+      '✳️', '✴️', '❇️', '©️', '®️', '™️', '💯', '🔥', '✨', '🌟', '💫', '💥', '💢', '💦', '💨'
+    ]
+  }
 ];
 
-// Shared gradient defs (gold "face" gradient, warm "flame" gradient, and
-// an angry-red gradient) reused by every icon above via url(#id) refs.
-const PREMIUM_EMOJI_DEFS = `<svg width="0" height="0" style="position:absolute">
-  <defs>
-    <linearGradient id="eg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="var(--gold-light)"/><stop offset="1" stop-color="var(--gold)"/>
-    </linearGradient>
-    <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="var(--gold-light)"/><stop offset="1" stop-color="#E07B3A"/>
-    </linearGradient>
-    <linearGradient id="ag" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#f0a4a4"/><stop offset="1" stop-color="var(--danger)"/>
-    </linearGradient>
-  </defs>
-</svg>`;
+function getRecentEmojis() {
+  try {
+    const raw = localStorage.getItem('holy_recent_emojis');
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length) return arr;
+    }
+  } catch { }
+  return ['😊', '😂', '❤️', '👍', '🙏', '🔥', '😍', '😭', '🎉', '🌟', '👏', '🤝', '💯', '😎', '🤔', '🥰'];
+}
+
+function saveRecentEmoji(ch) {
+  try {
+    const list = getRecentEmojis().filter(e => e !== ch);
+    list.unshift(ch);
+    if (list.length > 24) list.length = 24;
+    localStorage.setItem('holy_recent_emojis', JSON.stringify(list));
+    updateRecentEmojiGrid();
+  } catch { }
+}
+
+function updateRecentEmojiGrid() {
+  const grid = document.getElementById('emoji-grid-recent');
+  if (!grid) return;
+  const recent = getRecentEmojis();
+  grid.innerHTML = recent.map(ch =>
+    `<button type="button" class="emoji-btn-item" onclick="insertEmoji('${ch}')" aria-label="${ch}">${ch}</button>`
+  ).join('');
+}
+
+function buildEmojiPickerDOM() {
+  const picker = $('emojiPicker');
+  if (!picker) return;
+
+  const getLabel = (key, fallback) => {
+    try {
+      const val = typeof t === 'function' ? t(key) : key;
+      return (val && val !== key) ? val : fallback;
+    } catch { return fallback; }
+  };
+
+  const tabsHtml = [
+    `<button type="button" class="emoji-tab-btn active" data-cat-id="recent" title="${getLabel('emoji_recent', 'Recent')}" aria-label="${getLabel('emoji_recent', 'Recent')}">🕒</button>`,
+    ...EMOJI_CATEGORIES.map(c =>
+      `<button type="button" class="emoji-tab-btn" data-cat-id="${c.id}" title="${getLabel(c.titleKey, c.title)}" aria-label="${getLabel(c.titleKey, c.title)}">${c.icon}</button>`
+    )
+  ].join('');
+
+  const recent = getRecentEmojis();
+  const recentSection = `
+    <div class="emoji-section" id="emoji-section-recent" data-cat="recent">
+      <div class="emoji-section-title">${getLabel('emoji_recent', 'Recent')}</div>
+      <div class="emoji-grid" id="emoji-grid-recent">
+        ${recent.map(ch => `<button type="button" class="emoji-btn-item" onclick="insertEmoji('${ch}')" aria-label="${ch}">${ch}</button>`).join('')}
+      </div>
+    </div>`;
+
+  const categoriesHtml = EMOJI_CATEGORIES.map(c => `
+    <div class="emoji-section" id="emoji-section-${c.id}" data-cat="${c.id}">
+      <div class="emoji-section-title">${getLabel(c.titleKey, c.title)}</div>
+      <div class="emoji-grid">
+        ${c.emojis.map(ch => `<button type="button" class="emoji-btn-item" onclick="insertEmoji('${ch}')" aria-label="${ch}">${ch}</button>`).join('')}
+      </div>
+    </div>`
+  ).join('');
+
+  picker.innerHTML = `
+    <div class="emoji-picker-tabs">${tabsHtml}</div>
+    <div class="emoji-picker-body">${recentSection}${categoriesHtml}</div>
+  `;
+
+  // Attach tab switching and scroll tracking
+  const tabsContainer = picker.querySelector('.emoji-picker-tabs');
+  const body = picker.querySelector('.emoji-picker-body');
+
+  tabsContainer?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.emoji-tab-btn');
+    if (!btn) return;
+    const catId = btn.dataset.catId;
+    const targetSection = picker.querySelector(`#emoji-section-${catId}`);
+    if (targetSection && body) {
+      body.scrollTo({ top: targetSection.offsetTop - body.offsetTop, behavior: 'smooth' });
+    }
+    tabsContainer.querySelectorAll('.emoji-tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+    try { if (typeof haptic === 'function') haptic('selection'); } catch { }
+  });
+
+  // Spy on scroll to highlight active tab
+  let scrollTimeout = null;
+  body?.addEventListener('scroll', () => {
+    if (scrollTimeout) return;
+    scrollTimeout = setTimeout(() => {
+      scrollTimeout = null;
+      const sections = body.querySelectorAll('.emoji-section');
+      const scrollTop = body.scrollTop + 20;
+      let activeCat = 'recent';
+      sections.forEach(sec => {
+        if (sec.offsetTop - body.offsetTop <= scrollTop) {
+          activeCat = sec.dataset.cat;
+        }
+      });
+      tabsContainer?.querySelectorAll('.emoji-tab-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.catId === activeCat);
+      });
+    }, 50);
+  });
+}
 
 function toggleEmojiPicker() {
   const picker = $('emojiPicker');
   if (!picker) return;
 
   if (picker.children.length === 0) {
-    const defsHolder = document.getElementById('premiumEmojiDefs');
-    if (!defsHolder) {
-      const div = document.createElement('div');
-      div.id = 'premiumEmojiDefs';
-      div.innerHTML = PREMIUM_EMOJI_DEFS;
-      document.body.appendChild(div);
-    }
-    picker.innerHTML = PREMIUM_EMOJI_ICONS.map(({ ch, svg }) =>
-      `<button class="premium-emoji" onclick="insertEmoji('${ch}')" aria-label="${ch}" title="${ch}">
-         <svg viewBox="0 0 24 24" width="22" height="22">${svg}</svg>
-       </button>`
-    ).join('');
+    buildEmojiPickerDOM();
   }
 
   const opening = picker.classList.contains('hidden');
   closeComposerPopups();
-  if (opening) picker.classList.remove('hidden');
+  if (opening) {
+    picker.classList.remove('hidden');
+    updateRecentEmojiGrid();
+  }
 }
 
 function insertEmoji(emoji) {
+  saveRecentEmoji(emoji);
   const input = $('chatInput');
   if (!input) return;
   const start = input.selectionStart ?? input.value.length;
