@@ -30,8 +30,16 @@ function computeAppHeight() {
   const tg = window.Telegram?.WebApp;
   const candidates = [tg?.viewportStableHeight, tg?.viewportHeight, window.visualViewport?.height, window.innerHeight];
   for (const c of candidates) {
-    const h = Math.round(Number(c) || 0);
-    if (h >= MIN_PLAUSIBLE_APP_HEIGHT) return h;
+    let h = Math.round(Number(c) || 0);
+    if (h < MIN_PLAUSIBLE_APP_HEIGHT) continue;
+    // After the app was minimised, Telegram's reported height can stay larger than
+    // the window actually is, so the bottom of every page ran off the screen. With
+    // no keyboard open the window height is the truth; never exceed it.
+    const ae = document.activeElement;
+    const typing = !!ae && (/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) || ae.isContentEditable);
+    const real = Math.round(Number(window.innerHeight) || 0);
+    if (!typing && real >= MIN_PLAUSIBLE_APP_HEIGHT && h > real + 24) h = real;
+    return h;
   }
   return 0;
 }
@@ -72,6 +80,9 @@ let _resumeTimers = [];
 function recoverAfterResume() {
   _resumeTimers.forEach(clearTimeout);
   const fix = () => {
+    // The page can come back scrolled a little, which pushes the bottom bar and the
+    // last items off-screen (the app itself never scrolls the window).
+    try { window.scrollTo(0, 0); const se = document.scrollingElement; if (se) se.scrollTop = 0; } catch { }
     applyAppHeight(true);
     const page = document.querySelector('.page.active');
     if (page) {
@@ -83,7 +94,7 @@ function recoverAfterResume() {
     }
   };
   fix();
-  _resumeTimers = [150, 500, 1500].map(ms => setTimeout(() => applyAppHeight(true), ms));
+  _resumeTimers = [150, 500, 1500, 3000].map(ms => setTimeout(() => { try { window.scrollTo(0, 0); } catch { } applyAppHeight(true); }, ms));
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') recoverAfterResume(); });
 window.addEventListener('pageshow', recoverAfterResume);

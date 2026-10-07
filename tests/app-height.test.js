@@ -8,13 +8,14 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'frontend', 'app.js'), 'u
 const start = src.indexOf('let _lastAppHeight = 0;'), end = src.indexOf('applyAppHeight();\r\nwindow.Telegram');
 const block = src.slice(start, end > 0 ? end : src.indexOf('applyAppHeight();\nwindow.Telegram'));
 
-const make = (tg, innerHeight, rafNever) => {
+const make = (tg, innerHeight, rafNever, typing) => {
   const props = {}; let raf = null;
   const ctx = {
     window: { Telegram: { WebApp: tg }, innerHeight, visualViewport: { height: innerHeight } },
-    document: { documentElement: { style: { setProperty: (k, v) => { props[k] = v; } } } },
+    document: { activeElement: { tagName: 'BODY' }, documentElement: { style: { setProperty: (k, v) => { props[k] = v; } } } },
     requestAnimationFrame: (f) => { if (!rafNever) raf = f; return 1; }, cancelAnimationFrame: () => { raf = null; }, Math, Number,
   };
+  if (typing) ctx.document.activeElement = { tagName: 'TEXTAREA' };
   vm.createContext(ctx); vm.runInContext(block + '\nthis.api = { applyAppHeight, computeAppHeight };', ctx);
   return { api: ctx.api, props, flush: () => raf && raf() };
 };
@@ -32,6 +33,12 @@ const make = (tg, innerHeight, rafNever) => {
   t = make({ viewportStableHeight: 640 }, 800, true);       // frames never fire (suspended WebView)
   t.api.applyAppHeight(); t.api.applyAppHeight(true);
   assert.equal(t.props['--app-height'], '640px'); ok('forced re-measure works even if a scheduled frame never fires');
+
+  t = make({ viewportStableHeight: 800 }, 700);
+  t.api.applyAppHeight(true); assert.equal(t.props['--app-height'], '700px'); ok('Telegram height taller than the real window (stale after minimise) → clamped, bottom no longer cut off');
+
+  t = make({ viewportStableHeight: 800 }, 520, false, true);        // keyboard open: window shrinks, stable height is kept
+  t.api.applyAppHeight(true); assert.equal(t.props['--app-height'], '800px'); ok('while typing, the stable height is kept as before');
 
   console.log('\nALL APP-HEIGHT CHECKS PASSED');
 })();
