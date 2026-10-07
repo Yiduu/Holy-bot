@@ -21,19 +21,41 @@ let jitsiApi = null;
 // updates live as Telegram resizes it (keyboard open/close, etc).
 let _lastAppHeight = 0;
 let _appHeightRaf = 0;
-function applyAppHeight() {
+const MIN_PLAUSIBLE_APP_HEIGHT = 200;   // a real screen is never this short
+// When Telegram wakes a minimised mini app its WebView can briefly report a
+// height of ~0 and may never send a correcting event. Believing that value
+// collapsed every page to nothing (only the header and the fixed bottom nav
+// stayed visible), so implausible readings are ignored.
+function computeAppHeight() {
+  const tg = window.Telegram?.WebApp;
+  const candidates = [tg?.viewportStableHeight, tg?.viewportHeight, window.visualViewport?.height, window.innerHeight];
+  for (const c of candidates) {
+    const h = Math.round(Number(c) || 0);
+    if (h >= MIN_PLAUSIBLE_APP_HEIGHT) return h;
+  }
+  return 0;
+}
+function applyAppHeightNow(force) {
+  const h = computeAppHeight();
+  if (!h) return;
+  if (h === _lastAppHeight && !force) return;
+  _lastAppHeight = h;
+  document.documentElement.style.setProperty('--app-height', h + 'px');
+}
+function applyAppHeight(arg) {
   // visualViewport fires 'scroll'/'resize' many times per frame while the
   // keyboard animates. Each write to a root CSS variable invalidates styles
   // for the whole (very large) document, so coalesce to once per frame and
   // skip writes when the value hasn't changed.
+  if (arg === true) {                      // forced: don't depend on a frame that may never come
+    if (_appHeightRaf) { cancelAnimationFrame(_appHeightRaf); _appHeightRaf = 0; }
+    applyAppHeightNow(true);
+    return;
+  }
   if (_appHeightRaf) return;
   _appHeightRaf = requestAnimationFrame(() => {
     _appHeightRaf = 0;
-    const tg = window.Telegram?.WebApp;
-    const h = Math.round(tg?.viewportStableHeight || tg?.viewportHeight || window.visualViewport?.height || window.innerHeight);
-    if (h === _lastAppHeight) return;
-    _lastAppHeight = h;
-    document.documentElement.style.setProperty('--app-height', h + 'px');
+    applyAppHeightNow(false);
   });
 }
 applyAppHeight();
@@ -41,6 +63,32 @@ window.Telegram?.WebApp?.onEvent?.('viewportChanged', applyAppHeight);
 window.addEventListener('resize', applyAppHeight);
 window.addEventListener('orientationchange', applyAppHeight);
 window.visualViewport?.addEventListener('resize', applyAppHeight);
+
+// Coming back from the home screen / another app: re-measure (the size is often
+// wrong for the first moments), and force the visible page to repaint, because
+// Android WebViews can drop the GPU layers of the transformed .page elements
+// while suspended and come back showing nothing.
+let _resumeTimers = [];
+function recoverAfterResume() {
+  _resumeTimers.forEach(clearTimeout);
+  const fix = () => {
+    applyAppHeight(true);
+    const page = document.querySelector('.page.active');
+    if (page) {
+      page.style.animation = 'none';
+      page.style.display = 'none';
+      void page.offsetHeight;              // force a reflow
+      page.style.display = '';
+      requestAnimationFrame(() => { page.style.animation = ''; });
+    }
+  };
+  fix();
+  _resumeTimers = [150, 500, 1500].map(ms => setTimeout(() => applyAppHeight(true), ms));
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') recoverAfterResume(); });
+window.addEventListener('pageshow', recoverAfterResume);
+window.addEventListener('focus', recoverAfterResume);
+window.Telegram?.WebApp?.onEvent?.('activated', recoverAfterResume);
 
 // ─── Helpers ──────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
