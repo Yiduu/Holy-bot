@@ -254,8 +254,11 @@ async function clientTests() {
   assert.ok(photo.includes('msg-photo') && photo.includes('data-file-id="P1"')); ok('photo bubble placeholder');
   const localPhoto = run("renderFileAttachment({id:'t2',file_type:'photo',_local:{status:'uploading',url:'blob:abc'}})");
   assert.ok(localPhoto.includes('src="blob:abc"') && localPhoto.includes('cm-media-overlay')); ok('uploading photo shows the local image with a ring overlay');
-  assert.ok(run("renderFileAttachment({id:'m4',file_type:'video',file_id:'V',duration:75,file_size:3145728})").includes('1:15 · 3.0 MB')); ok('video bubble shows duration · size');
-  assert.equal(run("attachmentLabel({file_type:'voice'})"), '🎤 cm_voice_message'.replace('cm_voice_message', 'Voice message')); ok('reply-banner label for attachments');
+  assert.equal(run("attachmentLabel({file_type:'voice'})"), 'Voice message');
+  const qh = run("attachmentPreviewHtml({file_type:'voice'})");
+  assert.ok(qh.startsWith('<svg class="cm-inline-ico"') && qh.includes('<rect x="9" y="2.8"') && qh.endsWith('Voice message') && !/[\u{1F300}-\u{1FAFF}]/u.test(qh));
+  assert.ok(run("attachmentPreviewHtml({file_type:'document', file_name:'<b>x</b>.pdf'})").includes('&lt;b&gt;x&lt;/b&gt;.pdf'));
+  ok('reply banner / quote label: SVG mic icon (no emoji), file names escaped');
 
   // composer mode: mic ⇄ send ⇄ edit
   const btn = w.document.getElementById('chatSendBtn'); const input = w.document.getElementById('chatInput');

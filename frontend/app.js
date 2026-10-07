@@ -376,10 +376,18 @@ function closeImageLightbox() {
 function getReplyPreviewText(msg, max = 100) {
   let preview = String(msg?.content || '').replace(/\s+/g, ' ').trim();
   if (!preview && msg?.file_type) {
-    preview = typeof attachmentLabel === 'function' ? attachmentLabel(msg) : `📎 ${msg.file_type}`;
+    preview = typeof attachmentLabel === 'function' ? attachmentLabel(msg) : String(msg.file_type);
   }
   if (preview.length > max) preview = preview.substring(0, max) + '…';
   return preview;
+}
+
+// Same snippet as HTML: attachments get an inline SVG icon (mic for voice
+// messages, etc.) instead of an emoji. All text is escaped here.
+function getReplyPreviewHtml(msg, max = 100) {
+  const text = String(msg?.content || '').replace(/\s+/g, ' ').trim();
+  if (!text && msg?.file_type && typeof attachmentPreviewHtml === 'function') return attachmentPreviewHtml(msg, max);
+  return escapeHtml(getReplyPreviewText(msg, max));
 }
 
 function getReplySenderLabel(msg, fallback = 'them') {
@@ -402,7 +410,7 @@ function renderReplyQuote(msg) {
     const p = msg.parent_preview;
     return `<div class="reply-quote" style="cursor:default">
             <span class="reply-quote-name">${escapeHtml(getReplySenderLabel(p, 'Them'))}</span>
-            <span class="reply-quote-text">${escapeHtml(getReplyPreviewText(p))}</span>
+            <span class="reply-quote-text">${getReplyPreviewHtml(p)}</span>
           </div>`;
   }
 
@@ -413,7 +421,7 @@ function renderReplyQuote(msg) {
 
   return `<div class="reply-quote" role="button" tabindex="0" data-reply-to="${parentId}">
             <span class="reply-quote-name">${escapeHtml(getReplySenderLabel(parent, 'Them'))}</span>
-            <span class="reply-quote-text">${escapeHtml(getReplyPreviewText(parent))}</span>
+            <span class="reply-quote-text">${getReplyPreviewHtml(parent)}</span>
           </div>`;
 }
 
@@ -459,7 +467,7 @@ function refreshReplyQuotesFor(msgId, updatedMsg) {
   document.querySelectorAll(sel).forEach((q) => {
     if (updatedMsg) {
       const textEl = q.querySelector('.reply-quote-text');
-      if (textEl) textEl.textContent = getReplyPreviewText(updatedMsg);
+      if (textEl) textEl.innerHTML = getReplyPreviewHtml(updatedMsg);
     } else {
       q.classList.add('reply-quote-missing');
       q.removeAttribute('role');
@@ -853,12 +861,12 @@ function setReplyTo(messageId) {
   window.replyToId = messageId;
 
   const senderLabel = getReplySenderLabel(msg);
-  const preview = getReplyPreviewText(msg, 60);
+  const previewHtml = getReplyPreviewHtml(msg, 60);
 
   const label = $('replyIndicatorLabel');
   if (label) label.textContent = `Replying to ${senderLabel}`;
   const replyText = $('replyText');
-  if (replyText) replyText.textContent = preview;
+  if (replyText) replyText.innerHTML = previewHtml;
 
   $('replyIndicator')?.classList.remove('hidden');
 
@@ -907,10 +915,11 @@ async function deleteMessage() {
     showToast(e.message, 'error');
   }
 }
-function showToast(msg, type = 'info') {
+function showToast(msg, type = 'info', opts = {}) {
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
-  t.textContent = msg;
+  if (opts.iconHtml) t.insertAdjacentHTML('afterbegin', opts.iconHtml);   // trusted inline SVG only
+  t.appendChild(document.createTextNode(msg));
   t.style.cssText = `
     position:fixed;top:16px;left:50%;transform:translateX(-50%) translateZ(0);-webkit-transform:translateX(-50%) translateZ(0);
     background:${type === 'error' ? 'var(--danger)' : type === 'success' ? 'var(--success)' : 'var(--bg3)'};
@@ -1404,7 +1413,13 @@ function connectSocket() {
       // open, refresh the picker's badges live instead of leaving them
       // stale until the dropdown is next reopened.
       refreshChatPartnerBadges();
-      showToast('💬 New message received');
+      if (msg.file_type && typeof attachmentIconSvg === 'function') {
+        const kind = ['photo', 'voice', 'video', 'audio'].includes(msg.file_type) ? msg.file_type : 'document';
+        const text = kind === 'voice' ? 'Voice message received' : 'New message received';
+        showToast(text, 'info', { iconHtml: attachmentIconSvg(kind) });
+      } else {
+        showToast('💬 New message received');
+      }
       haptic('medium');
     }
   });

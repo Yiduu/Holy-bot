@@ -91,15 +91,38 @@ function cmSetArc(root, p) {
   arc.style.strokeDasharray = `${CM_RING_C * p} ${CM_RING_C}`;
 }
 
-/* ── labels used outside the chat (reply banner / quote) ──────────────────── */
+/* ── labels used outside the chat (reply banner / quote / toast) ──────────── */
+// Small inline SVG icons (no emoji), drawn with the surrounding text colour.
+const CM_INLINE_ICON = {
+  voice: '<rect x="9" y="2.8" width="6" height="11.2" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.6 21h6.8"/>',
+  photo: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="10.5" r="1.6"/><path d="M21 16l-5-5-9 8"/>',
+  video: '<rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3z"/>',
+  audio: '<path d="M9 18V5l11-2v13"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  document: '<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L10 17a1.7 1.7 0 0 1-2.4-2.4l7.5-7.5"/>',
+};
+function attachmentIconSvg(type) {
+  const body = CM_INLINE_ICON[type] || CM_INLINE_ICON.document;
+  return `<svg class="cm-inline-ico" viewBox="0 0 24 24" aria-hidden="true">${body}</svg>`;
+}
+
+// Plain-text label (no icon), safe for textContent.
 function attachmentLabel(msg) {
   switch (msg?.file_type) {
-    case 'photo': return '📷 ' + cmT('cm_photo', 'Photo');
-    case 'voice': return '🎤 ' + cmT('cm_voice_message', 'Voice message');
-    case 'video': return '🎬 ' + cmT('cm_video', 'Video');
-    case 'audio': return '🎵 ' + (msg.file_name || cmT('cm_audio', 'Audio'));
-    default: return '📎 ' + (msg?.file_name || cmT('cm_file', 'File'));
+    case 'photo': return cmT('cm_photo', 'Photo');
+    case 'voice': return cmT('cm_voice_message', 'Voice message');
+    case 'video': return cmT('cm_video', 'Video');
+    case 'audio': return msg.file_name || cmT('cm_audio', 'Audio');
+    default: return msg?.file_name || cmT('cm_file', 'File');
   }
+}
+
+// Icon + label as HTML for reply banners and quotes (label is escaped here).
+function attachmentPreviewHtml(msg, max = 100) {
+  let label = String(attachmentLabel(msg));
+  if (label.length > max) label = label.substring(0, max) + '…';
+  const type = ['photo', 'voice', 'video', 'audio'].includes(msg?.file_type) ? msg.file_type : 'document';
+  const esc = label.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return attachmentIconSvg(type) + esc;
 }
 
 /* ═══ Waveform ═════════════════════════════════════════════════════════════ */

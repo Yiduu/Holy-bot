@@ -1092,3 +1092,13 @@
     padding: 0 10px;
   }
 }
+
+/* Inline SVG icon in front of an attachment label (reply banner, quotes, toast) */
+.cm-inline-ico {
+  width: 1.1em; height: 1.1em;
+  vertical-align: -0.2em;
+  margin-right: 5px;
+  fill: none; stroke: currentColor; stroke-width: 1.9;
+  stroke-linecap: round; stroke-linejoin: round;
+  flex: none;
+}
