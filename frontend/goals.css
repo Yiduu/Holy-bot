@@ -121,3 +121,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) { .hg-ck.on { animation: none; } .hg-bar i { transition: none; } }
+
+/* while typing in a goals field: hide the fixed bottom nav and leave scroll room under the form,
+   so the keyboard and the nav never cover the field */
+body.hg-typing .bottom-nav { transform: translateY(100%); }
+body.hg-typing .hg-root { padding-bottom: 45vh; }
+.hg-form input, .hg-note textarea, .hg-addrow input { scroll-margin-block: 96px; }

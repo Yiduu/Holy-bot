@@ -111,7 +111,6 @@
     let sub = '';
     if (t.status === 'missed') sub = tr('missed');
     else if (t.status === 'skipped') sub = tr('skipped');
-    else if (lk === 'future') sub = tr('upcoming');
     else if (g.type !== 'challenge' && t.due_date && !on) sub = fmt(t.due_date, { month: 'short', day: 'numeric' });
     if (role === 'mentor' && ui.ren[t.id]) {
       return `<div class="hg-trow hg-ren"><input type="text" maxlength="200" data-ren="${t.id}" value="${esc(t.title)}">
@@ -335,6 +334,7 @@
     }
     html += goals.length ? goals.map(g => goalHtml(g, role)).join('') : (role === 'mentor' ? `<div class="hg-empty">${tr('empty')}</div>` : '');
     root.innerHTML = html;
+    if (!document.activeElement?.closest?.('.hg-root')) { kbField = null; document.body.classList.remove('hg-typing'); } // a repaint can drop focus without a blur event
     if (role === 'mentor') updateBadge(root, goals);
     else updateMenteeCard(goals);
   }
@@ -519,9 +519,50 @@
     if (store.mine) store.mine = store.mine.filter(g => g.id !== id);
   }
 
+  // ── keep the field being typed in above the on-screen keyboard ─────────
+  // The fixed bottom nav and the keyboard both sit over the lower part of the
+  // scrolling page, so a field near the bottom of the goal form ended up hidden.
+  // While a goals field has focus we (1) hide the nav, (2) add scroll room under
+  // the form, and (3) scroll the field into the visible area, again whenever the
+  // keyboard finishes resizing the viewport.
+  let kbField = null, kbTimers = [];
+  function reveal(el) {
+    if (!el || !el.isConnected) return;
+    const sc = el.closest('.page-content');
+    if (!sc) { el.scrollIntoView({ block: 'center' }); return; }
+    const vv = window.visualViewport;
+    const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    const top = Math.max(sc.getBoundingClientRect().top, 0);
+    const r = el.getBoundingClientRect();
+    const pad = 24;
+    if (r.bottom > bottom - pad || r.top < top + pad) {
+      // put the field about a third of the way down the visible area
+      sc.scrollTop += r.top - (top + (bottom - top) * 0.33);
+    }
+  }
+  function onFieldFocus(e) {
+    const el = e.target;
+    if (!el.matches || !el.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')) return;
+    kbField = el;
+    document.body.classList.add('hg-typing');
+    kbTimers.forEach(clearTimeout);
+    kbTimers = [60, 250, 500].map(ms => setTimeout(() => reveal(kbField), ms));
+  }
+  function onFieldBlur() {
+    kbField = null;
+    kbTimers.forEach(clearTimeout);
+    // a tap on another field fires focusin right after focusout; wait before dropping the typing state
+    kbTimers = [setTimeout(() => {
+      if (!kbField && !document.activeElement?.closest?.('.hg-root')) document.body.classList.remove('hg-typing');
+    }, 150)];
+  }
+  window.visualViewport?.addEventListener('resize', () => { if (kbField) reveal(kbField); });
+
   function bind(root) {
     if (root._hg) return;
     root._hg = true;
+    root.addEventListener('focusin', onFieldFocus);
+    root.addEventListener('focusout', onFieldBlur);
     root.addEventListener('click', e => { if (e.target.closest('[data-act]') && root.querySelector('.hg-new')) snap(root); onClick(root, e); });
     root.addEventListener('input', e => { if (e.target.closest('.hg-new')) snap(root); });
     root.addEventListener('change', e => {
