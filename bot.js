@@ -1895,12 +1895,12 @@ async function notifyTaskDone(mentorId, menteeId, goal, task, stats) {
   if (goal.type === 'challenge') {
     const n = daysBetween(goal.start_date, task.due_date) + 1;
     const total = daysBetween(goal.start_date, goal.end_date) + 1;
-    what = lang === 'am' ? `ቀን ${n} ከ${total} አጠናቀቀ` : `completed Day ${n} of ${total}`;
+    what = lang === 'am' ? `ቀን ${n} ከ${total}ን አጠናቋል` : `completed Day ${n} of ${total}`;
   } else {
-    what = lang === 'am' ? 'ግቡን አጠናቀቀ' : 'completed the goal';
+    what = lang === 'am' ? 'ግቡን አጠናቋል' : 'completed the goal';
   }
   const streakLine = goal.type === 'challenge' && stats?.streak
-    ? `\n${lang === 'am' ? 'ተከታታይ' : 'Streak'}: ${stats.streak}` : '';
+    ? `\n${lang === 'am' ? 'ተከታታይ ቀናት' : 'Streak'}: ${stats.streak}` : '';
   await safeSend(chatId, `${handle} ${what}\n"${goal.title}"${streakLine}${noteLine}`);
 }
 
@@ -1911,7 +1911,7 @@ async function notifyGoalMissedDays(menteeId, goal, dates) {
   const chatId = await resolveChatId(menteeId);
   const days = dates.map(formatGoalDate).join(', ');
   await safeSend(chatId, lang === 'am'
-    ? `ያመለጠ ቀን\n\n"${goal.title}": ${days} አልተጠናቀቀም። ችግር የለም፣ የጨረሷቸው ቀናት አሁንም ይቆጠራሉ። ዛሬ እንደገና ይቀጥሉ።`
+    ? `ያመለጠ ቀን\n\n"${goal.title}"፦ ${days} አልተጠናቀቀም። አይዞዎት፤ የጨረሷቸው ቀናት አሁንም ዋጋ አላቸው። ዛሬ ጉዞዎን እንደገና ይቀጥሉ።`
     : `Missed day\n\n"${goal.title}": ${days} wasn't completed. That's okay. Your done days still count. Pick it back up today.`);
 }
 
@@ -1921,7 +1921,7 @@ async function notifyMentorMissedRun(mentorId, goal, run) {
   const chatId = await resolveChatId(mentorId);
   const handle = await menteeHandle(goal.mentee_id);
   await safeSend(chatId, lang === 'am'
-    ? `${handle} በ"${goal.title}" ${run} ተከታታይ ቀናት አምልጠዋል። አጭር መልእክት ሊረዳ ይችላል።`
+    ? `${handle} በ"${goal.title}" ${run} ተከታታይ ቀናት አምልጠዋቸዋል። አጭር የማበረታቻ መልእክት ቢልኩላቸው ሊረዳቸው ይችላል።`
     : `${handle} missed ${run} days in a row on "${goal.title}". A short check-in message can help.`);
 }
 
@@ -1930,8 +1930,8 @@ async function notifyDailyReminder(menteeId, goal, tasks) {
   const lang = await getUserLang(menteeId);
   const chatId = await resolveChatId(menteeId);
   const head = goal.type === 'challenge'
-    ? (lang === 'am' ? 'የዛሬ ተግባር' : "Today's task")
-    : (lang === 'am' ? 'የግብ ማስታወሻ' : 'Goal reminder');
+    ? (lang === 'am' ? 'የዛሬው የዕለት ተግባር' : "Today's task")
+    : (lang === 'am' ? 'የመንፈሳዊ ግብ ማስታወሻ' : 'Goal reminder');
   const list = tasks.map(t => `• ${t.title}`).join('\n');
   const buttons = tasks.slice(0, 3).map(t => [{
     text: `${tSync(lang, 'btn_mark_goal_done')}: ${t.title.slice(0, 24)}`,
