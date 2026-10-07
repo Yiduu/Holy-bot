@@ -69,4 +69,24 @@ test('challenge generation: one row per template entry per day', () => {
   assert.strictEqual(R.buildChallengeTasks({ title: 'Solo', start_date: T, end_date: T, task_template: [] }).length, 1);
 });
 
+test('per-day plan: each day gets its own tasks, empty days are rest days', () => {
+  const g = { title: 'x', custom_days: true, start_date: '2026-10-07', end_date: '2026-10-10', task_template: [] };
+  const n = R.normalizeDayPlan({ '2026-10-07': [' Read Psalm 23 ', ''], '2026-10-09': ['Fast', 'Pray', 'Journal'] }, g.start_date, g.end_date);
+  assert.deepStrictEqual(n.plan, { '2026-10-07': ['Read Psalm 23'], '2026-10-09': ['Fast', 'Pray', 'Journal'] });
+  const rows = R.buildChallengeTasks(g, g.start_date, g.end_date, n.plan);
+  assert.strictEqual(rows.length, 4);
+  assert.deepStrictEqual(rows.filter(r => r.due_date === '2026-10-09').map(r => [r.position, r.title]), [[0, 'Fast'], [1, 'Pray'], [2, 'Journal']]);
+  assert(!rows.some(r => r.due_date === '2026-10-08' || r.due_date === '2026-10-10'), 'rest days have no rows');
+  // extending a custom challenge never invents work
+  assert.strictEqual(R.buildChallengeTasks(g, '2026-10-11', '2026-10-14').length, 0);
+});
+
+test('per-day plan validation', () => {
+  assert(R.normalizeDayPlan({}, T, '2026-10-10').error, 'empty plan rejected');
+  assert(R.normalizeDayPlan({ '2026-10-07': ['', '  '] }, T, '2026-10-10').error, 'blank-only plan rejected');
+  assert(R.normalizeDayPlan({ '2026-11-01': ['x'] }, T, '2026-10-10').error, 'day outside range rejected');
+  assert(R.normalizeDayPlan({ 'nope': ['x'] }, T, '2026-10-10').error, 'bad date rejected');
+  assert(R.normalizeDayPlan({ [T]: ['1', '2', '3', '4', '5'] }, T, '2026-10-10').error, 'too many tasks rejected');
+});
+
 console.log(`${passed} goal rule tests passed`);

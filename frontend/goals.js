@@ -24,6 +24,11 @@
       confirm_del: 'Delete this goal and all its tasks?', empty: 'No goals yet. Add one to guide this mentee.',
       err: "Couldn't load goals", goals_n: 'Goals', active_n: '{n} active', add_goal: 'Add a goal',
       toast_done: 'Done! Streak: {n}', toast_done1: 'Done!', created: 'Goal created',
+      f_dur: 'Length', days_n: '{n} days', mode_same: 'Same every day', mode_custom: 'Different each day',
+      plan_title: 'Plan each day', planned_n: '{n} of {m} days planned', apply_all: 'Copy to all days',
+      apply_empty: 'Copy to empty days', clear_day: 'Clear (rest day)', rest_day: 'Rest day', no_tasks: 'No tasks on this day.',
+      prev_month: 'Previous month', next_month: 'Next month', plan_dates_first: 'Pick valid start and end dates first (up to 120 days).',
+      plan_empty: 'Add tasks for at least one day', rename: 'Rename',
     },
     am: {
       new_goal: 'አዲስ ግብ', type_one: 'ነጠላ ተግባር', type_prog: 'ደረጃ በደረጃ የሚከናወን', type_chal: 'ቻሌንጅ',
@@ -40,6 +45,11 @@
       confirm_del: 'ይህ ግብ እና ተግባራቱ ሁሉ ይሰረዙ?', empty: 'እስካሁን የተቀመጠ ግብ የለም። ተመካሪዎን ለመምራት አዲስ ግብ ያስቀምጡ።',
       err: 'ግቦችን መጫን አልተቻለም', goals_n: 'የእድገት ግቦች', active_n: '{n} በሂደት ላይ', add_goal: 'አዲስ ግብ መድብ',
       toast_done: 'ተከናውኗል! {n} ተከታታይ ቀናት', toast_done1: 'ተከናውኗል!', created: 'ግቡ በተሳካ ሁኔታ ተመዝግቧል',
+      f_dur: 'ርዝመት', days_n: '{n} ቀን', mode_same: 'በየቀኑ ተመሳሳይ', mode_custom: 'ለእያንዳንዱ ቀን የተለያየ',
+      plan_title: 'የእያንዳንዱን ቀን እቅድ', planned_n: '{n} ከ{m} ቀናት ታቅደዋል', apply_all: 'ለሁሉም ቀናት ቅዳ',
+      apply_empty: 'ለባዶ ቀናት ቅዳ', clear_day: 'አጽዳ (የእረፍት ቀን)', rest_day: 'የእረፍት ቀን', no_tasks: 'ለዚህ ቀን ተግባር የለም።',
+      prev_month: 'ያለፈው ወር', next_month: 'የሚቀጥለው ወር', plan_dates_first: 'መጀመሪያ ትክክለኛ የመጀመሪያና የመጨረሻ ቀን ይምረጡ (እስከ 120 ቀን)።',
+      plan_empty: 'ቢያንስ ለአንድ ቀን ተግባር ይጨምሩ', rename: 'ስም ቀይር',
     },
   };
   const tr = (k, r) => {
@@ -61,7 +71,8 @@
 
   // ── state ──────────────────────────────────────────────────────────────
   const store = { mentor: {}, mine: null };   // goals by mentee id / for the signed-in mentee
-  const ui = { sel: {}, edit: {}, note: {}, form: {}, ftype: {} };
+  const ui = { sel: {}, edit: {}, note: {}, form: {}, ftype: {}, month: {}, fd: {}, ren: {} };
+  const MAX_DAYS = 120, MAX_TASKS = 4;   // keep in step with utils/goalRules.js
   const mounts = { mentor: {}, mentee: null };
 
   // Lookups are scoped to the list that was clicked, so the same goal shown in
@@ -102,7 +113,12 @@
     else if (t.status === 'skipped') sub = tr('skipped');
     else if (lk === 'future') sub = tr('upcoming');
     else if (g.type !== 'challenge' && t.due_date && !on) sub = fmt(t.due_date, { month: 'short', day: 'numeric' });
+    if (role === 'mentor' && ui.ren[t.id]) {
+      return `<div class="hg-trow hg-ren"><input type="text" maxlength="200" data-ren="${t.id}" value="${esc(t.title)}">
+        <button type="button" class="hg-btn hg-btn-sm" data-act="saveren" data-task="${t.id}">${tr('save')}</button></div>`;
+    }
     const tools = role === 'mentor' ? `
+      <button type="button" class="hg-mini hg-mini-ic" data-act="rename" data-task="${t.id}" aria-label="${tr('rename')}">${menteeIcon('pencil', 13)}</button>
       <button type="button" class="hg-mini" data-act="skip" data-task="${t.id}">${tr(t.status === 'skipped' ? 'restore' : 'skip')}</button>
       <button type="button" class="hg-mini hg-mini-ic" data-act="deltask" data-task="${t.id}" aria-label="${tr('del')}">${menteeIcon('trash', 13)}</button>` : '';
     let note = '';
@@ -130,29 +146,44 @@
     return td < s ? s : td > e ? e : td;
   }
 
+  // Months touched by s..e ('YYYY-MM').
+  function monthsOf(s, e) {
+    const out = [];
+    for (let d = s; d <= e; d = addDays(d, 1)) { const m = d.substring(0, 7); if (out[out.length - 1] !== m) out.push(m); }
+    return out;
+  }
+
+  // One month is visible at a time (prev/next arrows) so a long challenge never
+  // pushes the day's tasks off a phone screen. All months stay in the DOM,
+  // hidden, which keeps painting simple and makes day cells easy to reach.
+  function grids(key, s, e, ref, cell) {
+    const months = monthsOf(s, e);
+    const ov = ui.month[key], r7 = ref.substring(0, 7);
+    const active = months.includes(ov) ? ov : months.includes(r7) ? r7 : months[0];
+    const i = months.indexOf(active);
+    const nav = (m, label, aria) => `<button type="button" class="hg-mnav" data-act="mnav" data-key="${key}" data-m="${m || ''}" aria-label="${aria}"${m ? '' : ' disabled'}>${label}</button>`;
+    const head = `<div class="hg-nav">${months.length > 1 ? nav(months[i - 1], '‹', tr('prev_month')) : '<span></span>'}
+      <span class="hg-month">${fmt(`${active}-01`, { month: 'long', year: 'numeric' })}</span>
+      ${months.length > 1 ? nav(months[i + 1], '›', tr('next_month')) : '<span></span>'}</div>`;
+    const wd = Array.from({ length: 7 }, (_, k) => `<div class="hg-w">${fmt(`2024-01-0${k + 1}`, { weekday: 'narrow' })}</div>`).join('');
+    const body = months.map(m => {
+      const first = `${m}-01`, from = first < s ? s : first;
+      let cells = '<div class="hg-d x"></div>'.repeat((new Date(utc(from)).getUTCDay() + 6) % 7);
+      for (let d = from; d <= e && d.substring(0, 7) === m; d = addDays(d, 1)) cells += cell(d);
+      return `<div class="hg-cal"${m === active ? '' : ' hidden'}>${wd}${cells}</div>`;
+    }).join('');
+    return head + body;
+  }
+
   function calendar(g) {
     const td = today(), sel = ui.sel[g.id] || defaultSel(g);
-    const s = d10(g.start_date), e = d10(g.end_date);
-    const wd = Array.from({ length: 7 }, (_, i) => `<div class="hg-w">${fmt(`2024-01-0${i + 1}`, { weekday: 'narrow' })}</div>`).join('');
-    let html = '';
-    const months = [];
-    for (let d = s; d <= e; d = addDays(d, 1)) if (!months.includes(d.substring(0, 7))) months.push(d.substring(0, 7));
-    for (const m of months) {
-      const first = `${m}-01`;
-      const from = first < s ? s : first;
-      let cells = '';
-      const lead = (new Date(utc(from)).getUTCDay() + 6) % 7;
-      cells += '<div class="hg-d x"></div>'.repeat(lead);
-      for (let d = from; d <= e && d.substring(0, 7) === m; d = addDays(d, 1)) {
-        const info = dayInfo(g, d);
-        let cls = 'sk';
-        if (info.ts.length) cls = d === td ? 'n' : info.all ? 'k' : d > td ? 'f' : info.done ? 'pt' : 's';
-        const mark = info.all ? CHK : (cls === 's' ? '<b></b>' : '');
-        cells += `<button type="button" class="hg-d ${cls}${d === sel ? ' sel' : ''}" data-act="day" data-goal="${g.id}" data-date="${d}" aria-label="${fmt(d, { month: 'long', day: 'numeric' })}"><span>${Number(d.substring(8))}</span>${mark}</button>`;
-      }
-      html += `<div class="hg-month">${fmt(from, { month: 'long', year: 'numeric' })}</div><div class="hg-cal">${wd}${cells}</div>`;
-    }
-    return html;
+    return grids(g.id, d10(g.start_date), d10(g.end_date), sel, d => {
+      const info = dayInfo(g, d);
+      let cls = 'sk';
+      if (info.ts.length) cls = d === td ? 'n' : info.all ? 'k' : d > td ? 'f' : info.done ? 'pt' : 's';
+      const mark = info.all ? CHK : (cls === 's' ? '<b></b>' : '');
+      return `<button type="button" class="hg-d ${cls}${d === sel ? ' sel' : ''}" data-act="day" data-goal="${g.id}" data-date="${d}" aria-label="${fmt(d, { month: 'long', day: 'numeric' })}"><span>${Number(d.substring(8))}</span>${mark}</button>`;
+    });
   }
 
   function dayPanel(g, role) {
@@ -160,19 +191,21 @@
     const info = dayInfo(g, sel);
     const tasks = g.tasks.filter(t => d10(t.due_date) === sel);
     let st = ['', tr('upcoming')];
-    if (info.all) st = ['ok', tr('done')];
+    if (!tasks.length) st = ['', tr('rest_day')];
+    else if (info.all) st = ['ok', tr('done')];
     else if (sel < td) st = info.done ? ['go', tr('partial')] : ['bad', tr('missed')];
     else if (sel === td) st = ['go', tr('in_progress')];
     const n = diff(d10(g.start_date), sel) + 1;
     let hint = '';
-    if (sel > td) hint = tr('hint_future');
+    if (!tasks.length) hint = '';
+    else if (sel > td) hint = tr('hint_future');
     else if (sel < td) hint = role === 'mentor' ? tr('hint_mentor_past') : tr('hint_closed');
     const add = role === 'mentor' ? `<div class="hg-addrow"><input type="text" maxlength="200" data-addtask="${g.id}" placeholder="${tr('add_task')}"><button type="button" class="hg-btn hg-btn-sm" data-act="addtask" data-goal="${g.id}">${tr('add')}</button></div>` : '';
     return `<div class="hg-day">
       <div class="hg-day-head"><div><div class="hg-eyebrow">${tr('day')} ${n}${sel === td ? ' · ' + tr('today') : ''}</div>
       <div class="hg-day-title">${fmt(sel, { weekday: 'long', month: 'long', day: 'numeric' })}</div></div>
       <span class="hg-chip ${st[0]}">${st[1]}</span></div>
-      <div class="hg-eyebrow">${tr('n_of_m', { n: info.done, m: info.ts.length })}</div>
+      ${tasks.length ? `<div class="hg-eyebrow">${tr('n_of_m', { n: info.done, m: info.ts.length })}</div>` : `<div class="hg-hint">${tr('no_tasks')}</div>`}
       ${tasks.map(t => taskRow(g, t, role)).join('')}${add}
       ${hint ? `<div class="hg-hint">${hint}</div>` : ''}</div>`;
   }
@@ -207,22 +240,85 @@
       ${ui.edit[g.id] ? editPanel(g) : ''}${body}</section>`;
   }
 
+  // ── new-goal form state ──────────────────────────────────────────────
+  // Kept in ui.fd so switching type, month or day never wipes what was typed.
+  const newFd = () => {
+    const td = today(); return {
+      title: '', due: '', target: '5', deadline: '', start: td, end: addDays(td, 29),
+      reminder: '20:00', mode: 'same', same: [''], plan: {}, day: null
+    };
+  };
+  const fd = mid => ui.fd[mid] || (ui.fd[mid] = newFd());
+  const isDay = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
+  const rangeOf = d => (isDay(d.start) && isDay(d.end) && d.end >= d.start && diff(d.start, d.end) + 1 <= MAX_DAYS) ? [d.start, d.end] : null;
+  const filled = list => (list || []).map(v => String(v).trim()).filter(Boolean);
+
+  // Copy what is currently typed in the form into ui.fd (runs on every input).
+  function snap(root) {
+    const form = root.querySelector('.hg-new');
+    if (!form) return;
+    const d = fd(root.dataset.mentee);
+    for (const k of ['title', 'due', 'target', 'deadline', 'start', 'end', 'reminder']) {
+      const el = form.querySelector(`[data-f="${k}"]`);
+      if (el) d[k] = el.value;
+    }
+    const same = form.querySelectorAll('[data-tpl] input');
+    if (same.length) d.same = [...same].map(i => i.value);
+    const ed = form.querySelector('[data-dayedit]');
+    if (ed) d.plan[ed.dataset.dayedit] = [...ed.querySelectorAll('input')].map(i => i.value);
+  }
+
+  function planner(mid, d) {
+    const r = rangeOf(d);
+    if (!r) return `<div class="hg-hint">${tr('plan_dates_first')}</div>`;
+    const [s, e] = r;
+    const sel = d.day && d.day >= s && d.day <= e ? d.day : s;
+    const cal = grids('form:' + mid, s, e, sel, x => {
+      const has = filled(d.plan[x]).length > 0;
+      return `<button type="button" class="hg-d${has ? ' has' : ''}${x === sel ? ' sel' : ''}" data-act="fday" data-date="${x}" aria-label="${fmt(x, { month: 'long', day: 'numeric' })}"><span>${Number(x.substring(8))}</span>${has ? '<b></b>' : ''}</button>`;
+    });
+    const planned = Object.entries(d.plan).filter(([x, v]) => x >= s && x <= e && filled(v).length).length;
+    const list = d.plan[sel]?.length ? d.plan[sel] : [''];
+    return `<div class="hg-plan">
+      <div class="hg-eyebrow">${tr('plan_title')} · ${tr('planned_n', { n: planned, m: diff(s, e) + 1 })}</div>
+      <div class="hg-calwrap">${cal}</div>
+      <div class="hg-dayedit" data-dayedit="${sel}">
+        <div class="hg-day-title">${tr('day')} ${diff(s, sel) + 1} · ${fmt(sel, { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+        ${list.map(v => `<input type="text" maxlength="200" placeholder="${tr('f_daily_ph')}" value="${esc(v)}">`).join('')}
+        <div class="hg-plan-actions">
+          ${list.length < MAX_TASKS ? `<button type="button" class="hg-link" data-act="padd">+ ${tr('f_more')}</button>` : ''}
+          <button type="button" class="hg-link" data-act="pclear">${tr('clear_day')}</button></div>
+        <div class="hg-plan-actions">
+          <button type="button" class="hg-link" data-act="pfill" data-scope="empty">${tr('apply_empty')}</button>
+          <button type="button" class="hg-link" data-act="pfill" data-scope="all">${tr('apply_all')}</button></div>
+      </div></div>`;
+  }
+
   function formHtml(menteeId) {
     const type = ui.ftype[menteeId] || 'challenge';
-    const td = today();
-    const opt = (v, k, d) => `<button type="button" class="hg-type${type === v ? ' on' : ''}" data-act="ftype" data-type="${v}"><b>${tr(k)}</b><small>${tr(d)}</small></button>`;
+    const d = fd(menteeId), td = today();
+    const opt = (v, k, dd) => `<button type="button" class="hg-type${type === v ? ' on' : ''}" data-act="ftype" data-type="${v}"><b>${tr(k)}</b><small>${tr(dd)}</small></button>`;
     let fields = '';
-    if (type === 'one_time') fields = `<label>${tr('f_due')}<input type="date" data-f="due" min="${td}"></label>`;
-    if (type === 'progressive') fields = `<label>${tr('f_target')}<input type="number" data-f="target" min="1" max="50" value="5" inputmode="numeric"></label>
-      <label>${tr('f_deadline')}<input type="date" data-f="deadline" min="${td}"></label>`;
-    if (type === 'challenge') fields = `<div class="hg-row2"><label>${tr('f_start')}<input type="date" data-f="start" min="${td}" value="${td}"></label>
-      <label>${tr('f_end')}<input type="date" data-f="end" min="${td}" value="${addDays(td, 29)}"></label></div>
-      <div class="hg-tpl"><span>${tr('f_daily')}</span><div data-tpl><input type="text" maxlength="200" placeholder="${tr('f_daily_ph')}"></div>
-      <button type="button" class="hg-link" data-act="addtpl">+ ${tr('f_more')}</button></div>
-      <label>${tr('f_reminder')}<input type="time" data-f="reminder" value="20:00"></label>`;
+    if (type === 'one_time') fields = `<label>${tr('f_due')}<input type="date" data-f="due" min="${td}" value="${esc(d.due)}"></label>`;
+    if (type === 'progressive') fields = `<label>${tr('f_target')}<input type="number" data-f="target" min="1" max="50" value="${esc(d.target)}" inputmode="numeric"></label>
+      <label>${tr('f_deadline')}<input type="date" data-f="deadline" min="${td}" value="${esc(d.deadline)}"></label>`;
+    if (type === 'challenge') {
+      const len = rangeOf(d) ? diff(d.start, d.end) + 1 : 0;
+      const chips = [7, 14, 21, 30, 40].map(n => `<button type="button" class="hg-pill${len === n ? ' on' : ''}" data-act="dur" data-n="${n}">${tr('days_n', { n })}</button>`).join('');
+      const same = `<div class="hg-tpl"><span>${tr('f_daily')}</span><div data-tpl>${(d.same.length ? d.same : ['']).map(v => `<input type="text" maxlength="200" placeholder="${tr('f_daily_ph')}" value="${esc(v)}">`).join('')}</div>
+        <button type="button" class="hg-link" data-act="addtpl">+ ${tr('f_more')}</button></div>`;
+      fields = `<div class="hg-row2"><label>${tr('f_start')}<input type="date" data-f="start" min="${td}" value="${esc(d.start)}"></label>
+        <label>${tr('f_end')}<input type="date" data-f="end" min="${esc(d.start || td)}" value="${esc(d.end)}"></label></div>
+        <div class="hg-chips" role="group" aria-label="${tr('f_dur')}">${chips}</div>
+        <div class="hg-seg" role="group">
+          <button type="button" class="${d.mode === 'same' ? 'on' : ''}" data-act="fmode" data-mode="same">${tr('mode_same')}</button>
+          <button type="button" class="${d.mode === 'custom' ? 'on' : ''}" data-act="fmode" data-mode="custom">${tr('mode_custom')}</button></div>
+        ${d.mode === 'custom' ? planner(menteeId, d) : same}
+        <label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${esc(d.reminder)}"></label>`;
+    }
     return `<div class="hg-form hg-new">
       <div class="hg-types">${opt('one_time', 'type_one', 'type_one_d')}${opt('progressive', 'type_prog', 'type_prog_d')}${opt('challenge', 'type_chal', 'type_chal_d')}</div>
-      <label>${tr('f_title')}<input type="text" maxlength="200" data-f="title"></label>${fields}
+      <label>${tr('f_title')}<input type="text" maxlength="200" data-f="title" value="${esc(d.title)}"></label>${fields}
       <div class="hg-actions"><button type="button" class="hg-btn hg-btn-ghost" data-act="cancel-new">${tr('cancel')}</button>
       <button type="button" class="hg-btn" data-act="create">${tr('create')}</button></div></div>`;
   }
@@ -306,16 +402,24 @@
   }
 
   function readForm(root, menteeId) {
-    const form = root.querySelector('.hg-new');
-    const v = k => form.querySelector(`[data-f="${k}"]`)?.value || '';
+    snap(root);
+    const d = fd(menteeId);
     const type = ui.ftype[menteeId] || 'challenge';
-    const body = { mentee_id: menteeId, type, title: v('title').trim() };
-    if (type === 'one_time') body.due_date = v('due') || null;
-    if (type === 'progressive') { body.target_count = parseInt(v('target'), 10); body.end_date = v('deadline') || null; }
+    const body = { mentee_id: menteeId, type, title: d.title.trim() };
+    if (type === 'one_time') body.due_date = d.due || null;
+    if (type === 'progressive') { body.target_count = parseInt(d.target, 10); body.end_date = d.deadline || null; }
     if (type === 'challenge') {
-      body.start_date = v('start'); body.end_date = v('end'); body.reminder_time = v('reminder') || null;
-      body.task_template = [...form.querySelectorAll('[data-tpl] input')].map(i => i.value.trim()).filter(Boolean);
-      if (!body.task_template.length) body.task_template = [body.title];
+      body.start_date = d.start; body.end_date = d.end; body.reminder_time = d.reminder || null;
+      if (d.mode === 'custom') {
+        const r = rangeOf(d);
+        const plan = {};
+        if (r) for (const [x, v] of Object.entries(d.plan)) if (x >= r[0] && x <= r[1] && filled(v).length) plan[x] = filled(v);
+        if (!Object.keys(plan).length) return { error: tr('plan_empty') };
+        body.day_plan = plan;
+      } else {
+        body.task_template = filled(d.same);
+        if (!body.task_template.length) body.task_template = [body.title];
+      }
     }
     return body;
   }
@@ -326,22 +430,48 @@
     const act = el.dataset.act, mid = root.dataset.mentee, gid = el.dataset.goal, tid = el.dataset.task;
     switch (act) {
       case 'tick': return tick(root, tid);
-      case 'day': ui.sel[gid] = el.dataset.date; return paint(root, true);
+      case 'day': ui.sel[gid] = el.dataset.date; delete ui.month[gid]; return paint(root, true);
+      case 'mnav': ui.month[el.dataset.key] = el.dataset.m; return paint(root, true);
       case 'new': ui.form[mid] = true; return paint(root, true);
-      case 'cancel-new': ui.form[mid] = false; return paint(root, true);
+      case 'cancel-new': ui.form[mid] = false; delete ui.fd[mid]; return paint(root, true);
       case 'ftype': ui.ftype[mid] = el.dataset.type; return paint(root, true);
-      case 'addtpl': {
-        const box = root.querySelector('[data-tpl]');
-        if (box.children.length < 4) { const i = document.createElement('input'); i.type = 'text'; i.maxLength = 200; i.placeholder = tr('f_daily_ph'); box.appendChild(i); i.focus(); }
-        return;
+      case 'fmode': fd(mid).mode = el.dataset.mode; return paint(root, true);
+      case 'fday': fd(mid).day = el.dataset.date; delete ui.month['form:' + mid]; return paint(root, true);
+      case 'dur': { const d = fd(mid); if (isDay(d.start)) d.end = addDays(d.start, Number(el.dataset.n) - 1); return paint(root, true); }
+      case 'addtpl': { const d = fd(mid); if (d.same.length < MAX_TASKS) d.same.push(''); return paint(root, true); }
+      case 'padd': {
+        const d = fd(mid), r = rangeOf(d); if (!r) return;
+        const day = d.day && d.day >= r[0] && d.day <= r[1] ? d.day : r[0];
+        const cur = d.plan[day]?.length ? d.plan[day] : [''];
+        if (cur.length < MAX_TASKS) d.plan[day] = [...cur, ''];
+        return paint(root, true);
+      }
+      case 'pclear': {
+        const d = fd(mid), r = rangeOf(d); if (!r) return;
+        d.plan[d.day && d.day >= r[0] && d.day <= r[1] ? d.day : r[0]] = [];
+        return paint(root, true);
+      }
+      case 'pfill': {
+        const d = fd(mid), r = rangeOf(d); if (!r) return;
+        const src = filled(d.plan[d.day && d.day >= r[0] && d.day <= r[1] ? d.day : r[0]]);
+        if (!src.length) return;
+        for (let x = r[0]; x <= r[1]; x = addDays(x, 1)) if (el.dataset.scope === 'all' || !filled(d.plan[x]).length) d.plan[x] = [...src];
+        return paint(root, true);
       }
       case 'create': {
         const body = readForm(root, mid);
+        if (body.error) return showToast(body.error, 'error');
         if (!body.title) return root.querySelector('.hg-new [data-f="title"]').focus();
         el.disabled = true;
         return apiFetch('/api/goals', { method: 'POST', body }).then(g => {
-          applyGoal(g); ui.form[mid] = false; showToast(tr('created'), 'success'); repaintAll();
+          applyGoal(g); ui.form[mid] = false; delete ui.fd[mid]; showToast(tr('created'), 'success'); repaintAll();
         }).catch(err => { el.disabled = false; fail(err); });
+      }
+      case 'rename': ui.ren[tid] = true; return paint(root, true);
+      case 'saveren': {
+        const title = root.querySelector(`[data-ren="${tid}"]`).value.trim();
+        delete ui.ren[tid];
+        return title ? call(`/api/goals/tasks/${tid}`, 'PATCH', { title }) : paint(root, true);
       }
       case 'edit': ui.edit[gid] = true; return paint(root, true);
       case 'cancel-edit': ui.edit[gid] = false; return paint(root, true);
@@ -392,7 +522,13 @@
   function bind(root) {
     if (root._hg) return;
     root._hg = true;
-    root.addEventListener('click', e => onClick(root, e));
+    root.addEventListener('click', e => { if (e.target.closest('[data-act]') && root.querySelector('.hg-new')) snap(root); onClick(root, e); });
+    root.addEventListener('input', e => { if (e.target.closest('.hg-new')) snap(root); });
+    root.addEventListener('change', e => {
+      if (!e.target.closest('.hg-new')) return;
+      snap(root);
+      if (['start', 'end'].includes(e.target.dataset.f)) paint(root, true); // planner + length chips follow the dates
+    });
     // Enter in the add-task box adds the task
     root.addEventListener('keydown', e => {
       if (e.key === 'Enter' && e.target.matches('[data-addtask]')) { e.preventDefault(); root.querySelector(`[data-act="addtask"][data-goal="${e.target.dataset.addtask}"]`)?.click(); }

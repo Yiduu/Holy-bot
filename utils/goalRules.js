@@ -103,12 +103,32 @@ function trailingMissedDays(tasks, today = ethiopiaToday()) {
   return run;
 }
 
-// One row per template entry per calendar day from..to (inclusive).
-function buildChallengeTasks(goal, from = goal.start_date, to = goal.end_date) {
+// Validates a mentor's day-by-day plan: { 'YYYY-MM-DD': ['task', ...] }.
+// Dates outside start..end are rejected, titles are trimmed/clamped, and a day
+// with no tasks is simply a rest day. Returns { plan } or { error }.
+function normalizeDayPlan(raw, start, end) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: 'Add tasks for at least one day' };
+  const plan = {};
+  let any = false;
+  for (const [d, list] of Object.entries(raw)) {
+    if (!isValidDay(d) || d < day(start) || d > day(end)) return { error: `${d} is outside the challenge dates` };
+    const titles = (Array.isArray(list) ? list : []).map(x => String(x ?? '').trim().slice(0, 200)).filter(Boolean);
+    if (titles.length > MAX_TEMPLATE_TASKS) return { error: `A day can have at most ${MAX_TEMPLATE_TASKS} tasks (${d})` };
+    if (titles.length) { plan[d] = titles; any = true; }
+  }
+  return any ? { plan } : { error: 'Add tasks for at least one day' };
+}
+
+// One row per task per calendar day from..to (inclusive).
+//  - custom_days goals use the mentor's per-day plan (days not in it get no
+//    tasks, so extending a custom challenge never invents work)
+//  - otherwise every day repeats task_template
+function buildChallengeTasks(goal, from = goal.start_date, to = goal.end_date, plan = null) {
   const rows = [];
   const template = (goal.task_template?.length ? goal.task_template : [goal.title]);
   for (let d = day(from); d <= day(to); d = addDays(d, 1)) {
-    template.forEach((title, position) => rows.push({ title, position, due_date: d }));
+    const titles = goal.custom_days ? (plan?.[d] || []) : template;
+    titles.forEach((title, position) => rows.push({ title, position, due_date: d }));
   }
   return rows;
 }
@@ -116,5 +136,5 @@ function buildChallengeTasks(goal, from = goal.start_date, to = goal.end_date) {
 module.exports = {
   MAX_CHALLENGE_DAYS, MAX_TEMPLATE_TASKS, MAX_PROGRESSIVE,
   ethiopiaToday, ethiopiaTimeHM, isGoalPastDue, addDays, daysBetween, isValidDay, isValidTime,
-  menteeCannotSetDone, computeStreak, trailingMissedDays, goalStats, buildChallengeTasks,
+  menteeCannotSetDone, computeStreak, trailingMissedDays, goalStats, buildChallengeTasks, normalizeDayPlan,
 };

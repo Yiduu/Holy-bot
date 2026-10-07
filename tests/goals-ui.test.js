@@ -75,6 +75,37 @@ const tick = () => new Promise(r => setTimeout(r, 20));
   panel.querySelector('[data-type="progressive"]').click();
   assert(panel.querySelector('[data-f="target"]'), 'progressive fields');
 
+  // per-day planner: switch to "different each day", plan two days, submit
+  panel.querySelector('[data-type="challenge"]').click();
+  panel.querySelector('[data-f="title"]').value = 'Lent';
+  panel.querySelector('[data-act="fmode"][data-mode="custom"]').click();
+  assert.strictEqual(panel.querySelector('[data-f="title"]').value, 'Lent', 'typed title survives repaint');
+  assert(panel.querySelector('[data-dayedit]'), 'day editor shown');
+  assert.strictEqual(panel.querySelectorAll('.hg-plan .hg-d:not(.x)').length, 30, 'one planner cell per day (30-day default)');
+  panel.querySelector('[data-dayedit] input').value = 'Read Psalm 1';
+  panel.querySelector(`.hg-plan .hg-d[data-date="${add(TODAY, 1)}"]`).click();
+  panel.querySelector('[data-dayedit] input').value = 'Fast until noon';
+  panel.querySelector('[data-act="padd"]').click();
+  panel.querySelectorAll('[data-dayedit] input')[1].value = 'Evening prayer';
+  panel.querySelector('[data-act="create"]').click();
+  await tick();
+  const post = calls.find(c => c[0] === 'POST' && c[1] === '/api/goals');
+  assert(post, 'goal POSTed');
+  assert.strictEqual(JSON.stringify(post[2].day_plan), JSON.stringify({ [TODAY]: ['Read Psalm 1'], [add(TODAY, 1)]: ['Fast until noon', 'Evening prayer'] }), 'different tasks per day sent');
+  assert(!post[2].task_template, 'no repeated template in custom mode');
+  // creating with an empty plan is blocked client-side
+  panel.querySelector('[data-act="new"]').click();
+  panel.querySelector('[data-act="fmode"][data-mode="custom"]').click();
+  const before = calls.length;
+  panel.querySelector('[data-f="title"]').value = 'Empty';
+  panel.querySelector('[data-act="create"]').click();
+  await tick();
+  assert.strictEqual(calls.length, before, 'empty plan not submitted');
+  panel.querySelector('[data-act="cancel-new"]').click();
+
+  // calendar shows one month at a time
+  assert(panel.querySelectorAll('.hg-goal .hg-cal:not([hidden])').length === 1, 'single visible month');
+
   // mentee card: past and future days are locked, today is open and offers a note
   const card = doc.getElementById('card'), list = doc.getElementById('list');
   await w.HolyGoals.mountMentee(card, list);

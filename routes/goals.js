@@ -60,11 +60,20 @@ module.exports = (supabase, requireAuth) => {
         if (b.start_date < today) return res.status(400).json({ error: "The start date can't be in the past" });
         const span = R.daysBetween(b.start_date, b.end_date) + 1;
         if (span < 1 || span > R.MAX_CHALLENGE_DAYS) return res.status(400).json({ error: `A challenge can run 1 to ${R.MAX_CHALLENGE_DAYS} days` });
-        const tpl = (Array.isArray(b.task_template) ? b.task_template : [title]).map(x => String(x).trim().slice(0, 200)).filter(Boolean);
-        if (!tpl.length || tpl.length > R.MAX_TEMPLATE_TASKS) return res.status(400).json({ error: `Add 1 to ${R.MAX_TEMPLATE_TASKS} daily tasks` });
         if (b.reminder_time && !R.isValidTime(b.reminder_time)) return res.status(400).json({ error: 'Invalid reminder time' });
-        Object.assign(goal, { start_date: b.start_date, end_date: b.end_date, task_template: tpl, reminder_time: b.reminder_time || '20:00' });
-        tasks = R.buildChallengeTasks(goal);
+        Object.assign(goal, { start_date: b.start_date, end_date: b.end_date, reminder_time: b.reminder_time || '20:00' });
+        if (b.day_plan) {
+          // The mentor decided each day's tasks individually.
+          const r = R.normalizeDayPlan(b.day_plan, b.start_date, b.end_date);
+          if (r.error) return res.status(400).json({ error: r.error });
+          goal.custom_days = true;
+          tasks = R.buildChallengeTasks(goal, b.start_date, b.end_date, r.plan);
+        } else {
+          const tpl = (Array.isArray(b.task_template) ? b.task_template : [title]).map(x => String(x).trim().slice(0, 200)).filter(Boolean);
+          if (!tpl.length || tpl.length > R.MAX_TEMPLATE_TASKS) return res.status(400).json({ error: `Add 1 to ${R.MAX_TEMPLATE_TASKS} daily tasks` });
+          goal.task_template = tpl;
+          tasks = R.buildChallengeTasks(goal);
+        }
       } else {
         if (deadline && (!R.isValidDay(deadline) || deadline < today)) return res.status(400).json({ error: 'The due date must be today or later' });
         goal.end_date = deadline || null;
@@ -132,8 +141,10 @@ module.exports = (supabase, requireAuth) => {
       if (goal.type === 'challenge' && !(R.isValidDay(due) && due >= String(goal.start_date).substring(0, 10) && due <= String(goal.end_date).substring(0, 10))) {
         return res.status(400).json({ error: 'Pick a day inside the challenge' });
       }
-      const { data: last } = await supabase.from('goal_tasks').select('position').eq('goal_id', goal.id)
-        .order('position', { ascending: false }).limit(1);
+      // Position is per day (the unique slot is goal + day + position).
+      let q = supabase.from('goal_tasks').select('position').eq('goal_id', goal.id);
+      q = due ? q.eq('due_date', due) : q.is('due_date', null);
+      const { data: last } = await q.order('position', { ascending: false }).limit(1);
       const { error } = await supabase.from('goal_tasks').insert({
         goal_id: goal.id, mentor_id: goal.mentor_id, mentee_id: goal.mentee_id, title, due_date: due,
         position: (last?.[0]?.position ?? -1) + 1,
@@ -178,7 +189,8 @@ module.exports = (supabase, requireAuth) => {
           if (b.end_date > oldEnd) {
             const rows = R.buildChallengeTasks(goal, R.addDays(oldEnd, 1), b.end_date)
               .map(t => ({ ...t, goal_id: goal.id, mentor_id: goal.mentor_id, mentee_id: goal.mentee_id }));
-            const { error } = await supabase.from('goal_tasks').insert(rows);
+            // Custom-plan challenges get empty new days (the mentor fills them in).
+            const { error } = rows.length ? await supabase.from('goal_tasks').insert(rows) : { error: null };
             if (error) return res.status(500).json({ error: error.message });
           } else {
             const { data: kept } = await supabase.from('goal_tasks').select('id').eq('goal_id', goal.id)

@@ -1,7 +1,7 @@
 /* Goals v2 (goals.js). Uses the app's tokens so dark and light themes both work.
    Only transform/opacity are animated, and nothing here uses blur, so it stays
    smooth on low-end Android WebViews. */
-.hg-root { display: flex; flex-direction: column; gap: 12px; }
+.hg-root { display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 100%; }
 #myGoalsCard.hg-mounted .my-goals-viewport { max-height: none; overflow: visible; }
 #myGoalsCard.hg-mounted .my-goals-list { display: block; }
 
@@ -10,7 +10,7 @@
   font: 700 13px var(--font-body); cursor: pointer; }
 .hg-empty { color: var(--text3); font-size: 13px; padding: 4px 0; }
 
-.hg-goal { background: var(--bg2); border: 1px solid var(--border-dim); border-radius: var(--radius); padding: 12px; }
+.hg-goal { min-width: 0; max-width: 100%; box-sizing: border-box; background: var(--bg2); border: 1px solid var(--border-dim); border-radius: var(--radius); padding: 12px; }
 .hg-goal.fin { opacity: .85; }
 .hg-head { display: flex; align-items: flex-start; gap: 6px; }
 .hg-headtxt { flex: 1; min-width: 0; }
@@ -30,18 +30,26 @@
   font: 700 11px var(--font-body); cursor: pointer; }
 .hg-mini-ic { display: inline-flex; align-items: center; justify-content: center; }
 
-/* calendar */
-.hg-month { font-size: 13px; font-weight: 700; color: var(--text); margin: 6px 0; }
-.hg-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 8px; }
+/* calendar: one month at a time, compact cells so a month is ~5 short rows on a phone */
+.hg-calwrap { max-width: 320px; margin: 0 auto; }
+.hg-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 6px; }
+.hg-month { font-size: 13px; font-weight: 700; color: var(--text); text-align: center; flex: 1; }
+.hg-mnav { width: 36px; height: 32px; border: 0; border-radius: 8px; background: var(--bg3); color: var(--text);
+  font: 700 18px/1 var(--font-body); cursor: pointer; flex: none; }
+.hg-mnav:disabled { opacity: .3; cursor: default; }
+.hg-cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; margin-bottom: 6px; }
+.hg-cal[hidden] { display: none; }
 .hg-w { font-size: 10px; text-align: center; color: var(--text3); }
-.hg-d { aspect-ratio: 1; min-height: 40px; border: 0; padding: 0; border-radius: 8px; background: var(--bg3); color: var(--text2);
-  font: 12px var(--font-body); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
+.hg-d { height: 34px; min-width: 0; border: 0; padding: 0; border-radius: 8px; background: var(--bg3); color: var(--text2);
+  font: 12px/1 var(--font-body); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
 .hg-d.x { background: transparent; cursor: default; }
-.hg-d svg { width: 11px; height: 11px; margin-top: 1px; }
+.hg-d svg { width: 9px; height: 9px; margin-top: 2px; }
 .hg-d.k { background: rgba(201, 168, 76, .18); color: var(--gold); }
 .hg-d.pt { background: linear-gradient(135deg, rgba(201, 168, 76, .25) 50%, var(--bg3) 50%); color: var(--gold); }
 .hg-d.s { background: rgba(224, 92, 92, .15); color: var(--danger); }
-.hg-d.s b { width: 5px; height: 5px; border-radius: 50%; background: var(--danger); margin-top: 3px; }
+.hg-d.s b, .hg-d.has b { width: 4px; height: 4px; border-radius: 50%; background: var(--danger); margin-top: 3px; }
+.hg-d.has { background: rgba(201, 168, 76, .18); color: var(--gold); }
+.hg-d.has b { background: var(--gold); }
 .hg-d.n { background: var(--gold); color: #20180a; font-weight: 700; }
 .hg-d.f, .hg-d.sk { opacity: .55; }
 .hg-d.sel { outline: 2px solid var(--text); outline-offset: 1px; }
@@ -71,7 +79,11 @@
 
 /* forms */
 .hg-form { display: flex; flex-direction: column; gap: 10px; margin: 8px 0; }
-.hg-form label, .hg-tpl > span { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text2); }
+.hg-form label, .hg-tpl > span { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text2); min-width: 0; }
+/* native date/time inputs have a wide intrinsic size on mobile WebViews; force them to fit their column */
+.hg-form input[type="date"], .hg-form input[type="time"] { display: block; min-width: 0; max-width: 100%; min-height: 44px;
+  -webkit-appearance: none; appearance: none; text-align: left; }
+.hg-form input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .hg-new { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; margin: 0; }
 .hg-types { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .hg-type { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px; min-height: 64px; border-radius: var(--radius-sm);
@@ -79,7 +91,19 @@
 .hg-type b { font-size: 12px; color: var(--text); }
 .hg-type small { font-size: 10px; line-height: 1.25; }
 .hg-type.on { border-color: var(--gold); background: var(--gold-dim); }
-.hg-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.hg-row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.hg-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.hg-pill { min-height: 34px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--border-dim); background: var(--bg3);
+  color: var(--text2); font: 700 12px var(--font-body); cursor: pointer; }
+.hg-pill.on { border-color: var(--gold); background: var(--gold-dim); color: var(--text); }
+.hg-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 3px; border-radius: 12px; background: var(--bg3); }
+.hg-seg button { min-height: 40px; border: 0; border-radius: 10px; background: transparent; color: var(--text2);
+  font: 700 12px var(--font-body); cursor: pointer; padding: 0 6px; }
+.hg-seg button.on { background: var(--gold); color: #20180a; }
+.hg-plan { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border-dim); border-radius: var(--radius-sm); min-width: 0; }
+.hg-dayedit { display: flex; flex-direction: column; gap: 6px; }
+.hg-plan-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.hg-ren { gap: 8px; padding: 6px 0; }
 .hg-tpl [data-tpl] { display: flex; flex-direction: column; gap: 6px; }
 .hg-link { align-self: flex-start; background: none; border: 0; color: var(--gold); font: 700 12px var(--font-body); min-height: 36px; cursor: pointer; }
 .hg-actions { display: flex; gap: 8px; justify-content: flex-end; }
@@ -87,5 +111,13 @@
 .hg-btn:disabled { opacity: .5; }
 .hg-btn-sm { min-height: 36px; padding: 0 12px; font-size: 12px; border-radius: 10px; flex: none; }
 .hg-btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border-dim); }
+
+/* narrow phones: stack date fields and goal types so nothing is wider than the screen */
+@media (max-width: 420px) {
+  .hg-row2, .hg-types { grid-template-columns: minmax(0, 1fr); }
+  .hg-type { min-height: 52px; }
+  .hg-type small { font-size: 11px; }
+  .hg-goal, .hg-new { padding: 10px; }
+}
 
 @media (prefers-reduced-motion: reduce) { .hg-ck.on { animation: none; } .hg-bar i { transition: none; } }
