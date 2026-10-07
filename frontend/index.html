@@ -2373,13 +2373,24 @@
       const msgs = document.getElementById('chatMessages');
       if (msgs) msgs.scrollTo({ top: msgs.scrollHeight, behavior: 'smooth' });
     });
+    // Shown only while the chat page is open AND the list is scrolled up, and
+    // always parked just above the composer so it never covers the send button.
+    window.updateScrollToBottomBtn = () => {
+      const msgs = document.getElementById('chatMessages');
+      const row = document.getElementById('chatInputRow');
+      const onChat = document.getElementById('page-chat')?.classList.contains('active');
+      const rowVisible = row && !row.classList.contains('hidden') && row.offsetHeight > 0;
+      const dist = msgs ? msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight : 0;
+      if (!onChat || !rowVisible || dist <= 120) { scrollBtn.style.display = 'none'; return; }
+      const vh = window.visualViewport?.height || window.innerHeight;
+      const top = row.getBoundingClientRect().top;
+      scrollBtn.style.bottom = Math.max(8, Math.round(vh - top + 10)) + 'px';
+      scrollBtn.style.display = 'flex';
+    };
     const chatMsgs = document.getElementById('chatMessages');
-    if (chatMsgs) {
-      chatMsgs.addEventListener('scroll', () => {
-        const distFromBottom = chatMsgs.scrollHeight - chatMsgs.scrollTop - chatMsgs.clientHeight;
-        scrollBtn.style.display = distFromBottom > 120 ? 'flex' : 'none';
-      });
-    }
+    if (chatMsgs) chatMsgs.addEventListener('scroll', window.updateScrollToBottomBtn, { passive: true });
+    window.addEventListener('resize', window.updateScrollToBottomBtn);
+    window.visualViewport?.addEventListener('resize', window.updateScrollToBottomBtn);
 
     /* ── Swipe-left on chat messages to reply ────────────────── */
     let swipeStartX = 0, swipeTarget = null;

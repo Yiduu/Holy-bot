@@ -1583,6 +1583,7 @@ function navigate(page) {
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
   $(`page-${page}`)?.classList.add('active');
+  window.updateScrollToBottomBtn?.();      // hide the chat's "jump to bottom" button on other pages
   const navEl = $(`nav-${page}`);
   navEl?.classList.add('active');
   // Always scroll the active tab into view so the indicator shows correctly
@@ -1694,6 +1695,7 @@ function syncChatInputHeight() {
     row._lastSyncedH = h;
     messages.style.setProperty('--chat-input-h', h + 'px');
   }
+  window.updateScrollToBottomBtn?.();
 }
 window.addEventListener('resize', syncChatInputHeight);
 window.visualViewport?.addEventListener('resize', syncChatInputHeight);
