@@ -1,7 +1,7 @@
 // Run: node tests/chat-recorder.test.js   (needs devDependency jsdom)
 // Hold-to-record gestures and microphone permission in frontend/chat-media.js:
 // slide LEFT cancels, slide UP locks, a curved thumb doesn't trigger the wrong one,
-// the microphone is asked for only once, and a press eaten by the first-time
+// the microphone is kept briefly between recordings, and a press eaten by the first-time
 // permission sheet is kept instead of thrown away.
 const assert = require('assert'); const fs = require('fs'); const path = require('path');
 const { JSDOM } = require('jsdom');
@@ -78,16 +78,17 @@ function boot({ micDelayMs = 0 } = {}) {
   await sleep(1100); fire('pointerup', 300, 500, id); await sleep(80);
   assert.equal(sent(), 1); assert.ok(!recording()); ok('hold, release → voice message sent');
 
-  // 2 — hiding the page drops the current take cleanly and releases the mic
+  // 2 — permission asked once, even when the page is hidden WHILE holding
+  //     (Telegram's own permission / system sheets hide the page)
   id = press(); await sleep(60);
   w.Object.defineProperty(w.document, 'hidden', { value: true, configurable: true });
   w.document.dispatchEvent(new w.Event('visibilitychange'));
   w.Object.defineProperty(w.document, 'hidden', { value: false, configurable: true });
   fire('pointerup', 300, 500, id); await sleep(80); assert.ok(!recording(), 'the held recording is dropped when hidden');
   id = press(); await sleep(60); await sleep(1100); fire('pointerup', 300, 500, id); await sleep(80);
-  assert.equal(sent(), 2);
-  assert.equal(log.mic.stops, log.mic.requests, 'all microphone tracks stopped');
-  ok('hiding the page stops the recording without breaking future takes');
+  assert.equal(sent(), 2); assert.equal(log.mic.requests, 1, 'microphone requested once');
+  assert.equal(log.mic.stops, 0, 'microphone kept for quick follow-up recordings'); ok('microphone asked for once; hiding the page does not drop the permission');
+  w.eval('cmReleaseAudioStream(true)'); assert.equal(log.mic.stops, 1, 'force release stops it'); ok('force release (leaving / playing audio) stops the microphone');
 
   // 3 — slide left cancels (a little upward drift is fine)
   id = press(300, 500); await sleep(60);
@@ -162,6 +163,16 @@ function boot({ micDelayMs = 0 } = {}) {
   assert.equal(log.mic.requests, 1); assert.equal(log.added.length, 0);
   w.document.getElementById('recTrash').click(); await sleep(80);
   ok('first press eaten by the permission sheet → kept as a locked recording (no second press needed)');
+
+  // 14 — a TAP while the microphone is slow to open (>450 ms) must not turn into a locked recording
+  ({ w, log } = boot({ micDelayMs: 700 }));
+  await sleep(50);
+  const btn3 = w.document.getElementById('chatSendBtn'), bar3 = w.document.getElementById('recordBar');
+  const f3 = (type, id) => { const e = new w.MouseEvent(type, { bubbles: true, cancelable: true, clientX: 300, clientY: 500, button: 0 }); Object.defineProperty(e, 'pointerId', { value: id }); btn3.dispatchEvent(e); };
+  f3('pointerdown', 1); await sleep(100); f3('pointerup', 1);          // finger lifted normally, not cancelled
+  await sleep(900);
+  assert.ok(bar3.classList.contains('hidden'), 'no recording started'); assert.equal(log.added.length, 0);
+  assert.ok(log.toasts.some(m => /rec_hold_hint|Hold/.test(m))); ok('tap while the mic is slow to open → hint only, no locked recording');
 
   console.log('\nALL RECORDER CHECKS PASSED'); process.exit(0);
 })().catch(e => { console.error('\nFAILED:', e); process.exit(1); });

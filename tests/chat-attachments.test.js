@@ -357,9 +357,9 @@ async function clientTests() {
   assert.equal(sentBefore(), n0 + 1); const vm = log.added[n0]; assert.equal(vm.file_type, 'voice'); assert.equal(vm.duration, 3); assert.equal(vm.mime_type, 'audio/webm'); assert.ok(/\.webm$/.test(vm.file_name || 'x.webm'));
   assert.equal(run('cmRec.state'), 'idle'); assert.ok(!composer.classList.contains('is-recording')); ok('release → voice message sent, bar gone');
 
-  // Second recording opens the mic fresh so the green OS indicator turns off between takes
+  // Back-to-back recordings reuse the open stream, so the permission is not asked again
   await press();
-  assert.equal(mic.calls, 2); ok('second recording requests the microphone again cleanly');
+  assert.equal(mic.calls, 1); ok('second recording reuses permission without calling getUserMedia again');
   n0 = sentBefore(); log.toasts.length = 0;
   run('cmEndHold()'); // released straight away
   assert.equal(sentBefore(), n0); assert.ok(log.toasts.some(x => /Hold the mic/.test(x[0]))); ok('a quick tap sends nothing and explains "hold to record"');
@@ -379,8 +379,9 @@ async function clientTests() {
   await press(); run('cmRec.startedAt -= 4000; cmMoveHold({clientX: 100, clientY: 10})'); run('cancelRecording()');
   assert.equal(sentBefore(), n0); assert.equal(run('cmRec.state'), 'idle'); ok('trash / leaving the chat cancels a locked recording');
 
-  // every take stopped its track, no hardware leak
-  assert.equal(mic.stopped, mic.calls); ok('microphone tracks are stopped between recordings');
+  // page hidden completely releases hardware stream
+  run('cmReleaseAudioStream(true)');
+  assert.equal(mic.stopped, mic.calls); ok('every microphone stream that was opened has been stopped');
 
   // finger lifted (or OS permission sheet ate the touch) before the mic opened
   n0 = sentBefore(); mic.delay = 30; log.toasts.length = 0;

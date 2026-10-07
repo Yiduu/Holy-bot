@@ -311,6 +311,7 @@ async function cmToggleVoice(box, startAt) {
   }
 
   cmStopVoice();
+  cmReleaseAudioStream(true);       // an open microphone makes Android play audio quietly
   cmPlayer.el = box;
   cmPlayer.fileId = fileId;
   box.classList.add('is-loading');
@@ -984,6 +985,7 @@ function cmRecUi(on) {
 let cmCachedStream = null;
 
 async function cmAcquireAudioStream() {
+  clearTimeout(cmMicIdleTimer);
   const tracks = cmCachedStream?.getAudioTracks?.() || cmCachedStream?.getTracks?.() || [];
   const liveTrack = tracks.find(tr => tr.readyState === 'live' || tr.readyState === undefined);
   if (liveTrack && cmCachedStream) {
@@ -1007,19 +1009,29 @@ async function cmAcquireAudioStream() {
   return stream;
 }
 
-// Always STOP the tracks. Merely disabling them keeps the microphone open: the
-// green "mic in use" dot stays on and Android stays in capture mode, which also
-// makes playback quiet. Telegram remembers the permission, so re-opening the
-// mic on the next press does not ask again.
-function cmReleaseAudioStream() {
+// The microphone stays open for CM_MIC_IDLE_MS after a recording so that
+// recording again right away does not make Telegram / Android ask for the
+// permission again (and does not delay the start). After that the tracks are
+// really stopped, which clears Android's green "mic in use" dot and returns the
+// phone to normal playback volume. forceStop = stop right now (leaving the app,
+// or about to play a voice message).
+const CM_MIC_IDLE_MS = 30 * 1000;
+let cmMicIdleTimer = 0;
+function cmReleaseAudioStream(forceStop = false) {
+  clearTimeout(cmMicIdleTimer);
   if (!cmCachedStream) return;
-  try { cmCachedStream.getTracks?.().forEach(tr => tr.stop()); } catch { }
-  cmCachedStream = null;
+  if (forceStop) {
+    try { cmCachedStream.getTracks?.().forEach(tr => tr.stop()); } catch { }
+    cmCachedStream = null;
+    return;
+  }
+  try { (cmCachedStream.getAudioTracks?.() || cmCachedStream.getTracks?.() || []).forEach(tr => { tr.enabled = false; }); } catch { }
+  cmMicIdleTimer = setTimeout(() => cmReleaseAudioStream(true), CM_MIC_IDLE_MS);
 }
 
 function cmTeardownRec(forceStop = false) {
   clearInterval(cmRec.timer);
-  cmReleaseAudioStream();
+  cmReleaseAudioStream(forceStop);
   try { cmRec.ctx?.close(); } catch { }
   if (cmRec.previewAudio) {
     try { cmRec.previewAudio.pause(); } catch { }
@@ -1059,22 +1071,22 @@ async function cmStartRecording(e) {
   }
 
   if (cmRec.aborted || cmRec.state !== 'starting') {          // cancelled while the microphone was starting
-    cmReleaseAudioStream();
+    cmReleaseAudioStream(false);
     cmRec = cmNewRec();
     cmSwipes(true);
     updateComposerMode();
     return;
   }
+  // Finger already lifted while the microphone was opening. Like Telegram, a tap
+  // never starts a recording: show the hint and drop it. (Only a touch that the
+  // system took over, e.g. the permission sheet, sets autoLock via pointercancel.)
   if (!cmRec.held && !cmRec.autoLock) {
-    if (performance.now() - cmRec.t0 > 450) cmRec.autoLock = true;
-    else {
-      cmReleaseAudioStream();
-      cmRec = cmNewRec();
-      cmSwipes(true);
-      updateComposerMode();
-      showToast(cmT('rec_hold_hint', 'Hold the mic button to record, release to send.'));
-      return;
-    }
+    cmReleaseAudioStream(false);
+    cmRec = cmNewRec();
+    cmSwipes(true);
+    updateComposerMode();
+    showToast(cmT('rec_hold_hint', 'Hold the mic button to record, release to send.'));
+    return;
   }
 
   try {
@@ -1148,7 +1160,7 @@ function cmStopToPreview() {
   cmRec.state = 'preview';
   const mr = cmRec.mr;
   const finishPreview = () => {
-    cmReleaseAudioStream();       // only after the recorder has flushed its tail
+    cmReleaseAudioStream(false);       // only after the recorder has flushed its tail
     const blob = new Blob(cmRec.chunks, { type: cmRec.mime });
     cmRec.previewBlob = blob;
     cmRec.previewDuration = Math.max(1, Math.round(seconds));
