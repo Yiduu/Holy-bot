@@ -1343,6 +1343,78 @@ function cmCancelRecording(quiet) {
 function cancelRecording() { cmCancelRecording(); }
 window.cancelRecording = cancelRecording;
 
+/* ═══ Floating date pill (like Telegram) ═══════════════════════════════════
+   While the chat scrolls, a pill at the top shows the date of the messages
+   currently at the top of the screen. The next date's own pill pushes it up as
+   it arrives, and it fades out shortly after scrolling stops. The in-place
+   .chat-date-divider pills stay as they are. */
+const CM_FLOAT_DATE_HIDE_MS = 1400;
+const cmFloatDate = { el: null, timer: 0, raf: 0 };
+
+function cmEnsureFloatDate() {
+  const page = $('page-chat');
+  if (!page) return null;
+  if (!cmFloatDate.el || !cmFloatDate.el.isConnected) {
+    const el = document.createElement('div');
+    el.id = 'chatFloatingDate';
+    el.className = 'chat-float-date';
+    el.setAttribute('aria-hidden', 'true');
+    el.innerHTML = '<span></span>';
+    page.appendChild(el);
+    cmFloatDate.el = el;
+  }
+  return cmFloatDate.el;
+}
+
+function cmUpdateFloatingDate() {
+  const box = $('chatMessages');
+  const el = cmEnsureFloatDate();
+  if (!box || !el) return false;
+  const dividers = box.querySelectorAll('.chat-date-divider');
+  const cRect = box.getBoundingClientRect();
+  const topEdge = cRect.top + 8;
+  let cur = null, next = null;
+  for (const d of dividers) {
+    if (d.getBoundingClientRect().top <= topEdge) cur = d;
+    else { next = d; break; }
+  }
+  if (!cur) return false;                       // the first date pill is itself still on screen
+  const pill = el.firstElementChild;
+  const text = cur.textContent.trim();
+  if (pill.textContent !== text) pill.textContent = text;
+  const pillH = el.offsetHeight || 28;
+  const parent = el.offsetParent || el.parentElement;
+  const base = cRect.top - parent.getBoundingClientRect().top + 8;
+  // The next date's pill pushes this one out of the way instead of overlapping it.
+  let shift = 0;
+  if (next) shift = Math.min(0, next.getBoundingClientRect().top - (topEdge + pillH + 8));
+  el.style.top = Math.round(base) + 'px';
+  el.style.transform = shift ? `translateY(${Math.round(shift)}px)` : '';
+  return true;
+}
+
+function cmOnChatScroll() {
+  if (cmFloatDate.raf) return;
+  cmFloatDate.raf = requestAnimationFrame(() => {
+    cmFloatDate.raf = 0;
+    if (!$('page-chat')?.classList.contains('active')) return;
+    const el = cmFloatDate.el || cmEnsureFloatDate();
+    if (!el) return;
+    if (!cmUpdateFloatingDate()) { el.classList.remove('show'); return; }
+    el.classList.add('show');
+    clearTimeout(cmFloatDate.timer);
+    cmFloatDate.timer = setTimeout(() => el.classList.remove('show'), CM_FLOAT_DATE_HIDE_MS);
+  });
+}
+
+function cmInitFloatingDate() {
+  const box = $('chatMessages');
+  if (!box || box.dataset.cmFloatDate) return;
+  box.dataset.cmFloatDate = '1';
+  cmEnsureFloatDate();
+  box.addEventListener('scroll', cmOnChatScroll, { passive: true });
+}
+
 /* ═══ Wiring ═══════════════════════════════════════════════════════════════ */
 function cmInitComposer() {
   const btn = $('chatSendBtn');
@@ -1426,5 +1498,5 @@ function cmInitComposer() {
   updateComposerMode();
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cmInitComposer);
-else cmInitComposer();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { cmInitComposer(); cmInitFloatingDate(); });
+else { cmInitComposer(); cmInitFloatingDate(); }

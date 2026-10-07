@@ -1102,3 +1102,29 @@
   stroke-linecap: round; stroke-linejoin: round;
   flex: none;
 }
+
+/* Floating date pill: follows the scroll like Telegram's, fades out when idle */
+.chat-float-date {
+  position: absolute;
+  left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 30;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  will-change: opacity, transform;
+}
+.chat-float-date.show { opacity: 1; }
+.chat-float-date span {
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text2);
+  background: color-mix(in srgb, var(--bg2, var(--bg)) 90%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-dim);
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
