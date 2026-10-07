@@ -9,7 +9,8 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
-const { isGoalPastDue } = require('./utils/goalRules');
+const { ethiopiaToday, ethiopiaTimeHM, addDays, daysBetween, trailingMissedDays } = require('./utils/goalRules');
+const { setTaskDone: setGoalTaskDone, emitGoal } = require('./utils/goalService');
 const fs = require('fs');
 const path = require('path');
 const { emitToUser } = require('./utils');
@@ -1875,6 +1876,71 @@ async function notifyGoalMissed(menteeId, goal) {
   await safeSend(chatId, text);
 }
 
+
+// ─── Goals v2 notifications ──────────────────────────────────────────────────
+async function menteeHandle(id) {
+  const { data } = await supabase.from('users').select('anonymous_id').eq('telegram_id', id).maybeSingle();
+  return data?.anonymous_id || 'Your mentee';
+}
+
+// Mentor: the mentee finished their day (all of that day's tasks) or goal.
+async function notifyTaskDone(mentorId, menteeId, goal, task, stats) {
+  const lang = await getUserLang(mentorId);
+  const chatId = await resolveChatId(mentorId);
+  const handle = await menteeHandle(menteeId);
+  const sameDay = (goal.tasks || []).filter(t => t.due_date && String(t.due_date).substring(0, 10) === String(task.due_date).substring(0, 10));
+  const notes = sameDay.map(t => t.note).filter(Boolean);
+  const noteLine = notes.length ? `\n${lang === 'am' ? 'ማስታወሻ' : 'Note'}: "${notes.join(' / ')}"` : '';
+  let what;
+  if (goal.type === 'challenge') {
+    const n = daysBetween(goal.start_date, task.due_date) + 1;
+    const total = daysBetween(goal.start_date, goal.end_date) + 1;
+    what = lang === 'am' ? `ቀን ${n} ከ${total} አጠናቀቀ` : `completed Day ${n} of ${total}`;
+  } else {
+    what = lang === 'am' ? 'ግቡን አጠናቀቀ' : 'completed the goal';
+  }
+  const streakLine = goal.type === 'challenge' && stats?.streak
+    ? `\n${lang === 'am' ? 'ተከታታይ' : 'Streak'}: ${stats.streak}` : '';
+  await safeSend(chatId, `${handle} ${what}\n"${goal.title}"${streakLine}${noteLine}`);
+}
+
+// Mentee: one soft message listing the days that just closed as missed.
+async function notifyGoalMissedDays(menteeId, goal, dates) {
+  if (goal.type !== 'challenge') return notifyGoalMissed(menteeId, goal);
+  const lang = await getUserLang(menteeId);
+  const chatId = await resolveChatId(menteeId);
+  const days = dates.map(formatGoalDate).join(', ');
+  await safeSend(chatId, lang === 'am'
+    ? `ያመለጠ ቀን\n\n"${goal.title}": ${days} አልተጠናቀቀም። ችግር የለም፣ የጨረሷቸው ቀናት አሁንም ይቆጠራሉ። ዛሬ እንደገና ይቀጥሉ።`
+    : `Missed day\n\n"${goal.title}": ${days} wasn't completed. That's okay. Your done days still count. Pick it back up today.`);
+}
+
+// Mentor: 2 or 3 missed days in a row.
+async function notifyMentorMissedRun(mentorId, goal, run) {
+  const lang = await getUserLang(mentorId);
+  const chatId = await resolveChatId(mentorId);
+  const handle = await menteeHandle(goal.mentee_id);
+  await safeSend(chatId, lang === 'am'
+    ? `${handle} በ"${goal.title}" ${run} ተከታታይ ቀናት አምልጠዋል። አጭር መልእክት ሊረዳ ይችላል።`
+    : `${handle} missed ${run} days in a row on "${goal.title}". A short check-in message can help.`);
+}
+
+// Mentee: daily reminder with one "Mark done" button per task (max 3).
+async function notifyDailyReminder(menteeId, goal, tasks) {
+  const lang = await getUserLang(menteeId);
+  const chatId = await resolveChatId(menteeId);
+  const head = goal.type === 'challenge'
+    ? (lang === 'am' ? 'የዛሬ ተግባር' : "Today's task")
+    : (lang === 'am' ? 'የግብ ማስታወሻ' : 'Goal reminder');
+  const list = tasks.map(t => `• ${t.title}`).join('\n');
+  const buttons = tasks.slice(0, 3).map(t => [{
+    text: `${tSync(lang, 'btn_mark_goal_done')}: ${t.title.slice(0, 24)}`,
+    callback_data: `goal_done_${t.id}`
+  }]);
+  buttons.push([{ text: lang === 'am' ? 'መተግበሪያውን ክፈት' : 'Open app', web_app: { url: `${APP_URL}?start=goal_${goal.id}` } }]);
+  await safeSend(chatId, `${head}\n\n${goal.title}\n${list}`, { reply_markup: { inline_keyboard: buttons } });
+}
+
 // ─── Message Handler ──────────────────────────────────────────────────────────
 
 bot.on('message', async (msg) => {
@@ -2492,53 +2558,28 @@ bot.on('callback_query', async (query) => {
     return;
   }
 
-  // "Mark as Done" button on a due-date reminder (see notifyGoalDueReminder
-  // / the goal reminder scheduler below). Only the mentee the goal belongs
-  // to can complete it this way, matching the API's own permission rule.
+  // "Mark as done" button on a goal reminder. The button carries the task id
+  // (messages sent before goals v2 carry the goal id; the service accepts
+  // both). Same rules as the mini app: only the mentee, only on the day.
   if (data.startsWith('goal_done_')) {
-    const goalId = data.replace('goal_done_', '');
-    const { data: goal } = await supabase.from('mentor_mentee_goals').select('*').eq('id', goalId).single();
-
-    if (!goal || String(goal.mentee_id) !== String(chatId)) {
-      await bot.answerCallbackQuery(query.id, { text: tSync(lang, 'goal_not_found'), show_alert: true });
+    const r = await setGoalTaskDone(supabase, { taskId: data.replace('goal_done_', ''), actorId: chatId, done: true });
+    if (r.error) {
+      await bot.answerCallbackQuery(query.id, { text: r.error.message, show_alert: true });
+      if (r.error.status === 409) {
+        try { await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: query.message.message_id }); } catch { }
+      }
       return;
     }
-    if (goal.is_done) {
-      await bot.answerCallbackQuery(query.id, { text: tSync(lang, 'goal_already_done') });
-      return;
-    }
-    // Due date already passed: the goal is closed, so drop the button.
-    if (isGoalPastDue(goal.due_date)) {
-      await bot.answerCallbackQuery(query.id, { text: tSync(lang, 'goal_past_due'), show_alert: true });
-      try { await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: query.message.message_id }); } catch { }
-      return;
-    }
-
-    const { data: updated, error } = await supabase
-      .from('mentor_mentee_goals')
-      .update({ is_done: true, completed_at: new Date().toISOString(), is_missed: false, missed_flagged_at: null })
-      .eq('id', goalId)
-      .select()
-      .single();
-
-    if (error || !updated) {
-      await bot.answerCallbackQuery(query.id, { text: tSync(lang, 'goal_not_found'), show_alert: true });
-      return;
-    }
-
-    // Same real-time push the REST endpoint does, so the mentee's
-    // dashboard and the mentor's "My Mentees" panel both update live
-    // even though this change came from Telegram, not the mini app.
-    emitToUser(updated.mentee_id, 'goal_updated', updated);
-    emitToUser(updated.mentor_id, 'goal_updated', updated);
-
     await bot.answerCallbackQuery(query.id, { text: tSync(lang, 'goal_marked_done_confirm') });
     try {
+      // Drop only the tapped button; show the "done" label when none are left.
+      const left = (query.message.reply_markup?.inline_keyboard || []).filter(row => !row.some(b => b.callback_data === data));
+      const hasMore = left.some(row => row.some(b => b.callback_data?.startsWith('goal_done_')));
       await bot.editMessageReplyMarkup(
-        { inline_keyboard: [[{ text: tSync(lang, 'goal_marked_done_label'), callback_data: 'noop' }]] },
+        { inline_keyboard: hasMore ? left : [[{ text: tSync(lang, 'goal_marked_done_label'), callback_data: 'noop' }]] },
         { chat_id: chatId, message_id: query.message.message_id }
       );
-    } catch { /* message may already be gone/edited — not fatal */ }
+    } catch { /* message may already be gone/edited -- not fatal */ }
     return;
   }
 
@@ -3258,79 +3299,83 @@ setInterval(async () => {
   }
 }, 60 * 1000);
 
-// Goal due-date reminder — fires once daily at 23:57 Ethiopia time.
-// Checks all open (not-done) goals whose due_date falls within the next
-// 48 hours and sends a humanized nudge (see notifyGoalDueReminder) with
-// a one-tap "Mark as Done" button. Dedupes via last_reminder_sent_on so
-// a goal is never reminded twice on the same day even if this tick
-// re-runs before midnight rolls the date over.
-setInterval(async () => {
-  const now = getEthiopiaNow();
-  if (now.getHours() !== 23 || now.getMinutes() !== 57) return;
-
-  const todayStr = now.toISOString().split('T')[0];
-  const windowEndStr = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-  const { data: dueGoals, error } = await supabase
-    .from('mentor_mentee_goals')
-    .select('*')
-    .eq('is_done', false)
-    .gte('due_date', todayStr)
-    .lte('due_date', windowEndStr)
-    .or(`last_reminder_sent_on.is.null,last_reminder_sent_on.neq.${todayStr}`);
-
-  if (error) { console.error('[Scheduler] Goal reminder query failed:', error.message); return; }
-  if (!dueGoals?.length) return;
-
-  let sent = 0;
-  for (const g of dueGoals) {
-    await notifyGoalDueReminder(g.mentee_id, g);
-    await supabase.from('mentor_mentee_goals').update({ last_reminder_sent_on: todayStr }).eq('id', g.id);
-    sent++;
+// Goal maintenance: catch-up, not clock-exact. Runs every 5 minutes and once
+// shortly after boot; everything it does is idempotent and driven by dates, so
+// a restart or a sleeping host never skips a night (the old 23:57-only jobs did).
+//   1. goal_sweep_missed() flags every overdue pending task atomically. Each
+//      newly-missed day is announced once, and the mentor is warned when 2-3
+//      days in a row are missed.
+//   2. Reminders: a task is claimed (last_reminder_sent_on = today) before it
+//      is sent, so it is reminded at most once a day.
+let goalMaintenanceRunning = false;
+async function runGoalMaintenance() {
+  if (goalMaintenanceRunning) return;
+  goalMaintenanceRunning = true;
+  try {
+    const today = ethiopiaToday();
+    await sweepMissedGoalTasks(today);
+    await sendGoalReminders(today);
+  } catch (e) {
+    console.error('[Scheduler] Goal maintenance failed:', e.message);
+  } finally {
+    goalMaintenanceRunning = false;
   }
-  console.log(`[Scheduler] Sent ${sent} goal due-date reminder(s).`);
-}, 60 * 1000);
+}
 
-// Missed-goal flag — same nightly tick. Catches goals whose due_date has
-// already passed while still open, flips is_missed so both dashboards
-// show a "Missed" badge, pushes the change live over Socket.IO, and
-// sends the mentee a soft, no-guilt heads-up (see notifyGoalMissed).
-// Guarded by is_missed itself, so each goal only gets flagged/notified
-// once no matter how many nights pass while it stays incomplete.
-setInterval(async () => {
-  const now = getEthiopiaNow();
-  if (now.getHours() !== 23 || now.getMinutes() !== 57) return;
-
-  const todayStr = now.toISOString().split('T')[0];
-
-  const { data: overdue, error } = await supabase
-    .from('mentor_mentee_goals')
-    .select('*')
-    .eq('is_done', false)
-    .eq('is_missed', false)
-    .not('due_date', 'is', null)
-    .lt('due_date', todayStr);
-
-  if (error) { console.error('[Scheduler] Missed-goal query failed:', error.message); return; }
-  if (!overdue?.length) return;
-
-  let flagged = 0;
-  for (const g of overdue) {
-    const { data: updated } = await supabase
-      .from('mentor_mentee_goals')
-      .update({ is_missed: true, missed_flagged_at: new Date().toISOString() })
-      .eq('id', g.id)
-      .select()
-      .single();
-    if (!updated) continue;
-
-    emitToUser(updated.mentee_id, 'goal_updated', updated);
-    emitToUser(updated.mentor_id, 'goal_updated', updated);
-    await notifyGoalMissed(updated.mentee_id, updated);
-    flagged++;
+async function sweepMissedGoalTasks(today) {
+  const { data: missed, error } = await supabase.rpc('goal_sweep_missed', { p_today: today });
+  if (error) throw error;
+  if (!missed?.length) return;
+  const byGoal = new Map();
+  for (const t of missed) {
+    if (!byGoal.has(t.goal_id)) byGoal.set(t.goal_id, []);
+    byGoal.get(t.goal_id).push(t);
   }
-  console.log(`[Scheduler] Flagged ${flagged} goal(s) as missed.`);
-}, 60 * 1000);
+  for (const [goalId, tasks] of byGoal) {
+    const full = await emitGoal(supabase, goalId);
+    if (!full) continue;
+    await notifyGoalMissedDays(full.mentee_id, full, [...new Set(tasks.map(t => String(t.due_date).substring(0, 10)))]);
+    const run = trailingMissedDays(full.tasks, today);
+    if (full.type === 'challenge' && (run === 2 || run === 3)) await notifyMentorMissedRun(full.mentor_id, full, run);
+  }
+  console.log(`[Scheduler] Flagged ${missed.length} goal task(s) as missed.`);
+}
+
+async function sendGoalReminders(today) {
+  const nowHM = ethiopiaTimeHM();
+  const notClaimed = `last_reminder_sent_on.is.null,last_reminder_sent_on.neq.${today}`;
+  const { data: rows, error } = await supabase
+    .from('goal_tasks')
+    .select('id, goal_id, mentee_id, title, due_date, goals!inner(id, title, type, reminder_time, status)')
+    .eq('status', 'pending')
+    .eq('goals.status', 'active')
+    .gte('due_date', today)
+    .lte('due_date', addDays(today, 1))
+    .or(notClaimed);
+  if (error) throw error;
+
+  const due = (rows || []).filter(r => {
+    const at = r.goals.reminder_time ? String(r.goals.reminder_time).substring(0, 5) : '09:00';
+    if (nowHM < at) return false;
+    return r.goals.type === 'challenge' ? String(r.due_date).substring(0, 10) === today : true;
+  });
+  if (!due.length) return;
+
+  const { data: claimed } = await supabase.from('goal_tasks')
+    .update({ last_reminder_sent_on: today }).in('id', due.map(r => r.id)).or(notClaimed).select('id');
+  const ok = new Set((claimed || []).map(r => r.id));
+
+  const byGoal = new Map();
+  for (const r of due.filter(r => ok.has(r.id))) {
+    if (!byGoal.has(r.goal_id)) byGoal.set(r.goal_id, { goal: r.goals, menteeId: r.mentee_id, tasks: [] });
+    byGoal.get(r.goal_id).tasks.push(r);
+  }
+  for (const { goal, menteeId, tasks } of byGoal.values()) await notifyDailyReminder(menteeId, goal, tasks);
+  if (byGoal.size) console.log(`[Scheduler] Sent ${byGoal.size} goal reminder(s).`);
+}
+
+setInterval(runGoalMaintenance, 5 * 60 * 1000);
+setTimeout(runGoalMaintenance, 30 * 1000);
 
 // Mentor application review polling
 let lastAppCheck = new Date().toISOString();
@@ -3376,6 +3421,8 @@ module.exports = {
   notifyNewGoal,
   notifyGoalDueReminder,
   notifyGoalMissed,
+  notifyTaskDone,
+  runGoalMaintenance,
   endMentorship,
   safeSend,
   getUserLang,

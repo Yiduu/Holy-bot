@@ -1619,6 +1619,10 @@ function connectSocket() {
   // — both are idempotent, so they're also safe to call for actions the
   // current user just triggered themselves (the HTTP response already
   // patched the DOM; the echoed socket event is a no-op reconciliation).
+  // Goals v2: the server pushes the whole goal (tasks + stats) on every change.
+  socket.on('goal2_updated', (goal) => window.HolyGoals?.onRealtime(goal));
+  socket.on('goal2_deleted', (p) => window.HolyGoals?.onRealtimeDeleted(p));
+
   socket.on('goal_created', (goal) => {
     if (document.querySelector(`.goal-item[data-goal-id="${goal.id}"], .my-goal-item[data-goal-id="${goal.id}"]`)) return;
     if (String(goal.mentee_id) === String(currentUser?.telegram_id)) {
@@ -2751,6 +2755,7 @@ async function loadMyGoalsWidget() {
   const card = $('myGoalsCard');
   const list = $('myGoalsList');
   if (!card || !list || !currentUser?.telegram_id) return;
+  if (window.HolyGoals) return window.HolyGoals.mountMentee(card, list); // goals v2 (goals.js)
   try {
     const goals = await apiFetch(`/api/mentors/goals/${currentUser.telegram_id}`);
     myGoalsCache = goals || [];
@@ -6935,6 +6940,7 @@ async function toggleMenteeGoals(menteeId, btnEl) {
 async function refreshMenteeGoals(menteeId) {
   const panel = $(`goalPanel-${menteeId}`);
   if (!panel) return;
+  if (window.HolyGoals) return window.HolyGoals.mountMentor(panel, menteeId); // goals v2 (goals.js)
   panel.innerHTML = '<div class="loading-spinner" style="margin:12px auto;width:20px;height:20px"></div>';
   try {
     const goals = await apiFetch(`/api/mentors/goals/${menteeId}`);

@@ -323,6 +323,7 @@ function requireAdmin(req, res, next) {
 app.use('/api/auth', require('./routes/auth')(supabase, requireAuth));
 app.use('/api/users', require('./routes/users')(supabase, requireAuth));
 app.use('/api/mentors', require('./routes/mentors')(supabase, requireAuth, io, onlineUsers));
+app.use('/api/goals', require('./routes/goals')(supabase, requireAuth));
 app.use('/api/sessions', require('./routes/sessions')(supabase, requireAuth, io, onlineUsers));
 app.use('/api/messages', require('./routes/messages')(supabase, requireAuth, io, onlineUsers, bot));
 app.use('/api/admin', require('./routes/admin')(supabase, requireAuth, requireAdmin, io));

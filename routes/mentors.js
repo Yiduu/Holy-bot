@@ -537,7 +537,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     if (!menteeIds.length) return res.json(followup);
 
     const [{ data: goals }, { data: notes }] = await Promise.all([
-      supabase.from('mentor_mentee_goals').select('mentee_id, is_done').eq('mentor_id', mentor_id).in('mentee_id', menteeIds),
+      supabase.from('goals').select('mentee_id, status').eq('mentor_id', mentor_id).neq('status', 'archived').in('mentee_id', menteeIds),
       supabase.from('mentor_notes').select('mentee_id, last_nudge_sent_at').eq('mentor_id', mentor_id).in('mentee_id', menteeIds),
     ]);
 
@@ -545,7 +545,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       const bucket = followup[g.mentee_id];
       if (!bucket) return;
       bucket.total_goals += 1;
-      if (!g.is_done) bucket.open_goals += 1;
+      if (g.status === 'active') bucket.open_goals += 1;
     });
     (notes || []).forEach(n => {
       if (followup[n.mentee_id]) followup[n.mentee_id].last_nudge_sent_at = n.last_nudge_sent_at || null;
