@@ -837,14 +837,22 @@ function cmCloseSheet() {
 
 /* ═══ Voice recorder ═══════════════════════════════════════════════════════ */
 const CM_REC_MIMES = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/mp4', 'audio/webm'];
+// Finger gestures while the mic button is held. The first CM_DIR_SLOP px decide
+// the direction (left = cancel, up = lock); after that only that direction counts,
+// so a thumb that curves a little while sliding can't trigger the other action.
+const CM_CANCEL_DX = 90;
+const CM_LOCK_DY = 70;
+const CM_DIR_SLOP = 12;
 
 function cmNewRec() {
   return {
-    state: 'idle',            // idle → starting → recording → stopping → idle
-    held: false, locked: false, aborted: false,
+    state: 'idle',            // idle → starting → recording → preview → stopping → idle
+    held: false, locked: false, aborted: false, autoLock: false,
+    t0: 0, dir: '', last: null,
     stream: null, mr: null, chunks: [], mime: '', ctx: null, analyser: null,
     startedAt: 0, timer: 0, peaks: [], level: 0, toId: null,
     x0: 0, y0: 0, lastTyping: 0,
+    previewBlob: null, previewAudio: null, previewDuration: 0, previewUrl: '',
   };
 }
 let cmRec = cmNewRec();
@@ -852,6 +860,10 @@ let cmRec = cmNewRec();
 function cmPickRecMime() {
   if (typeof MediaRecorder === 'undefined') return '';
   return CM_REC_MIMES.find(m => { try { return MediaRecorder.isTypeSupported(m); } catch { return false; } }) || '';
+}
+
+function cmSwipes(on) {
+  try { on ? cmTg()?.enableVerticalSwipes?.() : cmTg()?.disableVerticalSwipes?.(); } catch { }
 }
 
 function cmShowNotice() {
@@ -878,7 +890,7 @@ function updateComposerMode() {
   if (!btn) return;
   let mode;
   if (window.editingMessageId) mode = 'edit';
-  else if (cmRec.state === 'recording' && cmRec.locked) mode = 'send';
+  else if ((cmRec.state === 'recording' || cmRec.state === 'preview') && cmRec.locked) mode = 'send';
   else if (($('chatInput')?.value || '').trim()) mode = 'send';
   else mode = 'mic';
   btn.dataset.mode = mode;
@@ -913,7 +925,7 @@ function cmSampleLevel() {
   }
 }
 
-function cmDrawRecWave() {
+function cmDrawRecWave(progressPct) {
   const c = $('recWave');
   if (!c || !c.clientWidth) return;
   const dpr = window.devicePixelRatio || 1;
@@ -922,15 +934,26 @@ function cmDrawRecWave() {
   if (c.height !== h) c.height = h;
   const g = c.getContext('2d');
   g.clearRect(0, 0, w, h);
-  g.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--gold').trim() || '#C9A84C';
+  const gold = getComputedStyle(document.documentElement).getPropertyValue('--gold').trim() || '#C9A84C';
   const bw = 3 * dpr, gap = 2 * dpr;
   const n = Math.floor(w / (bw + gap));
   const recent = cmRec.peaks.slice(-n);
+  const playedCount = progressPct != null ? Math.round(progressPct * recent.length) : -1;
   recent.forEach((p, i) => {
     const bh = Math.max(2 * dpr, Math.min(h, p * 2.4 * h));
     const x = w - (recent.length - i) * (bw + gap);
+    g.fillStyle = (playedCount >= 0 && i >= playedCount) ? 'rgba(201, 168, 76, 0.35)' : gold;
     g.fillRect(x, (h - bh) / 2, bw, bh);
   });
+}
+
+function cmSetStopButtonIcon(mode) {
+  const btn = $('recStop');
+  if (!btn) return;
+  btn.querySelector('.cm-rec-stop-icon')?.classList.toggle('hidden', mode !== 'stop');
+  btn.querySelector('.cm-rec-play-icon')?.classList.toggle('hidden', mode !== 'play');
+  btn.querySelector('.cm-rec-pause-icon')?.classList.toggle('hidden', mode !== 'pause');
+  btn.setAttribute('aria-label', mode === 'stop' ? 'Stop recording' : mode === 'pause' ? 'Pause' : 'Play preview');
 }
 
 function cmRecUi(on) {
@@ -941,7 +964,9 @@ function cmRecUi(on) {
   btn?.classList.toggle('is-recording', on);
   if (on) {
     $('recTrash')?.classList.add('hidden');
+    $('recStop')?.classList.add('hidden');
     $('recWave')?.classList.add('hidden');
+    cmSetStopButtonIcon('stop');
     const hint = $('recHint');
     if (hint) { hint.classList.remove('hidden'); hint.style.transform = ''; hint.style.opacity = ''; }
     $('recLock')?.classList.remove('hidden', 'is-near');
@@ -949,9 +974,10 @@ function cmRecUi(on) {
     const tm = $('recTime'); if (tm) tm.textContent = '0:00,0';
   } else {
     $('recLock')?.classList.add('hidden');
+    $('recStop')?.classList.add('hidden');
     btn?.style.removeProperty('--rec-level');
   }
-  try { on ? cmTg()?.disableVerticalSwipes?.() : cmTg()?.enableVerticalSwipes?.(); } catch { }
+  cmSwipes(!on);
   syncChatInputHeight();
 }
 
@@ -989,6 +1015,12 @@ function cmTeardownRec(forceStop = false) {
   clearInterval(cmRec.timer);
   cmReleaseAudioStream(forceStop);
   try { cmRec.ctx?.close(); } catch { }
+  if (cmRec.previewAudio) {
+    try { cmRec.previewAudio.pause(); } catch { }
+  }
+  if (cmRec.previewUrl) {
+    try { URL.revokeObjectURL(cmRec.previewUrl); } catch { }
+  }
   cmRec = cmNewRec();
   cmRecUi(false);
   updateComposerMode();
@@ -1003,8 +1035,10 @@ async function cmStartRecording(e) {
   cmRec = cmNewRec();
   cmRec.state = 'starting';
   cmRec.held = true;
+  cmRec.t0 = performance.now();
   cmRec.toId = window.chatState.with;
   cmRec.x0 = e.clientX; cmRec.y0 = e.clientY;
+  cmSwipes(false);
   const btn = $('chatSendBtn');
   try { btn.setPointerCapture(e.pointerId); } catch { }
 
@@ -1013,18 +1047,28 @@ async function cmStartRecording(e) {
     stream = await cmAcquireAudioStream();
   } catch {
     cmRec = cmNewRec();
+    cmSwipes(true);
     cmShowNotice();
     return;
   }
 
-  // The finger may have lifted (or the OS permission sheet swallowed the touch)
-  // while the microphone was starting. Never record without a held finger.
-  if (cmRec.aborted || cmRec.state !== 'starting' || !cmRec.held) {
+  if (cmRec.aborted || cmRec.state !== 'starting') {          // cancelled while the microphone was starting
     cmReleaseAudioStream(false);
     cmRec = cmNewRec();
+    cmSwipes(true);
     updateComposerMode();
-    showToast(cmT('rec_hold_hint', 'Hold the mic button to record, release to send.'));
     return;
+  }
+  if (!cmRec.held && !cmRec.autoLock) {
+    if (performance.now() - cmRec.t0 > 450) cmRec.autoLock = true;
+    else {
+      cmReleaseAudioStream(false);
+      cmRec = cmNewRec();
+      cmSwipes(true);
+      updateComposerMode();
+      showToast(cmT('rec_hold_hint', 'Hold the mic button to record, release to send.'));
+      return;
+    }
   }
 
   try {
@@ -1052,42 +1096,119 @@ async function cmStartRecording(e) {
     updateComposerMode();
     haptic('medium');
     document.addEventListener('visibilitychange', cmOnHidden);
+    if (cmRec.autoLock) cmLockRecording();
+    else if (cmRec.last) cmMoveHold(cmRec.last);              // the finger may have slid while the mic was starting
   } catch {
-    cmReleaseAudioStream(true);
+    cmReleaseAudioStream(false);
     cmRec = cmNewRec();
+    cmSwipes(true);
     cmShowNotice();
   }
 }
 
 function cmOnHidden() {
-  if (document.hidden) {
-    if (cmRec.state === 'recording' && !cmRec.locked) cmCancelRecording();
-    cmReleaseAudioStream(true);
+  if (document.hidden && cmRec.state === 'recording' && !cmRec.locked) cmCancelRecording();
+}
+window.addEventListener('pagehide', () => cmReleaseAudioStream(true));
+
+function cmLockRecording() {
+  if (cmRec.state !== 'recording' || cmRec.locked) return;
+  cmRec.locked = true;
+  $('recHint')?.classList.add('hidden');
+  $('recLock')?.classList.add('hidden');
+  $('recTrash')?.classList.remove('hidden');
+  $('recStop')?.classList.remove('hidden');
+  cmSetStopButtonIcon('stop');
+  $('recWave')?.classList.remove('hidden');
+  $('chatSendBtn')?.style.removeProperty('--rec-level');
+  updateComposerMode();
+  haptic('heavy');
+}
+
+function cmStopToPreview() {
+  if (cmRec.state !== 'recording' || !cmRec.locked) return;
+  const seconds = (performance.now() - cmRec.startedAt) / 1000;
+  if (seconds < CM_MIN_REC_SECONDS) {
+    showToast(cmT('rec_hold_hint', 'Recording too short'));
+    return;
+  }
+  clearInterval(cmRec.timer);
+  cmReleaseAudioStream(false);
+  cmRec.state = 'preview';
+  const mr = cmRec.mr;
+  const finishPreview = () => {
+    const blob = new Blob(cmRec.chunks, { type: cmRec.mime });
+    cmRec.previewBlob = blob;
+    cmRec.previewDuration = Math.max(1, Math.round(seconds));
+    cmRec.previewUrl = URL.createObjectURL(blob);
+    const audio = new Audio(cmRec.previewUrl);
+    cmRec.previewAudio = audio;
+    audio.addEventListener('timeupdate', () => {
+      const cur = audio.currentTime;
+      const dur = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : cmRec.previewDuration;
+      const pct = dur ? Math.min(1, cur / dur) : 0;
+      $('recTime').textContent = cmFmtDur(cur);
+      cmDrawRecWave(pct);
+    });
+    audio.addEventListener('ended', () => {
+      cmSetStopButtonIcon('play');
+      $('recTime').textContent = cmFmtDur(cmRec.previewDuration);
+      cmDrawRecWave(0);
+    });
+    cmSetStopButtonIcon('play');
+    $('recTime').textContent = cmFmtDur(cmRec.previewDuration);
+    cmDrawRecWave(0);
+  };
+  mr.onstop = finishPreview;
+  try { if (mr.state !== 'inactive') mr.stop(); else finishPreview(); } catch { finishPreview(); }
+  haptic('medium');
+}
+
+function cmTogglePreviewPlay() {
+  if (!cmRec.previewAudio) return;
+  const a = cmRec.previewAudio;
+  if (a.paused) {
+    a.play().then(() => {
+      cmSetStopButtonIcon('pause');
+      haptic('light');
+    }).catch(() => { });
+  } else {
+    a.pause();
+    cmSetStopButtonIcon('play');
+    haptic('light');
   }
 }
 
 function cmMoveHold(e) {
+  if (cmRec.state === 'starting' || cmRec.state === 'recording') cmRec.last = { clientX: e.clientX, clientY: e.clientY };
   if (cmRec.state !== 'recording' || cmRec.locked || !cmRec.held) return;
   const dx = e.clientX - cmRec.x0;
   const dy = e.clientY - cmRec.y0;
+  const left = Math.max(0, -dx);
+  const up = Math.max(0, -dy);
   const hint = $('recHint');
-  if (hint) {
-    hint.style.transform = `translateX(${Math.min(0, dx) * 0.6}px)`;
-    hint.style.opacity = String(Math.max(0, 1 + Math.min(0, dx) / 150));
-  }
-  const p = Math.min(1, Math.max(0, -dy / 80));
   const lock = $('recLock');
-  if (lock) { lock.style.setProperty('--lock-p', p.toFixed(2)); lock.classList.toggle('is-near', p > 0.6); }
-  if (dx < -110) { cmCancelRecording(); return; }
-  if (p >= 1) {
-    cmRec.locked = true;
-    $('recHint')?.classList.add('hidden');
-    $('recLock')?.classList.add('hidden');
-    $('recTrash')?.classList.remove('hidden');
-    $('recWave')?.classList.remove('hidden');
-    $('chatSendBtn')?.style.removeProperty('--rec-level');
-    updateComposerMode();
-    haptic('heavy');
+  const showLock = (p) => { if (lock) { lock.style.setProperty('--lock-p', p.toFixed(2)); lock.classList.toggle('is-near', p > 0.6); } };
+  const showHint = (px, opacity) => { if (hint) { hint.style.transform = px ? `translateX(${-px}px)` : ''; hint.style.opacity = opacity; } };
+
+  if (!cmRec.dir) {
+    if (Math.max(left, up) < CM_DIR_SLOP) { showHint(0, ''); showLock(0); return; }
+    cmRec.dir = up >= left * 0.75 ? 'y' : 'x';
+  } else if (Math.max(left, up) < CM_DIR_SLOP / 2) {
+    cmRec.dir = '';
+    showHint(0, ''); showLock(0);
+    return;
+  }
+
+  if (cmRec.dir === 'x') {
+    showLock(0);
+    showHint(Math.min(left, CM_CANCEL_DX) * 0.6, String(Math.max(0, 1 - left / CM_CANCEL_DX)));
+    if (left >= CM_CANCEL_DX) { cmCancelRecording(); }
+  } else {
+    showHint(0, '');
+    const p = Math.min(1, up / CM_LOCK_DY);
+    showLock(p);
+    if (p >= 1) cmLockRecording();
   }
 }
 
@@ -1095,7 +1216,7 @@ function cmEndHold() {
   cmRec.held = false;
   if (cmRec.state !== 'recording' || cmRec.locked) return;
   const ms = performance.now() - cmRec.startedAt;
-  if (ms < 700) {                                            // a tap, not a hold
+  if (ms < 700) {
     cmCancelRecording(true);
     showToast(cmT('rec_hold_hint', 'Hold the mic button to record, release to send.'));
   } else {
@@ -1104,13 +1225,30 @@ function cmEndHold() {
 }
 
 function cmFinishRecording(send) {
-  if (cmRec.state !== 'recording') return;
-  cmRec.state = 'stopping';
+  if (cmRec.state !== 'recording' && cmRec.state !== 'preview') return;
   document.removeEventListener('visibilitychange', cmOnHidden);
-  const seconds = (performance.now() - cmRec.startedAt) / 1000;
-  const { mr, toId } = cmRec;
+  const { toId } = cmRec;
   const peaks = cmRec.peaks.slice();
   const mime = cmRec.mime;
+
+  if (cmRec.state === 'preview') {
+    const blob = cmRec.previewBlob;
+    const dur = cmRec.previewDuration;
+    cmTeardownRec();
+    if (send && blob && dur >= CM_MIN_REC_SECONDS) {
+      const base = mime.split(';')[0];
+      const ext = base.includes('ogg') ? 'ogg' : base.includes('mp4') ? 'm4a' : 'webm';
+      cmQueueItems([{
+        blob, name: `voice.${ext}`, mime: base, kind: 'voice', size: blob.size,
+        duration: dur, waveform: cmEncodeWave(peaks),
+      }], '', toId);
+    }
+    return;
+  }
+
+  cmRec.state = 'stopping';
+  const seconds = (performance.now() - cmRec.startedAt) / 1000;
+  const { mr } = cmRec;
   let done = false;
   const finish = () => {
     if (done) return;
@@ -1130,22 +1268,22 @@ function cmFinishRecording(send) {
   clearInterval(cmRec.timer);
   cmRecUi(false);
   try { mr.state !== 'inactive' ? mr.stop() : finish(); } catch { finish(); }
-  setTimeout(finish, 1500);                                  // a recorder that never fires onstop must not strand the mic
+  setTimeout(finish, 1500);
 }
 
 function cmCancelRecording(quiet) {
   if (cmRec.state === 'idle') return;
   document.removeEventListener('visibilitychange', cmOnHidden);
   if (cmRec.state === 'starting') { cmRec.aborted = true; return; }
-  if (cmRec.state !== 'recording') return;
   cmRec.state = 'stopping';
   const { mr } = cmRec;
-  mr.ondataavailable = null;
-  mr.onstop = cmTeardownRec;
+  if (mr) {
+    mr.ondataavailable = null;
+    mr.onstop = cmTeardownRec;
+    try { if (mr.state !== 'inactive') mr.stop(); } catch { }
+  }
   clearInterval(cmRec.timer);
-  cmRecUi(false);
-  try { mr.state !== 'inactive' ? mr.stop() : cmTeardownRec(); } catch { cmTeardownRec(); }
-  setTimeout(() => { if (cmRec.state === 'stopping') cmTeardownRec(); }, 1500);
+  cmTeardownRec();
   if (!quiet) haptic('warning');
 }
 
@@ -1159,13 +1297,30 @@ function cmInitComposer() {
   if (!btn || btn.dataset.cmBound) return;
   btn.dataset.cmBound = '1';
 
-  // Pressing the button must never take focus from the text box (that collapses
-  // the phone keyboard and, with a mic, would open it again after every message).
   btn.addEventListener('mousedown', (e) => e.preventDefault());
   btn.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
 
   let down = null;
+  const onMove = (e) => { if (down?.id === e.pointerId && down.mode === 'mic') cmMoveHold(e); };
+  const onUp = (e) => {
+    if (!down || down.id !== e.pointerId) return;
+    const d = down; down = null;
+    if (d.mode === 'mic') return cmEndHold();
+    const r = btn.getBoundingClientRect();
+    const inside = e.clientX >= r.left - 8 && e.clientX <= r.right + 8 && e.clientY >= r.top - 8 && e.clientY <= r.bottom + 8;
+    if (!inside) return;
+    if ((cmRec.state === 'recording' || cmRec.state === 'preview') && cmRec.locked) cmFinishRecording(true);
+    else sendMessage();
+  };
+  const onCancel = (e) => {
+    if (!down || down.id !== e.pointerId) return;
+    const d = down; down = null;
+    if (d.mode !== 'mic') return;
+    cmRec.held = false;
+    if (cmRec.state === 'starting') cmRec.autoLock = true;
+    else if (cmRec.state === 'recording') cmLockRecording();
+  };
   btn.addEventListener('pointerdown', (e) => {
     if (e.button) return;
     updateComposerMode();
@@ -1173,32 +1328,26 @@ function cmInitComposer() {
     if (down.mode === 'mic') cmStartRecording(e);
     else { try { btn.setPointerCapture(e.pointerId); } catch { } }
   });
-  btn.addEventListener('pointermove', (e) => { if (down?.id === e.pointerId && down.mode === 'mic') cmMoveHold(e); });
-  btn.addEventListener('pointerup', (e) => {
-    if (!down || down.id !== e.pointerId) return;
-    const d = down; down = null;
-    if (d.mode === 'mic') return cmEndHold();
-    const r = btn.getBoundingClientRect();
-    const inside = e.clientX >= r.left - 8 && e.clientX <= r.right + 8 && e.clientY >= r.top - 8 && e.clientY <= r.bottom + 8;
-    if (!inside) return;
-    if (cmRec.state === 'recording' && cmRec.locked) cmFinishRecording(true);
-    else sendMessage();
-  });
-  btn.addEventListener('pointercancel', (e) => {
-    if (!down || down.id !== e.pointerId) return;
-    const d = down; down = null;
-    if (d.mode === 'mic') { cmRec.held = false; if (cmRec.state === 'recording' && !cmRec.locked) cmCancelRecording(); }
-  });
-  // Keyboard users (Enter / Space) arrive as a click without a pointer.
+  btn.addEventListener('pointermove', onMove);
+  btn.addEventListener('pointerup', onUp);
+  btn.addEventListener('pointercancel', onCancel);
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', onCancel);
+
   btn.addEventListener('click', (e) => {
     if (e.detail !== 0) return;
     updateComposerMode();
     if (btn.dataset.mode === 'mic') showToast(cmT('rec_hold_hint', 'Hold the mic button to record, release to send.'));
-    else if (cmRec.state === 'recording' && cmRec.locked) cmFinishRecording(true);
+    else if ((cmRec.state === 'recording' || cmRec.state === 'preview') && cmRec.locked) cmFinishRecording(true);
     else sendMessage();
   });
 
   $('recTrash')?.addEventListener('click', () => cmCancelRecording());
+  $('recStop')?.addEventListener('click', () => {
+    if (cmRec.state === 'recording' && cmRec.locked) cmStopToPreview();
+    else if (cmRec.state === 'preview') cmTogglePreviewPlay();
+  });
 
   $('attachInputMedia')?.addEventListener('change', (e) => cmOpenSheet(e.target.files));
   $('attachInputFile')?.addEventListener('change', (e) => cmOpenSheet(e.target.files, { asFile: true }));

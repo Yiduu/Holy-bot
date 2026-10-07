@@ -265,6 +265,36 @@
   height: 21px;
 }
 
+.cm-rec-stop {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--gold);
+  color: #1a1200;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s, background 0.12s;
+}
+
+.cm-rec-stop:active {
+  transform: scale(0.92);
+}
+
+.cm-rec-stop svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.cm-rec-stop.hidden {
+  display: none !important;
+}
+
 @keyframes cmBlink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }

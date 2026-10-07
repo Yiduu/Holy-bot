@@ -132,7 +132,7 @@ async function serverTests() {
     // blocked extension
     reset();
     r = await post(base, { kind: 'document', file_name: 'setup.exe' }, { data: Buffer.alloc(5), type: 'application/octet-stream', name: 'setup.exe' }, 'to_id=2&client_id=x1');
-    assert.equal(r.status, 415); assert.equal(state.calls.length, 0); assert.equal(tmpLeft(), 0); ok('executables are refused (415) and nothing reaches Telegram');
+    assert.equal(r.status, 415); assert.equal(state.calls.length, 0); await sleep(50); /* the temp file is removed just after the reply is sent */ assert.equal(tmpLeft(), 0); ok('executables are refused (415) and nothing reaches Telegram');
 
     // UTF-8 (Amharic) file name from the form field wins over multer's latin1 decoding
     reset();
