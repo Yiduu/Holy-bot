@@ -910,6 +910,12 @@ function cmTickTime() {
 }
 
 function cmSampleLevel() {
+  // Tell the other person "recording voice message…" every 2.5 s (also when
+  // there is no level meter, e.g. on iOS).
+  if (Date.now() - cmRec.lastTyping > 2500) {
+    cmRec.lastTyping = Date.now();
+    if (socket?.connected && cmRec.toId) socket.emit('typing', { to_id: cmRec.toId, action: 'voice' });
+  }
   const a = cmRec.analyser;
   if (!a) return;
   const buf = new Uint8Array(a.fftSize);
@@ -920,10 +926,6 @@ function cmSampleLevel() {
   cmRec.level = cmRec.level * 0.6 + Math.min(1, peak * 2.2) * 0.4;
   $('chatSendBtn')?.style.setProperty('--rec-level', cmRec.level.toFixed(3));
   if (cmRec.locked) cmDrawRecWave();
-  if (Date.now() - cmRec.lastTyping > 2500) {
-    cmRec.lastTyping = Date.now();
-    if (socket?.connected && cmRec.toId) socket.emit('typing', { to_id: cmRec.toId, action: 'voice' });
-  }
 }
 
 function cmDrawRecWave(progressPct) {
