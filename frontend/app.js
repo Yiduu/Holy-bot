@@ -288,120 +288,9 @@ function menteeIcon(name, size = 14) {
   const body = MENTEE_ICONS[name] || '';
   return `<svg class="ticket-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 }
-// ─── Voice / File Attachment Rendering ─────────────────────────────────────
-
-function formatDuration(seconds) {
-  if (seconds === null || seconds === undefined || isNaN(seconds)) return '';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-function formatFileSize(bytes) {
-  if (bytes === null || bytes === undefined || isNaN(bytes)) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-const FILE_TYPE_ICONS = { document: '📄', audio: '🎵', video: '🎬', photo: '🖼️', voice: '🎙️' };
-
-// Builds the markup for a single attachment based on msg.file_type. Text
-// messages (file_type === null/undefined) never call this — renderThread()
-// only invokes it when msg.file_type is set, so plain text rendering is
-// completely unaffected.
-function renderFileAttachment(msg) {
-  const fileId = escapeHtml(msg.file_id || '');
-
-  switch (msg.file_type) {
-    case 'voice':
-    case 'audio':
-      return `
-        <div class="msg-voice">
-          <button class="msg-voice-play" data-file-id="${fileId}" onclick="playVoiceMessage(this)" aria-label="Play ${msg.file_type === 'voice' ? 'voice message' : 'audio'}">▶️</button>
-          <div class="msg-voice-info">
-            <div class="msg-voice-label">${FILE_TYPE_ICONS[msg.file_type]} ${msg.file_type === 'voice' ? 'Voice message' : escapeHtml(msg.file_name || 'Audio')}</div>
-            <div class="msg-voice-track" data-duration="${msg.duration || 0}">
-              <div class="msg-voice-progress">
-                <div class="msg-voice-progress-fill"></div>
-                <div class="msg-voice-progress-handle"></div>
-              </div>
-            </div>
-            <div class="msg-voice-time">
-              <span class="msg-voice-elapsed">0:00</span>
-              <span class="msg-voice-total">${formatDuration(msg.duration)}</span>
-            </div>
-          </div>
-          <audio class="msg-voice-audio" style="display:none" preload="none"></audio>
-        </div>`;
-
-    case 'video':
-      return `
-        <div class="msg-video" data-file-id="${fileId}">
-          <button class="msg-video-play" onclick="playChatVideo(this)">▶️ Play video${msg.duration ? ` (${formatDuration(msg.duration)})` : ''}</button>
-        </div>`;
-
-    case 'photo':
-      return `
-        <div class="msg-photo" data-file-id="${fileId}">
-          <div class="msg-photo-placeholder">🖼️ Loading photo…</div>
-        </div>`;
-
-    case 'document':
-    default:
-      return `
-        <div class="msg-file">
-          <div class="msg-file-icon">${FILE_TYPE_ICONS[msg.file_type] || '📎'}</div>
-          <div class="msg-file-meta">
-            <div class="msg-file-name">${escapeHtml(msg.file_name || 'File')}</div>
-            <div class="msg-file-size">${formatFileSize(msg.file_size)}</div>
-          </div>
-          <button class="msg-file-download" data-state="download" data-file-id="${fileId}" data-file-name="${escapeHtml(msg.file_name || 'file')}" onclick="handleFileAction(this)" aria-label="Download file">⬇️</button>
-        </div>`;
-  }
-}
-
-// Fetches the actual image bytes for every not-yet-loaded photo bubble in
-// `container` and swaps the placeholder for a real <img>. Called after any
-// HTML containing message bubbles is inserted into the DOM. Voice/video/
-// document attachments are intentionally NOT auto-fetched here — those stay
-// lazy (fetched on tap) to avoid burning bandwidth on media the person may
-// never open.
-// Photos were re-downloaded (Telegram getFile + full stream through our small
-// server) every time the chat list was re-rendered, and each blob URL leaked.
-// Cache one blob URL per file_id for the session (bounded).
-const photoUrlCache = new Map(); // file_id → Promise<blob URL>
-const PHOTO_CACHE_MAX = 40;
-function getPhotoUrl(fileId) {
-  let p = photoUrlCache.get(fileId);
-  if (!p) {
-    p = fetchAuthedBlob(`/api/messages/file/${fileId}`).then(blob => URL.createObjectURL(blob));
-    p.catch(() => photoUrlCache.delete(fileId)); // allow a later retry
-    photoUrlCache.set(fileId, p);
-    if (photoUrlCache.size > PHOTO_CACHE_MAX) {
-      const oldestKey = photoUrlCache.keys().next().value;
-      const oldest = photoUrlCache.get(oldestKey);
-      photoUrlCache.delete(oldestKey);
-      oldest.then(u => URL.revokeObjectURL(u)).catch(() => { });
-    }
-  }
-  return p;
-}
-
-function hydratePhotoMessages(container) {
-  if (!container) return;
-  const els = container.querySelectorAll('.msg-photo[data-file-id]:not(.msg-photo-loaded)');
-  els.forEach(async el => {
-    el.classList.add('msg-photo-loaded'); // mark immediately so we never double-fetch
-    const fileId = el.dataset.fileId;
-    try {
-      const url = await getPhotoUrl(fileId);
-      el.innerHTML = `<img src="${url}" class="msg-photo-img" alt="Photo attachment" onclick="openImageLightbox('${url}')" />`;
-    } catch (e) {
-      el.innerHTML = '<div class="msg-photo-error">⚠️ Failed to load photo</div>';
-    }
-  });
-}
+// Attachment bubbles (voice, photo, video, file), the recorder, the attach menu
+// and uploads live in chat-media.js. Only the full-screen image viewer stays
+// here, because the profile-photo viewer uses it too.
 
 // Full-screen in-app image viewer. We deliberately avoid window.open() here
 // — inside Telegram's mobile in-app browser, window.open() on a blob: URL is
@@ -426,153 +315,7 @@ function closeImageLightbox() {
   if (overlay) overlay.remove();
 }
 
-async function playVoiceMessage(btn) {
-  const fileId = btn.dataset.fileId;
-  const container = btn.closest('.msg-voice');
-  const audioEl = container.querySelector('audio');
-  const track = container.querySelector('.msg-voice-track');
-  const fill = container.querySelector('.msg-voice-progress-fill');
-  const handle = container.querySelector('.msg-voice-progress-handle');
-  const elapsedEl = container.querySelector('.msg-voice-elapsed');
-  const totalEl = container.querySelector('.msg-voice-total');
 
-  if (!audioEl.src) {
-    btn.disabled = true;
-    btn.textContent = '↓';
-    btn.classList.add('loading');
-    container.classList.add('msg-voice-downloading');
-    try {
-      const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
-      audioEl.src = URL.createObjectURL(blob);
-    } catch (e) {
-      btn.disabled = false;
-      btn.textContent = '▶️';
-      btn.classList.remove('loading');
-      container.classList.remove('msg-voice-downloading');
-      haptic('error');
-      showToast('Failed to load voice message', 'error');
-      return;
-    }
-    btn.disabled = false;
-    btn.classList.remove('loading');
-    container.classList.remove('msg-voice-downloading');
-
-    audioEl.onloadedmetadata = () => {
-      if (isFinite(audioEl.duration) && audioEl.duration > 0) {
-        totalEl.textContent = formatDuration(audioEl.duration);
-      }
-    };
-    audioEl.ontimeupdate = () => {
-      const dur = audioEl.duration || parseFloat(track.dataset.duration) || 0;
-      const pct = dur ? Math.min(100, (audioEl.currentTime / dur) * 100) : 0;
-      fill.style.width = `${pct}%`;
-      handle.style.left = `${pct}%`;
-      elapsedEl.textContent = formatDuration(audioEl.currentTime);
-    };
-    audioEl.onended = () => {
-      btn.textContent = '▶️';
-      fill.style.width = '0%';
-      handle.style.left = '0%';
-      elapsedEl.textContent = '0:00';
-    };
-
-    const seek = (evt) => {
-      if (!audioEl.duration) return;
-      const rect = track.getBoundingClientRect();
-      const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-      const pct = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-      audioEl.currentTime = pct * audioEl.duration;
-    };
-    track.addEventListener('click', seek);
-    track.addEventListener('touchstart', seek, { passive: true });
-  }
-
-  if (audioEl.paused) {
-    audioEl.play();
-    btn.textContent = '⏸️';
-    haptic('light');
-  } else {
-    audioEl.pause();
-    btn.textContent = '▶️';
-  }
-}
-
-async function playChatVideo(btn) {
-  const container = btn.closest('.msg-video');
-  const fileId = container.dataset.fileId;
-  btn.disabled = true;
-  const originalLabel = btn.textContent;
-  btn.textContent = '⏳ Loading…';
-  try {
-    const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
-    const url = URL.createObjectURL(blob);
-    container.innerHTML = `<video class="msg-video-player" src="${url}" controls autoplay playsinline></video>`;
-  } catch (e) {
-    btn.disabled = false;
-    btn.textContent = originalLabel;
-    haptic('error');
-    showToast('Failed to load video', 'error');
-  }
-}
-
-// Opens a fetched blob so it works on desktop AND inside Telegram's mobile
-// in-app browser. window.open() on a blob: URL is unreliable in Telegram's
-// mobile WebView — it's silently blocked as a popup on Android and simply
-// does nothing on iOS — which is exactly why "Open" worked on desktop but
-// tapping did nothing on phone. We try window.open() first (desktop still
-// gets an inline preview tab when the browser supports it) and fall back to
-// a programmatic download link, which uses the browser's native
-// save/open handling instead of a blocked popup.
-function openBlobFile(url, fileName) {
-  const win = window.open(url, '_blank');
-  if (!win) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName || 'file';
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
-}
-
-// Document attachments start as a "⬇️ Download" button. First tap fetches
-// the file and flips the button into "📂 Open" (mirroring Telegram's own
-// download-then-open flow); a second tap opens the file via openBlobFile()
-// above, which works reliably on both desktop and mobile.
-async function handleFileAction(btn) {
-  const state = btn.dataset.state || 'download';
-
-  if (state === 'open') {
-    haptic('light');
-    if (btn.dataset.blobUrl) openBlobFile(btn.dataset.blobUrl, btn.dataset.fileName);
-    return;
-  }
-
-  const fileId = btn.dataset.fileId;
-  haptic('light');
-  btn.disabled = true;
-  const originalHtml = btn.innerHTML;
-  btn.innerHTML = '⏳';
-
-  try {
-    const blob = await fetchAuthedBlob(`/api/messages/file/${fileId}`);
-    const url = URL.createObjectURL(blob);
-    btn.dataset.blobUrl = url;
-    btn.dataset.state = 'open';
-    btn.classList.remove('msg-file-download');
-    btn.classList.add('msg-file-open');
-    btn.innerHTML = '📂';
-    btn.setAttribute('aria-label', 'Open file');
-    haptic('success');
-  } catch (e) {
-    btn.innerHTML = originalHtml;
-    haptic('error');
-    showToast('Failed to download file', 'error');
-  } finally {
-    btn.disabled = false;
-  }
-}
 
 /* ── Telegram-style replies ──────────────────────────────────────
    Messages are always rendered in ONE flat, chronological list. A reply is
@@ -585,9 +328,7 @@ async function handleFileAction(btn) {
 function getReplyPreviewText(msg, max = 100) {
   let preview = String(msg?.content || '').replace(/\s+/g, ' ').trim();
   if (!preview && msg?.file_type) {
-    preview = msg.file_type === 'photo' ? '📷 Photo'
-      : msg.file_type === 'voice' ? '🎤 Voice message'
-      : `📎 ${msg.file_type}`;
+    preview = typeof attachmentLabel === 'function' ? attachmentLabel(msg) : `📎 ${msg.file_type}`;
   }
   if (preview.length > max) preview = preview.substring(0, max) + '…';
   return preview;
@@ -754,21 +495,27 @@ function renderThread(messages, isRoot = true) {
       ? '<span class="msg-edited">edited</span>'
       : '';
 
+    // An attachment that is still uploading has no server id yet, so it gets no
+    // options menu; and one without a caption has no text to edit (the server
+    // rejects empty text), so it can only be deleted.
+    const showMenu = isSent && !msg._local;
+    const canEdit = !msg.file_type || !!msg.content;
+
     html += `
       <div class="message-thread ${isSent ? 'thread-sent' : 'thread-received'}" data-msg-id="${msg.id}">
-        <div class="message-bubble ${isSent ? 'sent' : 'received'}${msg.parent_id ? ' has-reply' : ''}">
+        <div class="message-bubble ${isSent ? 'sent' : 'received'}${msg.parent_id ? ' has-reply' : ''}${msg.file_type ? ' has-media' : ''}">
           ${renderReplyQuote(msg)}
           <div class="message-text">${msg.file_type ? renderFileAttachment(msg) : ''}${msg.content ? `<div class="${msg.file_type ? 'message-caption' : ''}">${escapeHtml(msg.content)}</div>` : ''}${editedMark}</div>
           <div class="message-footer">
             <span class="message-time">${formatTime(msg.created_at)}</span>
             <span class="msg-footer-actions">
-              ${isSent ? `
+              ${showMenu ? `
                 <button class="msg-action-btn" onclick="toggleMsgMenu('${msg.id}', event)" aria-label="Options">${ICON_MORE}</button>
                 <div class="msg-context-menu" id="msg-menu-${msg.id}">
-                  <button class="msg-menu-item" onclick="editMessageInline('${msg.id}');closeMsgMenu()">
+                  ${canEdit ? `<button class="msg-menu-item" onclick="editMessageInline('${msg.id}');closeMsgMenu()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     Edit
-                  </button>
+                  </button>` : ''}
                   <button class="msg-menu-item danger" onclick="deleteMessageInline('${msg.id}');closeMsgMenu()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                     Delete
@@ -1013,9 +760,8 @@ function editMessageInline(msgId) {
   }
   document.querySelector('.chat-input-wrapper')?.classList.add('editing');
 
-  $('chatSendIcon')?.classList.add('hidden');
-  $('chatSendEditIcon')?.classList.remove('hidden');
   $('chatSendBtn')?.setAttribute('title', 'Save edit');
+  updateComposerMode();
 
   syncChatInputHeight();
   haptic('selection');
@@ -1030,8 +776,6 @@ function cancelEditMessage() {
   if (preview) preview.textContent = '';
   document.querySelector('.chat-input-wrapper')?.classList.remove('editing');
 
-  $('chatSendIcon')?.classList.remove('hidden');
-  $('chatSendEditIcon')?.classList.add('hidden');
   $('chatSendBtn')?.removeAttribute('title');
 
   const input = $('chatInput');
@@ -1039,6 +783,7 @@ function cancelEditMessage() {
     input.value = '';
     autoResizeChatInput();
   }
+  updateComposerMode();
   syncChatInputHeight();
 }
 
@@ -1641,11 +1386,14 @@ function connectSocket() {
     showToast(`📢 ${message}`);
   });
 
-  socket.on('typing', ({ from_id }) => {
+  socket.on('typing', ({ from_id, action }) => {
     if (window.chatState?.with && String(window.chatState.with) === String(from_id)) {
       const statusEl = $('chatPeerStatus');
       if (statusEl) {
-        statusEl.innerHTML = `Typing <span class="typing-dots"><span></span><span></span><span></span></span>`;
+        const label = action === 'voice' ? (t('typing_voice') !== 'typing_voice' ? t('typing_voice') : 'Recording voice message')
+          : action === 'upload' ? (t('typing_upload') !== 'typing_upload' ? t('typing_upload') : 'Sending a file')
+          : 'Typing';
+        statusEl.innerHTML = `${escapeHtml(label)} <span class="typing-dots"><span></span><span></span><span></span></span>`;
         statusEl.classList.add('typing');
         statusEl.classList.remove('offline');
         statusEl.style.display = 'block';
@@ -1921,6 +1669,9 @@ function toggleChatInput(visible) {
     row.classList.remove('hidden');
     row.style.display = 'flex';
   } else {
+    // Never leave the microphone open behind a hidden composer.
+    if (typeof cancelRecording === 'function') cancelRecording();
+    if (typeof closeComposerPopups === 'function') closeComposerPopups();
     row.classList.add('hidden');
     row.style.display = 'none';
   }
@@ -5128,9 +4879,10 @@ async function sendMessage() {
   const originalContent = content;
   input.value = '';
   autoResizeChatInput();
-  $('emojiPicker')?.classList.add('hidden');
+  closeComposerPopups();
   const counter = $('charCounter');
-  if (counter) { counter.textContent = '0 / 2000'; counter.classList.remove('danger'); }
+  if (counter) { counter.textContent = '0 / 2000'; counter.classList.remove('danger', 'visible'); }
+  updateComposerMode();
 
   // The input is deliberately NOT disabled while sending. Disabling it blurred
   // the textarea, which collapsed the phone keyboard and re-opened it when
@@ -5303,19 +5055,20 @@ function handleChatTyping() {
     socket.emit('typing', { to_id: window.chatState.with });
   }
   autoResizeChatInput();
-  // Update live character counter
+  // Mic <-> send swap, like Telegram
+  updateComposerMode();
+  // Live character counter. Hidden until it matters, so it doesn't take a
+  // whole line of the composer all the time.
   const input = $('chatInput');
   const counter = $('charCounter');
   if (input && counter) {
     const len = input.value.length;
     const MAX = 2000;
     counter.textContent = `${len} / ${MAX}`;
-    if (len > MAX) {
-      counter.classList.add('danger');
-    } else {
-      counter.classList.remove('danger');
-    }
+    counter.classList.toggle('visible', len >= 1500);
+    counter.classList.toggle('danger', len > MAX);
   }
+  syncChatInputHeight();
 }
 
 // ── Premium SVG emoji set ──────────────────────────────────────────
@@ -5389,18 +5142,24 @@ function toggleEmojiPicker() {
     ).join('');
   }
 
-  picker.classList.toggle('hidden');
+  const opening = picker.classList.contains('hidden');
+  closeComposerPopups();
+  if (opening) picker.classList.remove('hidden');
 }
 
 function insertEmoji(emoji) {
   const input = $('chatInput');
   if (!input) return;
-  input.value += emoji;
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+  input.value = input.value.slice(0, start) + emoji + input.value.slice(end);
+  const caret = start + emoji.length;
   input.focus();
+  try { input.setSelectionRange(caret, caret); } catch { }
   handleChatTyping();
 }
 
-// Close emoji picker when clicking outside
+// Close the emoji picker / attach menu when clicking outside them
 document.addEventListener('click', (e) => {
   const picker = $('emojiPicker');
   const btn = document.querySelector('.emoji-btn');
@@ -5408,6 +5167,11 @@ document.addEventListener('click', (e) => {
     if (!picker.contains(e.target) && e.target !== btn && !btn?.contains(e.target)) {
       picker.classList.add('hidden');
     }
+  }
+  const menu = $('attachMenu');
+  const clip = $('attachBtn');
+  if (menu && !menu.classList.contains('hidden')) {
+    if (!menu.contains(e.target) && !clip?.contains(e.target)) menu.classList.add('hidden');
   }
 });
 
@@ -8174,129 +7938,4 @@ document.addEventListener('click', (e) => {
     start();
   }
 })();
-
-/* ── Voice & file shortcuts in the chat input ───────────────────
-   Opens the bot chat, where voice messages and files are sent.
-   Leave HB_BOT_USERNAME empty to switch the feature off.        */
-const HB_BOT_USERNAME = 'holynessforchristbot';
-
-(function initMediaShortcuts() {
-  if (!HB_BOT_USERNAME) return;
-
-  const FALLBACK_HINT = 'Voice messages and files are sent from the bot chat. They appear here too.';
-  let hintTimer = 0;
-
-  function hintText() {
-    try {
-      const s = typeof t === 'function' ? t('media_hint') : '';
-      return s && s !== 'media_hint' ? s : FALLBACK_HINT;
-    } catch { return FALLBACK_HINT; }
-  }
-
-  function actionBtnText() {
-    try {
-      const lang = localStorage.getItem('holy_lang') || 'am';
-      return lang === 'am' ? 'ወደ ቦቱ ሂድ ↗' : 'Open Bot ↗';
-    } catch { return 'Open Bot ↗'; }
-  }
-
-  function openBotChat() {
-    const url = 'https://t.me/' + HB_BOT_USERNAME.replace(/^@/, '');
-    const tg = window.Telegram?.WebApp;
-    if (tg) {
-      if (typeof tg.openTelegramLink === 'function') {
-        tg.openTelegramLink(url);
-      }
-      setTimeout(() => {
-        try { tg.close(); } catch { }
-      }, 100);
-    } else {
-      window.open(url, '_blank', 'noopener');
-    }
-  }
-
-  function hideHint() {
-    clearTimeout(hintTimer);
-    document.querySelectorAll('.hb-hint').forEach(el => el.remove());
-    document.removeEventListener('pointerdown', onOutside, true);
-  }
-  function onOutside(e) { if (!e.target.closest('.hb-hint, .hb-media-btn')) hideHint(); }
-
-  function showHint(row) {
-    const existing = row.querySelector('.hb-hint');
-    if (existing) {
-      hideHint();
-      return;
-    }
-    hideHint();
-    const el = document.createElement('div');
-    el.className = 'hb-hint';
-    el.setAttribute('role', 'status');
-    el.innerHTML = `<div style="margin-bottom:6px;">${hintText()}</div>` +
-      `<button type="button" style="display:inline-block;padding:5px 14px;border-radius:12px;background:var(--gold,#c9a84c);color:#111;font-weight:600;font-size:0.75rem;border:none;cursor:pointer;">${actionBtnText()}</button>`;
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      hideHint();
-      openBotChat();
-    });
-    row.appendChild(el);
-    hintTimer = setTimeout(hideHint, 6000);
-    document.addEventListener('pointerdown', onOutside, true);
-  }
-
-  function onTap(row) {
-    try { if (typeof haptic === 'function') haptic('light'); } catch { }
-    showHint(row);
-  }
-
-  const ICON_CLIP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 11.6l-7.6 7.6a5 5 0 0 1-7.07-7.07l8.13-8.13a3.33 3.33 0 0 1 4.71 4.71l-8.13 8.13a1.67 1.67 0 0 1-2.36-2.36l7.42-7.42" fill="none" stroke="url(#hbGold)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  const ICON_MIC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11.5" rx="3" fill="none" stroke="url(#hbGold)" stroke-width="1.7"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.2M8.6 21.2h6.8" fill="none" stroke="url(#hbGold)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-
-  function mount() {
-    const input = document.getElementById('chatInput');
-    const send = document.querySelector('.chat-send-btn');
-    const row = send?.parentElement;
-    if (!input || !row) return;
-    if (row.querySelector('.hb-media-actions')) return; // already mounted
-
-    const display = getComputedStyle(row).display;
-    if (display.includes('grid')) {                     // don't disturb a grid layout
-      console.warn('[media-shortcuts] input row uses CSS grid; not mounted');
-      return;
-    }
-    if (!display.includes('flex')) row.classList.add('hb-row');
-    if (getComputedStyle(row).position === 'static') row.style.position = 'relative';
-
-    const field = Array.from(row.children).find(c => c === input || c.contains(input));
-    if (field) field.classList.add('hb-field');
-
-    if (!document.getElementById('hbGold')) {
-      document.body.insertAdjacentHTML('beforeend',
-        '<svg class="hb-svg-defs" aria-hidden="true"><defs><linearGradient id="hbGold" x1="4" y1="3" x2="20" y2="21" gradientUnits="userSpaceOnUse">' +
-        '<stop offset="0" style="stop-color:var(--gold,#c9a84c)"/><stop offset="1" style="stop-color:var(--gold-dim,#a87a28)"/></linearGradient></defs></svg>');
-    }
-
-    const wrap = document.createElement('div');
-    wrap.className = 'hb-media-actions';
-    wrap.innerHTML =
-      '<button type="button" class="hb-media-btn" data-hb="file" aria-label="Send a file">' + ICON_CLIP + '</button>' +
-      '<button type="button" class="hb-media-btn" data-hb="voice" aria-label="Send a voice message">' + ICON_MIC + '</button>';
-    wrap.addEventListener('click', () => onTap(row));
-    row.insertBefore(wrap, send);
-
-    try { if (typeof syncChatInputHeight === 'function') syncChatInputHeight(); } catch { }
-  }
-
-  // The chat view may be built after load, so mount whenever the input appears.
-  let queued = false;
-  const check = () => {
-    queued = false;
-    const send = document.querySelector('.chat-send-btn');
-    if (send && !send.parentElement.querySelector('.hb-media-actions')) mount();
-  };
-  const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(check); } };
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', schedule);
-  else schedule();
-  new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
-})();
+

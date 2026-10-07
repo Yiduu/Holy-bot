@@ -2,6 +2,128 @@
 
 const express = require('express');
 const axios = require('axios');
+const multer = require('multer');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const crypto = require('crypto');
+
+// ─── Attachment uploads ───────────────────────────────────────────────────────
+// Telegram lets a bot UPLOAD up to 50 MB but only DOWNLOAD (getFile) up to
+// 20 MB, and GET /file/:file_id below is a getFile download. A bigger upload
+// would send fine and then never be playable, so 20 MB is the real ceiling.
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024;   // Telegram's sendPhoto limit
+const MAX_CAPTION = 1024;                   // Telegram's media caption limit
+const MAX_MEDIA_SECONDS = 60 * 60;
+// Windows executables / scripts / Android packages. Telegram itself allows
+// them, but this app pairs vulnerable people with strangers, so they are
+// refused. Edit freely.
+const BLOCKED_FILE_EXT = /\.(exe|bat|cmd|com|scr|msi|vbs|ps1|pif|cpl|dll|apk|jar)$/i;
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+// Uploads are spooled to disk, not held in RAM: a few people sending 20 MB
+// files at once would otherwise exhaust a small (512 MB) Render instance.
+const UPLOAD_DIR = path.join(os.tmpdir(), 'holy-uploads');
+try { fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch { /* surfaced on first upload */ }
+
+// Normally every temp file is deleted in a `finally`; this only catches the
+// leftovers from a process that was killed mid-upload.
+function sweepUploadDir() {
+  fs.readdir(UPLOAD_DIR, (err, names) => {
+    if (err) return;
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    for (const n of names) {
+      const p = path.join(UPLOAD_DIR, n);
+      fs.stat(p, (e, st) => { if (!e && st.mtimeMs < cutoff) fs.unlink(p, () => { }); });
+    }
+  });
+}
+sweepUploadDir();
+setInterval(sweepUploadDir, 30 * 60 * 1000).unref();
+
+const receiveFile = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+    filename: (req, file, cb) => cb(null, `up-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`),
+  }),
+  limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 12, fieldSize: 8 * 1024 },
+}).single('file');
+
+// The storage chat is the admin's own Telegram chat, the same one profile
+// photos already go to (see routes/avatar.js).
+function storageChatId() {
+  return String(process.env.ADMIN_TELEGRAM_ID || '').split(',')[0].trim();
+}
+
+function cleanFileName(raw, fallback) {
+  // multer decodes the multipart filename as latin1, which mangles Amharic
+  // names, so the client also sends the name as a normal (UTF-8) form field.
+  let n = String(raw || '').normalize('NFC').replace(/[\u0000-\u001f\u007f\\/:*?"<>|]+/g, '_').trim().replace(/^\.+/, '');
+  if (n.length > 120) {
+    const ext = path.extname(n).slice(0, 12);
+    n = n.slice(0, 120 - ext.length) + ext;
+  }
+  return n || fallback;
+}
+
+// What we call the upload, decided from the real mime type, not just the
+// client's hint — e.g. a "photo" that isn't a JPEG/PNG/WebP is sent as a file.
+function classifyUpload(hint, mime, size) {
+  let kind = ['voice', 'photo', 'video', 'audio', 'document'].includes(hint) ? hint : 'document';
+  if (kind === 'voice' && !(mime.startsWith('audio/') || mime === 'video/webm' || mime === 'video/mp4')) kind = 'document';
+  if (kind === 'audio' && !mime.startsWith('audio/')) kind = 'document';
+  if (kind === 'video' && !mime.startsWith('video/')) kind = 'document';
+  if (kind === 'photo' && (!/^image\/(jpeg|png|webp)$/.test(mime) || size > MAX_PHOTO_BYTES)) kind = 'document';
+  return kind;
+}
+
+// Try the richest Telegram method first and degrade (e.g. a WebM recording that
+// sendVoice refuses becomes sendAudio, then a plain document). A stream can only
+// be read once, so every attempt opens the temp file afresh.
+async function pushToStorage(bot, chatId, kind, filePath, { fileName, mime, duration, caption }) {
+  const fileOpts = { filename: fileName, contentType: mime || 'application/octet-stream' };
+  // disable_notification: the admin's phone must not buzz for every upload.
+  const base = { disable_notification: true, caption };
+  const plans = {
+    voice: [['sendVoice', { duration }], ['sendAudio', { duration }], ['sendDocument', {}]],
+    audio: [['sendAudio', { duration }], ['sendDocument', {}]],
+    video: [['sendVideo', { duration, supports_streaming: true }], ['sendDocument', {}]],
+    photo: [['sendPhoto', {}], ['sendDocument', {}]],
+    document: [['sendDocument', { disable_content_type_detection: true }]],
+  };
+  let lastErr;
+  for (const [method, extra] of plans[kind]) {
+    const stream = fs.createReadStream(filePath);
+    // A rejected attempt may never consume its stream; if the temp file is then
+    // deleted the stream emits 'error', and an unhandled 'error' event kills the
+    // process. Swallow it and always close the stream.
+    stream.on('error', () => { });
+    try {
+      return await bot[method](chatId, stream, { ...base, ...extra }, fileOpts);
+    } catch (e) {
+      lastErr = e;
+    } finally {
+      stream.destroy();
+    }
+  }
+  throw lastErr;
+}
+
+// What Telegram actually stored (it may differ from what was asked for).
+function describeSent(sent) {
+  const pick = (o, type) => ({
+    type, file_id: o.file_id, file_size: o.file_size || null,
+    duration: o.duration || null, mime: o.mime_type || null,
+  });
+  if (sent.voice) return pick(sent.voice, 'voice');
+  if (sent.audio) return pick(sent.audio, 'audio');
+  if (sent.video) return pick(sent.video, 'video');
+  if (sent.animation) return pick(sent.animation, 'video');   // before `document`: animations carry both
+  if (sent.photo?.length) return pick(sent.photo[sent.photo.length - 1], 'photo');
+  if (sent.document) return pick(sent.document, 'document');
+  return null;
+}
 
 const PROFANITY_LIST = ['fuck', 'shit', 'ass', 'bitch', 'damn', 'crap', 'bastard', 'hell', 'piss'];
 
@@ -39,8 +161,10 @@ const senderNameCache = makeTtlCache(10 * 60 * 1000);     // telegram_id → ano
 const filePathCache = makeTtlCache(30 * 60 * 1000, 500);  // file_id → telegram file_path
 const sendDedupe = makeTtlCache(2 * 60 * 1000, 5000);     // from:client_id → insert promise
 
-module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) {
+module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers, bot) {
   const router = express.Router();
+  // Resolved lazily so requiring this file never drags the bot in by itself.
+  const getBot = () => bot || require('../bot').bot;
 
   const userRoom = (id) => `user:${id}`;
 
@@ -83,6 +207,18 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
       const { notifyMessage } = require('../bot');
       await notifyMessage(toId, name, content, fromId, messageId);
     })().catch((err) => console.error('[messages] offline notification failed:', err.message));
+  }
+
+  // Same idea for an attachment: the recipient's Telegram gets the file itself
+  // (re-served from its file_id, so nothing is uploaded again) with an
+  // "Open Chat" button.
+  function notifyOfflineFile(toId, fromId, row, tgType) {
+    (async () => {
+      const name = await getSenderName(fromId);
+      if (!name) return;
+      const { notifyFileMessage } = require('../bot');
+      await notifyFileMessage(toId, name, row.file_type, tgType, row.file_id, row.content, fromId, row.id);
+    })().catch((err) => console.error('[messages] offline file notification failed:', err.message));
   }
 
   // Quoted-message previews for replies whose original isn't in the payload the
@@ -366,6 +502,144 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers) 
 
     // Respond immediately — nothing above waits on Telegram.
     res.status(201).json(payload);
+  }));
+
+  // POST /api/messages/upload?to_id=…&client_id=… – send a voice message,
+  // photo, video or file (multipart: `file` plus the text fields read below).
+  //
+  // The bytes are pushed to the admin's Telegram chat only to obtain a
+  // permanent file_id; just that id and the metadata are stored, and
+  // GET /file/:file_id streams it back. `to_id` and `client_id` travel in the
+  // query string so the mentorship check and the duplicate check can run
+  // BEFORE the (up to 20 MB) body is accepted.
+  async function uploadPrecheck(req, res, next) {
+    const from_id = req.telegramUser.id;
+    const to_id = Number(req.query.to_id);
+    if (!Number.isSafeInteger(to_id)) return res.status(400).json({ error: 'to_id required' });
+
+    const len = Number(req.headers['content-length'] || 0);
+    if (len > MAX_UPLOAD_BYTES + 256 * 1024) {
+      return res.status(413).json({ error: 'File too large (max 20 MB)', code: 'too_large' });
+    }
+    if (!storageChatId()) {
+      console.error('[POST /messages/upload] ADMIN_TELEGRAM_ID is not configured');
+      return res.status(503).json({ error: 'File storage is not configured' });
+    }
+    if (!(await hasActiveMentorship(from_id, to_id))) {
+      return res.status(403).json({ error: 'No active mentorship with this user' });
+    }
+
+    // A retry of an upload that actually went through returns the stored
+    // message instead of storing the file twice.
+    const cid = typeof req.query.client_id === 'string' && /^[\w-]{1,64}$/.test(req.query.client_id) ? req.query.client_id : null;
+    if (cid) {
+      const prior = sendDedupe.get(`${from_id}:${cid}`);
+      if (prior) return res.status(201).json({ ...(await prior), client_id: cid });
+    }
+    req.uploadTo = to_id;
+    req.uploadClientId = cid;
+    next();
+  }
+
+  function receiveUpload(req, res, next) {
+    receiveFile(req, res, (err) => {
+      if (!err) return next();
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'File too large (max 20 MB)', code: 'too_large' });
+      }
+      console.error('[POST /messages/upload] receive failed:', err.message);
+      res.status(400).json({ error: 'Upload failed' });
+    });
+  }
+
+  router.post('/upload', requireAuth, wrap(uploadPrecheck), receiveUpload, wrap(async (req, res) => {
+    const from_id = req.telegramUser.id;
+    const to_id = req.uploadTo;
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: 'No file provided' });
+
+    const removeTemp = () => fs.unlink(file.path, () => { });
+    try {
+      const body = req.body || {};
+      // The mime type is echoed to other users' browsers, so accept only a plain type/subtype.
+      let mime = String(body.mime_type || file.mimetype || '').split(';')[0].trim().toLowerCase();
+      if (!/^[a-z0-9][a-z0-9!#$&^_.+-]{0,60}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,60}$/.test(mime)) mime = 'application/octet-stream';
+      const fileName = cleanFileName(body.file_name || file.originalname, 'file');
+      if (BLOCKED_FILE_EXT.test(fileName)) {
+        return res.status(415).json({ error: 'This type of file cannot be sent', code: 'blocked_type' });
+      }
+      if (!file.size) return res.status(400).json({ error: 'The file is empty' });
+
+      const caption = String(body.caption || '').trim().slice(0, MAX_CAPTION);
+      const kind = classifyUpload(body.kind, mime, file.size);
+      const clientDuration = Math.max(0, Math.min(MAX_MEDIA_SECONDS, Math.round(Number(body.duration) || 0)));
+      const waveform = typeof body.waveform === 'string' && /^[0-9a-v]{8,128}$/.test(body.waveform) ? body.waveform : null;
+      const parent_id = typeof body.parent_id === 'string' && UUID_RE.test(body.parent_id) ? body.parent_id : null;
+      const is_flagged = caption ? containsProfanity(caption) : false;
+      const safeClientId = req.uploadClientId;
+      const withClientId = (m) => (safeClientId ? { ...m, client_id: safeClientId } : m);
+      const dedupeKey = safeClientId ? `${from_id}:${safeClientId}` : null;
+
+      const pipeline = (async () => {
+        const sent = await pushToStorage(getBot(), storageChatId(), kind, file.path, {
+          fileName, mime, duration: clientDuration || undefined, caption: `chat-file ${from_id}>${to_id}`,
+        });
+        const tg = describeSent(sent);
+        if (!tg?.file_id) throw new Error('Telegram did not return a file');
+
+        // A voice recording that Telegram stored as audio/document is still a
+        // voice message to us; anything else follows what Telegram made of it.
+        const fileType = kind === 'voice' || kind === 'audio' ? kind : tg.type;
+        const needsDuration = fileType === 'voice' || fileType === 'audio' || fileType === 'video';
+        const row = {
+          from_id, to_id, content: caption, is_flagged, parent_id,
+          file_id: tg.file_id,
+          file_type: fileType,
+          file_size: tg.file_size || file.size,
+          mime_type: mime,
+          duration: needsDuration ? (clientDuration || tg.duration || null) : null,
+          file_name: fileType === 'voice' || fileType === 'photo' ? null : fileName,
+        };
+        if (waveform && fileType === 'voice') row.waveform = waveform;
+
+        let ins = await supabase.from('messages').insert(row).select().single();
+        if (ins.error && row.waveform && /waveform/i.test(ins.error.message || '')) {
+          delete row.waveform;           // column not migrated yet — send without it
+          ins = await supabase.from('messages').insert(row).select().single();
+        }
+        if (ins.error) throw ins.error;
+        return { msg: ins.data, tgType: tg.type };
+      })();
+      if (dedupeKey) {
+        const shared = pipeline.then(r => r.msg);
+        shared.catch(() => { });         // a failure is handled below; don't also report it as unhandled
+        sendDedupe.set(dedupeKey, shared);
+      }
+
+      let result;
+      try {
+        result = await pipeline;
+      } catch (err) {
+        if (dedupeKey) sendDedupe.delete(dedupeKey);   // let a retry try again
+        console.error('[POST /messages/upload] failed:', err.response?.body?.description || err.message);
+        return res.status(502).json({ error: 'Could not send the file. Please try again.' });
+      }
+
+      const { msg, tgType } = result;
+      const payload = withClientId(msg);
+      if (msg.parent_id) {
+        const preview = (await fetchParentPreviews([msg.parent_id], from_id, to_id)).get(String(msg.parent_id));
+        if (preview) payload.parent_preview = preview;
+      }
+
+      deliverToRecipient(to_id, payload, () => notifyOfflineFile(to_id, from_id, msg, tgType));
+      const originSocket = req.get('x-socket-id');
+      io.to(userRoom(from_id)).except(originSocket || []).emit('message_sent', payload);
+
+      res.status(201).json(payload);
+    } finally {
+      removeTemp();
+    }
   }));
 
   // PATCH /api/messages/:id – edit a message

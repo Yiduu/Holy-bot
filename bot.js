@@ -1679,6 +1679,49 @@ async function notifyMessage(recipientId, senderName, messageContent, fromId = n
   return sent;
 }
 
+// Offline notification for an attachment sent from the Mini App: the recipient's
+// Telegram gets the file itself (re-served from its file_id, so nothing is
+// uploaded again) captioned like a text notification, with the same "Open Chat"
+// button. `tgType` is how Telegram stored the file (voice/audio/video/photo/
+// document) and decides which send method accepts the file_id.
+async function notifyFileMessage(recipientId, senderName, fileType, tgType, fileId, caption, fromId = null, messageId = null) {
+  const lang = await getUserLang(recipientId);
+  const icons = { voice: '🎙️', audio: '🎵', video: '🎬', photo: '🖼️', document: '📎' };
+  const { text: head, reply_markup } = buildMessageNotification(lang, senderName, '', fromId);
+  const first = `${icons[fileType] || '📎'} ${head.trim()}`;
+  // Telegram caps media captions at 1024 characters.
+  const text = (caption ? `${first}\n\n${caption}` : first).slice(0, 1024);
+  const opts = { caption: text, reply_markup };
+
+  let sent;
+  try {
+    switch (tgType) {
+      case 'voice': sent = await bot.sendVoice(recipientId, fileId, opts); break;
+      case 'audio': sent = await bot.sendAudio(recipientId, fileId, opts); break;
+      case 'video': sent = await bot.sendVideo(recipientId, fileId, opts); break;
+      case 'photo': sent = await bot.sendPhoto(recipientId, fileId, opts); break;
+      default: sent = await bot.sendDocument(recipientId, fileId, opts);
+    }
+  } catch (err) {
+    // E.g. the recipient restricts voice messages from non-contacts. They must
+    // still learn that something arrived, so fall back to a plain notification.
+    console.warn(`[Bot] Could not forward ${tgType} to ${recipientId}:`, err.message);
+    return notifyMessage(recipientId, senderName, caption ? `${icons[fileType] || '📎'} ${caption}` : (icons[fileType] || '📎'), fromId, messageId);
+  }
+
+  if (sent && messageId) {
+    const { error } = await supabase.from('message_tg_notifications').upsert({
+      message_id: messageId,
+      chat_id: sent.chat.id,
+      tg_message_id: sent.message_id,
+      from_id: fromId,
+      to_id: recipientId,
+    });
+    if (error) console.warn('[Bot] Could not store notification mapping:', error.message);
+  }
+  return sent;
+}
+
 // The user edited a message in the app → edit the Telegram notification too.
 async function syncNotificationEdit(messageId, senderName, newContent, fromId) {
   try {
@@ -3327,6 +3370,7 @@ module.exports = {
   notifyMentorshipAccepted,
   notifyMentorshipRejected,
   notifyMessage,
+  notifyFileMessage,
   syncNotificationEdit,
   syncNotificationDelete,
   notifyNewGoal,

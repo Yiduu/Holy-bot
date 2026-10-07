@@ -44,6 +44,19 @@ This works as-is, but the three-folder split should get collapsed into a
 single ordered migration history the next time someone has a spare afternoon
 and a scratch Supabase project to test against.
 
+## Chat attachments from the Mini App (2026-10-06)
+
+`migrations/20261006_chat_attachments.sql` adds (idempotently) the attachment
+columns on `messages` plus a new `waveform` column for voice bubbles. Voice
+messages and files sent from the Mini App work without it only if the six
+older attachment columns already exist; the `waveform` column is optional.
+
+The Mini App uploads each attachment to the Telegram chat of
+`ADMIN_TELEGRAM_ID` purely to get a permanent `file_id` (same approach as
+profile photos). **That admin chat will therefore contain every attachment sent
+in the app** — consider pointing it at a dedicated private account. The admin
+must have started the bot for uploads to work.
+
 ## Live-session lifecycle (2026-10-04)
 
 `migrations/20261004_session_lifecycle.sql` must be applied **before** deploying
