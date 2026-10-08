@@ -935,7 +935,7 @@ function showToast(msg, type = 'info', opts = {}) {
     position:fixed;top:16px;left:50%;transform:translateX(-50%) translateZ(0);-webkit-transform:translateX(-50%) translateZ(0);
     background:${type === 'error' ? 'var(--danger)' : type === 'success' ? 'var(--success)' : 'var(--bg3)'};
     color:#fff;padding:10px 20px;border-radius:8px;z-index:9999;
-    font-size:.85rem;font-weight:700;animation:fadeIn .2s ease;
+    font-size:var(--fs-sm);font-weight:700;animation:fadeIn .2s ease;
     max-width:90vw;text-align:center;will-change:transform,opacity;
   `;
   document.body.appendChild(t);
@@ -1079,7 +1079,7 @@ async function init() {
     } else {
       currentUser = data.user;
       if (currentUser.is_banned) {
-        document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#E05C5C;font-family:Cinzel,serif;font-size:1.2rem;">Account suspended.<br><br>Contact support.</div>';
+        document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#E05C5C;font-family:inherit;font-size:var(--fs-lg);">Account suspended.<br><br>Contact support.</div>';
         return;
       }
       startApp();
@@ -1115,7 +1115,7 @@ function showConnectionError(err) {
   const msg = err?.status === 401
     ? 'Session expired. Please close and reopen the app.'
     : 'Could not reach the server.';
-  ls.innerHTML = `<div style="padding:32px;text-align:center;color:#D4AF37;font-family:Cinzel,serif">
+  ls.innerHTML = `<div style="padding:32px;text-align:center;color:#D4AF37;font-family:inherit">
     <p style="margin-bottom:20px">${msg}</p>
     <button onclick="location.reload()" style="padding:12px 28px;border-radius:12px;border:1px solid #D4AF37;background:transparent;color:#D4AF37;font-family:inherit">Try again</button>
   </div>`;
@@ -3862,8 +3862,8 @@ function renderMentorsList() {
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:10px">
             <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
           </svg>
-          <p style="font-size:14px;color:var(--gold-light);margin:0 0 4px;font-weight:600">${t('no_saved_mentors_title')}</p>
-          <p style="font-size:12.5px;margin:0;line-height:1.5">${t('no_saved_mentors_desc')}</p>
+          <p style="font-size:var(--fs-md);color:var(--gold-light);margin:0 0 4px;font-weight:600">${t('no_saved_mentors_title')}</p>
+          <p style="font-size:var(--fs-xs);margin:0;line-height:1.5">${t('no_saved_mentors_desc')}</p>
         </div>`;
     } else {
       let message = 'No mentors found with active filters';
@@ -5221,8 +5221,8 @@ async function deliverMessage(tempId) {
       if (!bubble.querySelector('.retry-btn')) {
         bubble.insertAdjacentHTML('beforeend', `
           <div class="failed-status" style="margin-top: 4px; display: flex; align-items: center; justify-content: flex-end; gap: 4px;">
-            <span style="font-size: 0.75rem; color: var(--danger);">Failed</span>
-            <button class="btn btn-danger btn-xs btn-outline retry-btn" onclick="retrySendMessage('${tempId}')" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--danger);">Retry</button>
+            <span style="font-size: var(--fs-xs); color: var(--danger);">Failed</span>
+            <button class="btn btn-danger btn-xs btn-outline retry-btn" onclick="retrySendMessage('${tempId}')" style="font-size: var(--fs-2xs); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--danger);">Retry</button>
           </div>
         `);
       }
@@ -7677,7 +7677,7 @@ async function loadTransferMentors(topicId = '') {
       if (isNotAccepting) suffixText += ' (Not Accepting)';
       if (isFull) suffixText += ' - At capacity';
 
-      const statusText = isFull ? ' <span style="color:var(--danger);font-size:0.7rem;">full</span>' : '';
+      const statusText = isFull ? ' <span style="color:var(--danger);font-size:var(--fs-2xs);">full</span>' : '';
 
       return `<option value="${m.telegram_id}" ${disabledAttr}>${escapeHtml(name)}${suffixText} <sup>${mentees}/${max}</sup>${statusText}</option>`;
     }).join('');

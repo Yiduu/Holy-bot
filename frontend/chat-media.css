@@ -205,7 +205,7 @@
 .cm-rec-time {
   flex: 0 0 auto;
   min-width: 56px;
-  font-size: 0.95rem;
+  font-size: var(--fs-md);
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
@@ -219,7 +219,7 @@
   gap: 4px;
   overflow: hidden;
   white-space: nowrap;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   color: var(--text3);
   will-change: transform, opacity;
 }
@@ -394,7 +394,7 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 0.92rem;
+  font-size: var(--fs-md);
   text-align: left;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -430,7 +430,7 @@
   bottom: calc(100% + 8px);
   padding: 10px 14px;
   text-align: center;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   line-height: 1.4;
   color: var(--text);
   background: var(--bg2);
@@ -450,7 +450,7 @@
   background: var(--gold);
   color: #1a1200;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
   cursor: pointer;
 }
@@ -498,7 +498,7 @@
 .cm-sheet-title {
   flex: 1;
   min-width: 0;
-  font-size: 1rem;
+  font-size: var(--fs-base);
   font-weight: 700;
   color: var(--text);
 }
@@ -608,7 +608,7 @@
 }
 
 .cm-prev-name {
-  font-size: 0.88rem;
+  font-size: var(--fs-md);
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
@@ -618,7 +618,7 @@
 
 .cm-prev-size {
   margin-top: 1px;
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   color: var(--text3);
 }
 
@@ -632,7 +632,7 @@
   align-items: center;
   gap: 10px;
   padding: 4px 2px;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   color: var(--text2);
   cursor: pointer;
 }
@@ -657,7 +657,7 @@
   box-sizing: border-box;
   resize: none;
   font: inherit;
-  font-size: 0.9rem;
+  font-size: var(--fs-md);
   line-height: 1.4;
   color: var(--text);
   background: var(--bg3);
@@ -682,7 +682,7 @@
   min-height: 44px;
   border-radius: 22px;
   font: inherit;
-  font-size: 0.92rem;
+  font-size: var(--fs-md);
   font-weight: 700;
   cursor: pointer;
 }
@@ -888,7 +888,7 @@
 }
 
 .cm-voice-name {
-  font-size: 0.78rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -920,7 +920,7 @@
 }
 
 .cm-voice-time {
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   line-height: 1;
   color: var(--cm-sub);
   font-variant-numeric: tabular-nums;
@@ -990,7 +990,7 @@
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1024,7 +1024,7 @@
 }
 
 .cm-file-name {
-  font-size: 0.86rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -1033,7 +1033,7 @@
 
 .cm-file-size {
   margin-top: 1px;
-  font-size: 0.7rem;
+  font-size: var(--fs-2xs);
   color: var(--cm-sub);
   font-variant-numeric: tabular-nums;
 }
@@ -1124,7 +1124,7 @@
 .chat-float-date.show { opacity: 1; }
 .chat-float-date span {
   padding: 4px 12px;
-  font-size: 0.75rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--text2);
   background: color-mix(in srgb, var(--bg2, var(--bg)) 90%, transparent);
