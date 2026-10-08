@@ -3428,6 +3428,10 @@ function mentorActionHtml(m, inSheet = false) {
 const MC_ICON_MSG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
 const MC_ICON_BOOKMARK = (filled) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>`;
 
+const MC_ICON_BOOK = '<svg class="mc-spec-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
+const MC_ICON_USER = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+const MC_ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+
 function mentorMatchBadge(n) {
   return n ? `<div class="mc-match">✦ ${t('match_topics', { n })}</div>` : '';
 }
@@ -3444,6 +3448,9 @@ function mentorCardHtml(m) {
   const st = mentorStatus(m);
   const halo = renderHaloAvatar(m, name.charAt(0).toUpperCase(), !!m.is_online, isAccepting ? pct : 1, isAccepting);
 
+  const spec = (m.user_settings?.specialization || '').trim();
+  const matchHtml = unavailable ? '' : mentorMatchBadge(mentorMatchCount(m));
+
   return `
     <div class="mc-card ${unavailable ? 'muted' : ''}" data-mentor-id="${id}" onclick="mentorCardClick(event, ${id})">
       <div class="mc-top">
@@ -3457,12 +3464,20 @@ function mentorCardHtml(m) {
           <button class="mc-icon-btn" onclick="openChat('${id}')" aria-label="${t('btn_message')}">${MC_ICON_MSG}</button>
         </div>
       </div>
-      ${mentorSubLine(m)}
-      ${unavailable ? '' : mentorMatchBadge(mentorMatchCount(m))}
-      <p class="mc-bio">${mentorBioInline(bio)}</p>
-      <div class="mc-view">${t('btn_view_profile')} ›</div>
-      <div class="mc-bottom">
+      <div class="mc-body">
+        ${spec ? `<div class="mc-spec">${MC_ICON_BOOK}<span>${escapeHtml(spec)}</span></div>` : ''}
+        <p class="mc-bio">${mentorBioInline(bio)}</p>
+      </div>
+      <div class="mc-meta">
         <span class="mc-status ${st.cls}">${st.text}</span>
+        ${matchHtml}
+      </div>
+      <div class="mc-footer">
+        <button type="button" class="mc-view" onclick="openMentorSheet(${id})">
+          <span class="mc-view-ico">${MC_ICON_USER}</span>
+          <span class="mc-view-label">${t('btn_view_profile')}</span>
+          <span class="mc-view-arrow">${MC_ICON_CHEV}</span>
+        </button>
         ${mentorActionHtml(m)}
       </div>
     </div>`;
@@ -3514,14 +3529,16 @@ const MP_ICONS = {
   tag:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>',
   cake:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
   people:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  pulse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
+  spark: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>',
   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
   book:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'
 };
 
-function mpInfoCard({ icon, label, text, gold = false, duo = false, trailing = '' }) {
+function mpInfoCard({ icon, label, text, gold = false, duo = false, trailing = '', iconClass = '' }) {
   return `
     <div class="profile-menu-item mp-info${gold ? ' pm-gold' : ''}${duo ? ' mp-info-duo' : ''}">
-      <span class="profile-menu-icon">${icon}</span>
+      <span class="profile-menu-icon ${iconClass}">${icon}</span>
       <span class="mp-info-body">
         <span class="mp-info-label">${escapeHtml(label)}</span>
         <span class="mp-info-text">${escapeHtml(text)}</span>
@@ -3570,10 +3587,7 @@ function renderMentorProfilePage(id) {
     : `<button class="btn btn-outline" onclick="openChat('${id}')">${MC_ICON_MSG} ${t('btn_message')}</button>
        ${mentorActionHtml(m, true)}`;
 
-  const aboutCards = [
-    mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: true }),
-    spec ? mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec }) : ''
-  ].join('');
+  const aboutCards = mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: true });
 
   const topicCards = topics.map(tp => {
     const mine = tp.id != null && myMentorTopicIds.has(Number(tp.id));
@@ -3593,19 +3607,23 @@ function renderMentorProfilePage(id) {
       </div>
       <div class="profile-hero-name">${escapeHtml(name)}</div>
       <div class="profile-hero-rating" style="display:flex">${renderProfileRating(ratingNum, ratingCount)}</div>
-      ${spec ? `<div class="mp-spec">${escapeHtml(spec)}</div>` : ''}
-      <div class="profile-pills">
-        <span class="chip"><span class="mp-dot${m.is_online ? ' on' : ''}"></span>${m.is_online ? t('status_online') : t('status_offline')}</span>
-        ${isMine ? '' : `<span class="chip">${escapeHtml(st.text)}</span>`}
-        ${n ? `<span class="chip mp-chip-match">✦ ${t('match_topics', { n })}</span>` : ''}
-      </div>
-      <div class="mp-actions">${actions}</div>
     </div>
+
+    <nav class="profile-menu-list mp-panel" aria-label="${escapeHtml(t('mp_label_status'))}">
+      <div class="mp-duo">
+        ${mpInfoCard({ icon: MP_ICONS.pulse, label: t('mp_label_status'), text: m.is_online ? t('status_online') : t('status_offline'), duo: true, iconClass: m.is_online ? 'mp-ok' : '' })}
+        ${mpInfoCard({ icon: MP_ICONS.people, label: t('mp_label_availability'), text: isMine ? t('active_mentorship_label') : st.text, duo: true })}
+      </div>
+      ${spec ? mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec }) : ''}
+      ${n ? mpInfoCard({ icon: MP_ICONS.spark, label: t('mp_matches_you'), text: t('match_topics', { n }), gold: true }) : ''}
+    </nav>
+
+    <div class="mp-actions">${actions}</div>
 
     <div class="mp-stats">
       <div class="stat-card"><div class="stat-num">${ratingNum > 0 ? ratingNum.toFixed(1) : '—'}</div><div class="stat-label">${t('mp_stat_rating')}</div></div>
       <div class="stat-card"><div class="stat-num">${ratingCount}</div><div class="stat-label">${t('mp_stat_reviews')}</div></div>
-      <div class="stat-card"><div class="stat-num">${open}<span class="mp-stat-of">/${max}</span></div><div class="stat-label">${t('mp_stat_spots')}</div></div>
+      <div class="stat-card"><div class="stat-num">${m.mentee_count || 0}<span class="mp-stat-of">/${max}</span></div><div class="stat-label">${t('mp_stat_mentees')}</div></div>
     </div>
 
     ${topics.length ? `

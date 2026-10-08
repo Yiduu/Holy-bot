@@ -11435,3 +11435,141 @@ input:focus, textarea:focus, select:focus {
   flex-shrink: 0;
 }
 .mc-skel { border-radius: 26px; height: 190px; }
+
+
+/* ═══ Refinement pass: count label, card body alignment, organised profile
+   panel, premium "View full profile" button ═══ */
+
+/* result count: small, quiet */
+.mc-count {
+  gap: 7px;
+  margin: 0 2px 10px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--text3);
+}
+.mc-count::before { width: 5px; height: 5px; box-shadow: 0 0 8px rgba(232, 201, 107, 0.6); }
+
+/* ── Mentor list card: one clean left edge for specialization + bio ── */
+.mc-card, .mc-mine { text-align: left; }
+.mc-body {
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  text-align: left;
+}
+[data-theme="light"] .mc-body { border-top-color: rgba(150, 120, 40, 0.18); }
+.mc-spec {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--gold-light);
+  text-align: left;
+}
+.mc-spec span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-spec-ico { flex: none; color: var(--gold-light); }
+[data-theme="light"] .mc-spec, [data-theme="light"] .mc-spec-ico { color: #7A5812; }
+.mc-body .mc-bio {
+  margin: 8px 0 0;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  text-align: left;
+  color: var(--text2);
+}
+.mc-body .mc-spec + .mc-bio { margin-top: 7px; }
+
+/* status + match: one tidy row */
+.mc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 13px;
+}
+.mc-meta .mc-match { margin-top: 0; }
+
+/* footer: premium profile button + request action share one row */
+.mc-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.mc-card .mc-footer .btn { min-height: 46px; }
+
+.mc-view {
+  flex: 1 1 160px;
+  min-width: 0;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0 6px 0 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(201, 168, 76, 0.4);
+  background:
+    linear-gradient(180deg, rgba(201, 168, 76, 0.2), rgba(201, 168, 76, 0.06)),
+    rgba(255, 255, 255, 0.03);
+  color: var(--gold-light);
+  font-family: var(--font-body);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3), 0 0 20px rgba(201, 168, 76, 0.1), inset 0 1px 0 rgba(255, 233, 160, 0.16);
+  transition: transform 0.15s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.mc-view:active { transform: scale(0.97); }
+@media (hover: hover) {
+  .mc-view:hover { border-color: rgba(232, 201, 107, 0.7); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32), 0 0 26px rgba(201, 168, 76, 0.22), inset 0 1px 0 rgba(255, 233, 160, 0.22); }
+}
+.mc-view-ico, .mc-view-arrow {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+.mc-view-ico {
+  color: #2a1e05;
+  background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%);
+  box-shadow: 0 4px 12px rgba(201, 168, 76, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.mc-view-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-view-arrow {
+  color: var(--gold-light);
+  background: rgba(201, 168, 76, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.3);
+}
+[data-theme="light"] .mc-view {
+  color: #6B4E0F;
+  border-color: rgba(150, 120, 40, 0.42);
+  background: linear-gradient(180deg, rgba(201, 168, 76, 0.26), rgba(201, 168, 76, 0.1)), #fffaf0;
+  box-shadow: 0 8px 18px rgba(30, 25, 15, 0.14), inset 0 1px 0 #fff;
+}
+[data-theme="light"] .mc-view-arrow { color: #7A5812; }
+
+/* ── Profile page: organised status panel instead of loose chips ── */
+.mp-hero { padding-bottom: 14px; }
+.mp-panel { margin-bottom: 0; }
+.mp-actions { max-width: none; margin: 16px 0 18px; }
+.mp-panel .mp-duo { gap: 12px; }
+.mp-info-duo .mp-info-text { overflow-wrap: anywhere; }
+.mp-ok {
+  background: rgba(91, 173, 122, 0.2) !important;
+  color: #8fe0ae !important;
+  box-shadow: inset 0 0 0 1px rgba(91, 173, 122, 0.4), 0 0 14px rgba(91, 173, 122, 0.25) !important;
+}
+[data-theme="light"] .mp-ok { color: #2f7a4d !important; }
+.mp-panel .mp-info-text { text-align: left; }
+@media (max-width: 360px) { .mc-view { flex-basis: 100%; } }

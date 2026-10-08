@@ -1,0 +1,308 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 3f1a826..e55fb71 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -3428,6 +3428,10 @@ function mentorActionHtml(m, inSheet = false) {
+ const MC_ICON_MSG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+ const MC_ICON_BOOKMARK = (filled) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>`;
+ 
++const MC_ICON_BOOK = '<svg class="mc-spec-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
++const MC_ICON_USER = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
++const MC_ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
++
+ function mentorMatchBadge(n) {
+   return n ? `<div class="mc-match">✦ ${t('match_topics', { n })}</div>` : '';
+ }
+@@ -3444,6 +3448,9 @@ function mentorCardHtml(m) {
+   const st = mentorStatus(m);
+   const halo = renderHaloAvatar(m, name.charAt(0).toUpperCase(), !!m.is_online, isAccepting ? pct : 1, isAccepting);
+ 
++  const spec = (m.user_settings?.specialization || '').trim();
++  const matchHtml = unavailable ? '' : mentorMatchBadge(mentorMatchCount(m));
++
+   return `
+     <div class="mc-card ${unavailable ? 'muted' : ''}" data-mentor-id="${id}" onclick="mentorCardClick(event, ${id})">
+       <div class="mc-top">
+@@ -3457,12 +3464,20 @@ function mentorCardHtml(m) {
+           <button class="mc-icon-btn" onclick="openChat('${id}')" aria-label="${t('btn_message')}">${MC_ICON_MSG}</button>
+         </div>
+       </div>
+-      ${mentorSubLine(m)}
+-      ${unavailable ? '' : mentorMatchBadge(mentorMatchCount(m))}
+-      <p class="mc-bio">${mentorBioInline(bio)}</p>
+-      <div class="mc-view">${t('btn_view_profile')} ›</div>
+-      <div class="mc-bottom">
++      <div class="mc-body">
++        ${spec ? `<div class="mc-spec">${MC_ICON_BOOK}<span>${escapeHtml(spec)}</span></div>` : ''}
++        <p class="mc-bio">${mentorBioInline(bio)}</p>
++      </div>
++      <div class="mc-meta">
+         <span class="mc-status ${st.cls}">${st.text}</span>
++        ${matchHtml}
++      </div>
++      <div class="mc-footer">
++        <button type="button" class="mc-view" onclick="openMentorSheet(${id})">
++          <span class="mc-view-ico">${MC_ICON_USER}</span>
++          <span class="mc-view-label">${t('btn_view_profile')}</span>
++          <span class="mc-view-arrow">${MC_ICON_CHEV}</span>
++        </button>
+         ${mentorActionHtml(m)}
+       </div>
+     </div>`;
+@@ -3514,14 +3529,16 @@ const MP_ICONS = {
+   tag:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>',
+   cake:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+   people:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
++  pulse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
++  spark: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>',
+   check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+   book:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'
+ };
+ 
+-function mpInfoCard({ icon, label, text, gold = false, duo = false, trailing = '' }) {
++function mpInfoCard({ icon, label, text, gold = false, duo = false, trailing = '', iconClass = '' }) {
+   return `
+     <div class="profile-menu-item mp-info${gold ? ' pm-gold' : ''}${duo ? ' mp-info-duo' : ''}">
+-      <span class="profile-menu-icon">${icon}</span>
++      <span class="profile-menu-icon ${iconClass}">${icon}</span>
+       <span class="mp-info-body">
+         <span class="mp-info-label">${escapeHtml(label)}</span>
+         <span class="mp-info-text">${escapeHtml(text)}</span>
+@@ -3570,10 +3587,7 @@ function renderMentorProfilePage(id) {
+     : `<button class="btn btn-outline" onclick="openChat('${id}')">${MC_ICON_MSG} ${t('btn_message')}</button>
+        ${mentorActionHtml(m, true)}`;
+ 
+-  const aboutCards = [
+-    mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: true }),
+-    spec ? mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec }) : ''
+-  ].join('');
++  const aboutCards = mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: true });
+ 
+   const topicCards = topics.map(tp => {
+     const mine = tp.id != null && myMentorTopicIds.has(Number(tp.id));
+@@ -3593,19 +3607,23 @@ function renderMentorProfilePage(id) {
+       </div>
+       <div class="profile-hero-name">${escapeHtml(name)}</div>
+       <div class="profile-hero-rating" style="display:flex">${renderProfileRating(ratingNum, ratingCount)}</div>
+-      ${spec ? `<div class="mp-spec">${escapeHtml(spec)}</div>` : ''}
+-      <div class="profile-pills">
+-        <span class="chip"><span class="mp-dot${m.is_online ? ' on' : ''}"></span>${m.is_online ? t('status_online') : t('status_offline')}</span>
+-        ${isMine ? '' : `<span class="chip">${escapeHtml(st.text)}</span>`}
+-        ${n ? `<span class="chip mp-chip-match">✦ ${t('match_topics', { n })}</span>` : ''}
+-      </div>
+-      <div class="mp-actions">${actions}</div>
+     </div>
+ 
++    <nav class="profile-menu-list mp-panel" aria-label="${escapeHtml(t('mp_label_status'))}">
++      <div class="mp-duo">
++        ${mpInfoCard({ icon: MP_ICONS.pulse, label: t('mp_label_status'), text: m.is_online ? t('status_online') : t('status_offline'), duo: true, iconClass: m.is_online ? 'mp-ok' : '' })}
++        ${mpInfoCard({ icon: MP_ICONS.people, label: t('mp_label_availability'), text: isMine ? t('active_mentorship_label') : st.text, duo: true })}
++      </div>
++      ${spec ? mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec }) : ''}
++      ${n ? mpInfoCard({ icon: MP_ICONS.spark, label: t('mp_matches_you'), text: t('match_topics', { n }), gold: true }) : ''}
++    </nav>
++
++    <div class="mp-actions">${actions}</div>
++
+     <div class="mp-stats">
+       <div class="stat-card"><div class="stat-num">${ratingNum > 0 ? ratingNum.toFixed(1) : '—'}</div><div class="stat-label">${t('mp_stat_rating')}</div></div>
+       <div class="stat-card"><div class="stat-num">${ratingCount}</div><div class="stat-label">${t('mp_stat_reviews')}</div></div>
+-      <div class="stat-card"><div class="stat-num">${open}<span class="mp-stat-of">/${max}</span></div><div class="stat-label">${t('mp_stat_spots')}</div></div>
++      <div class="stat-card"><div class="stat-num">${m.mentee_count || 0}<span class="mp-stat-of">/${max}</span></div><div class="stat-label">${t('mp_stat_mentees')}</div></div>
+     </div>
+ 
+     ${topics.length ? `
+diff --git a/frontend/index.html b/frontend/index.html
+index 66d968c..f3f439b 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -14,7 +14,7 @@
+   <!-- Non-blocking fonts (text shows in fallback fonts, then swaps) -->
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" /></noscript>
+-  <link rel="stylesheet" href="styles.css?v=2.4" />
++  <link rel="stylesheet" href="styles.css?v=2.5" />
+   <link rel="stylesheet" href="goals.css?v=1.3" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+@@ -2407,8 +2407,8 @@
+     </div>
+   </div>
+ 
+-  <script src="locales.js?v=1.6"></script>
+-  <script src="app.js?v=3.0"></script>
++  <script src="locales.js?v=1.7"></script>
++  <script src="app.js?v=3.1"></script>
+   <script src="goals.js?v=1.3"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="session-room.js?v=1.4"></script>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 495c9ab..3e797ed 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -76,6 +76,9 @@ const I18N = {
+     "sheet_age": "Age",
+     "sheet_gender": "Gender",
+     "mp_stat_rating": "Rating",
++    "mp_stat_mentees": "Mentees",
++    "mp_label_status": "Status",
++    "mp_label_availability": "Availability",
+     "mp_stat_reviews": "Reviews",
+     "mp_stat_spots": "Spots open",
+     "mp_matches_you": "Matches you",
+@@ -781,6 +784,9 @@ const I18N = {
+     "sheet_age": "ዕድሜ",
+     "sheet_gender": "ጾታ",
+     "mp_stat_rating": "ደረጃ",
++    "mp_stat_mentees": "ተመካሪዎች",
++    "mp_label_status": "ሁኔታ",
++    "mp_label_availability": "ተገኝነት",
+     "mp_stat_reviews": "ግምገማዎች",
+     "mp_stat_spots": "ክፍት ቦታ",
+     "mp_matches_you": "ከእርስዎ ጋር ይስማማል",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 6e0bede..b8a83e2 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -11435,3 +11435,141 @@ input:focus, textarea:focus, select:focus {
+   flex-shrink: 0;
+ }
+ .mc-skel { border-radius: 26px; height: 190px; }
++
++
++/* ═══ Refinement pass: count label, card body alignment, organised profile
++   panel, premium "View full profile" button ═══ */
++
++/* result count: small, quiet */
++.mc-count {
++  gap: 7px;
++  margin: 0 2px 10px;
++  font-size: 0.68rem;
++  font-weight: 600;
++  letter-spacing: 0.04em;
++  text-transform: none;
++  color: var(--text3);
++}
++.mc-count::before { width: 5px; height: 5px; box-shadow: 0 0 8px rgba(232, 201, 107, 0.6); }
++
++/* ── Mentor list card: one clean left edge for specialization + bio ── */
++.mc-card, .mc-mine { text-align: left; }
++.mc-body {
++  margin-top: 14px;
++  padding-top: 13px;
++  border-top: 1px solid rgba(255, 255, 255, 0.07);
++  text-align: left;
++}
++[data-theme="light"] .mc-body { border-top-color: rgba(150, 120, 40, 0.18); }
++.mc-spec {
++  display: flex;
++  align-items: center;
++  justify-content: flex-start;
++  gap: 8px;
++  font-size: 0.82rem;
++  font-weight: 700;
++  letter-spacing: 0.02em;
++  color: var(--gold-light);
++  text-align: left;
++}
++.mc-spec span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.mc-spec-ico { flex: none; color: var(--gold-light); }
++[data-theme="light"] .mc-spec, [data-theme="light"] .mc-spec-ico { color: #7A5812; }
++.mc-body .mc-bio {
++  margin: 8px 0 0;
++  font-size: 0.86rem;
++  line-height: 1.55;
++  text-align: left;
++  color: var(--text2);
++}
++.mc-body .mc-spec + .mc-bio { margin-top: 7px; }
++
++/* status + match: one tidy row */
++.mc-meta {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: center;
++  gap: 8px;
++  margin-top: 13px;
++}
++.mc-meta .mc-match { margin-top: 0; }
++
++/* footer: premium profile button + request action share one row */
++.mc-footer {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: center;
++  gap: 8px;
++  margin-top: 14px;
++}
++.mc-card .mc-footer .btn { min-height: 46px; }
++
++.mc-view {
++  flex: 1 1 160px;
++  min-width: 0;
++  height: 46px;
++  display: inline-flex;
++  align-items: center;
++  gap: 10px;
++  margin: 0;
++  padding: 0 6px 0 7px;
++  border-radius: 999px;
++  border: 1px solid rgba(201, 168, 76, 0.4);
++  background:
++    linear-gradient(180deg, rgba(201, 168, 76, 0.2), rgba(201, 168, 76, 0.06)),
++    rgba(255, 255, 255, 0.03);
++  color: var(--gold-light);
++  font-family: var(--font-body);
++  font-size: 0.86rem;
++  font-weight: 700;
++  letter-spacing: 0.02em;
++  text-align: left;
++  cursor: pointer;
++  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3), 0 0 20px rgba(201, 168, 76, 0.1), inset 0 1px 0 rgba(255, 233, 160, 0.16);
++  transition: transform 0.15s ease, box-shadow 0.25s ease, border-color 0.25s ease;
++}
++.mc-view:active { transform: scale(0.97); }
++@media (hover: hover) {
++  .mc-view:hover { border-color: rgba(232, 201, 107, 0.7); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32), 0 0 26px rgba(201, 168, 76, 0.22), inset 0 1px 0 rgba(255, 233, 160, 0.22); }
++}
++.mc-view-ico, .mc-view-arrow {
++  flex: none;
++  width: 32px;
++  height: 32px;
++  display: grid;
++  place-items: center;
++  border-radius: 50%;
++}
++.mc-view-ico {
++  color: #2a1e05;
++  background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%);
++  box-shadow: 0 4px 12px rgba(201, 168, 76, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.5);
++}
++.mc-view-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.mc-view-arrow {
++  color: var(--gold-light);
++  background: rgba(201, 168, 76, 0.16);
++  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.3);
++}
++[data-theme="light"] .mc-view {
++  color: #6B4E0F;
++  border-color: rgba(150, 120, 40, 0.42);
++  background: linear-gradient(180deg, rgba(201, 168, 76, 0.26), rgba(201, 168, 76, 0.1)), #fffaf0;
++  box-shadow: 0 8px 18px rgba(30, 25, 15, 0.14), inset 0 1px 0 #fff;
++}
++[data-theme="light"] .mc-view-arrow { color: #7A5812; }
++
++/* ── Profile page: organised status panel instead of loose chips ── */
++.mp-hero { padding-bottom: 14px; }
++.mp-panel { margin-bottom: 0; }
++.mp-actions { max-width: none; margin: 16px 0 18px; }
++.mp-panel .mp-duo { gap: 12px; }
++.mp-info-duo .mp-info-text { overflow-wrap: anywhere; }
++.mp-ok {
++  background: rgba(91, 173, 122, 0.2) !important;
++  color: #8fe0ae !important;
++  box-shadow: inset 0 0 0 1px rgba(91, 173, 122, 0.4), 0 0 14px rgba(91, 173, 122, 0.25) !important;
++}
++[data-theme="light"] .mp-ok { color: #2f7a4d !important; }
++.mp-panel .mp-info-text { text-align: left; }
++@media (max-width: 360px) { .mc-view { flex-basis: 100%; } }
