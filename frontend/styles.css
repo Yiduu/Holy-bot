@@ -3142,19 +3142,6 @@ textarea.form-control {
 }
 
 /* ─── Mentorship Request Topic Selection Modal ───────────────── */
-#requestTopicModal .modal-sheet {
-  overflow: visible !important;
-}
-
-#requestTopicModal .form-group {
-  overflow: visible !important;
-}
-
-#requestTopicModal .premium-dropdown-menu {
-  max-height: 220px;
-  overflow-y: auto;
-  z-index: 1200;
-}
 
 /* ─── Top Active Mentor Luxury Card ─────────────────────────── */
 .active-mentor-luxury-card {
@@ -11205,3 +11192,246 @@ input:focus, textarea:focus, select:focus {
   .mp-duo { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { #page-mentor-profile .page-content { animation: none; } }
+
+
+/* ═══ Profile concept: popups + mentor list ═══════════════════════════════════
+   Same tokens as the Profile page: 26px cards, gold glow, glass pills, gold
+   icon tiles, pill buttons. Applies to the topic picker (after "Request"),
+   the mentor list cards, and the end-mentorship popups. ═══ */
+
+/* ── Sheet shell shared by the popups ── */
+:is(#requestTopicModal, #mentorSheet, #endToApplyModal, #endToApplyWarnModal) .modal-sheet {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 14px 18px calc(22px + var(--safe-bottom));
+  border-radius: 32px 32px 0 0;
+  border: 1px solid rgba(201, 168, 76, 0.28);
+  border-bottom: 0;
+  background:
+    radial-gradient(120% 240px at 50% 0%, rgba(201, 168, 76, 0.22) 0%, rgba(168, 124, 42, 0.08) 50%, transparent 82%),
+    linear-gradient(180deg, #15171f, #0f1117);
+  box-shadow: 0 -22px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(201, 168, 76, 0.12), inset 0 1px 0 rgba(255, 233, 160, 0.12);
+}
+[data-theme="light"] :is(#requestTopicModal, #mentorSheet, #endToApplyModal, #endToApplyWarnModal) .modal-sheet {
+  background:
+    radial-gradient(120% 240px at 50% 0%, rgba(201, 168, 76, 0.30) 0%, rgba(201, 168, 76, 0.10) 50%, transparent 82%),
+    linear-gradient(180deg, #fffdf7, #f4f0e4);
+  border-color: rgba(150, 120, 40, 0.32);
+  box-shadow: 0 -18px 46px rgba(30, 25, 15, 0.22), inset 0 1px 0 #fff;
+}
+:is(#requestTopicModal, #mentorSheet, #endToApplyModal, #endToApplyWarnModal) .modal-handle {
+  width: 44px;
+  background: rgba(201, 168, 76, 0.45);
+  margin-bottom: 18px;
+}
+:is(#requestTopicModal, #mentorSheet, #endToApplyModal, #endToApplyWarnModal) .modal-title {
+  text-align: center;
+  font-size: 1.3rem;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  margin-bottom: 8px;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
+}
+[data-theme="light"] :is(#requestTopicModal, #mentorSheet, #endToApplyModal, #endToApplyWarnModal) .modal-title { text-shadow: none; }
+
+/* big gold icon tile, like the Profile cards' tiles but hero-sized */
+.hb-icon {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 20px;
+  background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%);
+  color: #2a1e05;
+  box-shadow: 0 10px 26px rgba(201, 168, 76, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.hb-icon svg { width: 28px; height: 28px; }
+.hb-icon.danger {
+  background: radial-gradient(circle at 30% 25%, #f59a9a, #d24f4f 70%);
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(224, 92, 92, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.hb-text {
+  margin: 0 auto 18px;
+  max-width: 340px;
+  text-align: center;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--text2);
+}
+.hb-text strong { color: var(--gold-light); }
+[data-theme="light"] .hb-text strong { color: #7A5812; }
+
+/* pill action row */
+.hb-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+.hb-actions.hb-stack { grid-template-columns: 1fr; }
+.hb-actions .btn { min-height: 52px; border-radius: 999px; font-size: 0.95rem; font-weight: 700; white-space: normal; }
+.hb-actions .btn-danger {
+  background: linear-gradient(180deg, #ee7f7f, #d24f4f);
+  border: 0;
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(224, 92, 92, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.hb-confirm .hb-actions { margin-top: 6px; }
+
+/* ── Topic picker: stacked selectable cards ── */
+.rt-list {
+  max-height: 42vh;
+  overflow-y: auto;
+  padding: 4px 2px 6px;
+  margin-bottom: 0;
+  -webkit-overflow-scrolling: touch;
+}
+.rt-topic { min-height: 64px; padding: 12px 16px; gap: 14px; }
+.rt-topic .profile-menu-icon { width: 42px; height: 42px; border-radius: 14px; }
+.rt-topic .profile-menu-label { font-size: 1rem; text-align: left; }
+.rt-topic .mp-mine-chip { margin-left: auto; }
+.rt-radio {
+  flex: none;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.rt-topic.selected .rt-radio {
+  border-color: var(--gold-light);
+  background: linear-gradient(180deg, #EBCD72, #C9A84C);
+  box-shadow: 0 0 14px rgba(201, 168, 76, 0.55);
+}
+.rt-topic.selected .rt-radio::after {
+  content: '';
+  position: absolute;
+  left: 7px; top: 3px;
+  width: 6px; height: 11px;
+  border: solid #1a1300;
+  border-width: 0 2.5px 2.5px 0;
+  transform: rotate(45deg);
+}
+[data-theme="light"] .rt-radio { border-color: rgba(150, 120, 40, 0.4); }
+.rt-warning {
+  margin-top: 12px;
+  padding: 11px 16px;
+  border-radius: 18px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #E05C5C;
+  background: rgba(224, 92, 92, 0.1);
+  border: 1px solid rgba(224, 92, 92, 0.3);
+}
+
+/* end-to-apply form fields inside the new sheet */
+#endToApplyModal .form-label { font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-light); }
+[data-theme="light"] #endToApplyModal .form-label { color: #7A5812; }
+#endToApplyModal textarea.form-control { border-radius: 20px; padding: 14px 16px; }
+
+/* ── Mentor list: cards in the Profile card style ── */
+.mc-card, .mc-mine {
+  padding: 16px 16px 14px;
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: transform 0.15s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.mc-card:active, .mc-mine:active { transform: scale(0.985); }
+.mc-mine {   /* your own mentor = the golden card */
+  border-color: rgba(201, 168, 76, 0.35);
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.22) 0%, rgba(201, 168, 76, 0.06) 55%, transparent 100%),
+    #17140c;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38), 0 0 26px rgba(201, 168, 76, 0.12), inset 0 1px 0 rgba(255, 233, 160, 0.12);
+}
+[data-theme="light"] .mc-card, [data-theme="light"] .mc-mine {
+  background: linear-gradient(160deg, #fff, #f6f3ea);
+  border-color: rgba(150, 120, 40, 0.2);
+  box-shadow: 0 8px 20px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff;
+}
+[data-theme="light"] .mc-mine {
+  background: radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.28), rgba(201, 168, 76, 0.08) 60%, #fffaf0);
+  border-color: rgba(150, 120, 40, 0.35);
+}
+.mc-name { font-size: 1.02rem; font-weight: 700; letter-spacing: 0.01em; }
+.mc-eyebrow { color: var(--gold-light); }
+[data-theme="light"] .mc-eyebrow { color: #7A5812; }
+
+/* save + message: round glass buttons */
+.mc-icons { gap: 8px; margin: 0; }
+.mc-icon-btn {
+  width: 38px;
+  height: 38px;
+  color: var(--gold-light);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+.mc-icon-btn:active { transform: scale(0.92); }
+.mc-icon-btn.saved { background: rgba(201, 168, 76, 0.2); border-color: rgba(201, 168, 76, 0.5); color: var(--gold-light); }
+[data-theme="light"] .mc-icon-btn { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); color: #7A5812; box-shadow: 0 6px 14px rgba(30, 25, 15, 0.12); }
+[data-theme="light"] .mc-icon-btn.saved { background: rgba(201, 168, 76, 0.22); }
+@media (max-width: 360px) { .mc-icon-btn { width: 34px; height: 34px; } .mc-icons { gap: 6px; } }
+
+/* chips: topic filter row, match badge, status pill */
+.mc-chip {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.mc-chip.active {
+  color: #1a1300;
+  background: linear-gradient(180deg, #EBCD72, #C9A84C);
+  border-color: transparent;
+  box-shadow: 0 8px 20px rgba(201, 168, 76, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+[data-theme="light"] .mc-chip { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.24); box-shadow: 0 4px 12px rgba(30, 25, 15, 0.1); }
+[data-theme="light"] .mc-chip.active { background: linear-gradient(180deg, #EBCD72, #C9A84C); }
+.mc-match {
+  padding: 5px 12px;
+  font-size: 0.74rem;
+  background: rgba(201, 168, 76, 0.14);
+  border-color: rgba(201, 168, 76, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+[data-theme="light"] .mc-match { color: #6B4E0F; }
+.mc-status {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+[data-theme="light"] .mc-status { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.22); }
+.mc-view { margin-top: 8px; font-size: 0.78rem; letter-spacing: 0.04em; }
+[data-theme="light"] .mc-more, [data-theme="light"] .mc-view { color: #7A5812; }
+
+/* result count = gold eyebrow with a glowing dot, like .section-title */
+.mc-count {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 2px 2px 12px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.mc-count:empty { display: none; }
+.mc-count::before {
+  content: '';
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--gold-light);
+  box-shadow: 0 0 10px rgba(232, 201, 107, 0.7);
+  flex-shrink: 0;
+}
+.mc-skel { border-radius: 26px; height: 190px; }

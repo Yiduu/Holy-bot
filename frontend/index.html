@@ -14,7 +14,7 @@
   <!-- Non-blocking fonts (text shows in fallback fonts, then swaps) -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" /></noscript>
-  <link rel="stylesheet" href="styles.css?v=2.3" />
+  <link rel="stylesheet" href="styles.css?v=2.4" />
   <link rel="stylesheet" href="goals.css?v=1.3" />
   <link rel="stylesheet" href="chat-media.css?v=1.0" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -1637,13 +1637,16 @@
 
   <!-- ─── Warning: ending mentorship before becoming a mentor ───── -->
   <div id="endToApplyWarnModal" class="modal-overlay" onclick="if(event.target===this)closeEndToApplyWarning()">
-    <div class="modal-sheet">
+    <div class="modal-sheet hb-confirm">
       <div class="modal-handle"></div>
+      <div class="hb-icon danger">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
       <div class="modal-title" data-i18n="end_to_apply_warn_title">Warning</div>
-      <p class="text-sm text-dim mb-16" data-i18n="end_to_apply_warn_msg">You are going to end your mentorship first before becoming a mentor. Are you sure you want to continue?</p>
-      <div class="flex gap-8">
-        <button class="btn btn-ghost flex-1" onclick="closeEndToApplyWarning()" data-i18n="btn_cancel">Cancel</button>
-        <button class="btn btn-danger flex-1" onclick="confirmEndToApplyWarning()" data-i18n="end_to_apply_warn_continue">Yes, continue</button>
+      <p class="hb-text" data-i18n="end_to_apply_warn_msg">You are going to end your mentorship first before becoming a mentor. Are you sure you want to continue?</p>
+      <div class="hb-actions">
+        <button class="btn btn-outline" onclick="closeEndToApplyWarning()" data-i18n="btn_cancel">Cancel</button>
+        <button class="btn btn-danger" onclick="confirmEndToApplyWarning()" data-i18n="end_to_apply_warn_continue">Yes, continue</button>
       </div>
     </div>
   </div>
@@ -1652,8 +1655,11 @@
   <div id="endToApplyModal" class="modal-overlay" onclick="if(event.target===this)closeEndToApplyModal()">
     <div class="modal-sheet">
       <div class="modal-handle"></div>
+      <div class="hb-icon danger">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
+      </div>
       <div class="modal-title" data-i18n="end_to_apply_title">End your mentorship first</div>
-      <p id="endToApplyIntro" class="text-sm text-dim mb-16"></p>
+      <p id="endToApplyIntro" class="hb-text"></p>
 
       <div class="form-group">
         <label class="form-label" data-i18n="end_to_apply_rating_label">How was your experience?</label>
@@ -1665,10 +1671,10 @@
           data-i18n="end_to_apply_reason_placeholder" placeholder="Write your reason here..."></textarea>
       </div>
 
-      <div class="flex flex-col gap-8 mt-16">
-        <button id="endToApplySubmitBtn" class="btn btn-primary btn-full" onclick="submitEndToApply()"
+      <div class="hb-actions hb-stack">
+        <button id="endToApplySubmitBtn" class="btn btn-danger" onclick="submitEndToApply()"
           data-i18n="end_to_apply_btn">End mentorship &amp; continue</button>
-        <button class="btn btn-ghost btn-full" onclick="closeEndToApplyModal()" data-i18n="btn_cancel">Cancel</button>
+        <button class="btn btn-outline" onclick="closeEndToApplyModal()" data-i18n="btn_cancel">Cancel</button>
       </div>
     </div>
   </div>
@@ -2273,33 +2279,25 @@
 
 <!-- ─── Mentorship Request Topic Picker Modal ──────────────── -->
   <div id="requestTopicModal" class="modal-overlay" onclick="if(event.target===this)closeRequestTopicModal()">
-    <div class="modal-sheet" style="max-width:400px;margin:0 auto;overflow:visible;">
+    <div class="modal-sheet">
       <div class="modal-handle"></div>
-      <div class="modal-title" data-i18n="select_topic_title">Select a Topic</div>
-      <p id="requestTopicSubtitle" class="text-xs text-dim mb-16" style="text-align:center" data-i18n="select_topic_sub">Choose the topic you would like mentorship on with this mentor:</p>
-
-      <div class="form-group mb-12" style="position:relative;overflow:visible;">
-        <label class="form-label" data-i18n="select_topic_title">Topic</label>
-        <div class="premium-dropdown form-dropdown" data-dropdown id="requestTopicDropdown">
-          <button type="button" class="premium-dropdown-btn" data-dropdown-toggle id="requestTopicDropdownBtn">
-            <span class="dropdown-label" id="requestTopicDropdownLabel" data-i18n="select_topic_placeholder">Choose a topic…</span>
-            <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-          <div class="premium-dropdown-menu" data-dropdown-menu id="requestTopicDropdownMenu">
-            <!-- Dynamically populated topic dropdown items -->
-          </div>
-          <input type="hidden" id="requestTopicSelectedId" value="" />
-        </div>
+      <div class="hb-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
       </div>
+      <div class="modal-title" data-i18n="select_topic_title">Select a Topic</div>
+      <p id="requestTopicSubtitle" class="hb-text" data-i18n="select_topic_sub">Choose the topic you would like mentorship on with this mentor:</p>
+
+      <nav id="requestTopicList" class="profile-menu-list rt-list" role="radiogroup" aria-label="Topics">
+        <!-- Dynamically populated topic cards -->
+      </nav>
+      <input type="hidden" id="requestTopicSelectedId" value="" />
 
       <!-- Warning if topic is not selected in user's settings -->
-      <div id="requestTopicWarning" class="text-xs" style="display:none;color:#E05C5C;background:rgba(224,92,92,0.1);border:1px solid rgba(224,92,92,0.25);border-radius:10px;padding:9px 12px;line-height:1.45;margin-bottom:12px;"></div>
+      <div id="requestTopicWarning" class="rt-warning" style="display:none;"></div>
 
-      <div class="flex gap-8 mt-16">
-        <button type="button" class="btn btn-ghost flex-1" onclick="closeRequestTopicModal()" data-i18n="btn_cancel">Cancel</button>
-        <button type="button" id="confirmRequestTopicBtn" class="btn btn-primary flex-1" onclick="confirmMentorshipRequestWithTopic()" data-i18n="btn_done">OK</button>
+      <div class="hb-actions">
+        <button type="button" class="btn btn-outline" onclick="closeRequestTopicModal()" data-i18n="btn_cancel">Cancel</button>
+        <button type="button" id="confirmRequestTopicBtn" class="btn btn-primary" onclick="confirmMentorshipRequestWithTopic()" data-i18n="btn_request">Request</button>
       </div>
     </div>
   </div>
@@ -2410,7 +2408,7 @@
   </div>
 
   <script src="locales.js?v=1.6"></script>
-  <script src="app.js?v=2.9"></script>
+  <script src="app.js?v=3.0"></script>
   <script src="goals.js?v=1.3"></script>
   <script src="chat-media.js?v=1.0"></script>
   <script src="session-room.js?v=1.4"></script>

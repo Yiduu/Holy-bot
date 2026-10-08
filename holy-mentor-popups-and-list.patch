@@ -1,0 +1,534 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index ce2631e..3f1a826 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -3701,11 +3701,16 @@ function confirmEndMentorship() {
+   if (!body || !activeMentorData) return;
+   haptic('light');
+   body.innerHTML = `
+-    <div class="mc-sheet-h" style="margin-top:4px">${escapeHtml(t('end_mentorship_title', { name: mentorNameOf(activeMentorData) }))}</div>
+-    <p class="mc-sheet-text">${t('end_mentorship_body')}</p>
+-    <div class="mc-sheet-actions">
+-      <button class="btn btn-outline" onclick="closeMentorSheet()">${t('btn_keep_mentor')}</button>
+-      <button class="btn btn-danger" onclick="closeMentorSheet();endMentorship(null, true)">${t('btn_end')}</button>
++    <div class="hb-confirm">
++      <div class="hb-icon danger">
++        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
++      </div>
++      <div class="modal-title">${escapeHtml(t('end_mentorship_title', { name: mentorNameOf(activeMentorData) }))}</div>
++      <p class="hb-text">${t('end_mentorship_body')}</p>
++      <div class="hb-actions">
++        <button class="btn btn-outline" onclick="closeMentorSheet()">${t('btn_keep_mentor')}</button>
++        <button class="btn btn-danger" onclick="closeMentorSheet();endMentorship(null, true)">${t('btn_end')}</button>
++      </div>
+     </div>`;
+   $('mentorSheet')?.classList.add('open');
+ }
+@@ -3909,6 +3914,7 @@ let _rtSelectedTopicName = '';
+ let _rtSourceBtn = null;
+ let _rtSourceBtnHtml = '';
+ let _userStruggleTopicIds = null;
++let _rtTopics = [];
+ 
+ /**
+  * Triggered when tapping the "Request" button on a mentor card.
+@@ -3967,36 +3973,14 @@ async function openRequestTopicModal(event, mentorId, mentorTopics, mentorName)
+     subtitle.innerHTML = raw.replace('{name}', `<strong>${escapeHtml(mentorName)}</strong>`);
+   }
+ 
+-  // Update dropdown label and input value
+-  const labelEl = $('requestTopicDropdownLabel');
+-  if (labelEl) {
+-    labelEl.textContent = defaultTopic ? defaultTopic.name : (t('select_topic_placeholder') || 'Choose a topic…');
+-  }
++  _rtTopics = mentorTopics.map(tp => ({ id: tp.id, name: tp.name }));
+   const inputEl = $('requestTopicSelectedId');
+-  if (inputEl) {
+-    inputEl.value = defaultTopic ? defaultTopic.id : '';
+-  }
+-
+-  // Populate dropdown items with indicator if in user's topics
+-  const menuEl = $('requestTopicDropdownMenu');
+-  if (menuEl) {
+-    menuEl.innerHTML = mentorTopics.map((tp) => {
+-      const isSelected = String(tp.id) === String(_rtSelectedTopicId);
+-      const isShared = _userStruggleTopicIds.has(Number(tp.id));
+-      return `
+-        <button type="button" class="dropdown-item ${isSelected ? 'selected' : ''}" data-value="${tp.id}" onclick="selectRequestTopicDropdown(${tp.id}, \`${escapeHtml(tp.name)}\`)">
+-          <span style="flex:1;">${escapeHtml(tp.name)}</span>
+-          ${isShared ? '<span style="font-size:0.75rem;color:var(--gold);opacity:0.85;">✓</span>' : ''}
+-        </button>
+-      `;
+-    }).join('');
+-  }
++  if (inputEl) inputEl.value = defaultTopic ? defaultTopic.id : '';
++  renderRequestTopicCards();
+ 
+   // Update warning visibility
+   updateRequestTopicWarning();
+ 
+-  // Reset dropdown open state & show modal
+-  $('requestTopicDropdown')?.removeAttribute('data-open');
+   $('requestTopicModal')?.classList.add('open');
+ }
+ 
+@@ -4016,39 +4000,39 @@ function updateRequestTopicWarning() {
+ /**
+  * Handles choosing an option from the premium dropdown.
+  */
+-function selectRequestTopicDropdown(topicId, topicName) {
++function selectRequestTopicDropdown(topicId) {   // name kept; now picks a card
+   haptic('selection');
++  const tp = _rtTopics.find(x => String(x.id) === String(topicId));
+   _rtSelectedTopicId = topicId;
+-  _rtSelectedTopicName = topicName;
+-
+-  const labelEl = $('requestTopicDropdownLabel');
+-  if (labelEl) labelEl.textContent = topicName;
+-
++  _rtSelectedTopicName = tp ? tp.name : '';
+   const inputEl = $('requestTopicSelectedId');
+   if (inputEl) inputEl.value = topicId;
+-
+-  const menuEl = $('requestTopicDropdownMenu');
+-  if (menuEl) {
+-    menuEl.querySelectorAll('.dropdown-item').forEach(btn => {
+-      if (String(btn.dataset.value) === String(topicId)) {
+-        btn.classList.add('selected');
+-      } else {
+-        btn.classList.remove('selected');
+-      }
+-    });
+-  }
+-
+-  // Close dropdown
+-  $('requestTopicDropdown')?.removeAttribute('data-open');
+-
+-  // Update warning
++  renderRequestTopicCards();
+   updateRequestTopicWarning();
+ }
+ 
++// Topic choices as the same stacked cards the Profile page uses. The chosen
++// card turns golden; topics the mentee also struggles with carry a gold tag.
++function renderRequestTopicCards() {
++  const list = $('requestTopicList');
++  if (!list) return;
++  const tagIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
++  list.innerHTML = _rtTopics.map(tp => {
++    const sel = String(tp.id) === String(_rtSelectedTopicId);
++    const shared = _userStruggleTopicIds && _userStruggleTopicIds.has(Number(tp.id));
++    return `
++      <button type="button" role="radio" aria-checked="${sel}" class="profile-menu-item rt-topic${sel ? ' pm-gold selected' : ''}" data-value="${tp.id}" onclick="selectRequestTopicDropdown(${tp.id})">
++        <span class="profile-menu-icon">${tagIcon}</span>
++        <span class="profile-menu-label">${escapeHtml(tp.name)}</span>
++        ${shared ? `<span class="mp-mine-chip">${t('mp_matches_you')}</span>` : ''}
++        <span class="rt-radio" aria-hidden="true"></span>
++      </button>`;
++  }).join('');
++}
++
+ function closeRequestTopicModal() {
+   haptic('light');
+   $('requestTopicModal')?.classList.remove('open');
+-  $('requestTopicDropdown')?.removeAttribute('data-open');
+   const warningEl = $('requestTopicWarning');
+   if (warningEl) warningEl.style.display = 'none';
+   _rtMentorId = null;
+@@ -4075,7 +4059,6 @@ async function confirmMentorshipRequestWithTopic() {
+ 
+   // Close modal
+   $('requestTopicModal')?.classList.remove('open');
+-  $('requestTopicDropdown')?.removeAttribute('data-open');
+ 
+   const mentorId = _rtMentorId;
+   const topicId = _rtSelectedTopicId;
+diff --git a/frontend/index.html b/frontend/index.html
+index c9ec032..66d968c 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -14,7 +14,7 @@
+   <!-- Non-blocking fonts (text shows in fallback fonts, then swaps) -->
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" /></noscript>
+-  <link rel="stylesheet" href="styles.css?v=2.3" />
++  <link rel="stylesheet" href="styles.css?v=2.4" />
+   <link rel="stylesheet" href="goals.css?v=1.3" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+@@ -1637,13 +1637,16 @@
+ 
+   <!-- ─── Warning: ending mentorship before becoming a mentor ───── -->
+   <div id="endToApplyWarnModal" class="modal-overlay" onclick="if(event.target===this)closeEndToApplyWarning()">
+-    <div class="modal-sheet">
++    <div class="modal-sheet hb-confirm">
+       <div class="modal-handle"></div>
++      <div class="hb-icon danger">
++        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
++      </div>
+       <div class="modal-title" data-i18n="end_to_apply_warn_title">Warning</div>
+-      <p class="text-sm text-dim mb-16" data-i18n="end_to_apply_warn_msg">You are going to end your mentorship first before becoming a mentor. Are you sure you want to continue?</p>
+-      <div class="flex gap-8">
+-        <button class="btn btn-ghost flex-1" onclick="closeEndToApplyWarning()" data-i18n="btn_cancel">Cancel</button>
+-        <button class="btn btn-danger flex-1" onclick="confirmEndToApplyWarning()" data-i18n="end_to_apply_warn_continue">Yes, continue</button>
++      <p class="hb-text" data-i18n="end_to_apply_warn_msg">You are going to end your mentorship first before becoming a mentor. Are you sure you want to continue?</p>
++      <div class="hb-actions">
++        <button class="btn btn-outline" onclick="closeEndToApplyWarning()" data-i18n="btn_cancel">Cancel</button>
++        <button class="btn btn-danger" onclick="confirmEndToApplyWarning()" data-i18n="end_to_apply_warn_continue">Yes, continue</button>
+       </div>
+     </div>
+   </div>
+@@ -1652,8 +1655,11 @@
+   <div id="endToApplyModal" class="modal-overlay" onclick="if(event.target===this)closeEndToApplyModal()">
+     <div class="modal-sheet">
+       <div class="modal-handle"></div>
++      <div class="hb-icon danger">
++        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
++      </div>
+       <div class="modal-title" data-i18n="end_to_apply_title">End your mentorship first</div>
+-      <p id="endToApplyIntro" class="text-sm text-dim mb-16"></p>
++      <p id="endToApplyIntro" class="hb-text"></p>
+ 
+       <div class="form-group">
+         <label class="form-label" data-i18n="end_to_apply_rating_label">How was your experience?</label>
+@@ -1665,10 +1671,10 @@
+           data-i18n="end_to_apply_reason_placeholder" placeholder="Write your reason here..."></textarea>
+       </div>
+ 
+-      <div class="flex flex-col gap-8 mt-16">
+-        <button id="endToApplySubmitBtn" class="btn btn-primary btn-full" onclick="submitEndToApply()"
++      <div class="hb-actions hb-stack">
++        <button id="endToApplySubmitBtn" class="btn btn-danger" onclick="submitEndToApply()"
+           data-i18n="end_to_apply_btn">End mentorship &amp; continue</button>
+-        <button class="btn btn-ghost btn-full" onclick="closeEndToApplyModal()" data-i18n="btn_cancel">Cancel</button>
++        <button class="btn btn-outline" onclick="closeEndToApplyModal()" data-i18n="btn_cancel">Cancel</button>
+       </div>
+     </div>
+   </div>
+@@ -2273,33 +2279,25 @@
+ 
+ <!-- ─── Mentorship Request Topic Picker Modal ──────────────── -->
+   <div id="requestTopicModal" class="modal-overlay" onclick="if(event.target===this)closeRequestTopicModal()">
+-    <div class="modal-sheet" style="max-width:400px;margin:0 auto;overflow:visible;">
++    <div class="modal-sheet">
+       <div class="modal-handle"></div>
++      <div class="hb-icon">
++        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
++      </div>
+       <div class="modal-title" data-i18n="select_topic_title">Select a Topic</div>
+-      <p id="requestTopicSubtitle" class="text-xs text-dim mb-16" style="text-align:center" data-i18n="select_topic_sub">Choose the topic you would like mentorship on with this mentor:</p>
++      <p id="requestTopicSubtitle" class="hb-text" data-i18n="select_topic_sub">Choose the topic you would like mentorship on with this mentor:</p>
+ 
+-      <div class="form-group mb-12" style="position:relative;overflow:visible;">
+-        <label class="form-label" data-i18n="select_topic_title">Topic</label>
+-        <div class="premium-dropdown form-dropdown" data-dropdown id="requestTopicDropdown">
+-          <button type="button" class="premium-dropdown-btn" data-dropdown-toggle id="requestTopicDropdownBtn">
+-            <span class="dropdown-label" id="requestTopicDropdownLabel" data-i18n="select_topic_placeholder">Choose a topic…</span>
+-            <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+-              <polyline points="6 9 12 15 18 9"/>
+-            </svg>
+-          </button>
+-          <div class="premium-dropdown-menu" data-dropdown-menu id="requestTopicDropdownMenu">
+-            <!-- Dynamically populated topic dropdown items -->
+-          </div>
+-          <input type="hidden" id="requestTopicSelectedId" value="" />
+-        </div>
+-      </div>
++      <nav id="requestTopicList" class="profile-menu-list rt-list" role="radiogroup" aria-label="Topics">
++        <!-- Dynamically populated topic cards -->
++      </nav>
++      <input type="hidden" id="requestTopicSelectedId" value="" />
+ 
+       <!-- Warning if topic is not selected in user's settings -->
+-      <div id="requestTopicWarning" class="text-xs" style="display:none;color:#E05C5C;background:rgba(224,92,92,0.1);border:1px solid rgba(224,92,92,0.25);border-radius:10px;padding:9px 12px;line-height:1.45;margin-bottom:12px;"></div>
++      <div id="requestTopicWarning" class="rt-warning" style="display:none;"></div>
+ 
+-      <div class="flex gap-8 mt-16">
+-        <button type="button" class="btn btn-ghost flex-1" onclick="closeRequestTopicModal()" data-i18n="btn_cancel">Cancel</button>
+-        <button type="button" id="confirmRequestTopicBtn" class="btn btn-primary flex-1" onclick="confirmMentorshipRequestWithTopic()" data-i18n="btn_done">OK</button>
++      <div class="hb-actions">
++        <button type="button" class="btn btn-outline" onclick="closeRequestTopicModal()" data-i18n="btn_cancel">Cancel</button>
++        <button type="button" id="confirmRequestTopicBtn" class="btn btn-primary" onclick="confirmMentorshipRequestWithTopic()" data-i18n="btn_request">Request</button>
+       </div>
+     </div>
+   </div>
+@@ -2410,7 +2408,7 @@
+   </div>
+ 
+   <script src="locales.js?v=1.6"></script>
+-  <script src="app.js?v=2.9"></script>
++  <script src="app.js?v=3.0"></script>
+   <script src="goals.js?v=1.3"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="session-room.js?v=1.4"></script>
+diff --git a/frontend/styles.css b/frontend/styles.css
+index c3eae25..6e0bede 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -3142,19 +3142,6 @@ textarea.form-control {
+ }
+ 
+ /* ─── Mentorship Request Topic Selection Modal ───────────────── */
+-#requestTopicModal .modal-sheet {
+-  overflow: visible !important;
+-}
+-
+-#requestTopicModal .form-group {
+-  overflow: visible !important;
+-}
+-
+-#requestTopicModal .premium-dropdown-menu {
+-  max-height: 220px;
+-  overflow-y: auto;
+-  z-index: 1200;
+-}
+ 
+ /* ─── Top Active Mentor Luxury Card ─────────────────────────── */
+ .active-mentor-luxury-card {
+@@ -11205,3 +11192,246 @@ input:focus, textarea:focus, select:focus {
+   .mp-duo { grid-template-columns: 1fr; }
+ }
+ @media (prefers-reduced-motion: reduce) { #page-mentor-profile .page-content { animation: none; } }
++
++
++/* ═══ Profile concept: popups + mentor list ═══════════════════════════════════
++   Same tokens as the Profile page: 26px cards, gold glow, glass pills, gold
++   icon tiles, pill buttons. Applies to the topic picker (after "Request"),
++   the mentor list cards, and the end-mentorship popups. ═══ */
++
++/* ── Sheet shell shared by the popups ── */
++:is(#requestTopicModal, #mentorSheet, #endToApplyModal, #endToApplyWarnModal) .modal-sheet {
++  max-width: 440px;
++  margin: 0 auto;
++  padding: 14px 18px calc(22px + var(--safe-bottom));
++  border-radius: 32px 32px 0 0;
++  border: 1px solid rgba(201, 168, 76, 0.28);
++  border-bottom: 0;
++  background:
++    radial-gradient(120% 240px at 50% 0%, rgba(201, 168, 76, 0.22) 0%, rgba(168, 124, 42, 0.08) 50%, transparent 82%),
++    linear-gradient(180deg, #15171f, #0f1117);
++  box-shadow: 0 -22px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(201, 168, 76, 0.12), inset 0 1px 0 rgba(255, 233, 160, 0.12);
++}
++[data-theme="light"] :is(#requestTopicModal, #mentorSheet, #endToApplyModal, #endToApplyWarnModal) .modal-sheet {
++  background:
++    radial-gradient(120% 240px at 50% 0%, rgba(201, 168, 76, 0.30) 0%, rgba(201, 168, 76, 0.10) 50%, transparent 82%),
++    linear-gradient(180deg, #fffdf7, #f4f0e4);
++  border-color: rgba(150, 120, 40, 0.32);
++  box-shadow: 0 -18px 46px rgba(30, 25, 15, 0.22), inset 0 1px 0 #fff;
++}
++:is(#requestTopicModal, #mentorSheet, #endToApplyModal, #endToApplyWarnModal) .modal-handle {
++  width: 44px;
++  background: rgba(201, 168, 76, 0.45);
++  margin-bottom: 18px;
++}
++:is(#requestTopicModal, #mentorSheet, #endToApplyModal, #endToApplyWarnModal) .modal-title {
++  text-align: center;
++  font-size: 1.3rem;
++  letter-spacing: 0.02em;
++  color: var(--text);
++  margin-bottom: 8px;
++  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
++}
++[data-theme="light"] :is(#requestTopicModal, #mentorSheet, #endToApplyModal, #endToApplyWarnModal) .modal-title { text-shadow: none; }
++
++/* big gold icon tile, like the Profile cards' tiles but hero-sized */
++.hb-icon {
++  width: 60px;
++  height: 60px;
++  margin: 0 auto 14px;
++  display: grid;
++  place-items: center;
++  border-radius: 20px;
++  background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%);
++  color: #2a1e05;
++  box-shadow: 0 10px 26px rgba(201, 168, 76, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.5);
++}
++.hb-icon svg { width: 28px; height: 28px; }
++.hb-icon.danger {
++  background: radial-gradient(circle at 30% 25%, #f59a9a, #d24f4f 70%);
++  color: #fff;
++  box-shadow: 0 10px 26px rgba(224, 92, 92, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.4);
++}
++.hb-text {
++  margin: 0 auto 18px;
++  max-width: 340px;
++  text-align: center;
++  font-size: 0.95rem;
++  line-height: 1.55;
++  color: var(--text2);
++}
++.hb-text strong { color: var(--gold-light); }
++[data-theme="light"] .hb-text strong { color: #7A5812; }
++
++/* pill action row */
++.hb-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
++.hb-actions.hb-stack { grid-template-columns: 1fr; }
++.hb-actions .btn { min-height: 52px; border-radius: 999px; font-size: 0.95rem; font-weight: 700; white-space: normal; }
++.hb-actions .btn-danger {
++  background: linear-gradient(180deg, #ee7f7f, #d24f4f);
++  border: 0;
++  color: #fff;
++  box-shadow: 0 8px 22px rgba(224, 92, 92, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.35);
++}
++.hb-confirm .hb-actions { margin-top: 6px; }
++
++/* ── Topic picker: stacked selectable cards ── */
++.rt-list {
++  max-height: 42vh;
++  overflow-y: auto;
++  padding: 4px 2px 6px;
++  margin-bottom: 0;
++  -webkit-overflow-scrolling: touch;
++}
++.rt-topic { min-height: 64px; padding: 12px 16px; gap: 14px; }
++.rt-topic .profile-menu-icon { width: 42px; height: 42px; border-radius: 14px; }
++.rt-topic .profile-menu-label { font-size: 1rem; text-align: left; }
++.rt-topic .mp-mine-chip { margin-left: auto; }
++.rt-radio {
++  flex: none;
++  position: relative;
++  width: 24px;
++  height: 24px;
++  border-radius: 50%;
++  border: 2px solid rgba(255, 255, 255, 0.22);
++  transition: background 0.2s ease, border-color 0.2s ease;
++}
++.rt-topic.selected .rt-radio {
++  border-color: var(--gold-light);
++  background: linear-gradient(180deg, #EBCD72, #C9A84C);
++  box-shadow: 0 0 14px rgba(201, 168, 76, 0.55);
++}
++.rt-topic.selected .rt-radio::after {
++  content: '';
++  position: absolute;
++  left: 7px; top: 3px;
++  width: 6px; height: 11px;
++  border: solid #1a1300;
++  border-width: 0 2.5px 2.5px 0;
++  transform: rotate(45deg);
++}
++[data-theme="light"] .rt-radio { border-color: rgba(150, 120, 40, 0.4); }
++.rt-warning {
++  margin-top: 12px;
++  padding: 11px 16px;
++  border-radius: 18px;
++  font-size: 0.82rem;
++  line-height: 1.45;
++  color: #E05C5C;
++  background: rgba(224, 92, 92, 0.1);
++  border: 1px solid rgba(224, 92, 92, 0.3);
++}
++
++/* end-to-apply form fields inside the new sheet */
++#endToApplyModal .form-label { font-size: 0.74rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-light); }
++[data-theme="light"] #endToApplyModal .form-label { color: #7A5812; }
++#endToApplyModal textarea.form-control { border-radius: 20px; padding: 14px 16px; }
++
++/* ── Mentor list: cards in the Profile card style ── */
++.mc-card, .mc-mine {
++  padding: 16px 16px 14px;
++  border-radius: 26px;
++  border: 1px solid rgba(255, 255, 255, 0.07);
++  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
++  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
++  transition: transform 0.15s ease, box-shadow 0.25s ease, border-color 0.25s ease;
++}
++.mc-card:active, .mc-mine:active { transform: scale(0.985); }
++.mc-mine {   /* your own mentor = the golden card */
++  border-color: rgba(201, 168, 76, 0.35);
++  background:
++    radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.22) 0%, rgba(201, 168, 76, 0.06) 55%, transparent 100%),
++    #17140c;
++  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38), 0 0 26px rgba(201, 168, 76, 0.12), inset 0 1px 0 rgba(255, 233, 160, 0.12);
++}
++[data-theme="light"] .mc-card, [data-theme="light"] .mc-mine {
++  background: linear-gradient(160deg, #fff, #f6f3ea);
++  border-color: rgba(150, 120, 40, 0.2);
++  box-shadow: 0 8px 20px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff;
++}
++[data-theme="light"] .mc-mine {
++  background: radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.28), rgba(201, 168, 76, 0.08) 60%, #fffaf0);
++  border-color: rgba(150, 120, 40, 0.35);
++}
++.mc-name { font-size: 1.02rem; font-weight: 700; letter-spacing: 0.01em; }
++.mc-eyebrow { color: var(--gold-light); }
++[data-theme="light"] .mc-eyebrow { color: #7A5812; }
++
++/* save + message: round glass buttons */
++.mc-icons { gap: 8px; margin: 0; }
++.mc-icon-btn {
++  width: 38px;
++  height: 38px;
++  color: var(--gold-light);
++  background: rgba(255, 255, 255, 0.06);
++  border: 1px solid rgba(255, 255, 255, 0.12);
++  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
++  transition: transform 0.15s ease, background 0.2s ease;
++}
++.mc-icon-btn:active { transform: scale(0.92); }
++.mc-icon-btn.saved { background: rgba(201, 168, 76, 0.2); border-color: rgba(201, 168, 76, 0.5); color: var(--gold-light); }
++[data-theme="light"] .mc-icon-btn { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); color: #7A5812; box-shadow: 0 6px 14px rgba(30, 25, 15, 0.12); }
++[data-theme="light"] .mc-icon-btn.saved { background: rgba(201, 168, 76, 0.22); }
++@media (max-width: 360px) { .mc-icon-btn { width: 34px; height: 34px; } .mc-icons { gap: 6px; } }
++
++/* chips: topic filter row, match badge, status pill */
++.mc-chip {
++  height: 36px;
++  display: inline-flex;
++  align-items: center;
++  padding: 0 16px;
++  font-size: 0.85rem;
++  font-weight: 600;
++  background: rgba(255, 255, 255, 0.06);
++  border: 1px solid rgba(255, 255, 255, 0.12);
++  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
++}
++.mc-chip.active {
++  color: #1a1300;
++  background: linear-gradient(180deg, #EBCD72, #C9A84C);
++  border-color: transparent;
++  box-shadow: 0 8px 20px rgba(201, 168, 76, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.4);
++}
++[data-theme="light"] .mc-chip { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.24); box-shadow: 0 4px 12px rgba(30, 25, 15, 0.1); }
++[data-theme="light"] .mc-chip.active { background: linear-gradient(180deg, #EBCD72, #C9A84C); }
++.mc-match {
++  padding: 5px 12px;
++  font-size: 0.74rem;
++  background: rgba(201, 168, 76, 0.14);
++  border-color: rgba(201, 168, 76, 0.4);
++  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.06);
++}
++[data-theme="light"] .mc-match { color: #6B4E0F; }
++.mc-status {
++  padding: 6px 12px;
++  border-radius: 999px;
++  font-size: 0.76rem;
++  font-weight: 600;
++  background: rgba(255, 255, 255, 0.06);
++  border: 1px solid rgba(255, 255, 255, 0.1);
++}
++[data-theme="light"] .mc-status { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.22); }
++.mc-view { margin-top: 8px; font-size: 0.78rem; letter-spacing: 0.04em; }
++[data-theme="light"] .mc-more, [data-theme="light"] .mc-view { color: #7A5812; }
++
++/* result count = gold eyebrow with a glowing dot, like .section-title */
++.mc-count {
++  display: flex;
++  align-items: center;
++  gap: 9px;
++  margin: 2px 2px 12px;
++  font-size: 0.74rem;
++  font-weight: 700;
++  letter-spacing: 0.14em;
++  text-transform: uppercase;
++}
++.mc-count:empty { display: none; }
++.mc-count::before {
++  content: '';
++  width: 7px; height: 7px;
++  border-radius: 50%;
++  background: var(--gold-light);
++  box-shadow: 0 0 10px rgba(232, 201, 107, 0.7);
++  flex-shrink: 0;
++}
++.mc-skel { border-radius: 26px; height: 190px; }

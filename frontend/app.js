@@ -3701,11 +3701,16 @@ function confirmEndMentorship() {
   if (!body || !activeMentorData) return;
   haptic('light');
   body.innerHTML = `
-    <div class="mc-sheet-h" style="margin-top:4px">${escapeHtml(t('end_mentorship_title', { name: mentorNameOf(activeMentorData) }))}</div>
-    <p class="mc-sheet-text">${t('end_mentorship_body')}</p>
-    <div class="mc-sheet-actions">
-      <button class="btn btn-outline" onclick="closeMentorSheet()">${t('btn_keep_mentor')}</button>
-      <button class="btn btn-danger" onclick="closeMentorSheet();endMentorship(null, true)">${t('btn_end')}</button>
+    <div class="hb-confirm">
+      <div class="hb-icon danger">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" y1="11" x2="23" y2="11"/></svg>
+      </div>
+      <div class="modal-title">${escapeHtml(t('end_mentorship_title', { name: mentorNameOf(activeMentorData) }))}</div>
+      <p class="hb-text">${t('end_mentorship_body')}</p>
+      <div class="hb-actions">
+        <button class="btn btn-outline" onclick="closeMentorSheet()">${t('btn_keep_mentor')}</button>
+        <button class="btn btn-danger" onclick="closeMentorSheet();endMentorship(null, true)">${t('btn_end')}</button>
+      </div>
     </div>`;
   $('mentorSheet')?.classList.add('open');
 }
@@ -3909,6 +3914,7 @@ let _rtSelectedTopicName = '';
 let _rtSourceBtn = null;
 let _rtSourceBtnHtml = '';
 let _userStruggleTopicIds = null;
+let _rtTopics = [];
 
 /**
  * Triggered when tapping the "Request" button on a mentor card.
@@ -3967,36 +3973,14 @@ async function openRequestTopicModal(event, mentorId, mentorTopics, mentorName) 
     subtitle.innerHTML = raw.replace('{name}', `<strong>${escapeHtml(mentorName)}</strong>`);
   }
 
-  // Update dropdown label and input value
-  const labelEl = $('requestTopicDropdownLabel');
-  if (labelEl) {
-    labelEl.textContent = defaultTopic ? defaultTopic.name : (t('select_topic_placeholder') || 'Choose a topic…');
-  }
+  _rtTopics = mentorTopics.map(tp => ({ id: tp.id, name: tp.name }));
   const inputEl = $('requestTopicSelectedId');
-  if (inputEl) {
-    inputEl.value = defaultTopic ? defaultTopic.id : '';
-  }
-
-  // Populate dropdown items with indicator if in user's topics
-  const menuEl = $('requestTopicDropdownMenu');
-  if (menuEl) {
-    menuEl.innerHTML = mentorTopics.map((tp) => {
-      const isSelected = String(tp.id) === String(_rtSelectedTopicId);
-      const isShared = _userStruggleTopicIds.has(Number(tp.id));
-      return `
-        <button type="button" class="dropdown-item ${isSelected ? 'selected' : ''}" data-value="${tp.id}" onclick="selectRequestTopicDropdown(${tp.id}, \`${escapeHtml(tp.name)}\`)">
-          <span style="flex:1;">${escapeHtml(tp.name)}</span>
-          ${isShared ? '<span style="font-size:0.75rem;color:var(--gold);opacity:0.85;">✓</span>' : ''}
-        </button>
-      `;
-    }).join('');
-  }
+  if (inputEl) inputEl.value = defaultTopic ? defaultTopic.id : '';
+  renderRequestTopicCards();
 
   // Update warning visibility
   updateRequestTopicWarning();
 
-  // Reset dropdown open state & show modal
-  $('requestTopicDropdown')?.removeAttribute('data-open');
   $('requestTopicModal')?.classList.add('open');
 }
 
@@ -4016,39 +4000,39 @@ function updateRequestTopicWarning() {
 /**
  * Handles choosing an option from the premium dropdown.
  */
-function selectRequestTopicDropdown(topicId, topicName) {
+function selectRequestTopicDropdown(topicId) {   // name kept; now picks a card
   haptic('selection');
+  const tp = _rtTopics.find(x => String(x.id) === String(topicId));
   _rtSelectedTopicId = topicId;
-  _rtSelectedTopicName = topicName;
-
-  const labelEl = $('requestTopicDropdownLabel');
-  if (labelEl) labelEl.textContent = topicName;
-
+  _rtSelectedTopicName = tp ? tp.name : '';
   const inputEl = $('requestTopicSelectedId');
   if (inputEl) inputEl.value = topicId;
-
-  const menuEl = $('requestTopicDropdownMenu');
-  if (menuEl) {
-    menuEl.querySelectorAll('.dropdown-item').forEach(btn => {
-      if (String(btn.dataset.value) === String(topicId)) {
-        btn.classList.add('selected');
-      } else {
-        btn.classList.remove('selected');
-      }
-    });
-  }
-
-  // Close dropdown
-  $('requestTopicDropdown')?.removeAttribute('data-open');
-
-  // Update warning
+  renderRequestTopicCards();
   updateRequestTopicWarning();
+}
+
+// Topic choices as the same stacked cards the Profile page uses. The chosen
+// card turns golden; topics the mentee also struggles with carry a gold tag.
+function renderRequestTopicCards() {
+  const list = $('requestTopicList');
+  if (!list) return;
+  const tagIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
+  list.innerHTML = _rtTopics.map(tp => {
+    const sel = String(tp.id) === String(_rtSelectedTopicId);
+    const shared = _userStruggleTopicIds && _userStruggleTopicIds.has(Number(tp.id));
+    return `
+      <button type="button" role="radio" aria-checked="${sel}" class="profile-menu-item rt-topic${sel ? ' pm-gold selected' : ''}" data-value="${tp.id}" onclick="selectRequestTopicDropdown(${tp.id})">
+        <span class="profile-menu-icon">${tagIcon}</span>
+        <span class="profile-menu-label">${escapeHtml(tp.name)}</span>
+        ${shared ? `<span class="mp-mine-chip">${t('mp_matches_you')}</span>` : ''}
+        <span class="rt-radio" aria-hidden="true"></span>
+      </button>`;
+  }).join('');
 }
 
 function closeRequestTopicModal() {
   haptic('light');
   $('requestTopicModal')?.classList.remove('open');
-  $('requestTopicDropdown')?.removeAttribute('data-open');
   const warningEl = $('requestTopicWarning');
   if (warningEl) warningEl.style.display = 'none';
   _rtMentorId = null;
@@ -4075,7 +4059,6 @@ async function confirmMentorshipRequestWithTopic() {
 
   // Close modal
   $('requestTopicModal')?.classList.remove('open');
-  $('requestTopicDropdown')?.removeAttribute('data-open');
 
   const mentorId = _rtMentorId;
   const topicId = _rtSelectedTopicId;
