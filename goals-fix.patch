@@ -1,0 +1,121 @@
+diff --git a/frontend/goals.css b/frontend/goals.css
+index c094c91..c99294c 100644
+--- a/frontend/goals.css
++++ b/frontend/goals.css
+@@ -121,3 +121,9 @@
+ }
+ 
+ @media (prefers-reduced-motion: reduce) { .hg-ck.on { animation: none; } .hg-bar i { transition: none; } }
++
++/* while typing in a goals field: hide the fixed bottom nav and leave scroll room under the form,
++   so the keyboard and the nav never cover the field */
++body.hg-typing .bottom-nav { transform: translateY(100%); }
++body.hg-typing .hg-root { padding-bottom: 140px; }
++.hg-form input, .hg-note textarea, .hg-addrow input { scroll-margin-block: 96px; }
+diff --git a/frontend/goals.js b/frontend/goals.js
+index 671d905..274bd40 100644
+--- a/frontend/goals.js
++++ b/frontend/goals.js
+@@ -111,7 +111,6 @@
+     let sub = '';
+     if (t.status === 'missed') sub = tr('missed');
+     else if (t.status === 'skipped') sub = tr('skipped');
+-    else if (lk === 'future') sub = tr('upcoming');
+     else if (g.type !== 'challenge' && t.due_date && !on) sub = fmt(t.due_date, { month: 'short', day: 'numeric' });
+     if (role === 'mentor' && ui.ren[t.id]) {
+       return `<div class="hg-trow hg-ren"><input type="text" maxlength="200" data-ren="${t.id}" value="${esc(t.title)}">
+@@ -335,6 +334,7 @@
+     }
+     html += goals.length ? goals.map(g => goalHtml(g, role)).join('') : (role === 'mentor' ? `<div class="hg-empty">${tr('empty')}</div>` : '');
+     root.innerHTML = html;
++    if (!document.activeElement?.closest?.('.hg-root')) typingOff(); // a repaint can drop focus without a blur event
+     if (role === 'mentor') updateBadge(root, goals);
+     else updateMenteeCard(goals);
+   }
+@@ -519,9 +519,64 @@
+     if (store.mine) store.mine = store.mine.filter(g => g.id !== id);
+   }
+ 
++  // ── keep the field being typed in above the on-screen keyboard ─────────
++  // The fixed bottom nav and the keyboard both sit over the lower part of the
++  // scrolling page, so a field near the bottom of the goal form ended up hidden.
++  // While a goals field has focus we (1) hide the nav, (2) add scroll room under
++  // the form, and (3) scroll the field into the visible area, again whenever the
++  // keyboard finishes resizing the viewport.
++  let kbField = null, kbTimer = 0, kbRaf = 0, kbWasOpen = false, baseH = 0;
++  const viewH = () => window.visualViewport?.height || window.innerHeight;
++  const typingOff = () => { kbField = null; kbWasOpen = false; document.body.classList.remove('hg-typing'); };
++  function reveal(el) {
++    if (!el || !el.isConnected) return;
++    const sc = el.closest('.page-content');
++    if (!sc) { el.scrollIntoView({ block: 'center' }); return; }
++    const vv = window.visualViewport;
++    const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
++    const r = el.getBoundingClientRect();
++    const top = Math.max(sc.getBoundingClientRect().top, 0);
++    if (r.bottom > bottom - 24 || r.top < top + 24) sc.scrollTop += r.top - (top + (bottom - top) * 0.33);
++  }
++  function onFieldFocus(e) {
++    const el = e.target;
++    if (!el.matches || !el.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')) return;
++    kbField = el;
++    document.body.classList.add('hg-typing');
++    clearTimeout(kbTimer);
++    kbTimer = setTimeout(() => reveal(kbField), 280); // after the keyboard animation; resize events cover the rest
++  }
++  function onFieldBlur() {
++    kbField = null;
++    clearTimeout(kbTimer);
++    kbTimer = setTimeout(() => { // a tap on another field fires focusin right after focusout
++      if (!kbField && !document.activeElement?.closest?.('.hg-root')) typingOff();
++    }, 120);
++  }
++  // Viewport changes arrive many times per frame while the keyboard animates: handle once per frame.
++  function onViewport() {
++    if (kbRaf) return;
++    kbRaf = requestAnimationFrame(() => {
++      kbRaf = 0;
++      const h = viewH();
++      if (!kbField && !document.body.classList.contains('hg-typing')) { baseH = Math.max(baseH, h); return; }
++      const open = baseH - h > 100;
++      if (open) { kbWasOpen = true; reveal(kbField); }
++      else if (kbWasOpen) { // keyboard was dismissed (back button / swipe) without the field blurring
++        document.activeElement?.blur?.();
++        typingOff();
++      }
++    });
++  }
++  baseH = viewH();
++  window.visualViewport?.addEventListener('resize', onViewport);
++  window.Telegram?.WebApp?.onEvent?.('viewportChanged', onViewport);
++
+   function bind(root) {
+     if (root._hg) return;
+     root._hg = true;
++    root.addEventListener('focusin', onFieldFocus);
++    root.addEventListener('focusout', onFieldBlur);
+     root.addEventListener('click', e => { if (e.target.closest('[data-act]') && root.querySelector('.hg-new')) snap(root); onClick(root, e); });
+     root.addEventListener('input', e => { if (e.target.closest('.hg-new')) snap(root); });
+     root.addEventListener('change', e => {
+diff --git a/frontend/index.html b/frontend/index.html
+index 74ed2be..a607ac7 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -15,7 +15,7 @@
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" /></noscript>
+   <link rel="stylesheet" href="styles.css?v=2.2" />
+-  <link rel="stylesheet" href="goals.css?v=1.1" />
++  <link rel="stylesheet" href="goals.css?v=1.3" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+ 
+@@ -2313,7 +2313,7 @@
+ 
+   <script src="locales.js?v=1.5"></script>
+   <script src="app.js?v=2.8"></script>
+-  <script src="goals.js?v=1.1"></script>
++  <script src="goals.js?v=1.3"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="session-room.js?v=1.4"></script>
+ 

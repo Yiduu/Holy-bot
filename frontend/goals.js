@@ -334,7 +334,7 @@
     }
     html += goals.length ? goals.map(g => goalHtml(g, role)).join('') : (role === 'mentor' ? `<div class="hg-empty">${tr('empty')}</div>` : '');
     root.innerHTML = html;
-    if (!document.activeElement?.closest?.('.hg-root')) { kbField = null; document.body.classList.remove('hg-typing'); } // a repaint can drop focus without a blur event
+    if (!document.activeElement?.closest?.('.hg-root')) typingOff(); // a repaint can drop focus without a blur event
     if (role === 'mentor') updateBadge(root, goals);
     else updateMenteeCard(goals);
   }
@@ -525,38 +525,52 @@
   // While a goals field has focus we (1) hide the nav, (2) add scroll room under
   // the form, and (3) scroll the field into the visible area, again whenever the
   // keyboard finishes resizing the viewport.
-  let kbField = null, kbTimers = [];
+  let kbField = null, kbTimer = 0, kbRaf = 0, kbWasOpen = false, baseH = 0;
+  const viewH = () => window.visualViewport?.height || window.innerHeight;
+  const typingOff = () => { kbField = null; kbWasOpen = false; document.body.classList.remove('hg-typing'); };
   function reveal(el) {
     if (!el || !el.isConnected) return;
     const sc = el.closest('.page-content');
     if (!sc) { el.scrollIntoView({ block: 'center' }); return; }
     const vv = window.visualViewport;
     const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-    const top = Math.max(sc.getBoundingClientRect().top, 0);
     const r = el.getBoundingClientRect();
-    const pad = 24;
-    if (r.bottom > bottom - pad || r.top < top + pad) {
-      // put the field about a third of the way down the visible area
-      sc.scrollTop += r.top - (top + (bottom - top) * 0.33);
-    }
+    const top = Math.max(sc.getBoundingClientRect().top, 0);
+    if (r.bottom > bottom - 24 || r.top < top + 24) sc.scrollTop += r.top - (top + (bottom - top) * 0.33);
   }
   function onFieldFocus(e) {
     const el = e.target;
     if (!el.matches || !el.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')) return;
     kbField = el;
     document.body.classList.add('hg-typing');
-    kbTimers.forEach(clearTimeout);
-    kbTimers = [60, 250, 500].map(ms => setTimeout(() => reveal(kbField), ms));
+    clearTimeout(kbTimer);
+    kbTimer = setTimeout(() => reveal(kbField), 280); // after the keyboard animation; resize events cover the rest
   }
   function onFieldBlur() {
     kbField = null;
-    kbTimers.forEach(clearTimeout);
-    // a tap on another field fires focusin right after focusout; wait before dropping the typing state
-    kbTimers = [setTimeout(() => {
-      if (!kbField && !document.activeElement?.closest?.('.hg-root')) document.body.classList.remove('hg-typing');
-    }, 150)];
+    clearTimeout(kbTimer);
+    kbTimer = setTimeout(() => { // a tap on another field fires focusin right after focusout
+      if (!kbField && !document.activeElement?.closest?.('.hg-root')) typingOff();
+    }, 120);
   }
-  window.visualViewport?.addEventListener('resize', () => { if (kbField) reveal(kbField); });
+  // Viewport changes arrive many times per frame while the keyboard animates: handle once per frame.
+  function onViewport() {
+    if (kbRaf) return;
+    kbRaf = requestAnimationFrame(() => {
+      kbRaf = 0;
+      const h = viewH();
+      if (!kbField && !document.body.classList.contains('hg-typing')) { baseH = Math.max(baseH, h); return; }
+      const open = baseH - h > 100;
+      if (open) { kbWasOpen = true; reveal(kbField); }
+      else if (kbWasOpen) { // keyboard was dismissed (back button / swipe) without the field blurring
+        document.activeElement?.blur?.();
+        typingOff();
+      }
+    });
+  }
+  baseH = viewH();
+  window.visualViewport?.addEventListener('resize', onViewport);
+  window.Telegram?.WebApp?.onEvent?.('viewportChanged', onViewport);
 
   function bind(root) {
     if (root._hg) return;
