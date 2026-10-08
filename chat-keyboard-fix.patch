@@ -1,0 +1,117 @@
+diff --git a/frontend/chat-media.css b/frontend/chat-media.css
+index ac12d0f..314ef17 100644
+--- a/frontend/chat-media.css
++++ b/frontend/chat-media.css
+@@ -1145,3 +1145,29 @@
+   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+   mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+ }
++
++/* ═══ Keyboard mode ═══════════════════════════════════════════════════════════
++   While the on-screen keyboard is open for the chat box (body.chat-typing, set
++   by chat-media.js), the floating nav pill is slid away and the composer sits
++   directly on top of the keyboard instead of ~80px above it. Without this the
++   nav pill and the composer both stacked above the keyboard, eating the small
++   visible area and leaving the typing box cramped or partly covered.         */
++.bottom-nav {
++  transition: transform 0.2s ease;
++}
++
++body.chat-typing .bottom-nav {
++  transform: translateY(calc(100% + var(--safe-bottom) + 24px));
++  pointer-events: none;
++}
++
++body.chat-typing .chat-input-row {
++  bottom: 0;
++  padding-bottom: 10px;
++}
++
++/* the nav no longer takes space at the bottom, so the chat page may use all of
++   the visible height (the messages' bottom padding is re-measured from this) */
++body.chat-typing #page-chat.active {
++  height: var(--app-height);
++}
+diff --git a/frontend/chat-media.js b/frontend/chat-media.js
+index 06e5837..d24ca9d 100644
+--- a/frontend/chat-media.js
++++ b/frontend/chat-media.js
+@@ -1657,3 +1657,78 @@ function cmInitComposer() {
+ 
+ if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { cmInitComposer(); cmInitFloatingDate(); });
+ else { cmInitComposer(); cmInitFloatingDate(); }
++
++
++/* ═══ Keyboard mode for the chat box ═════════════════════════════════════════
++   While the keyboard is open for #chatInput: hide the floating nav and park the
++   composer right above the keyboard (CSS: body.chat-typing), keep the newest
++   message in view, and leave the mode again when the box loses focus OR the
++   keyboard is dismissed without a blur (Android back button / swipe down). */
++function cmInitKeyboardMode() {
++  const input = $('chatInput');
++  const msgs = $('chatMessages');
++  if (!input || !msgs || input._cmKb) return;
++  input._cmKb = true;
++
++  const viewH = () => window.visualViewport?.height || window.innerHeight;
++  let baseH = viewH();
++  let kbWasOpen = false;
++  let offTimer = 0, raf = 0;
++
++  const nearBottom = () => msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 320;
++  const toBottom = () => { msgs.scrollTop = msgs.scrollHeight; };
++  const resync = () => { try { syncChatInputHeight(); } catch { } };
++
++  function typingOn() {
++    clearTimeout(offTimer);
++    if (document.body.classList.contains('chat-typing')) return;
++    const stick = nearBottom();
++    document.body.classList.add('chat-typing');
++    resync();
++    if (stick) { toBottom(); setTimeout(() => { resync(); toBottom(); }, 300); }
++  }
++
++  function typingOff() {
++    clearTimeout(offTimer);
++    kbWasOpen = false;
++    if (!document.body.classList.contains('chat-typing')) return;
++    document.body.classList.remove('chat-typing');
++    resync();
++  }
++
++  input.addEventListener('focus', typingOn);
++  input.addEventListener('blur', () => {
++    clearTimeout(offTimer);
++    // a tap on send/emoji/attach fires blur first; wait so those clicks still land
++    offTimer = setTimeout(() => { if (document.activeElement !== input) typingOff(); }, 160);
++  });
++
++  function onViewport() {
++    if (raf) return;
++    raf = requestAnimationFrame(() => {
++      raf = 0;
++      const h = viewH();
++      if (!document.body.classList.contains('chat-typing')) { baseH = Math.max(baseH, h); return; }
++      if (baseH - h > 100) {                 // keyboard is (still) open: keep the newest message visible
++        kbWasOpen = true;
++        resync();
++        if (nearBottom()) toBottom();
++      } else if (kbWasOpen) {                // keyboard closed without a blur
++        input.blur();
++        typingOff();
++      }
++    });
++  }
++  window.visualViewport?.addEventListener('resize', onViewport);
++  window.Telegram?.WebApp?.onEvent?.('viewportChanged', onViewport);
++
++  // leaving the chat page must never leave the nav hidden
++  const page = $('page-chat');
++  if (page && window.MutationObserver) {
++    new MutationObserver(() => { if (!page.classList.contains('active')) typingOff(); })
++      .observe(page, { attributes: true, attributeFilter: ['class'] });
++  }
++}
++
++if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cmInitKeyboardMode);
++else cmInitKeyboardMode();

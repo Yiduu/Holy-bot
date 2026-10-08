@@ -1145,3 +1145,29 @@
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
 }
+
+/* ═══ Keyboard mode ═══════════════════════════════════════════════════════════
+   While the on-screen keyboard is open for the chat box (body.chat-typing, set
+   by chat-media.js), the floating nav pill is slid away and the composer sits
+   directly on top of the keyboard instead of ~80px above it. Without this the
+   nav pill and the composer both stacked above the keyboard, eating the small
+   visible area and leaving the typing box cramped or partly covered.         */
+.bottom-nav {
+  transition: transform 0.2s ease;
+}
+
+body.chat-typing .bottom-nav {
+  transform: translateY(calc(100% + var(--safe-bottom) + 24px));
+  pointer-events: none;
+}
+
+body.chat-typing .chat-input-row {
+  bottom: 0;
+  padding-bottom: 10px;
+}
+
+/* the nav no longer takes space at the bottom, so the chat page may use all of
+   the visible height (the messages' bottom padding is re-measured from this) */
+body.chat-typing #page-chat.active {
+  height: var(--app-height);
+}
