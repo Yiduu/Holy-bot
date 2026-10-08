@@ -2241,7 +2241,9 @@ window.loadDashboard = async function loadDashboard() {
         message: t('daily_verse_invite_message', { verse: escapeHtml(verse.text) }),
         buttonText: t('btn_read_now'),
         secondaryText: t('btn_remind_later'),
-        variant: 'info',
+        variant: 'gold',
+        layout: 'sheet',
+        hint: t('daily_verse_invite_hint'),
         onAction: () => {
           if (currentPage !== 'dashboard') navigate('dashboard');
           requestAnimationFrame(() => {
@@ -7903,7 +7905,10 @@ function showEngagementPopup(config) {
     onAction = () => {},
     secondaryText = null,
     onSecondary = null,
+    layout = 'dialog',   // 'dialog' (centered card) | 'sheet' (glowing bottom sheet)
+    hint = '',           // small dim line under the buttons (sheet layout)
   } = config;
+  const isSheet = layout === 'sheet';
 
   // Only one engagement popup at a time — a new one replaces whatever
   // is already showing rather than stacking on top of it.
@@ -7911,24 +7916,25 @@ function showEngagementPopup(config) {
 
   const overlay = document.createElement('div');
   overlay.id = 'engagementPopupOverlay';
-  overlay.className = 'engagement-popup-overlay';
+  overlay.className = 'engagement-popup-overlay' + (isSheet ? ' engagement-popup-overlay--sheet' : '');
   overlay.dataset.popupId = id;
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
   overlay.setAttribute('aria-label', title);
 
   overlay.innerHTML = `
-    <div class="engagement-popup">
+    <div class="engagement-popup${isSheet ? ' engagement-popup--sheet' : ''}">
       <button type="button" class="engagement-popup-close" aria-label="${t('btn_close')}">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14M19 5L5 19"/></svg>
       </button>
       <div class="engagement-popup-icon engagement-popup-icon--${variant}">${icon}</div>
       <div class="engagement-popup-title">${title}</div>
-      <p class="engagement-popup-message">${message}</p>
+      ${isSheet ? `<div class="engagement-popup-card"><p class="engagement-popup-message">${message}</p></div>` : `<p class="engagement-popup-message">${message}</p>`}
       <div class="engagement-popup-actions">
         <button type="button" class="btn btn-primary btn-full engagement-popup-primary">${buttonText}</button>
         ${secondaryText ? `<button type="button" class="btn btn-ghost btn-full engagement-popup-secondary">${secondaryText}</button>` : ''}
       </div>
+      ${isSheet && hint ? `<div class="engagement-popup-hint">${hint}</div>` : ''}
     </div>
   `;
 

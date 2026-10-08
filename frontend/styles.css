@@ -6166,6 +6166,145 @@ textarea.form-control {
   }
 }
 
+/* ─── Engagement popup: glowing bottom-sheet layout ───────────
+   Opt-in via showEngagementPopup({ layout: 'sheet' }). Gold glow at the
+   top edge fading into the app's dark surface. Only transform/opacity are
+   animated so it stays smooth on low-end Android WebViews. ─── */
+.engagement-popup-overlay--sheet {
+  align-items: flex-end;
+  padding: 0;
+}
+
+.engagement-popup--sheet {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  max-width: 480px;
+  padding: 30px 20px calc(22px + env(safe-area-inset-bottom, 0px));
+  border: 0;
+  border-radius: 28px 28px 0 0;
+  background:
+    linear-gradient(180deg, rgba(201, 168, 76, 0.34) 0%, rgba(74, 54, 18, 0.62) 22%, rgba(24, 20, 14, 0.96) 55%, var(--bg) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(232, 201, 107, 0.55),
+    0 -18px 60px rgba(201, 168, 76, 0.2),
+    0 -2px 0 rgba(201, 168, 76, 0.08);
+  transform: translateY(100%) translateZ(0);
+  opacity: 1;
+  transition: transform 0.38s var(--ease-premium);
+}
+
+.engagement-popup-overlay--sheet.open .engagement-popup--sheet {
+  transform: translateY(0) translateZ(0);
+}
+
+/* soft light spilling down from the top centre */
+.engagement-popup--sheet::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -90px;
+  left: 50%;
+  width: 120%;
+  height: 260px;
+  margin-left: -60%;
+  background: radial-gradient(ellipse at 50% 0%, rgba(232, 201, 107, 0.55) 0%, rgba(201, 168, 76, 0.18) 38%, transparent 70%);
+  pointer-events: none;
+  animation: engagementGlow 4.5s ease-in-out infinite;
+}
+
+@keyframes engagementGlow {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+
+.engagement-popup--sheet .engagement-popup-close {
+  top: 16px;
+  right: 16px;
+  color: rgba(240, 237, 228, 0.7);
+}
+
+.engagement-popup--sheet .engagement-popup-icon {
+  width: 68px;
+  height: 68px;
+  margin-bottom: 14px;
+  color: var(--gold-light);
+  background: radial-gradient(circle at 50% 35%, rgba(232, 201, 107, 0.3), rgba(201, 168, 76, 0.1) 70%);
+  box-shadow: 0 0 0 1px rgba(232, 201, 107, 0.35), 0 0 34px rgba(201, 168, 76, 0.4);
+}
+
+.engagement-popup--sheet .engagement-popup-title {
+  font-size: 1.3rem;
+  color: #F6F1E3;
+  text-shadow: 0 2px 18px rgba(201, 168, 76, 0.35);
+}
+
+/* the verse sits in a glass card, like the day cards in the reference */
+.engagement-popup--sheet .engagement-popup-card {
+  margin: 4px 0 20px;
+  padding: 16px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(232, 201, 107, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.engagement-popup--sheet .engagement-popup-message {
+  margin: 0;
+  color: rgba(246, 241, 227, 0.88);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  font-style: italic;
+}
+
+.engagement-popup--sheet .engagement-popup-actions {
+  gap: 12px;
+}
+
+.engagement-popup--sheet .engagement-popup-primary {
+  min-height: 54px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--gold-light) 0%, var(--gold) 100%);
+  color: var(--espresso);
+  font-weight: 700;
+  font-size: 1rem;
+  box-shadow: 0 10px 30px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.engagement-popup--sheet .engagement-popup-secondary {
+  min-height: 52px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(232, 201, 107, 0.28);
+  color: #F6F1E3;
+  font-weight: 600;
+}
+
+.engagement-popup-hint {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 0.78rem;
+  color: rgba(246, 241, 227, 0.5);
+}
+
+/* light theme: warm cream sheet with the same gold light */
+[data-theme="light"] .engagement-popup--sheet {
+  background: linear-gradient(180deg, rgba(201, 168, 76, 0.38) 0%, rgba(246, 236, 205, 0.95) 24%, var(--bg) 100%);
+}
+[data-theme="light"] .engagement-popup--sheet .engagement-popup-title { color: var(--espresso); text-shadow: none; }
+[data-theme="light"] .engagement-popup--sheet .engagement-popup-message { color: var(--text); }
+[data-theme="light"] .engagement-popup--sheet .engagement-popup-close { color: var(--text2); }
+[data-theme="light"] .engagement-popup--sheet .engagement-popup-icon { color: #6B4E0F; background: rgba(255, 255, 255, 0.5); }
+[data-theme="light"] .engagement-popup--sheet .engagement-popup-card { background: rgba(255, 255, 255, 0.55); }
+[data-theme="light"] .engagement-popup--sheet .engagement-popup-secondary { color: var(--espresso); background: rgba(255, 255, 255, 0.4); }
+[data-theme="light"] .engagement-popup-hint { color: var(--text3); }
+
+@media (prefers-reduced-motion: reduce) {
+  .engagement-popup--sheet,
+  .engagement-popup--sheet::before { transition: none; animation: none; }
+}
+
 /* ─── Modal (center style for schedule) ────────────────────── */
 .modal {
   background: var(--bg2);
