@@ -10667,3 +10667,10 @@ input:focus, textarea:focus, select:focus {
 @media (prefers-reduced-motion: reduce) {
   .card, .btn, .stat-card, .mentor-card { transition: none; }
 }
+
+/* Chat: last message must clear the floating nav + input row. --chat-covered is
+   measured in app.js (syncChatCoveredSpace); the old estimate is the fallback. */
+.chat-messages {
+  padding-bottom: var(--chat-covered, calc(var(--chat-input-h, 90px) + var(--nav-h) + var(--safe-bottom) + 12px));
+  scroll-padding-bottom: var(--chat-covered, 120px);
+}

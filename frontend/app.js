@@ -1819,10 +1819,42 @@ function syncChatInputHeight() {
     row._lastSyncedH = h;
     messages.style.setProperty('--chat-input-h', h + 'px');
   }
+  syncChatCoveredSpace();
   window.updateScrollToBottomBtn?.();
+}
+
+// The floating nav pill and the fixed input row sit on top of the message list.
+// Instead of guessing how much of the list they hide (which depended on
+// --app-height being exact and left the last message under the nav in
+// fullscreen), measure the real overlap from the screen and pad by that.
+function syncChatCoveredSpace() {
+  const messages = $('chatMessages');
+  const row = $('chatInputRow');
+  if (!messages || messages.offsetHeight === 0) return;           // chat page not visible
+  const mr = messages.getBoundingClientRect();
+  let coverTop = Infinity;
+  if (row && !row.classList.contains('hidden') && row.offsetHeight) coverTop = Math.min(coverTop, row.getBoundingClientRect().top);
+  const nav = document.querySelector('.bottom-nav');
+  if (nav && nav.offsetHeight && getComputedStyle(nav).display !== 'none') coverTop = Math.min(coverTop, nav.getBoundingClientRect().top);
+  if (!isFinite(coverTop)) return;
+  const covered = Math.max(0, Math.ceil(mr.bottom - coverTop)) + 14;   // + breathing room
+  if (messages._lastCovered === covered) return;
+  const atBottom = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80;
+  messages._lastCovered = covered;
+  messages.style.setProperty('--chat-covered', covered + 'px');
+  if (atBottom) messages.scrollTop = messages.scrollHeight;      // keep the newest message in view
 }
 window.addEventListener('resize', syncChatInputHeight);
 window.visualViewport?.addEventListener('resize', syncChatInputHeight);
+window.addEventListener('orientationchange', () => setTimeout(syncChatInputHeight, 250));
+['fullscreenChanged', 'safeAreaChanged', 'contentSafeAreaChanged', 'viewportChanged'].forEach(ev => {
+  try { window.Telegram?.WebApp?.onEvent?.(ev, () => requestAnimationFrame(syncChatInputHeight)); } catch { }
+});
+if (window.ResizeObserver) {
+  const _chatRO = new ResizeObserver(() => syncChatInputHeight());
+  const _watch = () => { ['chatInputRow', 'chatMessages'].forEach(id => { const el = $(id); if (el && !el._ro) { el._ro = 1; _chatRO.observe(el); } }); };
+  _watch(); setTimeout(_watch, 800); setTimeout(_watch, 2500);
+}
 
 // ─── Onboarding ───────────────────────────────────────────────
 const ONBOARDING_TOTAL_STEPS = 7;
@@ -8269,4 +8301,4 @@ document.addEventListener('click', (e) => {
     start();
   }
 })();
-
+
