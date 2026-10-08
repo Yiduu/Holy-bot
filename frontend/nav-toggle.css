@@ -1,0 +1,292 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   nav-toggle.css — collapsible bottom navigation + non-floating chat composer
+   Loaded LAST (after styles.css, goals.css, chat-media.css) so it wins.
+
+   1. The bottom nav is hidden by default. A small handle at the bottom edge
+      opens it; choosing a tab, tapping outside, swiping down, pressing Esc
+      or focusing a text field closes it again. (nav-toggle.js)
+   2. The nav no longer permanently covers the page, so pages only reserve a
+      thin strip (--nav-h) for the handle instead of the old 68-82px.
+   3. The chat composer is part of the page layout (not position:fixed), so it
+      never floats over the messages while scrolling.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* --nav-h is what every page reserves at the bottom. With the nav collapsed
+   that is just the handle strip. --nav-full is the nav's real height. */
+:root {
+  --nav-h: 30px;
+  --nav-full: 68px;
+}
+
+/* ── Bottom navigation: refined floating panel ─────────────────────────── */
+.bottom-nav {
+  left: 12px;
+  right: 12px;
+  width: auto;
+  bottom: calc(var(--safe-bottom) + 10px);
+  height: var(--nav-full);
+  padding: 0 8px;
+  gap: 2px;
+  align-items: center;
+  border-radius: 20px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.25);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  overflow: hidden;
+  z-index: 9999;
+
+  /* collapsed state */
+  transform: translateY(calc(100% + var(--safe-bottom) + 24px));
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform 0.28s cubic-bezier(0.22, 0.8, 0.3, 1),
+              opacity 0.2s ease,
+              visibility 0s linear 0.28s;
+}
+
+body.nav-open .bottom-nav {
+  transform: translateY(0);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: transform 0.28s cubic-bezier(0.22, 0.8, 0.3, 1),
+              opacity 0.2s ease,
+              visibility 0s;
+}
+
+[data-theme="light"] .bottom-nav {
+  background: var(--bg2);
+  border-color: rgba(150, 120, 40, 0.28);
+  box-shadow: 0 14px 34px rgba(30, 25, 15, 0.18), 0 2px 6px rgba(30, 25, 15, 0.1);
+}
+
+.bottom-nav .nav-item {
+  flex: 1 1 0;
+  min-width: 0;
+  align-self: stretch;
+  margin: 8px 0;
+  padding: 4px 2px;
+  gap: 4px;
+  border-radius: 14px;
+  color: var(--text3);
+  background: transparent;
+  box-shadow: none;
+  position: relative;
+  transition: color 0.18s ease, background-color 0.18s ease;
+}
+
+.bottom-nav .nav-item svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.8;
+}
+
+.bottom-nav .nav-item span:not(.nav-badge) {
+  font-size: clamp(0.58rem, 2.7vw, 0.68rem);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.bottom-nav .nav-item:active {
+  background: var(--surface);
+}
+
+/* active tab: gold icon + label with a soft tint and a small indicator bar */
+.bottom-nav .nav-item.active {
+  color: var(--gold-light, #E8C96B);
+  background: rgba(201, 168, 76, 0.12);
+  box-shadow: none;
+}
+
+.bottom-nav .nav-item.active::after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 18px;
+  height: 3px;
+  margin-left: -9px;
+  border-radius: 0 0 3px 3px;
+  background: var(--gold, #C9A84C);
+}
+
+[data-theme="light"] .bottom-nav .nav-item.active {
+  color: #6B4E0F;
+  background: rgba(150, 120, 40, 0.12);
+}
+
+[data-theme="light"] .bottom-nav .nav-item.active::after {
+  background: #8A6A1C;
+}
+
+/* the goals form used to slide the nav away; the nav is already hidden then */
+body.hg-typing .bottom-nav {
+  transform: translateY(calc(100% + var(--safe-bottom) + 24px));
+}
+
+/* ── Dim layer behind the open nav (tap it to close) ───────────────────── */
+.nav-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  background: rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0s linear 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.nav-open .nav-scrim {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.2s ease, visibility 0s;
+}
+
+/* ── Handle that opens the nav ─────────────────────────────────────────── */
+.nav-toggle {
+  position: fixed;
+  left: 50%;
+  bottom: var(--safe-bottom);
+  transform: translateX(-50%);
+  z-index: 9980;
+  width: 64px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text2);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.18s ease, opacity 0.18s ease, background-color 0.18s ease;
+}
+
+/* larger invisible tap target around the handle */
+.nav-toggle::before {
+  content: "";
+  position: absolute;
+  inset: -8px -22px 0 -22px;
+}
+
+.nav-toggle:hover,
+.nav-toggle:active {
+  color: var(--gold-light, #E8C96B);
+}
+
+.nav-toggle:focus-visible {
+  outline: 2px solid var(--gold, #C9A84C);
+  outline-offset: 2px;
+}
+
+.nav-toggle svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+/* unread dot, shown when any tab badge (chat, live, requests) is active */
+.nav-toggle .nav-toggle-dot {
+  display: none;
+  position: absolute;
+  top: 3px;
+  right: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e5484d;
+  border: 1.5px solid var(--bg2);
+}
+
+.nav-toggle.has-badge .nav-toggle-dot {
+  display: block;
+}
+
+body.nav-open .nav-toggle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* no nav or handle while in a call */
+body.in-call .nav-toggle,
+body.in-call .nav-scrim {
+  display: none !important;
+}
+
+/* keyboard-safe: handle tucks away while typing */
+body.hg-typing .nav-toggle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --nav-h: 26px;
+    --nav-full: 52px;
+  }
+
+  .bottom-nav {
+    bottom: calc(var(--safe-bottom) + 6px);
+    border-radius: 16px;
+  }
+
+  .bottom-nav .nav-item {
+    margin: 4px 0;
+  }
+
+  .bottom-nav .nav-item span:not(.nav-badge) {
+    display: none;
+  }
+
+  .nav-toggle {
+    height: 20px;
+    width: 56px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bottom-nav,
+  .nav-scrim,
+  .nav-toggle {
+    transition: none !important;
+  }
+}
+
+/* ═══ Chat: the composer is part of the layout, not a floating overlay ═════
+   #page-chat is already a flex column (header, messages, composer). Taking the
+   composer out of position:fixed lets the message list end exactly where the
+   composer begins, so messages scroll *behind nothing* and never sit under it. */
+.chat-input-row {
+  position: relative;       /* still anchors the emoji picker / attach menu */
+  left: auto;
+  right: auto;
+  bottom: auto;
+  z-index: 5;
+  flex: 0 0 auto;
+  box-shadow: none;
+  border-top: 1px solid var(--border-dim);
+  padding-bottom: 10px;
+}
+
+#chatMessages.chat-messages {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* no more space reserved for a floating composer / nav */
+  padding-bottom: 12px !important;
+  scroll-padding-bottom: 12px;
+  overscroll-behavior: contain;
+}
