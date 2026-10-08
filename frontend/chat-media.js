@@ -178,7 +178,7 @@ function renderFileAttachment(msg) {
         : `<button type="button" class="cm-voice-btn" aria-label="${cmT('cm_play', 'Play')}">${CM_ICON.play}${CM_ICON.pause}</button>`;
       const name = msg.file_type === 'audio'
         ? `<div class="cm-voice-name">${cmEsc(msg.file_name || cmT('cm_audio', 'Audio'))}</div>` : '';
-      return `<div class="cm-voice" data-file-id="${fid}" data-mid="${mid}" data-mime="${mime}" data-duration="${Number(msg.duration) || 0}">
+      return `<div class="cm-voice" data-file-id="${fid}" data-mid="${mid}" data-mime="${mime}" data-size="${Number(msg.file_size) || 0}" data-duration="${Number(msg.duration) || 0}">
         ${btn}<div class="cm-voice-body">${name}<div class="cm-wave" aria-hidden="true">${bars}</div>
         <div class="cm-voice-time">${cmFmtDur(msg.duration)}</div></div></div>`;
     }
@@ -218,14 +218,14 @@ function renderFileAttachment(msg) {
 }
 
 /* ═══ Authed download with progress + blob-URL cache ═══════════════════════ */
-async function cmFetchBlob(path, onProgress, signal) {
+async function cmFetchBlob(path, onProgress, signal, knownSize) {
   const { initData, user } = getTelegramData();
   const res = await fetch(`${API}${path}`, {
     headers: { 'x-telegram-init-data': initData, 'x-telegram-id': user?.id || '' },
     signal,
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const total = Number(res.headers.get('content-length')) || 0;
+  const total = Number(res.headers.get('content-length')) || Number(knownSize) || 0;
   if (!onProgress || !total || !res.body?.getReader) {
     const b = await res.blob();
     onProgress?.(1);
@@ -239,8 +239,9 @@ async function cmFetchBlob(path, onProgress, signal) {
     if (done) break;
     parts.push(value);
     got += value.length;
-    onProgress(Math.min(1, got / total));
+    onProgress(Math.min(0.99, got / total));
   }
+  onProgress(1);
   return new Blob(parts, { type: res.headers.get('content-type') || '' });
 }
 
@@ -257,11 +258,25 @@ function cmCacheSet(fileId, promise) {
   }
 }
 
-function cmGetMediaUrl(fileId, mime, onProgress, signal) {
+const cmProgressSubs = new Map();               // file_id → Set<fn(0..1)>
+function cmSubscribeProgress(fileId, fn) {
+  if (!fn) return () => { };
+  if (!cmProgressSubs.has(fileId)) cmProgressSubs.set(fileId, new Set());
+  cmProgressSubs.get(fileId).add(fn);
+  return () => cmProgressSubs.get(fileId)?.delete(fn);
+}
+
+function cmGetMediaUrl(fileId, mime, onProgress, signal, knownSize) {
   const hit = cmMediaCache.get(fileId);
-  if (hit) return hit.promise;
+  if (hit) {
+    if (!onProgress) return hit.promise;
+    const off = cmSubscribeProgress(fileId, onProgress);
+    return hit.promise.finally(off);
+  }
+  const off = cmSubscribeProgress(fileId, onProgress);
   const promise = (async () => {
-    const blob = await cmFetchBlob(`/api/messages/file/${encodeURIComponent(fileId)}`, onProgress, signal);
+    const blob = await cmFetchBlob(`/api/messages/file/${encodeURIComponent(fileId)}`,
+      p => cmProgressSubs.get(fileId)?.forEach(f => f(p)), signal, knownSize);
     // Telegram serves some files as application/octet-stream; the element
     // won't play/preview them unless the blob carries the real type.
     const typed = mime && (!blob.type || blob.type === 'application/octet-stream') ? new Blob([blob], { type: mime }) : blob;
@@ -269,6 +284,7 @@ function cmGetMediaUrl(fileId, mime, onProgress, signal) {
   })();
   cmCacheSet(fileId, promise);
   promise.catch(() => cmMediaCache.delete(fileId));
+  promise.finally(() => { off(); cmProgressSubs.delete(fileId); }).catch(() => { });
   return promise;
 }
 
@@ -289,7 +305,7 @@ function hydratePhotoMessages(container) {
 }
 
 /* ═══ Voice player (one at a time, like Telegram) ══════════════════════════ */
-const cmPlayer = { audio: null, el: null, fileId: null };
+const cmPlayer = { audio: null, el: null, fileId: null, token: 0 };
 const cmScrub = { active: false, target: null, el: null, box: null, startX: 0, dragged: false };
 
 function cmPaintWaveProgress(box, fraction) {
@@ -315,15 +331,26 @@ function cmPlayerPaint() {
   el.querySelector('.cm-voice-time').textContent = cmFmtDur(audio.currentTime);
 }
 
+function cmVoiceLoadPaint(el, p) {              // download percent on a voice bubble
+  if (!el?.isConnected) return;
+  const pct = Math.max(0, Math.min(100, Math.floor(p * 100)));
+  el.classList.add('has-p');
+  el.style.setProperty('--cm-p', pct);
+  const t = el.querySelector('.cm-voice-time');
+  if (t) t.textContent = `${pct}%`;
+}
+
 function cmPlayerReset(el) {
   if (!el) return;
-  el.classList.remove('is-playing', 'is-loading');
+  el.classList.remove('is-playing', 'is-loading', 'has-p');
+  el.style.removeProperty('--cm-p');
   el.querySelectorAll('.cm-wave i.on').forEach(b => b.classList.remove('on'));
   const t = el.querySelector('.cm-voice-time');
   if (t) t.textContent = cmFmtDur(el.dataset.duration);
 }
 
 function cmStopVoice() {
+  cmPlayer.token++;                              // invalidates any load still in flight
   const { audio, el } = cmPlayer;
   if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load?.(); }
   cmPlayerReset(el);
@@ -426,29 +453,42 @@ async function cmToggleVoice(box, startAt) {
     return;
   }
 
+  // Tapping again while this message is still downloading cancels it (acts as pause).
+  if (cmPlayer.fileId === fileId && !cmPlayer.audio && box.classList.contains('is-loading')) {
+    cmStopVoice();
+    return;
+  }
+
   cmStopVoice();
   cmReleaseAudioStream(true);       // an open microphone makes Android play audio quietly
+  const token = cmPlayer.token;
   cmPlayer.el = box;
   cmPlayer.fileId = fileId;
   box.classList.add('is-loading');
   let url;
   try {
-    url = await cmGetMediaUrl(fileId, box.dataset.mime || 'audio/ogg');
+    url = await cmGetMediaUrl(fileId, box.dataset.mime || 'audio/ogg', p => { if (cmPlayer.token === token) cmVoiceLoadPaint(box, p); }, undefined, Number(box.dataset.size) || 0);
   } catch {
-    if (cmPlayer.el === box) cmStopVoice();
+    if (cmPlayer.token === token) cmStopVoice();
     haptic('error');
     showToast(cmT('cm_voice_failed', 'Could not load the voice message'), 'error');
     return;
   }
-  if (cmPlayer.el !== box) return;                          // user tapped something else meanwhile
-  box.classList.remove('is-loading');
+  if (cmPlayer.token !== token) return;                     // paused / cancelled / another message tapped meanwhile
+  box.classList.remove('is-loading', 'has-p');
+  box.style.removeProperty('--cm-p');
+  const t0 = box.querySelector('.cm-voice-time');
+  if (t0) t0.textContent = cmFmtDur(box.dataset.duration);
 
   const a = new Audio();
   a.preload = 'auto';
   a.src = url;
   cmPlayer.audio = a;
-  a.addEventListener('play', () => cmPlayer.el?.classList.add('is-playing'));
-  a.addEventListener('pause', () => cmPlayer.el?.classList.remove('is-playing'));
+  a.addEventListener('play', () => {
+    if (cmPlayer.audio !== a) { a.pause(); return; }      // never let a stray element keep playing
+    cmPlayer.el?.classList.add('is-playing');
+  });
+  a.addEventListener('pause', () => { if (cmPlayer.audio === a) cmPlayer.el?.classList.remove('is-playing'); });
   a.addEventListener('timeupdate', cmPlayerPaint);
   a.addEventListener('error', () => {
     if (cmPlayer.audio !== a) return;
@@ -671,6 +711,8 @@ function cmSetProgress(tempId, loaded, total) {
   // keep the arc almost-full rather than reading "done" too early.
   const shown = Math.min(0.96, p);
   el.querySelectorAll('.cm-ring-arc').forEach(a => { a.style.strokeDasharray = `${CM_RING_C * Math.max(0.04, shown)} ${CM_RING_C}`; });
+  const vt = el.querySelector('.cm-voice .cm-voice-time');
+  if (vt) vt.textContent = `${Math.min(99, Math.floor(shown * 100))}%`;
   const sizeEl = el.querySelector('.cm-file-size');
   if (sizeEl && total) sizeEl.textContent = `${cmFmtSize(loaded)} / ${cmFmtSize(total)}`;
 }
@@ -1276,6 +1318,7 @@ function cmOnHidden() {
   if (document.hidden && cmRec.state === 'recording' && !cmRec.locked) cmCancelRecording();
 }
 window.addEventListener('pagehide', () => cmReleaseAudioStream());
+document.addEventListener('visibilitychange', () => { if (document.hidden && cmPlayer.audio && !cmPlayer.audio.paused) cmPlayer.audio.pause(); });
 
 function cmLockRecording() {
   if (cmRec.state !== 'recording' || cmRec.locked) return;

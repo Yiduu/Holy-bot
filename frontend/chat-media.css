@@ -1134,3 +1134,14 @@
   border-radius: 14px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
+
+/* Determinate download ring + pause glyph while a voice message is loading (tap again cancels) */
+.cm-voice.is-loading .cm-ico-play { display: none !important; }
+.cm-voice.is-loading .cm-ico-pause { display: block !important; }
+.cm-voice.is-loading.has-p .cm-voice-btn::before {
+  animation: none;
+  border: 0;
+  background: conic-gradient(var(--cm-bar-on) calc(var(--cm-p, 0) * 1%), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+}
