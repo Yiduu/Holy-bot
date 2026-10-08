@@ -4787,7 +4787,6 @@ async function loadChat() {
       if (menu) {
         menu.innerHTML = res.mentees.map(m => {
           const isSelected = String(m.telegram_id) === String(partner.telegram_id);
-          const activeStyle = isSelected ? 'background: var(--surface); color: var(--gold);' : '';
           const isOnline = isUserOnline(m.last_active);
           const dotColor = isOnline ? 'var(--success)' : 'var(--text3)';
           const dotLabel = isOnline ? 'Online' : 'Offline';
@@ -4796,8 +4795,8 @@ async function loadChat() {
             : `<span style="width: 8px; height: 8px; border-radius: 50%; background: ${dotColor}; display: inline-block;" title="${dotLabel}"></span>`;
 
           return `
-            <button class="msg-menu-item" style="justify-content: space-between; align-items: center; ${activeStyle}" onclick="switchChatPartner('${m.telegram_id}'); closeChatPartnerDropdown()">
-              <span style="font-weight: ${isSelected ? '700' : '500'};">${escapeHtml(m.display_name)}</span>
+            <button type="button" class="msg-menu-item chat-partner-item${isSelected ? ' active' : ''}" onclick="switchChatPartner('${m.telegram_id}'); closeChatPartnerDropdown()">
+              <span class="chat-partner-item-name">${escapeHtml(m.display_name)}</span>
               ${badge}
             </button>
           `;
