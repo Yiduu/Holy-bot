@@ -40,18 +40,18 @@ const reset = () => { sent.length = 0; failFor = new Set(); db.mentor_waitlist =
 const wait = (id, user, t) => db.mentor_waitlist.push({ id, mentor_id: 1, user_id: user, created_at: t });
 
 (async () => {
-  db.users.push({ telegram_id: 1, accepting_requests: true, anonymous_id: 'Shepherd_1', user_settings: { display_name: 'Pastor_Sam*', max_mentees: 2 } });
+  db.users.push({ telegram_id: 1, accepting_requests: true, anonymous_id: 'Shepherd_1', user_settings: { display_name: 'Pastor_Sam*<b>', max_mentees: 2 } });
 
-  // names with _ * ` [ no longer break Telegram Markdown
+  // the card is sent as HTML: names with _ * < > must arrive intact and escaped
   reset(); wait(1, 10, 1);
   assert.equal(await notifyMentorWaitlist(supabase, 1, deps), 1);
-  assert.ok(sent[0].text.includes('Pastor\\_Sam\\*') && !/[^\\]_/.test(sent[0].text.replace(/\\_/g, ''))); ok('mentor name is Markdown-escaped (underscore in IDs used to make Telegram reject the message)');
-  assert.equal(sent[0].extra.reply_markup.inline_keyboard[0][0].web_app.url.endsWith('?start=mentors'), true); ok('message carries an "Open mentors" button that deep-links to the Mentors page');
+  assert.ok(sent[0].text.includes('Pastor_Sam*&lt;b&gt;') && !sent[0].text.includes('<b>Pastor') && sent[0].extra.parse_mode === 'HTML'); ok('mentor name is HTML-escaped in a card');
+  assert.equal(sent[0].extra.reply_markup.inline_keyboard[0][0].web_app.url.endsWith('?start=mentors') && sent[0].extra.reply_markup.inline_keyboard[0][0].text.includes('🌟'), true); ok('message carries a gold "Open mentors" button that deep-links to the Mentors page');
   assert.equal(db.mentor_waitlist.length, 0); ok('notified person is removed from the list');
 
   // Amharic users get Amharic
   reset(); wait(1, 20, 1); await notifyMentorWaitlist(supabase, 1, deps);
-  assert.ok(/ክፍት ቦታ/.test(sent[0].text) && sent[0].extra.reply_markup.inline_keyboard[0][0].text === 'አማካሪዎችን ክፈት'); ok('Amharic message + button for Amharic users');
+  assert.ok(/ክፍት ቦታ/.test(sent[0].text) && sent[0].extra.reply_markup.inline_keyboard[0][0].text.includes('አማካሪዎችን ክፈት')); ok('Amharic message + button for Amharic users');
 
   // one message per free spot, oldest first
   reset(); wait(1, 10, 1); wait(2, 11, 2); wait(3, 12, 3);

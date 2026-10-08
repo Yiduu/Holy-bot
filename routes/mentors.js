@@ -1056,13 +1056,16 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
         ]);
 
         const newMentorName = newMentor?.user_settings?.display_name || newMentor?.anonymous_id || 'Your new mentor';
-        const { safeSend, getUserLang } = require('../bot');
+        const { sendCard, getUserLang } = require('../bot');
         if (user?.chat_id) {
           const lang = await getUserLang(assignment.user_id);
-          const text = lang === 'am'
-            ? `የምክር አገልግሎትዎ ወደ አማካሪ ${newMentorName} ተላልፏል።`
-            : `Your mentorship has been transferred to mentor ${newMentorName}.`;
-          await safeSend(user.chat_id, text);
+          const am = lang === 'am';
+          await sendCard(user.chat_id, {
+            icon: '🔄',
+            title: am ? 'አማካሪዎ ተቀይሯል' : 'Your Mentor Has Changed',
+            body: am ? `የምክር አገልግሎትዎ ወደ አማካሪ ${newMentorName} ተላልፏል።` : `Your mentorship has been transferred to ${newMentorName}.`,
+            footer: am ? 'አዲስ ጉዞዎ በበረከት ይሁን 🌱' : 'Wishing you a blessed new chapter 🌱',
+          }, { label: am ? 'ቻት ክፈት' : 'Open Chat' });
         }
 
         const { data: menteeUser } = await supabase
@@ -1073,10 +1076,13 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
         const menteeName = menteeUser?.user_settings?.display_name || menteeUser?.anonymous_id || 'A mentee';
 
         const targetLang = await getUserLang(targetTid);
-        const targetText = targetLang === 'am'
-          ? `አዲስ ተመካሪ በዝውውር ቀርቦልዎታል፦ ${menteeName}`
-          : `A new mentee has been transferred to you: ${menteeName}`;
-        await safeSend(targetTid, targetText);
+        const tAm = targetLang === 'am';
+        await sendCard(targetTid, {
+          icon: '🤝',
+          title: tAm ? 'አዲስ ተመካሪ ተመድቦልዎታል' : 'New Mentee Assigned',
+          body: tAm ? `አዲስ ተመካሪ በዝውውር ቀርቦልዎታል፦ ${menteeName}` : `A new mentee has been transferred to you: ${menteeName}`,
+          footer: tAm ? 'እግዚአብሔር ያበርታዎት 🙏' : 'Thank you for serving 🙏',
+        }, { label: tAm ? 'መተግበሪያውን ክፈት' : 'Open App' });
 
         return res.json({ success: true });
       }
