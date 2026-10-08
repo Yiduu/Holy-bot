@@ -2036,6 +2036,11 @@ function renderOnboardingSelectedTags() {
   if (!wrap || !select) return;
 
   const selected = Array.from(select.selectedOptions);
+  const countPill = $('obTopicsCount');
+  if (countPill) {
+    countPill.textContent = selected.length;
+    countPill.classList.toggle('hidden', !selected.length);
+  }
   if (!selected.length) {
     wrap.innerHTML = '';
     wrap.classList.add('hidden');
@@ -2192,21 +2197,6 @@ function validateAndGoNext(step) {
   let ok = true;
 
   if (step === 1) {
-    if (!$('regSex').value) {
-      showInlineError('group-regSex', t('err_select_sex'));
-      ok = false;
-    }
-  } else if (step === 2) {
-    if (!$('regAge').value) {
-      showInlineError('group-regAge', t('err_select_age'));
-      ok = false;
-    }
-  } else if (step === 3) {
-    if (!$('regEdu').value) {
-      showInlineError('group-regEdu', t('err_select_edu'));
-      ok = false;
-    }
-  } else if (step === 4) {
     const nickname = $('regNickname').value.trim();
     const nickRegex = /^[a-zA-Z0-9_]{3,20}$/;
     if (!nickname) {
@@ -2214,6 +2204,21 @@ function validateAndGoNext(step) {
       ok = false;
     } else if (!nickRegex.test(nickname)) {
       showInlineError('regNickname', t('err_nickname_format'));
+      ok = false;
+    }
+  } else if (step === 2) {
+    if (!$('regSex').value) {
+      showInlineError('group-regSex', t('err_select_sex'));
+      ok = false;
+    }
+  } else if (step === 3) {
+    if (!$('regAge').value) {
+      showInlineError('group-regAge', t('err_select_age'));
+      ok = false;
+    }
+  } else if (step === 4) {
+    if (!$('regEdu').value) {
+      showInlineError('group-regEdu', t('err_select_edu'));
       ok = false;
     }
   } else if (step === 5) {
@@ -2244,10 +2249,10 @@ async function completeRegistration() {
 
   let hasError = false;
   let firstErrorStep = null;
-  if (!sex) { hasError = true; firstErrorStep = firstErrorStep ?? 1; }
-  if (!age_range) { hasError = true; firstErrorStep = firstErrorStep ?? 2; }
-  if (!education_level) { hasError = true; firstErrorStep = firstErrorStep ?? 3; }
-  if (!nickname || !nickRegex.test(nickname)) { hasError = true; firstErrorStep = firstErrorStep ?? 4; }
+  if (!nickname || !nickRegex.test(nickname)) { hasError = true; firstErrorStep = firstErrorStep ?? 1; }
+  if (!sex) { hasError = true; firstErrorStep = firstErrorStep ?? 2; }
+  if (!age_range) { hasError = true; firstErrorStep = firstErrorStep ?? 3; }
+  if (!education_level) { hasError = true; firstErrorStep = firstErrorStep ?? 4; }
   const selectedTopicCount = $('regTopicsSelect')?.selectedOptions.length || 0;
   if (selectedTopicCount === 0) { hasError = true; firstErrorStep = firstErrorStep ?? 5; }
 
@@ -2291,7 +2296,7 @@ async function completeRegistration() {
   } catch (e) {
     haptic('error');
     if (e.message.toLowerCase().includes('taken')) {
-      showStep(4);
+      showStep(1);
       showInlineError('regNickname', t('err_nickname_taken'));
     } else {
       showToast(e.message, 'error');

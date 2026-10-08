@@ -12037,7 +12037,6 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
   justify-content: flex-start;
   padding: calc(var(--safe-top) + 14px) 16px calc(var(--safe-bottom) + 24px);
 }
-#onboarding .onboarding-container:has(.onboarding-step:first-child:not(.hidden)) { justify-content: center; }
 #onboarding .onboarding-card,
 [data-theme="light"] #onboarding .onboarding-card {
   background: transparent;
@@ -12224,3 +12223,78 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
   gap: 6px;
 }
 #onboarding .btn-ob-ghost:active { transform: scale(0.96); }
+
+/* ═══ Onboarding — welcome page: progress bar stays on top, art fills the space ═══ */
+#onboarding .onboarding-card { flex: 1; display: flex; flex-direction: column; }
+#onboarding .onboarding-step:first-child:not(.hidden) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+}
+#onboarding .ob-welcome-art {
+  flex: 1;
+  position: relative;
+  min-height: 210px;
+  margin: 0 -16px 22px; /* bleed to the screen edges so the glow melts into the page */
+}
+#onboarding .ob-welcome-art picture { display: block; position: absolute; inset: 0; }
+#onboarding .ob-welcome-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Welcome page must fit the screen exactly: border-box + fill the fixed overlay (no 100vh + padding overflow) */
+#onboarding .onboarding-container {
+  box-sizing: border-box;
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+/* ═══ Onboarding topics: icons always visible, tighter cards, count pill ═══ */
+/* An older rule hides .chip-icon svg (opacity 0, scale .4) until .active — undo it here */
+#onboarding .chip-icon svg { opacity: 1; transform: none; width: 22px; height: 22px; }
+#onboarding .topic-chip.active .chip-icon svg { transform: scale(1.06); }
+#onboarding .topic-chip { padding: 14px 8px 12px; gap: 8px; justify-content: flex-start; }
+#onboarding .chip-icon { width: 44px; height: 44px; border-radius: 14px; }
+#onboarding .topic-chip .chip-name { line-height: 1.25; }
+#onboarding .topics-chips-list {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent);
+  padding-bottom: 22px;
+}
+@keyframes obChipPop { 0% { transform: scale(0.96); } 55% { transform: scale(1.03); } 100% { transform: scale(1); } }
+#onboarding .topic-chip.active { animation: obChipPop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.ob-count-pill {
+  min-width: 22px; height: 22px; padding: 0 6px; margin-left: 8px;
+  border-radius: 11px; background: rgba(26, 18, 0, 0.82); color: var(--gold-light);
+  font-size: 12px; font-weight: 800; line-height: 22px; text-align: center;
+}
+@media (prefers-reduced-motion: reduce) { #onboarding .topic-chip.active { animation: none; } }
+/* Selected-topic pills: one scrollable row so they never push Continue off-screen */
+#onboarding .topic-selected-tags { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+#onboarding .topic-selected-tags::-webkit-scrollbar { display: none; }
+#onboarding .topic-tag-pill { flex-shrink: 0; }
+#onboarding .topics-chips-list { max-height: max(240px, calc(100vh - 505px)); max-height: max(240px, calc(100dvh - 505px)); }
+
+/* ═══ Onboarding performance pass (phones / touch WebViews) ═══
+   - Background orbs are already soft radial gradients: the extra blur(100px) on
+     400px layers + endless morph animation forced a huge re-raster every frame.
+   - The topic-list fade used mask-image, which repaints the whole scrolling list.
+   - Always-on logo glow animation removed on touch devices.
+   Desktop keeps the full effects. */
+@media (hover: none), (max-width: 480px) {
+  #onboarding .ob-bg-orb { filter: none; animation: none; will-change: auto; }
+  #onboarding .ob-logo-clean::after { animation: none; will-change: auto; opacity: 0.5; }
+  #onboarding .topics-chips-list { -webkit-mask-image: none; mask-image: none; padding-bottom: 6px; }
+  #onboarding .topic-chip { contain: layout paint; }
+  #onboarding .topic-chip.active { animation-duration: 0.2s; }
+  #onboarding .onboarding-step { animation-duration: 0.22s; }
+}

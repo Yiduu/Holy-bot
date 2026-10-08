@@ -14,6 +14,7 @@
   <!-- Non-blocking fonts (text shows in fallback fonts, then swaps) -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
+  <link rel="preload" as="image" href="onboarding-counseling.webp" type="image/webp" />
   <link rel="stylesheet" href="styles.css?v=2.6" />
   <link rel="stylesheet" href="goals.css?v=1.3" />
   <link rel="stylesheet" href="chat-media.css?v=1.0" />
@@ -107,13 +108,57 @@
           <div class="ob-title-rule ob-fade-up" style="--d:0"></div>
           <p class="ob-subtitle ob-fade-up" style="--d:0">Your counseling platform</p>
 
+          <div class="ob-welcome-art ob-fade-up" style="--d:1">
+            <picture>
+              <source srcset="onboarding-counseling.webp" type="image/webp" />
+              <img src="onboarding-counseling.png" width="1200" height="870" alt="" decoding="async" />
+            </picture>
+          </div>
+
           <button class="btn btn-primary btn-full ob-btn-next ob-fade-up" style="--d:1" onclick="showStep(1)">
             <span data-i18n="ob_begin_journey">Begin My Journey</span>
             <span class="btn-arrow">→</span>
           </button>
         </div>
 
-        <!-- Step 1: Sex -->
+        <!-- Step 1: Nickname -->
+        <div class="onboarding-step hidden">
+          <div class="step-intro-header">
+            <div class="step-intro-icon">
+              <svg class="ob-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+            </div>
+            <div>
+              <h3 class="step-intro-title ob-fade-up" style="--d:0" data-i18n="ob_nickname_question">Choose your
+                nickname</h3>
+              <p class="step-intro-desc ob-fade-up" style="--d:1" data-i18n="ob_nickname_helper">A name only you will
+                know — kept anonymous</p>
+            </div>
+          </div>
+
+          <div class="form-group-ob ob-fade-up" style="--d:2" id="group-regNickname">
+            <label class="form-label-ob" data-i18n="nickname_label">Nickname</label>
+            <input id="regNickname" class="form-control-ob" data-i18n="nickname_placeholder"
+              placeholder="tutu" maxlength="20" oninput="onNicknameInput()" autocomplete="off" />
+            <div class="nickname-meta-row">
+              <p class="form-helper-ob" data-i18n="nickname_hint">Letters, numbers, and underscores only</p>
+              <span class="char-counter" id="nicknameCounter">0/20</span>
+            </div>
+          </div>
+
+          <div class="button-group-ob">
+            <button class="btn-ob-ghost" onclick="prevStep()">← <span data-i18n="Back">Back</span></button>
+            <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(1)">
+              <span data-i18n="btn_continue">Continue</span>
+              <span class="btn-arrow">→</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2: Sex -->
         <div class="onboarding-step hidden">
           <div class="step-intro-header">
             <div class="step-intro-icon">
@@ -161,14 +206,14 @@
 
           <div class="button-group-ob">
             <button class="btn-ob-ghost" onclick="prevStep()">← <span data-i18n="Back">Back</span></button>
-            <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(1)">
+            <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(2)">
               <span data-i18n="btn_continue">Continue</span>
               <span class="btn-arrow">→</span>
             </button>
           </div>
         </div>
 
-        <!-- Step 2: Age Range -->
+        <!-- Step 3: Age Range -->
         <div class="onboarding-step hidden">
           <div class="step-intro-header">
             <div class="step-intro-icon">
@@ -242,14 +287,14 @@
 
           <div class="button-group-ob">
             <button class="btn-ob-ghost" onclick="prevStep()">← <span data-i18n="Back">Back</span></button>
-            <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(2)">
+            <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(3)">
               <span data-i18n="btn_continue">Continue</span>
               <span class="btn-arrow">→</span>
             </button>
           </div>
         </div>
 
-        <!-- Step 3: Education Level -->
+        <!-- Step 4: Education Level -->
         <div class="onboarding-step hidden">
           <div class="step-intro-header">
             <div class="step-intro-icon">
@@ -321,43 +366,6 @@
 
           <div class="button-group-ob">
             <button class="btn-ob-ghost" onclick="prevStep()">← <span data-i18n="Back">Back</span></button>
-            <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(3)">
-              <span data-i18n="btn_continue">Continue</span>
-              <span class="btn-arrow">→</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Step 4: Nickname -->
-        <div class="onboarding-step hidden">
-          <div class="step-intro-header">
-            <div class="step-intro-icon">
-              <svg class="ob-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
-              </svg>
-            </div>
-            <div>
-              <h3 class="step-intro-title ob-fade-up" style="--d:0" data-i18n="ob_nickname_question">Choose your
-                nickname</h3>
-              <p class="step-intro-desc ob-fade-up" style="--d:1" data-i18n="ob_nickname_helper">A name only you will
-                know — kept anonymous</p>
-            </div>
-          </div>
-
-          <div class="form-group-ob ob-fade-up" style="--d:2" id="group-regNickname">
-            <label class="form-label-ob" data-i18n="nickname_label">Nickname</label>
-            <input id="regNickname" class="form-control-ob" data-i18n="nickname_placeholder"
-              placeholder="e.g. HopeSeeker" maxlength="20" oninput="onNicknameInput()" autocomplete="off" />
-            <div class="nickname-meta-row">
-              <p class="form-helper-ob" data-i18n="nickname_hint">Letters, numbers, and underscores only</p>
-              <span class="char-counter" id="nicknameCounter">0/20</span>
-            </div>
-          </div>
-
-          <div class="button-group-ob">
-            <button class="btn-ob-ghost" onclick="prevStep()">← <span data-i18n="Back">Back</span></button>
             <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(4)">
               <span data-i18n="btn_continue">Continue</span>
               <span class="btn-arrow">→</span>
@@ -424,6 +432,7 @@
             <button class="btn-ob-ghost" onclick="prevStep()">← <span data-i18n="Back">Back</span></button>
             <button class="btn btn-primary flex-1 ob-btn-next" onclick="validateAndGoNext(5)">
               <span data-i18n="btn_continue">Continue</span>
+              <span class="ob-count-pill hidden" id="obTopicsCount"></span>
               <span class="btn-arrow">→</span>
             </button>
           </div>
