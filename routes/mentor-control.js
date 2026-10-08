@@ -2,6 +2,7 @@
 
 const express = require('express');
 const { closeAssignment } = require('../utils');
+const { HTML, card, goldKeyboard } = require('../utils/notifyStyle');
 
 // Localized copy for the Telegram notifications this module sends. Mirrors
 // the pattern used in routes/admin.js (CONTACT_PREFIX) and bot.js.
