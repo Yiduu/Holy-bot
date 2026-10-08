@@ -1116,10 +1116,16 @@ index 5a9c455..03a5383 100644
          console.error('[admin] Failed to send Telegram notification for ticket update:', botErr.message);
        }
 diff --git a/routes/mentor-control.js b/routes/mentor-control.js
-index b8c1712..ef8788c 100644
+index b8c1712..9993797 100644
 --- a/routes/mentor-control.js
 +++ b/routes/mentor-control.js
-@@ -7,20 +7,42 @@ const { closeAssignment } = require('../utils');
+@@ -2,25 +2,48 @@
+ 
+ const express = require('express');
+ const { closeAssignment } = require('../utils');
++const { HTML, card, goldKeyboard } = require('../utils/notifyStyle');
+ 
+ // Localized copy for the Telegram notifications this module sends. Mirrors
  // the pattern used in routes/admin.js (CONTACT_PREFIX) and bot.js.
  const MSG = {
    suspended: {
@@ -1170,7 +1176,7 @@ index b8c1712..ef8788c 100644
    },
    ADMIN_MESSAGE_PREFIX: {
      en: 'Message from the Admin Team',
-@@ -261,7 +283,7 @@ module.exports = function mentorControlRoutes(supabase, requireAuth, requireAdmi
+@@ -261,7 +284,7 @@ module.exports = function mentorControlRoutes(supabase, requireAuth, requireAdmi
        const { safeSend, getUserLang } = require('../bot');
        const lang = await getUserLang(telegram_id);
        const text = (MSG.suspended[lang] || MSG.suspended.en)(reason);
@@ -1179,7 +1185,7 @@ index b8c1712..ef8788c 100644
      } catch (notifyErr) {
        console.error('[mentor-control] Failed to notify mentor of suspension:', notifyErr.message);
      }
-@@ -290,7 +312,7 @@ module.exports = function mentorControlRoutes(supabase, requireAuth, requireAdmi
+@@ -290,7 +313,7 @@ module.exports = function mentorControlRoutes(supabase, requireAuth, requireAdmi
      try {
        const { safeSend, getUserLang } = require('../bot');
        const lang = await getUserLang(telegram_id);
@@ -1188,7 +1194,7 @@ index b8c1712..ef8788c 100644
      } catch (notifyErr) {
        console.error('[mentor-control] Failed to notify mentor of reactivation:', notifyErr.message);
      }
-@@ -399,10 +421,10 @@ module.exports = function mentorControlRoutes(supabase, requireAuth, requireAdmi
+@@ -399,10 +422,10 @@ module.exports = function mentorControlRoutes(supabase, requireAuth, requireAdmi
        const menteeName = mentee?.user_settings?.display_name || mentee?.anonymous_id || 'your mentee';
  
        const menteeLang = await getUserLang(mentee_id);

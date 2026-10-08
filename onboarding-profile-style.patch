@@ -1,0 +1,252 @@
+diff --git a/frontend/index.html b/frontend/index.html
+index 92fbce0..815d020 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -14,7 +14,7 @@
+   <!-- Non-blocking fonts (text shows in fallback fonts, then swaps) -->
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
+-  <link rel="stylesheet" href="styles.css?v=2.5" />
++  <link rel="stylesheet" href="styles.css?v=2.6" />
+   <link rel="stylesheet" href="goals.css?v=1.3" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 03d5fb1..52d6c20 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -11993,3 +11993,234 @@ button, input, select, textarea, optgroup { font-family: var(--font-body); }
+ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing: -0.005em; }
+ .app-header h2 { font-size: var(--fs-xl); font-weight: 700; letter-spacing: -0.005em; }
+ .section-title { font-weight: 800; letter-spacing: 0.12em; }
++
++/* ═══ Onboarding — same look as the Profile page ═══════════════════
++   One override layer (kept last, scoped to #onboarding so nothing else
++   moves): flat page instead of a boxed glass card, the app's cream
++   bold headings, Profile-style option cards with the gold icon tile,
++   the app's input + pill buttons. Works in dark and light. ═══ */
++#onboarding {
++  --ob-surface: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
++  --ob-surface-border: rgba(255, 255, 255, 0.07);
++  --ob-surface-shadow: 0 10px 26px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
++  --ob-gold-surface: radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.22) 0%, rgba(201, 168, 76, 0.06) 55%, transparent 100%), #17140c;
++  --ob-gold-border: rgba(201, 168, 76, 0.35);
++  --ob-gold-shadow: 0 12px 30px rgba(0, 0, 0, 0.38), 0 0 26px rgba(201, 168, 76, 0.12), inset 0 1px 0 rgba(255, 233, 160, 0.12);
++  --ob-pill-bg: rgba(255, 255, 255, 0.06);
++  --ob-pill-border: rgba(255, 255, 255, 0.12);
++  --ob-pill-shadow: 0 6px 18px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
++  --ob-tile-bg: rgba(201, 168, 76, 0.13);
++  --ob-tile-ring: inset 0 0 0 1px rgba(201, 168, 76, 0.22);
++  --ob-tile-fg: var(--gold-light);
++  --ob-field-bg: var(--bg3);
++  --ob-field-shadow: inset 2px 4px 8px rgba(0, 0, 0, 0.35), inset -1px -1px 3px rgba(255, 255, 255, 0.03);
++}
++[data-theme="light"] #onboarding {
++  --ob-surface: linear-gradient(160deg, #fff, #f6f3ea);
++  --ob-surface-border: rgba(150, 120, 40, 0.2);
++  --ob-surface-shadow: 0 8px 20px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff;
++  --ob-gold-surface: radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.26) 0%, rgba(201, 168, 76, 0.08) 55%, transparent 100%), #fffaf0;
++  --ob-gold-border: rgba(168, 124, 42, 0.5);
++  --ob-gold-shadow: 0 10px 24px rgba(30, 25, 15, 0.14), 0 0 22px rgba(201, 168, 76, 0.14), inset 0 1px 0 #fff;
++  --ob-pill-bg: rgba(255, 255, 255, 0.85);
++  --ob-pill-border: rgba(150, 120, 40, 0.24);
++  --ob-pill-shadow: 0 6px 16px rgba(30, 25, 15, 0.14);
++  --ob-tile-bg: rgba(201, 168, 76, 0.2);
++  --ob-tile-ring: inset 0 0 0 1px rgba(150, 120, 40, 0.28);
++  --ob-tile-fg: #6B4E0F;
++  --ob-field-bg: #fff;
++  --ob-field-shadow: inset 0 2px 6px rgba(30, 25, 15, 0.1);
++}
++
++/* Flat page, like every other page: no boxed card around the content. */
++#onboarding .onboarding-container {
++  justify-content: flex-start;
++  padding: calc(var(--safe-top) + 14px) 16px calc(var(--safe-bottom) + 24px);
++}
++#onboarding .onboarding-container:has(.onboarding-step:first-child:not(.hidden)) { justify-content: center; }
++#onboarding .onboarding-card,
++[data-theme="light"] #onboarding .onboarding-card {
++  background: transparent;
++  border: 0;
++  border-radius: 0;
++  box-shadow: none;
++  -webkit-backdrop-filter: none;
++  backdrop-filter: none;
++  padding: 4px 2px 0;
++}
++#onboarding .onboarding-topbar { margin-bottom: 22px; }
++
++/* Header controls = the Profile page pills */
++#onboarding .ob-back-btn,
++#onboarding .lang-toggle-btn,
++#onboarding .theme-btn {
++  background: var(--ob-pill-bg);
++  border: 1px solid var(--ob-pill-border);
++  box-shadow: var(--ob-pill-shadow);
++  color: var(--text);
++}
++#onboarding .ob-step-count { color: var(--text2); font-weight: 700; font-size: var(--fs-xs); }
++
++/* Headings: cream, bold, sentence case (the .app-header h2 look) */
++#onboarding .step-intro-header { gap: 14px; margin-bottom: 22px; align-items: center; }
++#onboarding .step-intro-icon {
++  width: 48px;
++  height: 48px;
++  border-radius: 16px;
++  padding: 0;
++  background: var(--ob-tile-bg);
++  border: 0;
++  box-shadow: var(--ob-tile-ring);
++  color: var(--ob-tile-fg);
++}
++#onboarding .step-intro-icon .ob-icon-lg { width: 22px; height: 22px; stroke: currentColor; }
++#onboarding .step-intro-title {
++  color: var(--text);
++  font-size: var(--fs-xl);
++  font-weight: 700;
++  letter-spacing: -0.005em;
++  line-height: 1.2;
++  margin: 0 0 4px;
++}
++#onboarding .step-intro-desc { color: var(--text2); font-size: var(--fs-md); line-height: 1.4; margin: 0; }
++#onboarding .ob-subtitle { color: var(--text2); font-weight: 700; }
++
++/* Option cards = Profile menu cards */
++#onboarding .segmented-list { gap: 12px; margin-bottom: 24px; }
++#onboarding .segmented-option,
++#onboarding .sex-option-btn,
++#onboarding .topic-chip,
++#onboarding .agree-summary-card {
++  background: var(--ob-surface);
++  border: 1px solid var(--ob-surface-border);
++  box-shadow: var(--ob-surface-shadow);
++  color: var(--text);
++}
++#onboarding .segmented-option {
++  min-height: 60px;
++  padding: 12px 20px;
++  border-radius: 26px;
++  font-size: var(--fs-base);
++  font-weight: 600;
++}
++#onboarding .segmented-option:hover,
++#onboarding .sex-option-btn:hover,
++#onboarding .topic-chip:hover { transform: none; border-color: var(--ob-gold-border); }
++#onboarding .segmented-option:active,
++#onboarding .sex-option-btn:active,
++#onboarding .topic-chip:active { transform: scale(0.985); }
++#onboarding .segmented-option.active,
++#onboarding .sex-option-btn.active,
++#onboarding .topic-chip.active,
++#onboarding .agree-summary-card {
++  background: var(--ob-gold-surface);
++  border-color: var(--ob-gold-border);
++  box-shadow: var(--ob-gold-shadow);
++  transform: none;
++}
++#onboarding .segmented-option.active,
++#onboarding .topic-chip.active { color: var(--text); }
++#onboarding .segmented-check {
++  width: 26px;
++  height: 26px;
++  border: 2px solid var(--ob-pill-border);
++  background: var(--ob-pill-bg);
++}
++#onboarding .segmented-option.active .segmented-check {
++  background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%);
++  border-color: transparent;
++  color: #2a1e05;
++  box-shadow: 0 4px 12px rgba(201, 168, 76, 0.4);
++}
++
++/* Sex cards: same gold icon tile as the menu rows */
++#onboarding .sex-select-grid { gap: 12px; margin-bottom: 24px; }
++#onboarding .sex-option-btn { border-radius: 26px; padding: 22px 14px; font-size: var(--fs-base); font-weight: 600; }
++#onboarding .sex-icon-wrap,
++#onboarding .chip-icon {
++  background: var(--ob-tile-bg);
++  box-shadow: var(--ob-tile-ring);
++  color: var(--ob-tile-fg);
++  border-radius: 16px;
++}
++#onboarding .sex-icon-wrap { width: 52px; height: 52px; }
++#onboarding .sex-option-btn.active .sex-icon-wrap,
++#onboarding .topic-chip.active .chip-icon {
++  background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%);
++  color: #2a1e05;
++  box-shadow: 0 6px 16px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5);
++  transform: none;
++}
++
++/* Topics */
++#onboarding .topics-chips-list { gap: 12px; max-height: max(260px, calc(100vh - 440px)); overflow-y: auto; padding: 2px 8px 2px 2px; margin-top: 12px; }
++#onboarding .topic-chip { border-radius: 24px; padding: 16px 10px 14px; }
++#onboarding .topic-chip .chip-name { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
++#onboarding .chip-icon { width: 48px; height: 48px; }
++#onboarding .topic-search-input {
++  height: 46px;
++  padding: 0 16px 0 40px;
++  border-radius: 999px;
++  border: 0;
++  background: var(--ob-field-bg);
++  box-shadow: var(--ob-field-shadow);
++  font-size: var(--fs-md);
++}
++#onboarding .topic-search-input:focus { box-shadow: 0 0 0 2px var(--gold), var(--shadow-gold); }
++#onboarding .topic-search-icon { left: 15px; }
++
++/* Text field = the app's .input */
++#onboarding .form-control-ob {
++  border: 0;
++  border-radius: 14px;
++  background: var(--ob-field-bg);
++  box-shadow: var(--ob-field-shadow);
++  font-size: var(--fs-base);
++  padding: 14px 16px;
++}
++#onboarding .form-control-ob:focus { background: var(--ob-field-bg); box-shadow: 0 0 0 2px var(--gold), var(--shadow-gold); }
++#onboarding .form-control-ob.is-invalid { box-shadow: 0 0 0 2px var(--danger); }
++#onboarding .form-label-ob {
++  color: var(--gold);
++  font-size: var(--fs-xs);
++  font-weight: 800;
++  letter-spacing: 0.12em;
++}
++#onboarding .form-helper-ob { color: var(--text2); font-size: var(--fs-xs); }
++
++/* Agree card */
++#onboarding .agree-summary-card { border-radius: 26px; padding: 22px 20px; margin-bottom: 24px; }
++#onboarding .agree-summary-card::before { display: none; }
++#onboarding .agree-summary-text { color: var(--text); font-size: var(--fs-md); line-height: 1.6; text-align: left; }
++
++/* Buttons = the Profile page gold pill + pill */
++#onboarding .button-group-ob { gap: 12px; margin-top: 8px; }
++#onboarding .onboarding-card .ob-btn-next.btn-primary {
++  min-height: 48px;
++  padding: 0 24px;
++  border-radius: 999px;
++  background: linear-gradient(180deg, #EBCD72, #C9A84C);
++  color: #1a1300;
++  font-size: var(--fs-base);
++  font-weight: 700;
++  letter-spacing: 0;
++  box-shadow: 0 8px 22px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
++}
++#onboarding .onboarding-card .ob-btn-next.btn-primary:hover { transform: none; }
++#onboarding .onboarding-card .ob-btn-next.btn-primary:active { transform: scale(0.97); }
++#onboarding .btn-ob-ghost {
++  min-height: 48px;
++  padding: 0 20px;
++  border-radius: 999px;
++  background: var(--ob-pill-bg);
++  border: 1px solid var(--ob-pill-border);
++  box-shadow: var(--ob-pill-shadow);
++  color: var(--text);
++  font-size: var(--fs-base);
++  font-weight: 700;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: 6px;
++}
++#onboarding .btn-ob-ghost:active { transform: scale(0.96); }
