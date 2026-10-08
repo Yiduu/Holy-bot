@@ -744,28 +744,6 @@
           data-i18n="btn_clear">Clear</button>
       </div>
       <div class="page-content">
-        <div class="section-title" data-i18n="Start a Session (Mentors Only)">Start a Session (Mentors Only)</div>
-        <div class="grid-2 mb-16">
-          <button class="btn btn-primary" onclick="openPrivateSessionFlow()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2">
-              <polygon points="23 7 16 12 23 17 23 7" />
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-            </svg>
-            <span data-i18n="1-on-1 Session">1-on-1 Session</span>
-          </button>
-          <button class="btn btn-outline" onclick="showScheduleModal(true)">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-            <span data-i18n="Group Session">Group Session</span>
-          </button>
-        </div>
-
         <div class="profile-tabs" role="tablist">
           <button type="button" id="sessTabPrivate" class="profile-tab active" role="tab" aria-selected="true"
             onclick="switchSessionsTab('private')">
@@ -787,6 +765,21 @@
         </div>
 
         <div id="sessPanePrivate" class="profile-pane active">
+          <nav class="profile-menu-list mb-16 mentor-only hidden" aria-label="New Private Session">
+            <button type="button" class="profile-menu-item pm-gold" onclick="openPrivateSessionFlow()">
+              <span class="profile-menu-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </span>
+              <span class="profile-menu-label" data-i18n="sess_new_private">New Private Session</span>
+              <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 6 15 12 9 18" />
+              </svg>
+            </button>
+          </nav>
           <div class="section-title" data-i18n="My Private Sessions">My Private Sessions</div>
           <div id="privateSessionsList" class="mb-16">
             <div class="loading-spinner" style="margin:30px auto"></div>
@@ -794,6 +787,21 @@
         </div>
 
         <div id="sessPaneGroup" class="profile-pane">
+          <nav class="profile-menu-list mb-16 mentor-only hidden" aria-label="New Group Session">
+            <button type="button" class="profile-menu-item pm-gold" onclick="showScheduleModal(true)">
+              <span class="profile-menu-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </span>
+              <span class="profile-menu-label" data-i18n="sess_new_group">New Group Session</span>
+              <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 6 15 12 9 18" />
+              </svg>
+            </button>
+          </nav>
           <div class="section-title" data-i18n="Upcoming Group Sessions">Upcoming Group Sessions</div>
           <div id="upcomingSessions">
             <div class="loading-spinner" style="margin:30px auto"></div>
