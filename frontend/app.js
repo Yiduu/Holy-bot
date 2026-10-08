@@ -2192,7 +2192,26 @@ function onNicknameInput() {
 // Generic per-step validator: validates the field(s) owned by `step`,
 // then advances to `step + 1`. Steps with nothing required (e.g. Topics)
 // simply pass through.
-function validateAndGoNext(step) {
+// Nickname availability: checked when the user presses Continue on the nickname
+// step (not only at "Agree & Join"). Results are cached per nickname.
+const nicknameCheckCache = new Map(); // lowercase nickname -> true (free) | false (taken)
+let nicknameChecking = false;
+
+async function checkNicknameAvailable(nick) {
+  const key = nick.toLowerCase();
+  if (nicknameCheckCache.has(key)) return nicknameCheckCache.get(key);
+  try {
+    const r = await apiFetch(`/api/auth/nickname-available?nickname=${encodeURIComponent(nick)}`, { timeout: 8000, retry: false });
+    const free = r?.available !== false;
+    nicknameCheckCache.set(key, free);
+    return free;
+  } catch (e) {
+    return true; // can't check right now: don't block the user, registration still verifies
+  }
+}
+
+async function validateAndGoNext(step) {
+  if (step === 1 && nicknameChecking) return;
   clearAllFieldErrors();
   let ok = true;
 
@@ -2233,6 +2252,25 @@ function validateAndGoNext(step) {
   if (!ok) {
     haptic('error');
     return;
+  }
+
+  if (step === 1) {
+    nicknameChecking = true;
+    const btn = document.querySelector('.onboarding-step:not(.hidden) .ob-btn-next');
+    const btnHtml = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = `<span>${t('btn_checking')}</span>`; }
+    let free = true;
+    try {
+      free = await checkNicknameAvailable($('regNickname').value.trim());
+    } finally {
+      nicknameChecking = false;
+      if (btn) { btn.disabled = false; btn.innerHTML = btnHtml; }
+    }
+    if (!free) {
+      haptic('error');
+      showInlineError('regNickname', t('err_nickname_taken'));
+      return;
+    }
   }
 
   showStep(step + 1);

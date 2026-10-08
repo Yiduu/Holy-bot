@@ -12292,9 +12292,11 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
    Desktop keeps the full effects. */
 @media (hover: none), (max-width: 480px) {
   #onboarding .ob-bg-orb { filter: none; animation: none; will-change: auto; }
-  #onboarding .ob-logo-clean::after { animation: none; will-change: auto; opacity: 0.5; }
   #onboarding .topics-chips-list { -webkit-mask-image: none; mask-image: none; padding-bottom: 6px; }
   #onboarding .topic-chip { contain: layout paint; }
   #onboarding .topic-chip.active { animation-duration: 0.2s; }
   #onboarding .onboarding-step { animation-duration: 0.22s; }
 }
+
+/* Logo: no glow disc behind it (it showed as a visible round halo with rings in dark mode) */
+#onboarding .ob-logo-clean::after { content: none; display: none; animation: none; }

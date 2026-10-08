@@ -1,0 +1,174 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index b1cd8aa..878c8af 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -2192,7 +2192,26 @@ function onNicknameInput() {
+ // Generic per-step validator: validates the field(s) owned by `step`,
+ // then advances to `step + 1`. Steps with nothing required (e.g. Topics)
+ // simply pass through.
+-function validateAndGoNext(step) {
++// Nickname availability: checked when the user presses Continue on the nickname
++// step (not only at "Agree & Join"). Results are cached per nickname.
++const nicknameCheckCache = new Map(); // lowercase nickname -> true (free) | false (taken)
++let nicknameChecking = false;
++
++async function checkNicknameAvailable(nick) {
++  const key = nick.toLowerCase();
++  if (nicknameCheckCache.has(key)) return nicknameCheckCache.get(key);
++  try {
++    const r = await apiFetch(`/api/auth/nickname-available?nickname=${encodeURIComponent(nick)}`, { timeout: 8000, retry: false });
++    const free = r?.available !== false;
++    nicknameCheckCache.set(key, free);
++    return free;
++  } catch (e) {
++    return true; // can't check right now: don't block the user, registration still verifies
++  }
++}
++
++async function validateAndGoNext(step) {
++  if (step === 1 && nicknameChecking) return;
+   clearAllFieldErrors();
+   let ok = true;
+ 
+@@ -2235,6 +2254,25 @@ function validateAndGoNext(step) {
+     return;
+   }
+ 
++  if (step === 1) {
++    nicknameChecking = true;
++    const btn = document.querySelector('.onboarding-step:not(.hidden) .ob-btn-next');
++    const btnHtml = btn ? btn.innerHTML : '';
++    if (btn) { btn.disabled = true; btn.innerHTML = `<span>${t('btn_checking')}</span>`; }
++    let free = true;
++    try {
++      free = await checkNicknameAvailable($('regNickname').value.trim());
++    } finally {
++      nicknameChecking = false;
++      if (btn) { btn.disabled = false; btn.innerHTML = btnHtml; }
++    }
++    if (!free) {
++      haptic('error');
++      showInlineError('regNickname', t('err_nickname_taken'));
++      return;
++    }
++  }
++
+   showStep(step + 1);
+ }
+ 
+diff --git a/frontend/locales.js b/frontend/locales.js
+index d2fd64e..faf282f 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -260,6 +260,7 @@ const I18N = {
+     "err_edu_required": "Education level is required",
+     "err_nickname_required_anon": "Anonymous nickname is required",
+     "err_nickname_taken": "This nickname is already taken. Please try another.",
++    "btn_checking": "Checking…",
+     "err_correct_below": "Please correct the errors below",
+     "registration_success": "Welcome! You are now registered",
+     "ob_momentum_badge": "Day 1 begins",
+@@ -967,6 +968,7 @@ const I18N = {
+     "err_edu_required": "የትምህርት ደረጃ ያስፈልጋል",
+     "err_nickname_required_anon": "ስም-አልባ ቅጽል ስም ያስፈልጋል",
+     "err_nickname_taken": "ይህ ቅጽል ስም ተይዟል። እባክዎ ሌላ ይሞክሩ።",
++    "btn_checking": "በመፈተሽ ላይ…",
+     "err_correct_below": "እባክዎ ከታች ያሉትን ስህተቶች ያስተካክሉ",
+     "registration_success": "እንኳን ደህና መጡ! ተመዝግበዋል",
+     "ob_momentum_badge": "ቀን 1 ጀምሯል",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 410992d..e82fc9c 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -12292,9 +12292,11 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+    Desktop keeps the full effects. */
+ @media (hover: none), (max-width: 480px) {
+   #onboarding .ob-bg-orb { filter: none; animation: none; will-change: auto; }
+-  #onboarding .ob-logo-clean::after { animation: none; will-change: auto; opacity: 0.5; }
+   #onboarding .topics-chips-list { -webkit-mask-image: none; mask-image: none; padding-bottom: 6px; }
+   #onboarding .topic-chip { contain: layout paint; }
+   #onboarding .topic-chip.active { animation-duration: 0.2s; }
+   #onboarding .onboarding-step { animation-duration: 0.22s; }
+ }
++
++/* Logo: no glow disc behind it (it showed as a visible round halo with rings in dark mode) */
++#onboarding .ob-logo-clean::after { content: none; display: none; animation: none; }
+diff --git a/routes/auth.js b/routes/auth.js
+index 959bb8a..077bb89 100644
+--- a/routes/auth.js
++++ b/routes/auth.js
+@@ -13,6 +13,34 @@ module.exports = function authRoutes(supabase, requireAuth) {
+     return `${adj}_${suffix}`;
+   }
+ 
++  // Escape LIKE wildcards: '_' and '%' in a nickname must match literally
++  // (otherwise "Hope_Seeker" would also match "HopeXSeeker" under ilike).
++  const escapeLike = (v) => String(v).replace(/[\\%_]/g, '\\$&');
++
++  // True when the nickname is already used as an anonymous ID or display name.
++  async function isNicknameTaken(nick) {
++    const pattern = escapeLike(nick);
++    const [{ data: userCollision }, { data: settingsCollision }] = await Promise.all([
++      supabase.from('users').select('telegram_id').ilike('anonymous_id', pattern).limit(1).maybeSingle(),
++      supabase.from('user_settings').select('telegram_id').ilike('display_name', pattern).limit(1).maybeSingle()
++    ]);
++    return !!(userCollision || settingsCollision);
++  }
++
++  // GET /api/auth/nickname-available?nickname=abc – lets onboarding check the name
++  // when the user presses Continue on the nickname step (register still re-checks).
++  router.get('/nickname-available', requireAuth, async (req, res) => {
++    const nick = typeof req.query.nickname === 'string' ? req.query.nickname.trim() : '';
++    if (!/^[a-zA-Z0-9_]{3,20}$/.test(nick)) {
++      return res.status(400).json({ error: 'Invalid nickname', available: false });
++    }
++    try {
++      res.json({ available: !(await isNicknameTaken(nick)) });
++    } catch (e) {
++      res.status(500).json({ error: 'Could not check nickname' });
++    }
++  });
++
+   // GET /api/auth/me – get or check current user
+   router.get('/me', requireAuth, async (req, res) => {
+     const { id: telegram_id } = req.telegramUser;
+@@ -53,11 +81,7 @@ module.exports = function authRoutes(supabase, requireAuth) {
+     }
+ 
+     // Nickname uniqueness check against both users.anonymous_id and user_settings.display_name
+-    const [{ data: userCollision }, { data: settingsCollision }] = await Promise.all([
+-      supabase.from('users').select('telegram_id').ilike('anonymous_id', trimmedNick).limit(1).maybeSingle(),
+-      supabase.from('user_settings').select('telegram_id').ilike('display_name', trimmedNick).limit(1).maybeSingle()
+-    ]);
+-    if (userCollision || settingsCollision) {
++    if (await isNicknameTaken(trimmedNick)) {
+       return res.status(409).json({ error: 'Nickname already taken', nickname_taken: true });
+     }
+ 
+diff --git a/server.js b/server.js
+index 3cf7a77..00ace85 100644
+--- a/server.js
++++ b/server.js
+@@ -151,6 +151,14 @@ const authLimiter = rateLimit({
+   message: { error: 'Too many auth attempts, please slow down.' },
+ });
+ 
++// Nickname availability check during onboarding: 40 per minute per user
++const nicknameCheckLimiter = rateLimit({
++  ...limiterBase,
++  windowMs: 60 * 1000,
++  max: 40,
++  message: { error: 'Too many checks, please slow down.' },
++});
++
+ // Sending chat messages: 60 per minute per user (spam guard; POST only)
+ const sendMessageLimiter = rateLimit({
+   ...limiterBase,
+@@ -172,6 +180,7 @@ const broadcastLimiter = rateLimit({
+ app.use('/api', generalLimiter);
+ // Tighter limits on specific sensitive routes
+ app.use('/api/auth/register', authLimiter);
++app.use('/api/auth/nickname-available', nicknameCheckLimiter);
+ app.use('/api/messages', sendMessageLimiter);
+ app.use('/api/admin/broadcast', broadcastLimiter);
+ 

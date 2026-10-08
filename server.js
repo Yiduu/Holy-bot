@@ -151,6 +151,14 @@ const authLimiter = rateLimit({
   message: { error: 'Too many auth attempts, please slow down.' },
 });
 
+// Nickname availability check during onboarding: 40 per minute per user
+const nicknameCheckLimiter = rateLimit({
+  ...limiterBase,
+  windowMs: 60 * 1000,
+  max: 40,
+  message: { error: 'Too many checks, please slow down.' },
+});
+
 // Sending chat messages: 60 per minute per user (spam guard; POST only)
 const sendMessageLimiter = rateLimit({
   ...limiterBase,
@@ -172,6 +180,7 @@ const broadcastLimiter = rateLimit({
 app.use('/api', generalLimiter);
 // Tighter limits on specific sensitive routes
 app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/nickname-available', nicknameCheckLimiter);
 app.use('/api/messages', sendMessageLimiter);
 app.use('/api/admin/broadcast', broadcastLimiter);
 

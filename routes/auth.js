@@ -13,6 +13,34 @@ module.exports = function authRoutes(supabase, requireAuth) {
     return `${adj}_${suffix}`;
   }
 
+  // Escape LIKE wildcards: '_' and '%' in a nickname must match literally
+  // (otherwise "Hope_Seeker" would also match "HopeXSeeker" under ilike).
+  const escapeLike = (v) => String(v).replace(/[\\%_]/g, '\\$&');
+
+  // True when the nickname is already used as an anonymous ID or display name.
+  async function isNicknameTaken(nick) {
+    const pattern = escapeLike(nick);
+    const [{ data: userCollision }, { data: settingsCollision }] = await Promise.all([
+      supabase.from('users').select('telegram_id').ilike('anonymous_id', pattern).limit(1).maybeSingle(),
+      supabase.from('user_settings').select('telegram_id').ilike('display_name', pattern).limit(1).maybeSingle()
+    ]);
+    return !!(userCollision || settingsCollision);
+  }
+
+  // GET /api/auth/nickname-available?nickname=abc – lets onboarding check the name
+  // when the user presses Continue on the nickname step (register still re-checks).
+  router.get('/nickname-available', requireAuth, async (req, res) => {
+    const nick = typeof req.query.nickname === 'string' ? req.query.nickname.trim() : '';
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(nick)) {
+      return res.status(400).json({ error: 'Invalid nickname', available: false });
+    }
+    try {
+      res.json({ available: !(await isNicknameTaken(nick)) });
+    } catch (e) {
+      res.status(500).json({ error: 'Could not check nickname' });
+    }
+  });
+
   // GET /api/auth/me – get or check current user
   router.get('/me', requireAuth, async (req, res) => {
     const { id: telegram_id } = req.telegramUser;
@@ -53,11 +81,7 @@ module.exports = function authRoutes(supabase, requireAuth) {
     }
 
     // Nickname uniqueness check against both users.anonymous_id and user_settings.display_name
-    const [{ data: userCollision }, { data: settingsCollision }] = await Promise.all([
-      supabase.from('users').select('telegram_id').ilike('anonymous_id', trimmedNick).limit(1).maybeSingle(),
-      supabase.from('user_settings').select('telegram_id').ilike('display_name', trimmedNick).limit(1).maybeSingle()
-    ]);
-    if (userCollision || settingsCollision) {
+    if (await isNicknameTaken(trimmedNick)) {
       return res.status(409).json({ error: 'Nickname already taken', nickname_taken: true });
     }
 
