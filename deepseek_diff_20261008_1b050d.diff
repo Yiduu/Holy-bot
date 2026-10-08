@@ -1,0 +1,80 @@
+diff --git a/bot.js b/bot.js
+--- a/bot.js
++++ b/bot.js
+@@ -219,7 +219,8 @@ async function createVideoSession(chatId, date, time12h) {
+           reply_markup: {
+             inline_keyboard: [[{
+               text: tSync(lang, 'btn_join_session'),
+-              web_app: { url: `${APP_URL}?start=session_${sess.id}` }
++              web_app: { url: `${APP_URL}?start=session_${sess.id}` },
++              style: 'success'
+             }]]
+           }
+         });
+@@ -435,7 +436,8 @@ async function notifySessionInvite(chatId, sessionInfo) {
+         reply_markup: {
+           inline_keyboard: [[{
+             text: tSync(lang, 'btn_join_session'),
+-            web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` }
++            web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` },
++            style: 'success'
+           }]]
+         }
+       });
+@@ -449,7 +451,8 @@ async function notifySessionReminder(chatId, sessionInfo) {
+         reply_markup: {
+           inline_keyboard: [[{
+             text: tSync(lang, 'btn_join_session'),
+-            web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` }
++            web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` },
++            style: 'success'
+           }]]
+         }
+       });
+@@ -464,7 +467,8 @@ async function notifySessionWaiting(chatId, sessionInfo) {
+         reply_markup: {
+           inline_keyboard: [[{
+             text: tSync(lang, 'btn_join_session'),
+-            web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` }
++            web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` },
++            style: 'success'
+           }]]
+         }
+       });
+@@ -479,7 +483,8 @@ async function notifySessionStarted(chatId, sessionInfo) {
+         reply_markup: {
+           inline_keyboard: [[{
+             text: tSync(lang, 'btn_join_session'),
+-            web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` }
++            web_app: { url: `${APP_URL}?start=session_${sessionInfo.session_id}` },
++            style: 'success'
+           }]]
+         }
+       });
+@@ -551,7 +556,8 @@ async function notifyMentorshipAccepted(userId, mentorName) {
+         reply_markup: {
+           inline_keyboard: [[{
+             text: lang === 'am' ? 'አሁን ያውሩ' : 'Chat Now',
+-            web_app: { url: APP_URL }
++            web_app: { url: APP_URL },
++            style: 'success'
+           }]]
+         }
+       });
+@@ -679,7 +685,8 @@ async function notifyNewGoal(menteeId, goal, mentorName) {
+         reply_markup: {
+           inline_keyboard: [[{
+             text: lang === 'am' ? 'ግቤን ክፈት' : 'Open My Goal',
+-            web_app: { url: `${APP_URL}?start=goal_${goal.id}` }
++            web_app: { url: `${APP_URL}?start=goal_${goal.id}` },
++            style: 'success'
+           }]]
+         }
+       });
+@@ -715,7 +722,7 @@ async function notifyDailyReminder(menteeId, goal, tasks) {
+         callback_data: `goal_done_${t.id}`
+       }]);
+-  buttons.push([{ text: lang === 'am' ? 'መተግበሪያውን ክፈት' : 'Open app', web_app: { url: `${APP_URL}?start=goal_${goal.id}` } }]);
++  buttons.push([{ text: lang === 'am' ? 'መተግበሪያውን ክፈት' : 'Open app', web_app: { url: `${APP_URL}?start=goal_${goal.id}` }, style: 'success' }]);
+       await safeSend(chatId, `${head}\n\n${goal.title}\n${list}`, { reply_markup: { inline_keyboard: buttons } });
+     }

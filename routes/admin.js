@@ -6,13 +6,6 @@ const multer = require('multer');
 const { endMenteeSideOnPromotion, closeAssignment } = require('../utils');
 const { summarize } = require('../utils/mentorshipAnalytics');
 
-// Prefix shown above an admin's custom message, localized by the applicant's
-// preferred language (user_settings.language). Falls back to English.
-const CONTACT_PREFIX = {
-  en: 'Message from the Mentorship Team\nRegarding your mentor application:',
-  am: 'መልእክት ከአማካሪ ቡድን\nስለ አማካሪነት ማመልከቻዎ፦',
-};
-
 // Broadcast attachments are held in memory just long enough to hand them to
 // Telegram (50 MB is the Bot API upload ceiling).
 const BROADCAST_MEDIA_MAX = 50 * 1024 * 1024;
@@ -353,10 +346,15 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       .eq('telegram_id', app.telegram_id)
       .single();
     const lang = settings?.language || 'en';
-    const prefix = CONTACT_PREFIX[lang] || CONTACT_PREFIX.en;
 
-    const { safeSend } = require('../bot');
-    await safeSend(app.telegram_id, `${prefix}\n\n${message.trim()}`);
+    const { sendCard } = require('../bot');
+    await sendCard(app.telegram_id, {
+      icon: '💌',
+      title: lang === 'am' ? 'መልእክት ከአማካሪ ቡድን' : 'Message from the Mentorship Team',
+      body: lang === 'am' ? 'ስለ አማካሪነት ማመልከቻዎ፦' : 'Regarding your mentor application:',
+      quote: message.trim(),
+      footer: lang === 'am' ? 'እግዚአብሔር ይባርክዎ 🙏' : 'God bless you 🙏',
+    }, { label: lang === 'am' ? 'መተግበሪያውን ክፈት' : 'Open App' });
 
     await logAudit(admin_id, 'application_contact', app.telegram_id, 'mentor_application', {
       app_id: req.params.id,
@@ -769,16 +767,18 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
 
       // 2. Telegram Bot notification via safeSend — clean, professional copy
       try {
-        const { safeSend } = require('../bot');
-        let msgText = `Support Request Update\n\nSubject: ${ticket.subject}\nStatus: ${statusLabel}`;
-        if (replyText) {
-          const preview = replyText.length > 300 ? replyText.substring(0, 300) + '…' : replyText;
-          msgText += `\n\n${preview}`;
-        }
-        msgText += updatedStatus === 'closed'
-          ? `\n\nThis request has been closed. Open the app if you need to review the conversation.`
-          : `\n\nOpen the app to view the full conversation or send a follow-up.`;
-        await safeSend(ticket.telegram_id, msgText);
+        const { sendCard } = require('../bot');
+        const closed = updatedStatus === 'closed';
+        await sendCard(ticket.telegram_id, {
+          icon: closed ? '✅' : '💬',
+          title: closed ? 'Support Request Closed' : 'Support Request Update',
+          body: closed
+            ? 'This request has been closed. Open the app if you need to review the conversation.'
+            : 'Our team has an update for you. Open the app to view the full conversation or send a follow-up.',
+          quote: replyText ? (replyText.length > 300 ? replyText.substring(0, 300) + '…' : replyText) : '',
+          fields: [['📌', 'Subject', ticket.subject], ['🔖', 'Status', statusLabel]],
+          footer: 'We are here to help 🙏',
+        }, { label: 'Open App' });
       } catch (botErr) {
         console.error('[admin] Failed to send Telegram notification for ticket update:', botErr.message);
       }

@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { HTML, card, goldKeyboard } = require('./notifyStyle');
 
 /**
  * Generate a Jitsi JWT token for a given room.
@@ -163,7 +164,7 @@ async function notifyMentorWaitlist(supabase, mentorId, deps = {}) {
     const hasMentor = new Set((busy || []).map(r => String(r.user_id)));
 
     const { safeSend, getUserLang } = deps.safeSend ? deps : require('../bot');
-    const name = mdSafe(mentor.user_settings?.display_name || mentor.anonymous_id || 'A mentor');
+    const name = mentor.user_settings?.display_name || mentor.anonymous_id || 'A mentor';
     const finished = [];
     let sent = 0;
     for (const w of waiting) {
@@ -171,10 +172,15 @@ async function notifyMentorWaitlist(supabase, mentorId, deps = {}) {
       if (sent >= free) break;
       const lang = await getUserLang(w.user_id).catch(() => 'en');
       const am = lang === 'am';
-      const ok = await safeSend(w.user_id,
-        am ? `${name} ክፍት ቦታ አለው። ጥያቄ ለመላክ ከታች ያለውን ቁልፍ ይጫኑ።`
-           : `${name} has a spot open now. Tap the button below to see their profile and send a request.`,
-        { reply_markup: { inline_keyboard: [[{ text: am ? 'አማካሪዎችን ክፈት' : 'Open mentors', web_app: { url: `${APP_URL}?start=mentors` } }]] } });
+      const text = card({
+        icon: '🎉',
+        title: am ? 'ክፍት ቦታ ተገኝቷል' : 'A Spot Just Opened Up',
+        body: am
+          ? `${name} ክፍት ቦታ አለው። መገለጫቸውን ለማየትና ጥያቄ ለመላክ ከታች ያለውን ቁልፍ ይጫኑ።`
+          : `${name} has a spot open now. Tap below to see their profile and send a request.`,
+        footer: am ? 'ቦታው ከመሞላቱ በፊት ፍጠኑ 💛' : 'Be quick before it fills up 💛',
+      });
+      const ok = await safeSend(w.user_id, text, { ...HTML, reply_markup: goldKeyboard(am ? 'አማካሪዎችን ክፈት' : 'Open mentors', `${APP_URL}?start=mentors`) });
       if (ok) { sent++; finished.push(w.id); }
     }
     if (finished.length) await supabase.from('mentor_waitlist').delete().in('id', finished);

@@ -7,20 +7,42 @@ const { closeAssignment } = require('../utils');
 // the pattern used in routes/admin.js (CONTACT_PREFIX) and bot.js.
 const MSG = {
   suspended: {
-    en: (reason) => `Mentor Account Suspended\n\nYour mentor status has been temporarily suspended by the admin team${reason ? `:\n\n"${reason}"` : '.'}\n\nYou will not appear in mentor search and will not receive new mentorship requests until this is lifted. Any mentees you are already paired with are unaffected. Contact support if you have questions.`,
-    am: (reason) => `የአማካሪ አካውንት ታግዷል\n\nየአማካሪነት ሁኔታዎ በአስተዳደር ቡድን ለጊዜው ታግዷል${reason ? `፦\n\n"${reason}"` : '።'}\n\nይህ እስኪነሳ ድረስ በአማካሪ ፍለጋ ውስጥ አይታዩም እንዲሁም አዲስ ጥያቄዎችን አይቀበሉም። ቀድሞ የተጣመሩ ተመካሪዎች አይነኩም። ጥያቄ ካለዎት ድጋፍን ያነጋግሩ።`,
+    en: (reason) => card({
+      icon: '⏸️',
+      title: 'Mentor Account Suspended',
+      body: 'Your mentor status has been temporarily paused by the admin team. You will not appear in mentor search or receive new requests until this is lifted. Mentees you are already paired with are unaffected.',
+      fields: [['📝', 'Reason', reason]],
+      footer: 'Contact support if you have any questions 🙏',
+    }),
+    am: (reason) => card({
+      icon: '⏸️',
+      title: 'የአማካሪ አካውንት ታግዷል',
+      body: 'የአማካሪነት ሁኔታዎ በአስተዳደር ቡድን ለጊዜው ታግዷል። ይህ እስኪነሳ ድረስ በአማካሪ ፍለጋ ውስጥ አይታዩም እንዲሁም አዲስ ጥያቄዎችን አይቀበሉም። ቀድሞ የተጣመሩ ተመካሪዎች አይነኩም።',
+      fields: [['📝', 'ምክንያት', reason]],
+      footer: 'ጥያቄ ካለዎት ድጋፍን ያነጋግሩ 🙏',
+    }),
   },
   reactivated: {
-    en: 'Mentor Account Reactivated\n\nYour mentor status has been restored. You are visible in mentor search again and can receive new mentorship requests.',
-    am: 'የአማካሪ አካውንት ተመልሷል\n\nየአማካሪነት ሁኔታዎ ተመልሷል። በአማካሪ ፍለጋ ውስጥ እንደገና ይታያሉ እና አዲስ ጥያቄዎችን መቀበል ይችላሉ።',
+    en: card({
+      icon: '✅',
+      title: 'Mentor Account Reactivated',
+      body: 'Your mentor status has been restored. You are visible in mentor search again and can receive new mentorship requests.',
+      footer: 'Welcome back 💛',
+    }),
+    am: card({
+      icon: '✅',
+      title: 'የአማካሪ አካውንት ተመልሷል',
+      body: 'የአማካሪነት ሁኔታዎ ተመልሷል። በአማካሪ ፍለጋ ውስጥ እንደገና ይታያሉ እና አዲስ ጥያቄዎችን መቀበል ይችላሉ።',
+      footer: 'እንኳን ደህና ተመለሱ 💛',
+    }),
   },
   unassignedMentor: {
-    en: (name) => `An administrator has ended your mentorship pairing with ${name}.`,
-    am: (name) => `አስተዳዳሪ ከ${name} ጋር የነበረዎትን የምክር ግንኙነት አቁሟል።`,
+    en: (name) => card({ icon: '🔔', title: 'Mentorship Ended', body: `An administrator has ended your mentorship pairing with ${name}. You can request a new mentor any time.` }),
+    am: (name) => card({ icon: '🔔', title: 'የምክር ግንኙነት ተጠናቅቋል', body: `አስተዳዳሪ ከ${name} ጋር የነበረዎትን የምክር ግንኙነት አቁሟል። በማንኛውም ጊዜ አዲስ አማካሪ መጠየቅ ይችላሉ።` }),
   },
   unassignedMentee: {
-    en: (name) => `An administrator has ended your mentorship pairing with ${name}.`,
-    am: (name) => `አስተዳዳሪ ከ${name} ጋር የነበረዎትን የምክር ግንኙነት አቁሟል።`,
+    en: (name) => card({ icon: '🔔', title: 'Mentorship Ended', body: `An administrator has ended your mentorship pairing with ${name}.` }),
+    am: (name) => card({ icon: '🔔', title: 'የምክር ግንኙነት ተጠናቅቋል', body: `አስተዳዳሪ ከ${name} ጋር የነበረዎትን የምክር ግንኙነት አቁሟል።` }),
   },
   ADMIN_MESSAGE_PREFIX: {
     en: 'Message from the Admin Team',
@@ -261,7 +283,7 @@ module.exports = function mentorControlRoutes(supabase, requireAuth, requireAdmi
       const { safeSend, getUserLang } = require('../bot');
       const lang = await getUserLang(telegram_id);
       const text = (MSG.suspended[lang] || MSG.suspended.en)(reason);
-      await safeSend(telegram_id, text);
+      await safeSend(telegram_id, text, HTML);
     } catch (notifyErr) {
       console.error('[mentor-control] Failed to notify mentor of suspension:', notifyErr.message);
     }
@@ -290,7 +312,7 @@ module.exports = function mentorControlRoutes(supabase, requireAuth, requireAdmi
     try {
       const { safeSend, getUserLang } = require('../bot');
       const lang = await getUserLang(telegram_id);
-      await safeSend(telegram_id, MSG.reactivated[lang] || MSG.reactivated.en);
+      await safeSend(telegram_id, MSG.reactivated[lang] || MSG.reactivated.en, { ...HTML, reply_markup: goldKeyboard(lang === 'am' ? 'መተግበሪያውን ክፈት' : 'Open App', process.env.MINI_APP_URL || 'https://holy-bot-etvy.onrender.com') });
     } catch (notifyErr) {
       console.error('[mentor-control] Failed to notify mentor of reactivation:', notifyErr.message);
     }
@@ -399,10 +421,10 @@ module.exports = function mentorControlRoutes(supabase, requireAuth, requireAdmi
       const menteeName = mentee?.user_settings?.display_name || mentee?.anonymous_id || 'your mentee';
 
       const menteeLang = await getUserLang(mentee_id);
-      await safeSend(mentee_id, (MSG.unassignedMentor[menteeLang] || MSG.unassignedMentor.en)(mentorName));
+      await safeSend(mentee_id, (MSG.unassignedMentor[menteeLang] || MSG.unassignedMentor.en)(mentorName), HTML);
 
       const mentorLang = await getUserLang(mentor_id);
-      await safeSend(mentor_id, (MSG.unassignedMentee[mentorLang] || MSG.unassignedMentee.en)(menteeName));
+      await safeSend(mentor_id, (MSG.unassignedMentee[mentorLang] || MSG.unassignedMentee.en)(menteeName), HTML);
     } catch (notifyErr) {
       console.error('[mentor-control] Failed to notify parties of forced unassign:', notifyErr.message);
     }
