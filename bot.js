@@ -269,27 +269,34 @@ async function showTextInputWithCancel(chatId, promptText, nextState, tempData =
 
 // ─── Topic Picker ─────────────────────────────────────────────────────────────
 
+// Topics store English in `name` and Amharic in `name_am`. Show only one language,
+// falling back to English if an Amharic name has not been added yet.
+function topicLabel(topic, lang = 'en') {
+  if (!topic) return '?';
+  return (lang === 'am' && topic.name_am) ? topic.name_am : (topic.name || '?');
+}
+
 async function getTopicPickerKeyboard(selectedIds = [], actionPrefix = 'reg_topic_', lang = 'en') {
-  const { data: topics } = await supabase.from('topics').select('id, name').eq('is_active', true).order('name');
+  const { data: topics } = await supabase.from('topics').select('id, name, name_am').eq('is_active', true).order('name');
   if (!topics) return { inline_keyboard: [] };
 
   const buttons = topics.map(t => {
     const isSelected = selectedIds.includes(t.id);
-    return [{ text: `${isSelected ? '✅' : '⬜'} ${t.name}`, callback_data: `${actionPrefix}${t.id}` }];
+    return [{ text: `${isSelected ? '✅' : '⬜'} ${topicLabel(t, lang)}`, callback_data: `${actionPrefix}${t.id}` }];
   });
   buttons.push([{ text: tSync(lang, 'btn_done'), callback_data: `${actionPrefix}done` }]);
   return { inline_keyboard: buttons };
 }
 
 async function getMentorTopicKeyboard(chatId, lang = 'en') {
-  const { data: topics } = await supabase.from('topics').select('id, name').eq('is_active', true).order('name');
+  const { data: topics } = await supabase.from('topics').select('id, name, name_am').eq('is_active', true).order('name');
   const { data: mentorTopics } = await supabase.from('mentor_topics').select('topic_id').eq('telegram_id', chatId);
   const selectedIds = (mentorTopics || []).map(mt => mt.topic_id);
   if (!topics) return { inline_keyboard: [] };
 
   const buttons = topics.map(t => {
     const isSelected = selectedIds.includes(t.id);
-    return [{ text: `${isSelected ? '✅' : '⬜'} ${t.name}`, callback_data: `toggle_topic_${t.id}` }];
+    return [{ text: `${isSelected ? '✅' : '⬜'} ${topicLabel(t, lang)}`, callback_data: `toggle_topic_${t.id}` }];
   });
   buttons.push([
     { text: tSync(lang, 'btn_done'), callback_data: 'topic_done' },
@@ -635,7 +642,7 @@ async function sendMenteeList(chatId, lang, mentees) {
   for (let i = 0; i < mentees.length; i++) {
     const m = mentees[i];
     const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', m.user_id).single();
-    const menteeText = `👤 @${mdEscape(u?.anonymous_id || String(m.user_id))} (${mdEscape(m.topics?.name || '?')})`;
+    const menteeText = `👤 @${mdEscape(u?.anonymous_id || String(m.user_id))} (${mdEscape(topicLabel(m.topics, lang))})`;
     const isLast = i === mentees.length - 1;
     await safeSend(chatId, menteeText, {
       reply_markup: {
@@ -1596,8 +1603,9 @@ async function notifyAdminNewMentorApplication(applicantTelegramId, sex, educati
   }
 }
 
-async function notifyMentorshipRequest(mentorId, requesterId, requesterName, requesterSex, requesterAge, topicName) {
+async function notifyMentorshipRequest(mentorId, requesterId, requesterName, requesterSex, requesterAge, topic) {
   const lang = await getUserLang(mentorId);
+  const topicName = (topic && typeof topic === 'object') ? topicLabel(topic, lang) : topic;
   const text = lang === 'am'
     ? `አዲስ የምክር ጥያቄ\n\nከ፦ ${requesterName}\nርዕስ፦ ${topicName}\nጾታ፦ ${requesterSex === 'M' ? 'ወንድ' : (requesterSex === 'F' ? 'ሴት' : 'አልተገለጸም')}\nዕድሜ፦ ${requesterAge || 'አልተገለጸም'}\n\nጥያቄውን ለመገምገም እና ምላሽ ለመስጠት እባክዎ መተግበሪያውን ይክፈቱ።`
     : `New Mentorship Request\n\nFrom: ${requesterName}\nTopic: ${topicName}\nSex: ${requesterSex === 'M' ? 'Male' : (requesterSex === 'F' ? 'Female' : 'Not specified')}\nAge: ${requesterAge || 'Not specified'}\n\nPlease open the app to review and respond to this request.`;
@@ -2134,9 +2142,9 @@ bot.on('message', async (msg) => {
   const textMatches = (key) => text === tSync(lang, key) || text === tSync('en', key) || text === tSync('am', key);
 
   if (textMatches('btn_find_mentor')) {
-    const { data: ut } = await supabase.from('user_topics').select('topic_id, topics(name)').eq('telegram_id', chatId);
+    const { data: ut } = await supabase.from('user_topics').select('topic_id, topics(name, name_am)').eq('telegram_id', chatId);
     if (!ut?.length) return safeSend(chatId, tSync(lang, 'no_topics_set'));
-    const buttons = ut.map(t => [{ text: t.topics.name, callback_data: `search_topic_${t.topic_id}` }]);
+    const buttons = ut.map(t => [{ text: topicLabel(t.topics, lang), callback_data: `search_topic_${t.topic_id}` }]);
     return safeSend(chatId, tSync(lang, 'choose_topic_search'), { reply_markup: { inline_keyboard: buttons } });
   }
   if (textMatches('btn_my_chat')) {
@@ -2174,7 +2182,7 @@ bot.on('message', async (msg) => {
   if (textMatches('btn_settings')) return showSettings(chatId);
   if (textMatches('btn_my_mentees')) {
     const { data: mentees, error } = await supabase.from('mentorship_assignments')
-      .select('user_id, topics(name)').eq('mentor_id', chatId).eq('is_active', true);
+      .select('user_id, topics(name, name_am)').eq('mentor_id', chatId).eq('is_active', true);
 
     if (error) { console.error('[My Mentees] Error:', error); return safeSend(chatId, 'Error loading mentees.'); }
 
@@ -2328,9 +2336,10 @@ bot.on('message', async (msg) => {
           // Fetch topic names for the common IDs to give a helpful message
           const { data: commonTopics } = await supabase
             .from('topics')
-            .select('name')
+            .select('name, name_am')
             .in('id', commonTopicIds);
-          const topicNames = (commonTopics || []).map(t => t.name).join(', ');
+          const topicLang = await getUserLang(chatId);
+          const topicNames = (commonTopics || []).map(t => topicLabel(t, topicLang)).join(', ');
           await safeSend(chatId, `❌ You do not share the selected topic with the mentor. You share these topics: ${topicNames}. Please select a matching topic.`);
         }
         clearState(chatId);
@@ -2404,14 +2413,14 @@ bot.on('message', async (msg) => {
         // Notify the mentor (existing logic)
         const [{ data: u }, { data: topic }] = await Promise.all([
           supabase.from('users').select('anonymous_id, sex, age_range').eq('telegram_id', chatId).single(),
-          supabase.from('topics').select('name').eq('id', topicId).single()
+          supabase.from('topics').select('name, name_am').eq('id', topicId).single()
         ]);
         const mentorLang = await getUserLang(mentorId);
         const menteeSex = u.sex === 'M' ? 'Male' : u.sex === 'F' ? 'Female' : 'Not specified';
         const menteeAge = u.age_range || 'Not specified';
         const requestText = mentorLang === 'am'
-          ? `🙏 አዲስ የምክር ጥያቄ!\n\nከ: *${mdEscape(u.anonymous_id)}*\nጾታ: ${menteeSex}\nዕድሜ: ${menteeAge}\nርዕስ: *${mdEscape(topic.name)}*\nመልዕክት: ${mdEscape(msgStr || '')}\n\nይቀበላሉ?`
-          : `🙏 *New Mentorship Request!*\n\nFrom: *${mdEscape(u.anonymous_id)}*\nSex: ${menteeSex}\nAge: ${menteeAge}\nTopic: *${mdEscape(topic.name)}*\nMessage: ${mdEscape(msgStr || 'None')}\n\nDo you accept?`;
+          ? `🙏 አዲስ የምክር ጥያቄ!\n\nከ: *${mdEscape(u.anonymous_id)}*\nጾታ: ${menteeSex}\nዕድሜ: ${menteeAge}\nርዕስ: *${mdEscape(topicLabel(topic, 'am'))}*\nመልዕክት: ${mdEscape(msgStr || '')}\n\nይቀበላሉ?`
+          : `🙏 *New Mentorship Request!*\n\nFrom: *${mdEscape(u.anonymous_id)}*\nSex: ${menteeSex}\nAge: ${menteeAge}\nTopic: *${mdEscape(topicLabel(topic, 'en'))}*\nMessage: ${mdEscape(msgStr || 'None')}\n\nDo you accept?`;
 
         await safeSend(mentorId, requestText, {
           reply_markup: {
@@ -2685,9 +2694,9 @@ bot.on('callback_query', async (query) => {
 
   // Mentor Search & Sort
   else if (data === 'menu_mentors') {
-    const { data: ut } = await supabase.from('user_topics').select('topic_id, topics(name)').eq('telegram_id', chatId);
+    const { data: ut } = await supabase.from('user_topics').select('topic_id, topics(name, name_am)').eq('telegram_id', chatId);
     if (!ut?.length) return safeSend(chatId, tSync(lang, 'no_topics_set'));
-    const buttons = ut.map(t => [{ text: t.topics.name, callback_data: `search_topic_${t.topic_id}` }]);
+    const buttons = ut.map(t => [{ text: topicLabel(t.topics, lang), callback_data: `search_topic_${t.topic_id}` }]);
     await safeSend(chatId, tSync(lang, 'choose_topic_search'), { reply_markup: { inline_keyboard: buttons } });
   } else if (data.startsWith('search_topic_')) {
     await listMentors(chatId, 0, data.replace('search_topic_', ''), 'rating');
@@ -2968,7 +2977,7 @@ bot.on('callback_query', async (query) => {
   // Mentees
   else if (data === 'menu_mentees') {
     const { data: mentees, error } = await supabase.from('mentorship_assignments')
-      .select('user_id, topics(name)').eq('mentor_id', chatId).eq('is_active', true);
+      .select('user_id, topics(name, name_am)').eq('mentor_id', chatId).eq('is_active', true);
 
     if (error) { console.error('[My Mentees] Error:', error); return bot.answerCallbackQuery(query.id, { text: 'Error loading mentees.' }); }
 

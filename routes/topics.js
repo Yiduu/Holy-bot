@@ -30,10 +30,10 @@ module.exports = function topicRoutes(supabase, requireAuth, requireAdmin) {
 
   // POST /api/topics - create a new topic
   router.post('/', requireAuth, requireAdmin, async (req, res) => {
-    const { name, slug, description } = req.body;
+    const { name, name_am, slug, description } = req.body;
       const { data, error } = await supabase
         .from('topics')
-        .upsert({ name, slug, description }, { onConflict: 'slug' })
+        .upsert({ name, name_am: name_am || null, slug, description }, { onConflict: 'slug' })
         .select()
         .single();
 
@@ -43,10 +43,10 @@ module.exports = function topicRoutes(supabase, requireAuth, requireAdmin) {
 
   // PUT /api/topics/:id - update a topic
   router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
-    const { name, slug, description, is_active } = req.body;
+    const { name, name_am, slug, description, is_active } = req.body;
     const { data, error } = await supabase
       .from('topics')
-      .update({ name, slug, description, is_active })
+      .update({ name, name_am: name_am || null, slug, description, is_active })
       .eq('id', req.params.id)
       .select()
       .single();

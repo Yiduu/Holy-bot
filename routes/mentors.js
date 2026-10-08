@@ -160,7 +160,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
         const allTopicIds = [...new Set(mtRows.map(r => r.topic_id))];
         if (allTopicIds.length) {
           const topicRows = await fetchInChunks(allTopicIds, ids => supabase
-            .from('topics').select('id, name').in('id', ids));
+            .from('topics').select('id, name, name_am').in('id', ids));
           topicRows.forEach(t => topicById.set(t.id, t));
         }
       } catch (e) {
@@ -318,11 +318,12 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
         return res.status(400).json({ error: 'This topic is not offered by this mentor.' });
       }
       if (!userTids.includes(requestedTopicId)) {
-        const { data: tp } = await supabase.from('topics').select('name').eq('id', requestedTopicId).single();
+        const { data: tp } = await supabase.from('topics').select('name, name_am').eq('id', requestedTopicId).single();
         const tpName = tp?.name || 'this topic';
         return res.status(400).json({
           error_code: 'TOPIC_NOT_IN_MY_TOPICS',
           topic_name: tpName,
+          topic_name_am: tp?.name_am || null,
           error: `You did not select "${tpName}" in your topics. Please set it in your settings.`
         });
       }
@@ -381,12 +382,12 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       .single();
     const { data: topicData } = await supabase
       .from('topics')
-      .select('name')
+      .select('name, name_am')
       .eq('id', topic_id)
       .single();
 
     const { notifyMentorshipRequest } = require('../bot');
-    await notifyMentorshipRequest(mentor_id, user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData?.name);
+    await notifyMentorshipRequest(mentor_id, user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData);
 
     // Live badge/toast if the mentor has the app open. The client already had
     // a handler for this event, but nothing ever sent it.
@@ -400,7 +401,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     const { id: mentor_id } = req.telegramUser;
     const { data, error } = await supabase
       .from('mentorship_requests')
-      .select('*, user:user_id(anonymous_id, sex, age_range, user_settings(display_name)), topic:topic_id(name)')
+      .select('*, user:user_id(anonymous_id, sex, age_range, user_settings(display_name)), topic:topic_id(name, name_am)')
       .eq('mentor_id', mentor_id)
       .eq('status', 'pending');
     if (error) return res.status(500).json({ error: error.message });
@@ -947,7 +948,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     // Fetch the mentee's struggle topics
     const { data, error } = await supabase
       .from('user_topics')
-      .select('topic_id, topics(id, name)')
+      .select('topic_id, topics(id, name, name_am)')
       .eq('telegram_id', mentee_id);
 
     if (error) return res.status(500).json({ error: error.message });
@@ -992,12 +993,12 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
           .single();
         const { data: topicData } = await supabase
           .from('topics')
-          .select('name')
+          .select('name, name_am')
           .eq('id', request.topic_id)
           .single();
 
         const { notifyMentorshipRequest } = require('../bot');
-        await notifyMentorshipRequest(targetTid, request.user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData?.name);
+        await notifyMentorshipRequest(targetTid, request.user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData);
 
         return res.json({ success: true });
 

@@ -1920,7 +1920,7 @@ async function loadOnboardingTopics() {
 
     if (select) {
       select.innerHTML = onboardingTopicsCache
-        .map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`)
+        .map(t => `<option value="${t.id}">${escapeHtml(topicLabel(t))}</option>`)
         .join('');
     }
 
@@ -1992,7 +1992,7 @@ function renderOnboardingTopicChips(topics) {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
       </span>
       <span class="chip-icon">${topicIconSvg(t.slug)}</span>
-      <span class="chip-name">${escapeHtml(t.name)}</span>
+      <span class="chip-name">${escapeHtml(topicLabel(t))}</span>
     </div>
   `).join('');
 }
@@ -2022,7 +2022,7 @@ function renderOnboardingSelectedTags() {
 function filterOnboardingTopics(query) {
   const q = (query || '').trim().toLowerCase();
   const filtered = q
-    ? onboardingTopicsCache.filter(t => t.name.toLowerCase().includes(q))
+    ? onboardingTopicsCache.filter(t => topicTextMatches(t, q))
     : onboardingTopicsCache;
   renderOnboardingTopicChips(filtered);
 }
@@ -3060,6 +3060,9 @@ function selectMentorMainTopic(topicId, topicName) {
 }
 
 function updateFilterActiveIndicators() {
+  // keep the topic dropdown label in the current language after an EN/AM switch
+  { const lbl = topicFilterLabel(mentorFilters);
+    ['mentorMainTopicDropdownLabel', 'modalFilterTopicDropdownLabel'].forEach(id => { const el = $(id); if (el) el.textContent = lbl; }); }
   const isTopicActive = !!mentorFilters.topic_id;
   const isSexActive = !!mentorFilters.sex;
   const isRatingActive = Number(mentorFilters.min_rating) > 0;
@@ -3149,7 +3152,7 @@ function openMentorFilterModal() {
   mentorModalTempFilters = { ...mentorFilters };
 
   // Sync Topic in modal dropdown
-  const displayLabel = mentorModalTempFilters.topic_name || t('all_topics') || 'All Topics';
+  const displayLabel = topicFilterLabel(mentorModalTempFilters);
   const modalLabelEl = $('modalFilterTopicDropdownLabel');
   if (modalLabelEl) modalLabelEl.textContent = displayLabel;
 
@@ -3238,7 +3241,7 @@ function applyMentorFiltersFromModal() {
   mentorFilters = { ...mentorModalTempFilters };
   mentorActiveTopicId = mentorFilters.topic_id;
 
-  const displayLabel = mentorFilters.topic_name || t('all_topics') || 'All Topics';
+  const displayLabel = topicFilterLabel(mentorFilters);
   const labelEl = $('mentorMainTopicDropdownLabel');
   if (labelEl) labelEl.textContent = displayLabel;
 
@@ -3557,7 +3560,7 @@ function renderMentorProfilePage(id) {
   const bio = m.user_settings?.bio || t('mentor_default_bio');
   const spec = (m.user_settings?.specialization || '').trim();
   const topics = (m.topics && m.topics.length)
-    ? m.topics.map(x => ({ id: x.id, name: x.name }))
+    ? m.topics.map(x => ({ id: x.id, name: x.name, name_am: x.name_am }))
     : (m.expertise_topics || []).map(nm => ({ id: null, name: nm }));
   const st = mentorStatus(m);
   const n = (isMine || isMentorUnavailable(m)) ? 0 : mentorMatchCount(m);
@@ -3594,7 +3597,7 @@ function renderMentorProfilePage(id) {
     return `
       <div class="profile-menu-item mp-info mp-topic${mine ? ' pm-gold' : ''}">
         <span class="profile-menu-icon">${mine ? MP_ICONS.check : MP_ICONS.tag}</span>
-        <span class="profile-menu-label">${escapeHtml(tp.name)}</span>
+        <span class="profile-menu-label">${escapeHtml(topicLabel(tp))}</span>
         ${mine ? `<span class="mp-mine-chip">${t('mp_matches_you')}</span>` : ''}
       </div>`;
   }).join('');
@@ -3786,7 +3789,7 @@ function renderMentorsList() {
       const name = (m.user_settings?.display_name || m.anonymous_id || '').toLowerCase();
       const bio = (m.user_settings?.bio || '').toLowerCase();
       const spec = (m.user_settings?.specialization || '').toLowerCase();
-      const topics = (m.expertise_topics || []).join(' ').toLowerCase();
+      const topics = ((m.topics && m.topics.length) ? m.topics.map(x => `${x.name || ''} ${x.name_am || ''}`) : (m.expertise_topics || [])).join(' ').toLowerCase();
       if (!(name.includes(query) || bio.includes(query) || spec.includes(query) || topics.includes(query))) return false;
     }
     if (selectedTopic) {
@@ -3890,7 +3893,7 @@ function renderMentorTopicChips() {
   const chip = (id, label) =>
     `<button type="button" class="mc-chip" data-id="${escapeHtml(String(id))}" data-name="${escapeHtml(id === '' ? '' : label)}"
       onclick="selectMentorMainTopic(this.dataset.id, this.dataset.name)">${escapeHtml(label)}</button>`;
-  row.innerHTML = chip('', t('mentor_chip_all')) + (mentorTopicsCache || []).map(tp => chip(tp.id, tp.name)).join('');
+  row.innerHTML = chip('', t('mentor_chip_all')) + (mentorTopicsCache || []).map(tp => chip(tp.id, topicLabel(tp))).join('');
   syncMentorTopicChips();
 }
 
@@ -3982,7 +3985,7 @@ async function openRequestTopicModal(event, mentorId, mentorTopics, mentorName) 
   const defaultTopic = firstShared || mentorTopics[0] || null;
 
   _rtSelectedTopicId = defaultTopic ? defaultTopic.id : null;
-  _rtSelectedTopicName = defaultTopic ? defaultTopic.name : '';
+  _rtSelectedTopicName = defaultTopic ? topicLabel(defaultTopic) : '';
 
   // Update subtitle
   const subtitle = $('requestTopicSubtitle');
@@ -3991,7 +3994,7 @@ async function openRequestTopicModal(event, mentorId, mentorTopics, mentorName) 
     subtitle.innerHTML = raw.replace('{name}', `<strong>${escapeHtml(mentorName)}</strong>`);
   }
 
-  _rtTopics = mentorTopics.map(tp => ({ id: tp.id, name: tp.name }));
+  _rtTopics = mentorTopics.map(tp => ({ id: tp.id, name: tp.name, name_am: tp.name_am }));
   const inputEl = $('requestTopicSelectedId');
   if (inputEl) inputEl.value = defaultTopic ? defaultTopic.id : '';
   renderRequestTopicCards();
@@ -4022,7 +4025,7 @@ function selectRequestTopicDropdown(topicId) {   // name kept; now picks a card
   haptic('selection');
   const tp = _rtTopics.find(x => String(x.id) === String(topicId));
   _rtSelectedTopicId = topicId;
-  _rtSelectedTopicName = tp ? tp.name : '';
+  _rtSelectedTopicName = tp ? topicLabel(tp) : '';
   const inputEl = $('requestTopicSelectedId');
   if (inputEl) inputEl.value = topicId;
   renderRequestTopicCards();
@@ -4041,7 +4044,7 @@ function renderRequestTopicCards() {
     return `
       <button type="button" role="radio" aria-checked="${sel}" class="profile-menu-item rt-topic${sel ? ' pm-gold selected' : ''}" data-value="${tp.id}" onclick="selectRequestTopicDropdown(${tp.id})">
         <span class="profile-menu-icon">${tagIcon}</span>
-        <span class="profile-menu-label">${escapeHtml(tp.name)}</span>
+        <span class="profile-menu-label">${escapeHtml(topicLabel(tp))}</span>
         ${shared ? `<span class="mp-mine-chip">${t('mp_matches_you')}</span>` : ''}
         <span class="rt-radio" aria-hidden="true"></span>
       </button>`;
@@ -4191,7 +4194,7 @@ async function loadRequests() {
       const name = r.user?.user_settings?.display_name || r.user?.anonymous_id || 'Anonymous';
       const sex = r.user?.sex === 'M' ? 'Male' : (r.user?.sex === 'F' ? 'Female' : 'Not specified');
       const age = r.user?.age_range || 'Not specified';
-      const topic = r.topic?.name || 'General';
+      const topic = topicLabel(r.topic) || 'General';
       return `
         <div class="mentor-card">
           <div class="mentor-info">
@@ -6817,6 +6820,26 @@ function t(key, replacements = {}) {
   return str;
 }
 
+// Topics keep English in `name` and Amharic in `name_am`; show only the language
+// the app is currently set to (English if no Amharic name exists yet).
+function topicLabel(tp) {
+  if (!tp) return '';
+  return (currentLanguage === 'am' && tp.name_am) ? tp.name_am : (tp.name || '');
+}
+// Label for the selected topic filter, always in the current language
+// (the stored topic_name would go stale after switching EN/AM).
+function topicFilterLabel(filters) {
+  const id = filters && filters.topic_id;
+  if (!id) return t('all_topics') || 'All Topics';
+  const tp = (typeof mentorTopicsCache !== 'undefined' ? mentorTopicsCache || [] : []).find(x => String(x.id) === String(id));
+  return tp ? topicLabel(tp) : (filters.topic_name || t('all_topics') || 'All Topics');
+}
+// Search should match either language so people can type in whichever they know.
+function topicTextMatches(tp, q) {
+  q = (q || '').toLowerCase();
+  return (tp.name || '').toLowerCase().includes(q) || (tp.name_am || '').toLowerCase().includes(q);
+}
+
 function applyLanguage() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
@@ -7620,7 +7643,7 @@ async function openTransferModal(assignmentId, menteeId, menteeName) {
         topicSelect.innerHTML = '<option value="">All Topics (show all mentors)</option>' +
           topics.map(t => {
             const topic = t.topics;
-            return `<option value="${topic.id}">${escapeHtml(topic.name)}</option>`;
+            return `<option value="${topic.id}">${escapeHtml(topicLabel(topic))}</option>`;
           }).join('');
       }
       if (filterGroup) {
@@ -7832,7 +7855,7 @@ async function openTopicModal(isExpertise = false) {
     if (searchInput && !searchInput._listenerAdded) {
       searchInput._listenerAdded = true;
       searchInput.oninput = () => {
-        const filtered = allTopicsCache.filter(t => t.name.toLowerCase().includes(searchInput.value.toLowerCase()));
+        const filtered = allTopicsCache.filter(t => topicTextMatches(t, searchInput.value));
         renderTopicList(filtered, window.selectedTopics);
       };
     }
@@ -7849,7 +7872,7 @@ function renderTopicList(topics, selectedIds) {
   container.innerHTML = topics.map(topicItem => `
     <div id="topic-${topicItem.id}" class="topic-chip-card${selectedIds.includes(topicItem.id) ? ' active' : ''}" onclick="toggleTopic(${topicItem.id})">
       <span class="chip-check-icon">${ICON_CHECK_SVG}</span>
-      <span class="chip-name">${escapeHtml(topicItem.name)}</span>
+      <span class="chip-name">${escapeHtml(topicLabel(topicItem))}</span>
     </div>
   `).join('');
 }

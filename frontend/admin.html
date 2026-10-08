@@ -2710,8 +2710,12 @@
             <div class="modal-title" id="topicModalTitle">Add Topic</div>
             <input type="hidden" id="topicId" />
             <div class="form-group">
-                <label class="form-label">Name</label>
-                <input type="text" id="topicName" class="form-control" placeholder="e.g. Pornography Addiction" />
+                <label class="form-label">Name (English)</label>
+                <input type="text" id="topicName" class="form-control" placeholder="e.g. Loneliness" />
+            </div>
+            <div class="form-group">
+                <label class="form-label">Name (Amharic / አማርኛ)</label>
+                <input type="text" id="topicNameAm" class="form-control" placeholder="e.g. ብቸኝነት" />
             </div>
             <div class="form-group">
                 <label class="form-label">Slug</label>
@@ -3629,7 +3633,7 @@
             try {
                 const topics = await api('/api/topics/admin');
                 body.innerHTML = topics.map(t => `<tr>
-      <td><strong>${esc(t.name)}</strong></td>
+      <td><strong>${esc(t.name)}</strong>${t.name_am ? `<div style="font-size:11.5px;color:var(--text3)">${esc(t.name_am)}</div>` : ''}</td>
       <td><code class="slug">${esc(t.slug)}</code></td>
       <td style="font-size:11.5px;max-width:200px">${esc(t.description)}</td>
       <td><span class="chip ${t.is_active ? 'chip-green' : 'chip-gray'}">${t.is_active ? 'Active' : 'Disabled'}</span></td>
@@ -3646,6 +3650,7 @@
             document.getElementById('topicModalTitle').textContent = 'Add Topic';
             document.getElementById('topicId').value = '';
             document.getElementById('topicName').value = '';
+            document.getElementById('topicNameAm').value = '';
             document.getElementById('topicSlug').value = '';
             document.getElementById('topicDesc').value = '';
             document.getElementById('topicActive').classList.add('on');
@@ -3656,6 +3661,7 @@
             document.getElementById('topicModalTitle').textContent = 'Edit Topic';
             document.getElementById('topicId').value = t.id;
             document.getElementById('topicName').value = t.name;
+            document.getElementById('topicNameAm').value = t.name_am || '';
             document.getElementById('topicSlug').value = t.slug;
             document.getElementById('topicDesc').value = t.description;
             t.is_active ? document.getElementById('topicActive').classList.add('on') : document.getElementById('topicActive').classList.remove('on');
@@ -3664,7 +3670,8 @@
         async function saveTopic() {
             const id = document.getElementById('topicId').value;
             const body = {
-                name: document.getElementById('topicName').value,
+                name: document.getElementById('topicName').value.trim(),
+                name_am: document.getElementById('topicNameAm').value.trim(),
                 slug: document.getElementById('topicSlug').value,
                 description: document.getElementById('topicDesc').value,
                 is_active: document.getElementById('topicActive').classList.contains('on'),

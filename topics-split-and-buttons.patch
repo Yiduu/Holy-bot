@@ -1,0 +1,571 @@
+diff --git a/bot.js b/bot.js
+index 85e0722..b71e6d3 100644
+--- a/bot.js
++++ b/bot.js
+@@ -269,27 +269,34 @@ async function showTextInputWithCancel(chatId, promptText, nextState, tempData =
+ 
+ // ─── Topic Picker ─────────────────────────────────────────────────────────────
+ 
++// Topics store English in `name` and Amharic in `name_am`. Show only one language,
++// falling back to English if an Amharic name has not been added yet.
++function topicLabel(topic, lang = 'en') {
++  if (!topic) return '?';
++  return (lang === 'am' && topic.name_am) ? topic.name_am : (topic.name || '?');
++}
++
+ async function getTopicPickerKeyboard(selectedIds = [], actionPrefix = 'reg_topic_', lang = 'en') {
+-  const { data: topics } = await supabase.from('topics').select('id, name').eq('is_active', true).order('name');
++  const { data: topics } = await supabase.from('topics').select('id, name, name_am').eq('is_active', true).order('name');
+   if (!topics) return { inline_keyboard: [] };
+ 
+   const buttons = topics.map(t => {
+     const isSelected = selectedIds.includes(t.id);
+-    return [{ text: `${isSelected ? '✅' : '⬜'} ${t.name}`, callback_data: `${actionPrefix}${t.id}` }];
++    return [{ text: `${isSelected ? '✅' : '⬜'} ${topicLabel(t, lang)}`, callback_data: `${actionPrefix}${t.id}` }];
+   });
+   buttons.push([{ text: tSync(lang, 'btn_done'), callback_data: `${actionPrefix}done` }]);
+   return { inline_keyboard: buttons };
+ }
+ 
+ async function getMentorTopicKeyboard(chatId, lang = 'en') {
+-  const { data: topics } = await supabase.from('topics').select('id, name').eq('is_active', true).order('name');
++  const { data: topics } = await supabase.from('topics').select('id, name, name_am').eq('is_active', true).order('name');
+   const { data: mentorTopics } = await supabase.from('mentor_topics').select('topic_id').eq('telegram_id', chatId);
+   const selectedIds = (mentorTopics || []).map(mt => mt.topic_id);
+   if (!topics) return { inline_keyboard: [] };
+ 
+   const buttons = topics.map(t => {
+     const isSelected = selectedIds.includes(t.id);
+-    return [{ text: `${isSelected ? '✅' : '⬜'} ${t.name}`, callback_data: `toggle_topic_${t.id}` }];
++    return [{ text: `${isSelected ? '✅' : '⬜'} ${topicLabel(t, lang)}`, callback_data: `toggle_topic_${t.id}` }];
+   });
+   buttons.push([
+     { text: tSync(lang, 'btn_done'), callback_data: 'topic_done' },
+@@ -635,7 +642,7 @@ async function sendMenteeList(chatId, lang, mentees) {
+   for (let i = 0; i < mentees.length; i++) {
+     const m = mentees[i];
+     const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', m.user_id).single();
+-    const menteeText = `👤 @${mdEscape(u?.anonymous_id || String(m.user_id))} (${mdEscape(m.topics?.name || '?')})`;
++    const menteeText = `👤 @${mdEscape(u?.anonymous_id || String(m.user_id))} (${mdEscape(topicLabel(m.topics, lang))})`;
+     const isLast = i === mentees.length - 1;
+     await safeSend(chatId, menteeText, {
+       reply_markup: {
+@@ -1596,8 +1603,9 @@ async function notifyAdminNewMentorApplication(applicantTelegramId, sex, educati
+   }
+ }
+ 
+-async function notifyMentorshipRequest(mentorId, requesterId, requesterName, requesterSex, requesterAge, topicName) {
++async function notifyMentorshipRequest(mentorId, requesterId, requesterName, requesterSex, requesterAge, topic) {
+   const lang = await getUserLang(mentorId);
++  const topicName = (topic && typeof topic === 'object') ? topicLabel(topic, lang) : topic;
+   const text = lang === 'am'
+     ? `አዲስ የምክር ጥያቄ\n\nከ፦ ${requesterName}\nርዕስ፦ ${topicName}\nጾታ፦ ${requesterSex === 'M' ? 'ወንድ' : (requesterSex === 'F' ? 'ሴት' : 'አልተገለጸም')}\nዕድሜ፦ ${requesterAge || 'አልተገለጸም'}\n\nጥያቄውን ለመገምገም እና ምላሽ ለመስጠት እባክዎ መተግበሪያውን ይክፈቱ።`
+     : `New Mentorship Request\n\nFrom: ${requesterName}\nTopic: ${topicName}\nSex: ${requesterSex === 'M' ? 'Male' : (requesterSex === 'F' ? 'Female' : 'Not specified')}\nAge: ${requesterAge || 'Not specified'}\n\nPlease open the app to review and respond to this request.`;
+@@ -2134,9 +2142,9 @@ bot.on('message', async (msg) => {
+   const textMatches = (key) => text === tSync(lang, key) || text === tSync('en', key) || text === tSync('am', key);
+ 
+   if (textMatches('btn_find_mentor')) {
+-    const { data: ut } = await supabase.from('user_topics').select('topic_id, topics(name)').eq('telegram_id', chatId);
++    const { data: ut } = await supabase.from('user_topics').select('topic_id, topics(name, name_am)').eq('telegram_id', chatId);
+     if (!ut?.length) return safeSend(chatId, tSync(lang, 'no_topics_set'));
+-    const buttons = ut.map(t => [{ text: t.topics.name, callback_data: `search_topic_${t.topic_id}` }]);
++    const buttons = ut.map(t => [{ text: topicLabel(t.topics, lang), callback_data: `search_topic_${t.topic_id}` }]);
+     return safeSend(chatId, tSync(lang, 'choose_topic_search'), { reply_markup: { inline_keyboard: buttons } });
+   }
+   if (textMatches('btn_my_chat')) {
+@@ -2174,7 +2182,7 @@ bot.on('message', async (msg) => {
+   if (textMatches('btn_settings')) return showSettings(chatId);
+   if (textMatches('btn_my_mentees')) {
+     const { data: mentees, error } = await supabase.from('mentorship_assignments')
+-      .select('user_id, topics(name)').eq('mentor_id', chatId).eq('is_active', true);
++      .select('user_id, topics(name, name_am)').eq('mentor_id', chatId).eq('is_active', true);
+ 
+     if (error) { console.error('[My Mentees] Error:', error); return safeSend(chatId, 'Error loading mentees.'); }
+ 
+@@ -2328,9 +2336,10 @@ bot.on('message', async (msg) => {
+           // Fetch topic names for the common IDs to give a helpful message
+           const { data: commonTopics } = await supabase
+             .from('topics')
+-            .select('name')
++            .select('name, name_am')
+             .in('id', commonTopicIds);
+-          const topicNames = (commonTopics || []).map(t => t.name).join(', ');
++          const topicLang = await getUserLang(chatId);
++          const topicNames = (commonTopics || []).map(t => topicLabel(t, topicLang)).join(', ');
+           await safeSend(chatId, `❌ You do not share the selected topic with the mentor. You share these topics: ${topicNames}. Please select a matching topic.`);
+         }
+         clearState(chatId);
+@@ -2404,14 +2413,14 @@ bot.on('message', async (msg) => {
+         // Notify the mentor (existing logic)
+         const [{ data: u }, { data: topic }] = await Promise.all([
+           supabase.from('users').select('anonymous_id, sex, age_range').eq('telegram_id', chatId).single(),
+-          supabase.from('topics').select('name').eq('id', topicId).single()
++          supabase.from('topics').select('name, name_am').eq('id', topicId).single()
+         ]);
+         const mentorLang = await getUserLang(mentorId);
+         const menteeSex = u.sex === 'M' ? 'Male' : u.sex === 'F' ? 'Female' : 'Not specified';
+         const menteeAge = u.age_range || 'Not specified';
+         const requestText = mentorLang === 'am'
+-          ? `🙏 አዲስ የምክር ጥያቄ!\n\nከ: *${mdEscape(u.anonymous_id)}*\nጾታ: ${menteeSex}\nዕድሜ: ${menteeAge}\nርዕስ: *${mdEscape(topic.name)}*\nመልዕክት: ${mdEscape(msgStr || '')}\n\nይቀበላሉ?`
+-          : `🙏 *New Mentorship Request!*\n\nFrom: *${mdEscape(u.anonymous_id)}*\nSex: ${menteeSex}\nAge: ${menteeAge}\nTopic: *${mdEscape(topic.name)}*\nMessage: ${mdEscape(msgStr || 'None')}\n\nDo you accept?`;
++          ? `🙏 አዲስ የምክር ጥያቄ!\n\nከ: *${mdEscape(u.anonymous_id)}*\nጾታ: ${menteeSex}\nዕድሜ: ${menteeAge}\nርዕስ: *${mdEscape(topicLabel(topic, 'am'))}*\nመልዕክት: ${mdEscape(msgStr || '')}\n\nይቀበላሉ?`
++          : `🙏 *New Mentorship Request!*\n\nFrom: *${mdEscape(u.anonymous_id)}*\nSex: ${menteeSex}\nAge: ${menteeAge}\nTopic: *${mdEscape(topicLabel(topic, 'en'))}*\nMessage: ${mdEscape(msgStr || 'None')}\n\nDo you accept?`;
+ 
+         await safeSend(mentorId, requestText, {
+           reply_markup: {
+@@ -2685,9 +2694,9 @@ bot.on('callback_query', async (query) => {
+ 
+   // Mentor Search & Sort
+   else if (data === 'menu_mentors') {
+-    const { data: ut } = await supabase.from('user_topics').select('topic_id, topics(name)').eq('telegram_id', chatId);
++    const { data: ut } = await supabase.from('user_topics').select('topic_id, topics(name, name_am)').eq('telegram_id', chatId);
+     if (!ut?.length) return safeSend(chatId, tSync(lang, 'no_topics_set'));
+-    const buttons = ut.map(t => [{ text: t.topics.name, callback_data: `search_topic_${t.topic_id}` }]);
++    const buttons = ut.map(t => [{ text: topicLabel(t.topics, lang), callback_data: `search_topic_${t.topic_id}` }]);
+     await safeSend(chatId, tSync(lang, 'choose_topic_search'), { reply_markup: { inline_keyboard: buttons } });
+   } else if (data.startsWith('search_topic_')) {
+     await listMentors(chatId, 0, data.replace('search_topic_', ''), 'rating');
+@@ -2968,7 +2977,7 @@ bot.on('callback_query', async (query) => {
+   // Mentees
+   else if (data === 'menu_mentees') {
+     const { data: mentees, error } = await supabase.from('mentorship_assignments')
+-      .select('user_id, topics(name)').eq('mentor_id', chatId).eq('is_active', true);
++      .select('user_id, topics(name, name_am)').eq('mentor_id', chatId).eq('is_active', true);
+ 
+     if (error) { console.error('[My Mentees] Error:', error); return bot.answerCallbackQuery(query.id, { text: 'Error loading mentees.' }); }
+ 
+diff --git a/frontend/admin.html b/frontend/admin.html
+index efee661..3e77f55 100644
+--- a/frontend/admin.html
++++ b/frontend/admin.html
+@@ -2710,8 +2710,12 @@
+             <div class="modal-title" id="topicModalTitle">Add Topic</div>
+             <input type="hidden" id="topicId" />
+             <div class="form-group">
+-                <label class="form-label">Name</label>
+-                <input type="text" id="topicName" class="form-control" placeholder="e.g. Pornography Addiction" />
++                <label class="form-label">Name (English)</label>
++                <input type="text" id="topicName" class="form-control" placeholder="e.g. Loneliness" />
++            </div>
++            <div class="form-group">
++                <label class="form-label">Name (Amharic / አማርኛ)</label>
++                <input type="text" id="topicNameAm" class="form-control" placeholder="e.g. ብቸኝነት" />
+             </div>
+             <div class="form-group">
+                 <label class="form-label">Slug</label>
+@@ -3629,7 +3633,7 @@
+             try {
+                 const topics = await api('/api/topics/admin');
+                 body.innerHTML = topics.map(t => `<tr>
+-      <td><strong>${esc(t.name)}</strong></td>
++      <td><strong>${esc(t.name)}</strong>${t.name_am ? `<div style="font-size:11.5px;color:var(--text3)">${esc(t.name_am)}</div>` : ''}</td>
+       <td><code class="slug">${esc(t.slug)}</code></td>
+       <td style="font-size:11.5px;max-width:200px">${esc(t.description)}</td>
+       <td><span class="chip ${t.is_active ? 'chip-green' : 'chip-gray'}">${t.is_active ? 'Active' : 'Disabled'}</span></td>
+@@ -3646,6 +3650,7 @@
+             document.getElementById('topicModalTitle').textContent = 'Add Topic';
+             document.getElementById('topicId').value = '';
+             document.getElementById('topicName').value = '';
++            document.getElementById('topicNameAm').value = '';
+             document.getElementById('topicSlug').value = '';
+             document.getElementById('topicDesc').value = '';
+             document.getElementById('topicActive').classList.add('on');
+@@ -3656,6 +3661,7 @@
+             document.getElementById('topicModalTitle').textContent = 'Edit Topic';
+             document.getElementById('topicId').value = t.id;
+             document.getElementById('topicName').value = t.name;
++            document.getElementById('topicNameAm').value = t.name_am || '';
+             document.getElementById('topicSlug').value = t.slug;
+             document.getElementById('topicDesc').value = t.description;
+             t.is_active ? document.getElementById('topicActive').classList.add('on') : document.getElementById('topicActive').classList.remove('on');
+@@ -3664,7 +3670,8 @@
+         async function saveTopic() {
+             const id = document.getElementById('topicId').value;
+             const body = {
+-                name: document.getElementById('topicName').value,
++                name: document.getElementById('topicName').value.trim(),
++                name_am: document.getElementById('topicNameAm').value.trim(),
+                 slug: document.getElementById('topicSlug').value,
+                 description: document.getElementById('topicDesc').value,
+                 is_active: document.getElementById('topicActive').classList.contains('on'),
+diff --git a/frontend/app.js b/frontend/app.js
+index e55fb71..924cb8c 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1920,7 +1920,7 @@ async function loadOnboardingTopics() {
+ 
+     if (select) {
+       select.innerHTML = onboardingTopicsCache
+-        .map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`)
++        .map(t => `<option value="${t.id}">${escapeHtml(topicLabel(t))}</option>`)
+         .join('');
+     }
+ 
+@@ -1992,7 +1992,7 @@ function renderOnboardingTopicChips(topics) {
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+       </span>
+       <span class="chip-icon">${topicIconSvg(t.slug)}</span>
+-      <span class="chip-name">${escapeHtml(t.name)}</span>
++      <span class="chip-name">${escapeHtml(topicLabel(t))}</span>
+     </div>
+   `).join('');
+ }
+@@ -2022,7 +2022,7 @@ function renderOnboardingSelectedTags() {
+ function filterOnboardingTopics(query) {
+   const q = (query || '').trim().toLowerCase();
+   const filtered = q
+-    ? onboardingTopicsCache.filter(t => t.name.toLowerCase().includes(q))
++    ? onboardingTopicsCache.filter(t => topicTextMatches(t, q))
+     : onboardingTopicsCache;
+   renderOnboardingTopicChips(filtered);
+ }
+@@ -3060,6 +3060,9 @@ function selectMentorMainTopic(topicId, topicName) {
+ }
+ 
+ function updateFilterActiveIndicators() {
++  // keep the topic dropdown label in the current language after an EN/AM switch
++  { const lbl = topicFilterLabel(mentorFilters);
++    ['mentorMainTopicDropdownLabel', 'modalFilterTopicDropdownLabel'].forEach(id => { const el = $(id); if (el) el.textContent = lbl; }); }
+   const isTopicActive = !!mentorFilters.topic_id;
+   const isSexActive = !!mentorFilters.sex;
+   const isRatingActive = Number(mentorFilters.min_rating) > 0;
+@@ -3149,7 +3152,7 @@ function openMentorFilterModal() {
+   mentorModalTempFilters = { ...mentorFilters };
+ 
+   // Sync Topic in modal dropdown
+-  const displayLabel = mentorModalTempFilters.topic_name || t('all_topics') || 'All Topics';
++  const displayLabel = topicFilterLabel(mentorModalTempFilters);
+   const modalLabelEl = $('modalFilterTopicDropdownLabel');
+   if (modalLabelEl) modalLabelEl.textContent = displayLabel;
+ 
+@@ -3238,7 +3241,7 @@ function applyMentorFiltersFromModal() {
+   mentorFilters = { ...mentorModalTempFilters };
+   mentorActiveTopicId = mentorFilters.topic_id;
+ 
+-  const displayLabel = mentorFilters.topic_name || t('all_topics') || 'All Topics';
++  const displayLabel = topicFilterLabel(mentorFilters);
+   const labelEl = $('mentorMainTopicDropdownLabel');
+   if (labelEl) labelEl.textContent = displayLabel;
+ 
+@@ -3557,7 +3560,7 @@ function renderMentorProfilePage(id) {
+   const bio = m.user_settings?.bio || t('mentor_default_bio');
+   const spec = (m.user_settings?.specialization || '').trim();
+   const topics = (m.topics && m.topics.length)
+-    ? m.topics.map(x => ({ id: x.id, name: x.name }))
++    ? m.topics.map(x => ({ id: x.id, name: x.name, name_am: x.name_am }))
+     : (m.expertise_topics || []).map(nm => ({ id: null, name: nm }));
+   const st = mentorStatus(m);
+   const n = (isMine || isMentorUnavailable(m)) ? 0 : mentorMatchCount(m);
+@@ -3594,7 +3597,7 @@ function renderMentorProfilePage(id) {
+     return `
+       <div class="profile-menu-item mp-info mp-topic${mine ? ' pm-gold' : ''}">
+         <span class="profile-menu-icon">${mine ? MP_ICONS.check : MP_ICONS.tag}</span>
+-        <span class="profile-menu-label">${escapeHtml(tp.name)}</span>
++        <span class="profile-menu-label">${escapeHtml(topicLabel(tp))}</span>
+         ${mine ? `<span class="mp-mine-chip">${t('mp_matches_you')}</span>` : ''}
+       </div>`;
+   }).join('');
+@@ -3786,7 +3789,7 @@ function renderMentorsList() {
+       const name = (m.user_settings?.display_name || m.anonymous_id || '').toLowerCase();
+       const bio = (m.user_settings?.bio || '').toLowerCase();
+       const spec = (m.user_settings?.specialization || '').toLowerCase();
+-      const topics = (m.expertise_topics || []).join(' ').toLowerCase();
++      const topics = ((m.topics && m.topics.length) ? m.topics.map(x => `${x.name || ''} ${x.name_am || ''}`) : (m.expertise_topics || [])).join(' ').toLowerCase();
+       if (!(name.includes(query) || bio.includes(query) || spec.includes(query) || topics.includes(query))) return false;
+     }
+     if (selectedTopic) {
+@@ -3890,7 +3893,7 @@ function renderMentorTopicChips() {
+   const chip = (id, label) =>
+     `<button type="button" class="mc-chip" data-id="${escapeHtml(String(id))}" data-name="${escapeHtml(id === '' ? '' : label)}"
+       onclick="selectMentorMainTopic(this.dataset.id, this.dataset.name)">${escapeHtml(label)}</button>`;
+-  row.innerHTML = chip('', t('mentor_chip_all')) + (mentorTopicsCache || []).map(tp => chip(tp.id, tp.name)).join('');
++  row.innerHTML = chip('', t('mentor_chip_all')) + (mentorTopicsCache || []).map(tp => chip(tp.id, topicLabel(tp))).join('');
+   syncMentorTopicChips();
+ }
+ 
+@@ -3982,7 +3985,7 @@ async function openRequestTopicModal(event, mentorId, mentorTopics, mentorName)
+   const defaultTopic = firstShared || mentorTopics[0] || null;
+ 
+   _rtSelectedTopicId = defaultTopic ? defaultTopic.id : null;
+-  _rtSelectedTopicName = defaultTopic ? defaultTopic.name : '';
++  _rtSelectedTopicName = defaultTopic ? topicLabel(defaultTopic) : '';
+ 
+   // Update subtitle
+   const subtitle = $('requestTopicSubtitle');
+@@ -3991,7 +3994,7 @@ async function openRequestTopicModal(event, mentorId, mentorTopics, mentorName)
+     subtitle.innerHTML = raw.replace('{name}', `<strong>${escapeHtml(mentorName)}</strong>`);
+   }
+ 
+-  _rtTopics = mentorTopics.map(tp => ({ id: tp.id, name: tp.name }));
++  _rtTopics = mentorTopics.map(tp => ({ id: tp.id, name: tp.name, name_am: tp.name_am }));
+   const inputEl = $('requestTopicSelectedId');
+   if (inputEl) inputEl.value = defaultTopic ? defaultTopic.id : '';
+   renderRequestTopicCards();
+@@ -4022,7 +4025,7 @@ function selectRequestTopicDropdown(topicId) {   // name kept; now picks a card
+   haptic('selection');
+   const tp = _rtTopics.find(x => String(x.id) === String(topicId));
+   _rtSelectedTopicId = topicId;
+-  _rtSelectedTopicName = tp ? tp.name : '';
++  _rtSelectedTopicName = tp ? topicLabel(tp) : '';
+   const inputEl = $('requestTopicSelectedId');
+   if (inputEl) inputEl.value = topicId;
+   renderRequestTopicCards();
+@@ -4041,7 +4044,7 @@ function renderRequestTopicCards() {
+     return `
+       <button type="button" role="radio" aria-checked="${sel}" class="profile-menu-item rt-topic${sel ? ' pm-gold selected' : ''}" data-value="${tp.id}" onclick="selectRequestTopicDropdown(${tp.id})">
+         <span class="profile-menu-icon">${tagIcon}</span>
+-        <span class="profile-menu-label">${escapeHtml(tp.name)}</span>
++        <span class="profile-menu-label">${escapeHtml(topicLabel(tp))}</span>
+         ${shared ? `<span class="mp-mine-chip">${t('mp_matches_you')}</span>` : ''}
+         <span class="rt-radio" aria-hidden="true"></span>
+       </button>`;
+@@ -4191,7 +4194,7 @@ async function loadRequests() {
+       const name = r.user?.user_settings?.display_name || r.user?.anonymous_id || 'Anonymous';
+       const sex = r.user?.sex === 'M' ? 'Male' : (r.user?.sex === 'F' ? 'Female' : 'Not specified');
+       const age = r.user?.age_range || 'Not specified';
+-      const topic = r.topic?.name || 'General';
++      const topic = topicLabel(r.topic) || 'General';
+       return `
+         <div class="mentor-card">
+           <div class="mentor-info">
+@@ -6817,6 +6820,26 @@ function t(key, replacements = {}) {
+   return str;
+ }
+ 
++// Topics keep English in `name` and Amharic in `name_am`; show only the language
++// the app is currently set to (English if no Amharic name exists yet).
++function topicLabel(tp) {
++  if (!tp) return '';
++  return (currentLanguage === 'am' && tp.name_am) ? tp.name_am : (tp.name || '');
++}
++// Label for the selected topic filter, always in the current language
++// (the stored topic_name would go stale after switching EN/AM).
++function topicFilterLabel(filters) {
++  const id = filters && filters.topic_id;
++  if (!id) return t('all_topics') || 'All Topics';
++  const tp = (typeof mentorTopicsCache !== 'undefined' ? mentorTopicsCache || [] : []).find(x => String(x.id) === String(id));
++  return tp ? topicLabel(tp) : (filters.topic_name || t('all_topics') || 'All Topics');
++}
++// Search should match either language so people can type in whichever they know.
++function topicTextMatches(tp, q) {
++  q = (q || '').toLowerCase();
++  return (tp.name || '').toLowerCase().includes(q) || (tp.name_am || '').toLowerCase().includes(q);
++}
++
+ function applyLanguage() {
+   document.querySelectorAll('[data-i18n]').forEach(el => {
+     const key = el.getAttribute('data-i18n');
+@@ -7620,7 +7643,7 @@ async function openTransferModal(assignmentId, menteeId, menteeName) {
+         topicSelect.innerHTML = '<option value="">All Topics (show all mentors)</option>' +
+           topics.map(t => {
+             const topic = t.topics;
+-            return `<option value="${topic.id}">${escapeHtml(topic.name)}</option>`;
++            return `<option value="${topic.id}">${escapeHtml(topicLabel(topic))}</option>`;
+           }).join('');
+       }
+       if (filterGroup) {
+@@ -7832,7 +7855,7 @@ async function openTopicModal(isExpertise = false) {
+     if (searchInput && !searchInput._listenerAdded) {
+       searchInput._listenerAdded = true;
+       searchInput.oninput = () => {
+-        const filtered = allTopicsCache.filter(t => t.name.toLowerCase().includes(searchInput.value.toLowerCase()));
++        const filtered = allTopicsCache.filter(t => topicTextMatches(t, searchInput.value));
+         renderTopicList(filtered, window.selectedTopics);
+       };
+     }
+@@ -7849,7 +7872,7 @@ function renderTopicList(topics, selectedIds) {
+   container.innerHTML = topics.map(topicItem => `
+     <div id="topic-${topicItem.id}" class="topic-chip-card${selectedIds.includes(topicItem.id) ? ' active' : ''}" onclick="toggleTopic(${topicItem.id})">
+       <span class="chip-check-icon">${ICON_CHECK_SVG}</span>
+-      <span class="chip-name">${escapeHtml(topicItem.name)}</span>
++      <span class="chip-name">${escapeHtml(topicLabel(topicItem))}</span>
+     </div>
+   `).join('');
+ }
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 3e797ed..a03008c 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -68,7 +68,7 @@ const I18N = {
+     "btn_waiting": "Waiting",
+     "btn_notify_me": "Notify me",
+     "btn_on_waitlist": "On the list",
+-    "btn_view_profile": "View full profile",
++    "btn_view_profile": "View profile",
+     "sheet_about": "About",
+     "sheet_specialization": "Specialization",
+     "sheet_topics": "Topics",
+@@ -776,7 +776,7 @@ const I18N = {
+     "btn_waiting": "በመጠባበቅ ላይ",
+     "btn_notify_me": "አሳውቁኝ",
+     "btn_on_waitlist": "በዝርዝሩ ላይ",
+-    "btn_view_profile": "ሙሉ መገለጫ ይመልከቱ",
++    "btn_view_profile": "መገለጫ ይመልከቱ",
+     "sheet_about": "ስለ አማካሪው",
+     "sheet_specialization": "ልዩ ሙያ",
+     "sheet_topics": "ርዕሶች",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index b8a83e2..4a65c9d 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -11573,3 +11573,55 @@ input:focus, textarea:focus, select:focus {
+ [data-theme="light"] .mp-ok { color: #2f7a4d !important; }
+ .mp-panel .mp-info-text { text-align: left; }
+ @media (max-width: 360px) { .mc-view { flex-basis: 100%; } }
++
++/* ─── Mentor card footer — buttons fit their text (Instagram / LinkedIn style) ─
++   "View profile" is a compact pill that is exactly as wide as its icon + label
++   (no stretched empty space, no clipped text, works for Amharic too). The
++   primary action (Request / Waiting / Notify me) sits on the right, same height. */
++.mc-footer {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: center;
++  justify-content: space-between;
++  gap: 10px;
++}
++.mc-view {
++  flex: 0 0 auto;
++  width: auto;
++  min-width: 0;
++  max-width: 100%;
++  height: 40px;
++  gap: 8px;
++  padding: 0 8px 0 5px;
++  font-size: 0.84rem;
++  line-height: 1;
++  white-space: nowrap;
++}
++.mc-view-ico, .mc-view-arrow { width: 28px; height: 28px; }
++.mc-view-label {
++  flex: 0 1 auto;
++  overflow: visible;
++  text-overflow: clip;
++  padding: 0 2px;
++}
++.mc-card .mc-footer .btn,
++.mc-card .mc-footer .btn-sm {
++  flex: 0 0 auto;
++  width: auto;
++  min-width: max-content;
++  min-height: 40px;
++  height: 40px;
++  padding: 0 20px;
++  border-radius: 999px;
++  white-space: nowrap;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: 6px;
++  line-height: 1;
++}
++/* very narrow phones: stack, and let each button hug its own text */
++@media (max-width: 360px) {
++  .mc-footer { justify-content: flex-start; }
++  .mc-view { flex: 0 0 auto; }
++}
+diff --git a/routes/mentors.js b/routes/mentors.js
+index 9d29291..c827f99 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -160,7 +160,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+         const allTopicIds = [...new Set(mtRows.map(r => r.topic_id))];
+         if (allTopicIds.length) {
+           const topicRows = await fetchInChunks(allTopicIds, ids => supabase
+-            .from('topics').select('id, name').in('id', ids));
++            .from('topics').select('id, name, name_am').in('id', ids));
+           topicRows.forEach(t => topicById.set(t.id, t));
+         }
+       } catch (e) {
+@@ -318,11 +318,12 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+         return res.status(400).json({ error: 'This topic is not offered by this mentor.' });
+       }
+       if (!userTids.includes(requestedTopicId)) {
+-        const { data: tp } = await supabase.from('topics').select('name').eq('id', requestedTopicId).single();
++        const { data: tp } = await supabase.from('topics').select('name, name_am').eq('id', requestedTopicId).single();
+         const tpName = tp?.name || 'this topic';
+         return res.status(400).json({
+           error_code: 'TOPIC_NOT_IN_MY_TOPICS',
+           topic_name: tpName,
++          topic_name_am: tp?.name_am || null,
+           error: `You did not select "${tpName}" in your topics. Please set it in your settings.`
+         });
+       }
+@@ -381,12 +382,12 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+       .single();
+     const { data: topicData } = await supabase
+       .from('topics')
+-      .select('name')
++      .select('name, name_am')
+       .eq('id', topic_id)
+       .single();
+ 
+     const { notifyMentorshipRequest } = require('../bot');
+-    await notifyMentorshipRequest(mentor_id, user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData?.name);
++    await notifyMentorshipRequest(mentor_id, user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData);
+ 
+     // Live badge/toast if the mentor has the app open. The client already had
+     // a handler for this event, but nothing ever sent it.
+@@ -400,7 +401,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+     const { id: mentor_id } = req.telegramUser;
+     const { data, error } = await supabase
+       .from('mentorship_requests')
+-      .select('*, user:user_id(anonymous_id, sex, age_range, user_settings(display_name)), topic:topic_id(name)')
++      .select('*, user:user_id(anonymous_id, sex, age_range, user_settings(display_name)), topic:topic_id(name, name_am)')
+       .eq('mentor_id', mentor_id)
+       .eq('status', 'pending');
+     if (error) return res.status(500).json({ error: error.message });
+@@ -947,7 +948,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+     // Fetch the mentee's struggle topics
+     const { data, error } = await supabase
+       .from('user_topics')
+-      .select('topic_id, topics(id, name)')
++      .select('topic_id, topics(id, name, name_am)')
+       .eq('telegram_id', mentee_id);
+ 
+     if (error) return res.status(500).json({ error: error.message });
+@@ -992,12 +993,12 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+           .single();
+         const { data: topicData } = await supabase
+           .from('topics')
+-          .select('name')
++          .select('name, name_am')
+           .eq('id', request.topic_id)
+           .single();
+ 
+         const { notifyMentorshipRequest } = require('../bot');
+-        await notifyMentorshipRequest(targetTid, request.user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData?.name);
++        await notifyMentorshipRequest(targetTid, request.user_id, mentee?.anonymous_id, mentee?.sex, mentee?.age_range, topicData);
+ 
+         return res.json({ success: true });
+ 
+diff --git a/routes/topics.js b/routes/topics.js
+index 4b0c0ee..408a9a6 100644
+--- a/routes/topics.js
++++ b/routes/topics.js
+@@ -30,10 +30,10 @@ module.exports = function topicRoutes(supabase, requireAuth, requireAdmin) {
+ 
+   // POST /api/topics - create a new topic
+   router.post('/', requireAuth, requireAdmin, async (req, res) => {
+-    const { name, slug, description } = req.body;
++    const { name, name_am, slug, description } = req.body;
+       const { data, error } = await supabase
+         .from('topics')
+-        .upsert({ name, slug, description }, { onConflict: 'slug' })
++        .upsert({ name, name_am: name_am || null, slug, description }, { onConflict: 'slug' })
+         .select()
+         .single();
+ 
+@@ -43,10 +43,10 @@ module.exports = function topicRoutes(supabase, requireAuth, requireAdmin) {
+ 
+   // PUT /api/topics/:id - update a topic
+   router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
+-    const { name, slug, description, is_active } = req.body;
++    const { name, name_am, slug, description, is_active } = req.body;
+     const { data, error } = await supabase
+       .from('topics')
+-      .update({ name, slug, description, is_active })
++      .update({ name, name_am: name_am || null, slug, description, is_active })
+       .eq('id', req.params.id)
+       .select()
+       .single();
