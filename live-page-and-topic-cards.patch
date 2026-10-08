@@ -1,0 +1,267 @@
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -4044,8 +4044,10 @@
+     return `
+       <button type="button" role="radio" aria-checked="${sel}" class="profile-menu-item rt-topic${sel ? ' pm-gold selected' : ''}" data-value="${tp.id}" onclick="selectRequestTopicDropdown(${tp.id})">
+         <span class="profile-menu-icon">${tagIcon}</span>
+-        <span class="profile-menu-label">${escapeHtml(topicLabel(tp))}</span>
+-        ${shared ? `<span class="mp-mine-chip">${t('mp_matches_you')}</span>` : ''}
++        <span class="profile-menu-label rt-label">
++          <span class="rt-name">${escapeHtml(topicLabel(tp))}</span>
++          ${shared ? `<span class="mp-mine-chip">${t('mp_matches_you')}</span>` : ''}
++        </span>
+         <span class="rt-radio" aria-hidden="true"></span>
+       </button>`;
+   }).join('');
+@@ -4572,12 +4574,17 @@
+         menteeList.innerHTML = `<div class="text-xs text-dim">${t('no_mentees_to_invite')}</div>`;
+         return;
+       }
+-      menteeList.innerHTML = mentees.map(m => `
+-        <label class="flex items-center gap-8 mb-4" style="cursor:pointer">
++      menteeList.innerHTML = mentees.map(m => {
++        const nm = m.user?.user_settings?.display_name || m.user.anonymous_id || '–';
++        return `
++        <label class="sch-person">
+           <input type="checkbox" name="invite_mentee" value="${m.user.telegram_id}" />
+-          <span class="text-sm">${escapeHtml(m.user?.user_settings?.display_name || m.user.anonymous_id)}</span>
+-        </label>
+-      `).join('');
++          ${renderAvatar(m.user, (nm || '?').charAt(0).toUpperCase())}
++          <span class="sch-person-name">${escapeHtml(nm)}</span>
++          <span class="rt-radio" aria-hidden="true"></span>
++        </label>`;
++      }).join('');
++      hydrateAvatars(menteeList);
+     }).catch(e => {
+       menteeList.innerHTML = `<div class="text-danger text-xs">${escapeHtml(e.message)}</div>`;
+     });
+@@ -4654,12 +4661,13 @@
+       const letter = (displayName || '?').charAt(0).toUpperCase();
+       const dateStr = m.assigned_at ? new Date(m.assigned_at).toLocaleDateString(dateLocale) : '';
+       return `
+-      <button class="btn btn-outline btn-full" style="text-align:left;justify-content:flex-start;display:flex;align-items:center;gap:12px;height:auto;padding:12px" onclick="startPrivateSession('${m.user.telegram_id}')">
++      <button type="button" class="profile-menu-item rt-topic sch-pick" onclick="startPrivateSession('${m.user.telegram_id}')">
+         ${renderAvatar(m.user, letter)}
+-        <div>
+-          <div class="font-bold">${escapeHtml(displayName)}</div>
+-          <div class="text-xs text-dim">${escapeHtml(joinedLabel)} ${escapeHtml(dateStr)}</div>
+-        </div>
++        <span class="profile-menu-label rt-label">
++          <span class="rt-name">${escapeHtml(displayName)}</span>
++          <span class="sch-sub">${escapeHtml(joinedLabel)} ${escapeHtml(dateStr)}</span>
++        </span>
++        <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
+       </button>
+     `;
+     }).join('');
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -1683,11 +1683,15 @@
+   <div id="menteeSelectModal" class="modal-overlay" onclick="if(event.target===this)closeMenteeSelectModal()">
+     <div class="modal-sheet">
+       <div class="modal-handle"></div>
+-      <div class="modal-title" data-i18n="select_mentee_modal_title">Select Mentee</div>
+-      <p class="text-sm text-dim mb-16" data-i18n="select_mentee_modal_desc">Choose which mentee to invite to this private session.</p>
+-      <div id="menteeSelectList" style="display:flex;flex-direction:column;gap:10px;max-height:50vh;overflow-y:auto">
++      <div class="hb-icon">
++        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
++      </div>
++      <div class="modal-title sch-title" data-i18n="select_mentee_modal_title">Select Mentee</div>
++      <p class="hb-text" data-i18n="select_mentee_modal_desc">Choose which mentee to invite to this private session.</p>
++      <nav id="menteeSelectList" class="profile-menu-list rt-list"></nav>
++      <div class="hb-actions hb-stack">
++        <button type="button" class="btn btn-outline" onclick="closeMenteeSelectModal()" data-i18n="btn_cancel">Cancel</button>
+       </div>
+-      <button class="btn btn-ghost btn-full mt-16" onclick="closeMenteeSelectModal()" data-i18n="btn_cancel">Cancel</button>
+     </div>
+   </div>
+ 
+@@ -2379,30 +2383,35 @@
+   </div>
+ 
+   <!-- ── Modal: Schedule Session ───────────────────────────── -->
+-  <div id="scheduleModal" class="modal-overlay">
+-    <div class="modal">
+-      <h3 id="scheduleModalTitle" data-i18n="Schedule Session">Schedule Session</h3>
+-      <div id="groupTitleField" class="form-group hidden">
+-        <label class="form-label" data-i18n="session_title_label">Session Title</label>
+-        <input id="scheduleTitle" class="form-control" placeholder="e.g. Weekly Group Study" />
++  <div id="scheduleModal" class="modal-overlay" onclick="if(event.target===this)closeScheduleModal()">
++    <div class="modal-sheet sch-sheet">
++      <div class="modal-handle"></div>
++      <div class="hb-icon">
++        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+       </div>
+-      <div class="form-group">
+-        <label class="form-label" data-i18n="Date">Date</label>
+-        <input id="scheduleDate" type="date" class="form-control" />
++      <div id="scheduleModalTitle" class="modal-title sch-title" data-i18n="Schedule Session">Schedule Session</div>
++
++      <div id="groupTitleField" class="form-group hidden">
++        <label class="form-label" for="scheduleTitle" data-i18n="session_title_label">Session Title</label>
++        <input id="scheduleTitle" class="form-control sch-input" placeholder="e.g. Weekly Group Study" />
+       </div>
+-      <div class="form-group">
+-        <label class="form-label" data-i18n="Time">Time</label>
+-        <input id="scheduleTime" type="time" class="form-control" />
++      <div class="sch-grid">
++        <div class="form-group">
++          <label class="form-label" for="scheduleDate" data-i18n="Date">Date</label>
++          <input id="scheduleDate" type="date" class="form-control sch-input" />
++        </div>
++        <div class="form-group">
++          <label class="form-label" for="scheduleTime" data-i18n="Time">Time</label>
++          <input id="scheduleTime" type="time" class="form-control sch-input" />
++        </div>
+       </div>
+       <div id="groupParticipantsField" class="form-group hidden">
+         <label class="form-label" data-i18n="invite_participants_label">Invite Participants (Mentees)</label>
+-        <div id="menteeCheckboxes"
+-          style="max-height:150px;overflow-y:auto;background:var(--bg3);padding:8px;border-radius:var(--radius-sm)">
+-        </div>
++        <div id="menteeCheckboxes" class="sch-people"></div>
+       </div>
+-      <div class="flex gap-8 mt-16">
+-        <button class="btn btn-outline flex-1" onclick="closeScheduleModal()" data-i18n="btn_cancel">Cancel</button>
+-        <button id="scheduleBtn" class="btn btn-primary flex-1" data-i18n="btn_schedule_action">Schedule</button>
++      <div class="hb-actions">
++        <button type="button" class="btn btn-outline" onclick="closeScheduleModal()" data-i18n="btn_cancel">Cancel</button>
++        <button type="button" id="scheduleBtn" class="btn btn-primary" data-i18n="btn_schedule_action">Schedule</button>
+       </div>
+     </div>
+   </div>
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -11625,3 +11625,131 @@
+   .mc-footer { justify-content: flex-start; }
+   .mc-view { flex: 0 0 auto; }
+ }
++
++/* ─── Topic / mentee picker cards: long names wrap, nothing is clipped ─────── */
++.rt-topic {
++  height: auto;
++  min-height: 64px;
++  align-items: center;
++}
++.rt-topic .profile-menu-label.rt-label {
++  display: flex;
++  flex-direction: column;
++  align-items: flex-start;
++  gap: 6px;
++  min-width: 0;
++}
++.rt-topic .rt-name {
++  display: block;
++  max-width: 100%;
++  font-size: 0.98rem;
++  line-height: 1.3;
++  overflow-wrap: anywhere;
++  word-break: normal;
++  white-space: normal;
++}
++.rt-topic .mp-mine-chip { margin-left: 0; white-space: nowrap; }
++.rt-topic .profile-menu-icon, .rt-topic .rt-radio, .rt-topic .profile-menu-chevron { flex: none; }
++.rt-topic .sch-sub, .sch-person .sch-sub { font-size: 0.76rem; font-weight: 500; color: var(--text2); }
++
++/* ─── Live page: schedule sheet + pickers match the other sheets ─────────── */
++.sch-sheet { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
++.sch-title { text-align: center; font-size: 1.15rem; margin-bottom: 14px; }
++.sch-sheet .form-group { margin-bottom: 14px; }
++.sch-sheet .form-label { margin-left: 4px; }
++.sch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
++@media (max-width: 340px) { .sch-grid { grid-template-columns: 1fr; } }
++.sch-input,
++.sch-sheet .form-control {
++  min-height: 52px;
++  padding: 0 16px;
++  border-radius: 18px;
++  border: 1px solid rgba(255, 255, 255, 0.09);
++  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
++  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
++  font-size: 1rem;
++  font-weight: 600;
++  color: var(--text);
++  color-scheme: dark;
++  -webkit-appearance: none;
++  appearance: none;
++}
++.sch-sheet input[type="date"], .sch-sheet input[type="time"] { min-width: 0; text-align: left; }
++.sch-sheet .form-control:focus {
++  border-color: var(--gold-light);
++  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.22);
++}
++[data-theme="light"] .sch-input,
++[data-theme="light"] .sch-sheet .form-control {
++  background: #fffaf0;
++  border-color: rgba(150, 120, 40, 0.3);
++  color-scheme: light;
++}
++.sch-people {
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++  max-height: 32vh;
++  overflow-y: auto;
++  padding: 2px;
++  -webkit-overflow-scrolling: touch;
++}
++.sch-person {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  min-height: 60px;
++  padding: 10px 14px;
++  border-radius: 20px;
++  border: 1px solid rgba(255, 255, 255, 0.07);
++  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
++  cursor: pointer;
++  transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
++}
++.sch-person:active { transform: scale(0.985); }
++.sch-person input { position: absolute; opacity: 0; pointer-events: none; }
++.sch-person-name { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; line-height: 1.3; }
++.sch-person:has(input:checked) {
++  border-color: rgba(201, 168, 76, 0.6);
++  background: linear-gradient(160deg, rgba(201, 168, 76, 0.2), rgba(201, 168, 76, 0.06)), #14130d;
++}
++.sch-person:has(input:checked) .rt-radio {
++  border-color: var(--gold-light);
++  background: linear-gradient(180deg, #EBCD72, #C9A84C);
++  box-shadow: 0 0 14px rgba(201, 168, 76, 0.55);
++}
++.sch-person:has(input:checked) .rt-radio::after {
++  content: '';
++  position: absolute;
++  left: 7px; top: 3px;
++  width: 6px; height: 11px;
++  border: solid #1a1300;
++  border-width: 0 2.5px 2.5px 0;
++  transform: rotate(45deg);
++}
++.sch-person:has(input:focus-visible) { outline: 2px solid var(--gold-light); outline-offset: 2px; }
++[data-theme="light"] .sch-person { background: #fffaf0; border-color: rgba(150, 120, 40, 0.28); }
++
++/* Live page session rows: action buttons hug their text, same pill shape as elsewhere */
++.session-item .session-action .btn,
++.session-item .session-action .btn-sm {
++  width: auto;
++  min-width: max-content;
++  min-height: 38px;
++  padding: 0 18px;
++  border-radius: 999px;
++  white-space: nowrap;
++  font-weight: 700;
++}
++.session-item .session-action > div { align-items: stretch; }
++.session-item .session-body { flex: 1 1 140px; min-width: 0; }
++.session-item .session-title {
++  white-space: normal;
++  display: -webkit-box;
++  -webkit-line-clamp: 2;
++  -webkit-box-orient: vertical;
++  overflow: hidden;
++  line-height: 1.3;
++  overflow-wrap: anywhere;
++}
++.session-item .session-action { flex: 0 0 auto; margin-left: auto; }

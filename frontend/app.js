@@ -4044,8 +4044,10 @@ function renderRequestTopicCards() {
     return `
       <button type="button" role="radio" aria-checked="${sel}" class="profile-menu-item rt-topic${sel ? ' pm-gold selected' : ''}" data-value="${tp.id}" onclick="selectRequestTopicDropdown(${tp.id})">
         <span class="profile-menu-icon">${tagIcon}</span>
-        <span class="profile-menu-label">${escapeHtml(topicLabel(tp))}</span>
-        ${shared ? `<span class="mp-mine-chip">${t('mp_matches_you')}</span>` : ''}
+        <span class="profile-menu-label rt-label">
+          <span class="rt-name">${escapeHtml(topicLabel(tp))}</span>
+          ${shared ? `<span class="mp-mine-chip">${t('mp_matches_you')}</span>` : ''}
+        </span>
         <span class="rt-radio" aria-hidden="true"></span>
       </button>`;
   }).join('');
@@ -4572,12 +4574,17 @@ function showScheduleModal(is_group, mentee_id = null) {
         menteeList.innerHTML = `<div class="text-xs text-dim">${t('no_mentees_to_invite')}</div>`;
         return;
       }
-      menteeList.innerHTML = mentees.map(m => `
-        <label class="flex items-center gap-8 mb-4" style="cursor:pointer">
+      menteeList.innerHTML = mentees.map(m => {
+        const nm = m.user?.user_settings?.display_name || m.user.anonymous_id || '–';
+        return `
+        <label class="sch-person">
           <input type="checkbox" name="invite_mentee" value="${m.user.telegram_id}" />
-          <span class="text-sm">${escapeHtml(m.user?.user_settings?.display_name || m.user.anonymous_id)}</span>
-        </label>
-      `).join('');
+          ${renderAvatar(m.user, (nm || '?').charAt(0).toUpperCase())}
+          <span class="sch-person-name">${escapeHtml(nm)}</span>
+          <span class="rt-radio" aria-hidden="true"></span>
+        </label>`;
+      }).join('');
+      hydrateAvatars(menteeList);
     }).catch(e => {
       menteeList.innerHTML = `<div class="text-danger text-xs">${escapeHtml(e.message)}</div>`;
     });
@@ -4654,12 +4661,13 @@ function openMenteeSelectModal() {
       const letter = (displayName || '?').charAt(0).toUpperCase();
       const dateStr = m.assigned_at ? new Date(m.assigned_at).toLocaleDateString(dateLocale) : '';
       return `
-      <button class="btn btn-outline btn-full" style="text-align:left;justify-content:flex-start;display:flex;align-items:center;gap:12px;height:auto;padding:12px" onclick="startPrivateSession('${m.user.telegram_id}')">
+      <button type="button" class="profile-menu-item rt-topic sch-pick" onclick="startPrivateSession('${m.user.telegram_id}')">
         ${renderAvatar(m.user, letter)}
-        <div>
-          <div class="font-bold">${escapeHtml(displayName)}</div>
-          <div class="text-xs text-dim">${escapeHtml(joinedLabel)} ${escapeHtml(dateStr)}</div>
-        </div>
+        <span class="profile-menu-label rt-label">
+          <span class="rt-name">${escapeHtml(displayName)}</span>
+          <span class="sch-sub">${escapeHtml(joinedLabel)} ${escapeHtml(dateStr)}</span>
+        </span>
+        <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
       </button>
     `;
     }).join('');
