@@ -1,0 +1,404 @@
+From 1635ca8131eba21dfbe2c7ff0785ca4f6a6976eb Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 8 Oct 2026 11:01:18 +0300
+Subject: [PATCH] Profile page redesign (hero, pills, segmented tabs, stacked
+ cards); Live label everywhere
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HMz7Hx1S3UR1ZoBBRD3Qqi
+---
+ frontend/app.js     |  28 +++++++
+ frontend/index.html |  47 ++++++++---
+ frontend/locales.js |  12 ++-
+ frontend/styles.css | 194 ++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 266 insertions(+), 15 deletions(-)
+
+diff --git a/frontend/app.js b/frontend/app.js
+index 5b4ca70..dcfc5d4 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -5705,6 +5705,34 @@ function updateProfileIdentity() {
+   if ($('editProfileRole')) $('editProfileRole').textContent = formattedRole;
+ }
+ 
++// Profile page segmented switch: Preferences | Support
++function switchProfileTab(tab) {
++  const help = tab === 'help';
++  $('profilePanePrefs')?.classList.toggle('active', !help);
++  $('profilePaneHelp')?.classList.toggle('active', help);
++  [['profileTabPrefs', !help], ['profileTabHelp', help]].forEach(([id, on]) => {
++    const el = $(id); if (!el) return;
++    el.classList.toggle('active', on);
++    el.setAttribute('aria-selected', on ? 'true' : 'false');
++  });
++  haptic('selection');
++}
++// Unread support replies live inside the Support pane — mirror them as a dot on the tab.
++(function watchProfileSupportBadge() {
++  const init = () => {
++    const badge = $('profileSupportBadge'), tab = $('profileTabHelp');
++    if (!badge || !tab || badge._watched) return !!badge;
++    badge._watched = true;
++    let dot = tab.querySelector('.profile-tab-dot');
++    if (!dot) { dot = document.createElement('i'); dot.className = 'profile-tab-dot'; tab.appendChild(dot); }
++    const sync = () => dot.classList.toggle('on', badge.style.display !== 'none' && (badge.textContent || '0').trim() !== '0');
++    new MutationObserver(sync).observe(badge, { attributes: true, childList: true, characterData: true, subtree: true });
++    sync();
++    return true;
++  };
++  if (!init()) document.addEventListener('DOMContentLoaded', init);
++})();
++
+ function avatarInitials() {
+   const name = currentUser?.user_settings?.display_name || currentUser?.anonymous_id || '?';
+   const text = String(name || '?').trim();
+diff --git a/frontend/index.html b/frontend/index.html
+index 85efa39..8e1dd32 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -714,7 +714,7 @@
+     <!-- ── Page: Sessions ────────────────────────────────────────── -->
+     <div id="page-sessions" class="page">
+       <div class="app-header">
+-        <h2 data-i18n="Sessions">Video Sessions</h2>
++        <h2 data-i18n="Sessions">Live</h2>
+         <button class="btn btn-ghost btn-sm" onclick="clearSessionHistory()" style="color:var(--danger)"
+           data-i18n="btn_clear">Clear</button>
+       </div>
+@@ -1128,21 +1128,44 @@
+           <div id="profileHeroName" class="profile-hero-name">—</div>
+           <!-- Mentors only: their own rating, shown under the name (filled in by app.js) -->
+           <div id="profileHeroRating" class="profile-hero-rating" style="display:none"></div>
+-          <div class="profile-hero-meta">
+-            <span id="userRole" class="chip chip-blue"></span>
++          <div class="profile-pills">
++            <span id="userRole" class="chip chip-blue profile-role-pill"></span>
++            <button type="button" class="profile-pill profile-edit-btn" onclick="openEditProfileModal()">
++              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
++                stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
++                <path d="M12 20h9" />
++                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
++              </svg>
++              <span data-i18n="Edit Profile">Edit Profile</span>
++            </button>
+           </div>
+-          <button type="button" class="btn btn-outline btn-sm profile-edit-btn" onclick="openEditProfileModal()">
+-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+-              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+-              <path d="M12 20h9" />
+-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
++        </div>
++
++        <!-- Segmented switch (Preferences | Support) -->
++        <div class="profile-tabs" role="tablist">
++          <button type="button" id="profileTabPrefs" class="profile-tab active" role="tab" aria-selected="true"
++            onclick="switchProfileTab('prefs')">
++            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++              <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
++              <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
++              <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
++              <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
++            </svg>
++            <span data-i18n="profile_tab_prefs">Preferences</span>
++          </button>
++          <button type="button" id="profileTabHelp" class="profile-tab" role="tab" aria-selected="false"
++            onclick="switchProfileTab('help')">
++            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++              <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" />
+             </svg>
+-            <span data-i18n="Edit Profile">Edit Profile</span>
++            <span id="profileTabHelpLabel" data-i18n="profile_tab_help">Support</span>
+           </button>
+         </div>
+ 
+         <!-- Section 1: Preferences -->
+-        <div class="profile-section-title" data-i18n="Preferences">Preferences</div>
++        <div id="profilePanePrefs" class="profile-pane active">
+         <nav class="profile-menu-list" aria-label="Preferences">
+           <button type="button" class="profile-menu-item" onclick="openNotificationsModal()">
+             <span class="profile-menu-icon">
+@@ -1220,9 +1243,10 @@
+             </span>
+           </button>
+         </nav>
++        </div>
+ 
+         <!-- Section 2: Support & Help -->
+-        <div class="profile-section-title" data-i18n="Support & Help">Support & Help</div>
++        <div id="profilePaneHelp" class="profile-pane">
+         <nav class="profile-menu-list" aria-label="Support & Help">
+           <button type="button" class="profile-menu-item" onclick="navigate('support')">
+             <span class="profile-menu-icon">
+@@ -1270,6 +1294,7 @@
+             </svg>
+           </button>
+         </nav>
++        </div>
+       </div>
+     </div>
+ 
+diff --git a/frontend/locales.js b/frontend/locales.js
+index a4d28d6..09c83ca 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -153,7 +153,7 @@ const I18N = {
+     "Home": "Home",
+     "nav_live": "Live",
+     "Mentors": "Mentors",
+-    "Sessions": "Sessions",
++    "Sessions": "Live",
+     "Chat": "Chat",
+     "Mentees": "Mentees",
+     "Requests": "Requests",
+@@ -459,6 +459,8 @@ const I18N = {
+     "Male only": "Male only",
+     "Female only": "Female only",
+     "Preferences": "Preferences",
++    "profile_tab_prefs": "Preferences",
++    "profile_tab_help": "Support",
+     "Support & Help": "Support & Help",
+     "Support Requests": "Support Requests",
+     "Contact Admin": "Contact Admin",
+@@ -684,7 +686,7 @@ const I18N = {
+     "Start a Session (Mentors Only)": "Start a Session (Mentors Only)",
+     "My Private Sessions": "My Private Sessions",
+     "Upcoming Group Sessions": "Upcoming Group Sessions",
+-    "Sessions": "Video Sessions",
++    "Sessions": "Live",
+     "Date": "Date",
+     "Time": "Time",
+     // ========== HARDCODED TOASTS / CONFIRMS (humanized) ==========
+@@ -848,7 +850,7 @@ const I18N = {
+     "Home": "ዋና ገጽ",
+     "nav_live": "ቀጥታ",
+     "Mentors": "አማካሪዎች",
+-    "Sessions": "ክፍለጊዜዎች",
++    "Sessions": "ቀጥታ",
+     "Chat": "ቻት",
+     "Mentees": "ተመካሪዎች",
+     "Requests": "ጥያቄዎች",
+@@ -1150,6 +1152,8 @@ const I18N = {
+     "Male only": "ወንዶች ብቻ",
+     "Female only": "ሴቶች ብቻ",
+     "Preferences": "ምርጫዎች",
++    "profile_tab_prefs": "ምርጫዎች",
++    "profile_tab_help": "ድጋፍ",
+     "Support & Help": "ድጋፍ እና እርዳታ",
+     "Support Requests": "የድጋፍ ጥያቄዎች",
+     "Contact Admin": "አስተዳዳሪን አግኝ",
+@@ -1375,7 +1379,7 @@ const I18N = {
+     "Start a Session (Mentors Only)": "ክፍለ-ጊዜ ጀምር (ለአማካሪዎች ብቻ)",
+     "My Private Sessions": "የእኔ የግል ክፍለ-ጊዜዎች",
+     "Upcoming Group Sessions": "የሚመጡ የቡድን ክፍለ-ጊዜዎች",
+-    "Sessions": "የቪዲዮ ክፍለ-ጊዜዎች",
++    "Sessions": "ቀጥታ",
+     "Date": "ቀን",
+     "Time": "ሰዓት"
+   }
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 6dce316..c75dc9e 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -10671,3 +10671,197 @@ input:focus, textarea:focus, select:focus {
+   padding-left: 18px;
+   padding-right: 18px;
+ }
++
++/* ─── Profile page — "hero + segmented tabs + stacked cards" ───────────────
++   Deep-navy glow behind a big rounded-square photo, name, pill chips, a
++   segmented switch, then full-width rounded cards with an icon tile, label and
++   chevron. First card in each list is golden. Layout-only: every id/onclick
++   the app already uses is unchanged. ─── */
++#page-settings.active {
++  background:
++    radial-gradient(120% 420px at 50% 0%, rgba(58, 74, 168, 0.55) 0%, rgba(30, 38, 92, 0.32) 42%, transparent 78%),
++    radial-gradient(60% 240px at 50% 0%, rgba(201, 168, 76, 0.10) 0%, transparent 70%);
++  background-repeat: no-repeat;
++}
++[data-theme="light"] #page-settings.active {
++  background:
++    radial-gradient(120% 420px at 50% 0%, rgba(120, 140, 230, 0.28) 0%, rgba(120, 140, 230, 0.10) 45%, transparent 78%);
++  background-repeat: no-repeat;
++}
++#page-settings .app-header { background: transparent; border-bottom-color: transparent; box-shadow: none; }
++#page-settings .app-header h2 { opacity: 0; height: 0; margin: 0; pointer-events: none; }  /* title is redundant over the hero */
++
++.profile-hero { padding: 6px 12px 18px; }
++
++.profile-hero .avatar-preview-wrap {
++  padding: 5px;
++  border-radius: 34px;
++  background: linear-gradient(160deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02));
++  border: 1px solid rgba(255, 255, 255, 0.10);
++  box-shadow: 0 18px 44px rgba(10, 14, 40, 0.65), 0 0 36px rgba(91, 110, 230, 0.22);
++}
++.avatar-preview-xl {
++  width: 112px;
++  height: 112px;
++  border-radius: 28px;
++  overflow: hidden;
++  font-size: 2.6rem;
++  border: 0;
++  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
++}
++.avatar-preview-xl img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; display: block; }
++.avatar-preview-xl:hover { box-shadow: inset 0 0 0 2px var(--gold); }
++
++.profile-hero-name {
++  margin-top: 16px;
++  max-width: 88%;
++  font-size: 1.5rem;
++  letter-spacing: 0.02em;
++  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
++}
++
++.profile-pills {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  flex-wrap: wrap;
++  gap: 10px;
++  margin-top: 16px;
++}
++.profile-pills .chip, .profile-pill {
++  display: inline-flex;
++  align-items: center;
++  gap: 8px;
++  height: 40px;
++  padding: 0 18px;
++  border-radius: 999px;
++  font-family: var(--font-body);
++  font-size: 0.9rem;
++  font-weight: 700;
++  color: var(--text);
++  background: rgba(255, 255, 255, 0.06);
++  border: 1px solid rgba(255, 255, 255, 0.12);
++  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
++  white-space: nowrap;
++  cursor: pointer;
++  margin: 0;
++  transition: transform 0.15s ease, background 0.2s ease;
++}
++.profile-pills .chip { color: var(--gold-light); cursor: default; }
++.profile-pill:active { transform: scale(0.96); }
++.profile-pill svg { color: var(--gold-light); flex-shrink: 0; }
++[data-theme="light"] .profile-pills .chip, [data-theme="light"] .profile-pill {
++  background: rgba(255, 255, 255, 0.85); border-color: rgba(60, 70, 140, 0.18); color: var(--text);
++  box-shadow: 0 6px 16px rgba(30, 40, 90, 0.12);
++}
++[data-theme="light"] .profile-pills .chip { color: #6B4E0F; }
++
++/* segmented switch */
++.profile-tabs {
++  display: flex;
++  gap: 4px;
++  padding: 6px;
++  margin: 4px 2px 16px;
++  border-radius: 999px;
++  background: rgba(255, 255, 255, 0.04);
++  border: 1px solid rgba(255, 255, 255, 0.08);
++  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.25);
++}
++.profile-tab {
++  position: relative;
++  flex: 1;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: 8px;
++  height: 46px;
++  border: 0;
++  border-radius: 999px;
++  background: transparent;
++  color: var(--text2);
++  font-family: var(--font-body);
++  font-size: 1rem;
++  font-weight: 600;
++  cursor: pointer;
++  transition: background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
++}
++.profile-tab.active {
++  color: #fff;
++  background: linear-gradient(180deg, #7584f5, #5b6bdc);
++  box-shadow: 0 8px 22px rgba(91, 107, 220, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25);
++}
++.profile-tab-dot {
++  position: absolute; top: 9px; right: calc(50% - 56px);
++  width: 9px; height: 9px; border-radius: 50%;
++  background: var(--danger); box-shadow: 0 0 0 2px var(--bg);
++  display: none;
++}
++.profile-tab-dot.on { display: block; }
++[data-theme="light"] .profile-tabs { background: rgba(255, 255, 255, 0.7); border-color: rgba(60, 70, 140, 0.14); box-shadow: inset 0 2px 6px rgba(30, 40, 90, 0.08); }
++
++.profile-pane { display: none; }
++.profile-pane.active { display: block; animation: profilePaneIn 0.28s ease both; }
++@keyframes profilePaneIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
++
++/* stacked cards */
++.profile-section-title { display: none; }                      /* the tabs name the sections now */
++.profile-menu-list {
++  gap: 12px;
++  background: transparent;
++  border: 0;
++  border-radius: 0;
++  overflow: visible;
++  margin-bottom: 0;
++}
++.profile-menu-item {
++  min-height: 74px;
++  padding: 14px 18px;
++  gap: 16px;
++  border: 1px solid rgba(255, 255, 255, 0.07);
++  border-radius: 26px;
++  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
++  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
++  font-size: 1.02rem;
++  font-weight: 600;
++  transition: transform 0.15s ease, box-shadow 0.25s ease, border-color 0.25s ease;
++}
++.profile-menu-item:last-child { border-bottom: 1px solid rgba(255, 255, 255, 0.07); }
++.profile-menu-item:hover { background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)), #14161d; }
++.profile-menu-item:active { transform: scale(0.985); }
++.profile-menu-icon {
++  width: 48px;
++  height: 48px;
++  border-radius: 16px;
++  background: rgba(124, 138, 255, 0.14);
++  color: #aab4ff;
++  box-shadow: inset 0 0 0 1px rgba(124, 138, 255, 0.18);
++}
++.profile-menu-icon svg { width: 22px; height: 22px; }
++.profile-menu-chevron { width: 20px; height: 20px; color: var(--text2); }
++.profile-menu-trailing { font-size: 0.82rem; }
++
++/* first card of each list = the golden one */
++.profile-menu-list > .profile-menu-item:first-child {
++  border-color: rgba(201, 168, 76, 0.35);
++  background:
++    radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.22) 0%, rgba(201, 168, 76, 0.06) 55%, transparent 100%),
++    #17140c;
++  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38), 0 0 26px rgba(201, 168, 76, 0.12), inset 0 1px 0 rgba(255, 233, 160, 0.12);
++}
++.profile-menu-list > .profile-menu-item:first-child .profile-menu-icon {
++  background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%);
++  color: #2a1e05;
++  box-shadow: 0 6px 16px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5);
++}
++
++[data-theme="light"] .profile-menu-item {
++  background: linear-gradient(160deg, #fff, #f6f3ea);
++  border-color: rgba(60, 70, 140, 0.12);
++  box-shadow: 0 8px 20px rgba(30, 40, 90, 0.10), inset 0 1px 0 #fff;
++}
++[data-theme="light"] .profile-menu-icon { background: rgba(91, 107, 220, 0.12); color: #4452c0; box-shadow: inset 0 0 0 1px rgba(91, 107, 220, 0.18); }
++[data-theme="light"] .profile-menu-list > .profile-menu-item:first-child {
++  background: radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.28), rgba(201, 168, 76, 0.08) 60%, #fffaf0);
++  border-color: rgba(150, 120, 40, 0.35);
++}
++@media (prefers-reduced-motion: reduce) { .profile-pane.active { animation: none; } }
+-- 
+2.43.0
+

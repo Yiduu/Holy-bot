@@ -5705,6 +5705,34 @@ function updateProfileIdentity() {
   if ($('editProfileRole')) $('editProfileRole').textContent = formattedRole;
 }
 
+// Profile page segmented switch: Preferences | Support
+function switchProfileTab(tab) {
+  const help = tab === 'help';
+  $('profilePanePrefs')?.classList.toggle('active', !help);
+  $('profilePaneHelp')?.classList.toggle('active', help);
+  [['profileTabPrefs', !help], ['profileTabHelp', help]].forEach(([id, on]) => {
+    const el = $(id); if (!el) return;
+    el.classList.toggle('active', on);
+    el.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  haptic('selection');
+}
+// Unread support replies live inside the Support pane — mirror them as a dot on the tab.
+(function watchProfileSupportBadge() {
+  const init = () => {
+    const badge = $('profileSupportBadge'), tab = $('profileTabHelp');
+    if (!badge || !tab || badge._watched) return !!badge;
+    badge._watched = true;
+    let dot = tab.querySelector('.profile-tab-dot');
+    if (!dot) { dot = document.createElement('i'); dot.className = 'profile-tab-dot'; tab.appendChild(dot); }
+    const sync = () => dot.classList.toggle('on', badge.style.display !== 'none' && (badge.textContent || '0').trim() !== '0');
+    new MutationObserver(sync).observe(badge, { attributes: true, childList: true, characterData: true, subtree: true });
+    sync();
+    return true;
+  };
+  if (!init()) document.addEventListener('DOMContentLoaded', init);
+})();
+
 function avatarInitials() {
   const name = currentUser?.user_settings?.display_name || currentUser?.anonymous_id || '?';
   const text = String(name || '?').trim();
