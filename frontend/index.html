@@ -714,7 +714,7 @@
     <!-- ── Page: Sessions ────────────────────────────────────────── -->
     <div id="page-sessions" class="page">
       <div class="app-header">
-        <h2 data-i18n="Sessions">Video Sessions</h2>
+        <h2 data-i18n="Sessions">Live</h2>
         <button class="btn btn-ghost btn-sm" onclick="clearSessionHistory()" style="color:var(--danger)"
           data-i18n="btn_clear">Clear</button>
       </div>
@@ -1128,21 +1128,44 @@
           <div id="profileHeroName" class="profile-hero-name">—</div>
           <!-- Mentors only: their own rating, shown under the name (filled in by app.js) -->
           <div id="profileHeroRating" class="profile-hero-rating" style="display:none"></div>
-          <div class="profile-hero-meta">
-            <span id="userRole" class="chip chip-blue"></span>
+          <div class="profile-pills">
+            <span id="userRole" class="chip chip-blue profile-role-pill"></span>
+            <button type="button" class="profile-pill profile-edit-btn" onclick="openEditProfileModal()">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+              <span data-i18n="Edit Profile">Edit Profile</span>
+            </button>
           </div>
-          <button type="button" class="btn btn-outline btn-sm profile-edit-btn" onclick="openEditProfileModal()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </div>
+
+        <!-- Segmented switch (Preferences | Support) -->
+        <div class="profile-tabs" role="tablist">
+          <button type="button" id="profileTabPrefs" class="profile-tab active" role="tab" aria-selected="true"
+            onclick="switchProfileTab('prefs')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
+              <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
+              <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
             </svg>
-            <span data-i18n="Edit Profile">Edit Profile</span>
+            <span data-i18n="profile_tab_prefs">Preferences</span>
+          </button>
+          <button type="button" id="profileTabHelp" class="profile-tab" role="tab" aria-selected="false"
+            onclick="switchProfileTab('help')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <span id="profileTabHelpLabel" data-i18n="profile_tab_help">Support</span>
           </button>
         </div>
 
         <!-- Section 1: Preferences -->
-        <div class="profile-section-title" data-i18n="Preferences">Preferences</div>
+        <div id="profilePanePrefs" class="profile-pane active">
         <nav class="profile-menu-list" aria-label="Preferences">
           <button type="button" class="profile-menu-item" onclick="openNotificationsModal()">
             <span class="profile-menu-icon">
@@ -1220,9 +1243,10 @@
             </span>
           </button>
         </nav>
+        </div>
 
         <!-- Section 2: Support & Help -->
-        <div class="profile-section-title" data-i18n="Support & Help">Support & Help</div>
+        <div id="profilePaneHelp" class="profile-pane">
         <nav class="profile-menu-list" aria-label="Support & Help">
           <button type="button" class="profile-menu-item" onclick="navigate('support')">
             <span class="profile-menu-icon">
@@ -1270,6 +1294,7 @@
             </svg>
           </button>
         </nav>
+        </div>
       </div>
     </div>
 
