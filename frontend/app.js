@@ -1040,6 +1040,7 @@ function handleTelegramBack() {
   const sheets = document.querySelectorAll('.modal-overlay.open');
   if (sheets.length) { sheets[sheets.length - 1].click(); return; }
   if (document.body.classList.contains('in-call')) return;
+  if (currentPage === 'mentor-profile') { closeMentorProfile(); return; }
   if (currentPage !== 'dashboard') navigate('dashboard');
 }
 
@@ -3500,14 +3501,39 @@ function renderActiveMentorCard() {
   hydrateAvatars(c);
 }
 
-// ─── Mentor profile bottom sheet ──────────────────────────────
-let openMentorSheetId = null;
-function openMentorSheet(id) {
+// ─── Mentor full profile page ─────────────────────────────────
+// Same visual language as the Profile page: gold glow, framed avatar, pill
+// chips, gold segmented tabs, stacked rounded cards. (Was a bottom sheet.)
+let openMentorSheetId = null;       // id of the mentor whose profile page is open
+let mentorProfileTab = 'about';     // 'about' | 'topics'
+let mentorsListScrollTop = 0;       // remembered so Back lands where you left
+
+const MP_ICONS = {
+  user:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+  star:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+  tag:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>',
+  cake:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+  people:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+  book:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'
+};
+
+function mpInfoCard({ icon, label, text, gold = false, duo = false, trailing = '' }) {
+  return `
+    <div class="profile-menu-item mp-info${gold ? ' pm-gold' : ''}${duo ? ' mp-info-duo' : ''}">
+      <span class="profile-menu-icon">${icon}</span>
+      <span class="mp-info-body">
+        <span class="mp-info-label">${escapeHtml(label)}</span>
+        <span class="mp-info-text">${escapeHtml(text)}</span>
+      </span>
+      ${trailing}
+    </div>`;
+}
+
+function renderMentorProfilePage(id) {
+  const body = $('mentorProfileBody');
   const m = findMentorById(id);
-  const body = $('mentorSheetBody');
-  if (!m || !body) return;
-  haptic('light');
-  openMentorSheetId = id;
+  if (!body || !m) return;
 
   const isMine = !!activeMentorData && String(activeMentorData.telegram_id) === String(id);
   const name = mentorNameOf(m);
@@ -3519,43 +3545,154 @@ function openMentorSheet(id) {
   const st = mentorStatus(m);
   const n = (isMine || isMentorUnavailable(m)) ? 0 : mentorMatchCount(m);
   const sexLabel = m.sex === 'M' ? t('sex_male') : m.sex === 'F' ? t('sex_female') : '—';
-  const isAccepting = m.accepting_requests !== false;
   const max = mentorMax(m);
-  const halo = renderHaloAvatar(m, name.charAt(0).toUpperCase(), !!m.is_online, isAccepting ? (m.mentee_count || 0) / max : 1, isAccepting);
+  const open = Math.max(max - (m.mentee_count || 0), 0);
+  const ratingNum = Number(m.rating) || 0;
+  const ratingCount = Number(m.rating_count) || 0;
+  const isSaved = savedMentorsSet.has(String(id));
+  const photoAttr = m.photo_file_id
+    ? `data-avatar-tid="${m.telegram_id}" data-avatar-v="${m.photo_updated_at || ''}" onclick="viewAvatar(this)"`
+    : '';
+  const tab = (mentorProfileTab === 'topics' && topics.length) ? 'topics' : 'about';
+
+  // header bookmark (lives in the static header)
+  const saveBtn = $('mpSaveBtn');
+  if (saveBtn) {
+    saveBtn.classList.toggle('saved', isSaved);
+    saveBtn.setAttribute('aria-label', t('tab_saved'));
+    saveBtn.innerHTML = MC_ICON_BOOKMARK(isSaved);
+    saveBtn.style.display = isMine ? 'none' : '';
+  }
 
   const actions = isMine
-    ? `<button class="btn btn-primary" onclick="closeMentorSheet();openChat('${id}')">${t('btn_message')}</button>
+    ? `<button class="btn btn-outline" onclick="openChat('${id}')">${MC_ICON_MSG} ${t('btn_message')}</button>
        <button class="btn btn-danger" onclick="confirmEndMentorship()">${t('btn_end')}</button>`
-    : `<button class="btn btn-outline" onclick="closeMentorSheet();openChat('${id}')">${t('btn_message')}</button>
+    : `<button class="btn btn-outline" onclick="openChat('${id}')">${MC_ICON_MSG} ${t('btn_message')}</button>
        ${mentorActionHtml(m, true)}`;
 
+  const aboutCards = [
+    mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: true }),
+    spec ? mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec }) : ''
+  ].join('');
+
+  const topicCards = topics.map(tp => {
+    const mine = tp.id != null && myMentorTopicIds.has(Number(tp.id));
+    return `
+      <div class="profile-menu-item mp-info mp-topic${mine ? ' pm-gold' : ''}">
+        <span class="profile-menu-icon">${mine ? MP_ICONS.check : MP_ICONS.tag}</span>
+        <span class="profile-menu-label">${escapeHtml(tp.name)}</span>
+        ${mine ? `<span class="mp-mine-chip">${t('mp_matches_you')}</span>` : ''}
+      </div>`;
+  }).join('');
+
   body.innerHTML = `
-    <div class="mc-top">
-      ${halo}
-      <div class="mc-main">
-        <div class="mc-name mc-name-lg">${escapeHtml(name)}</div>
-        ${renderModernRating(m.rating || null, m.rating_count || 0)}
-        <div class="mc-online">${m.is_online ? t('status_online') : t('status_offline')}${isMine ? '' : ' · ' + st.text}</div>
+    <div class="profile-hero mp-hero">
+      <div class="avatar-preview-wrap">
+        <div class="avatar-preview avatar-preview-xl" ${photoAttr}>${escapeHtml(name.charAt(0).toUpperCase())}</div>
+        ${m.is_online ? '<span class="mp-online-dot"></span>' : ''}
       </div>
+      <div class="profile-hero-name">${escapeHtml(name)}</div>
+      <div class="profile-hero-rating" style="display:flex">${renderProfileRating(ratingNum, ratingCount)}</div>
+      ${spec ? `<div class="mp-spec">${escapeHtml(spec)}</div>` : ''}
+      <div class="profile-pills">
+        <span class="chip"><span class="mp-dot${m.is_online ? ' on' : ''}"></span>${m.is_online ? t('status_online') : t('status_offline')}</span>
+        ${isMine ? '' : `<span class="chip">${escapeHtml(st.text)}</span>`}
+        ${n ? `<span class="chip mp-chip-match">✦ ${t('match_topics', { n })}</span>` : ''}
+      </div>
+      <div class="mp-actions">${actions}</div>
     </div>
-    ${mentorMatchBadge(n)}
-    <div class="mc-sheet-h">${t('sheet_about')}</div>
-    <p class="mc-sheet-text">${escapeHtml(bio)}</p>
-    ${spec ? `<div class="mc-sheet-h">${t('sheet_specialization')}</div><p class="mc-sheet-text">${escapeHtml(spec)}</p>` : ''}
-    ${topics.length ? `<div class="mc-sheet-h">${t('sheet_topics')}</div>
-      <div class="mc-tags">${topics.map(tp => `<span class="${tp.id != null && myMentorTopicIds.has(Number(tp.id)) ? 'mine' : ''}">${escapeHtml(tp.name)}</span>`).join('')}</div>` : ''}
-    <div class="mc-sheet-h">${t('sheet_details')}</div>
-    <div class="mc-facts">
-      <div>${t('sheet_age')}<b>${escapeHtml(m.age_range || '—')}</b></div>
-      <div>${t('sheet_gender')}<b>${escapeHtml(sexLabel)}</b></div>
+
+    <div class="mp-stats">
+      <div class="stat-card"><div class="stat-num">${ratingNum > 0 ? ratingNum.toFixed(1) : '—'}</div><div class="stat-label">${t('mp_stat_rating')}</div></div>
+      <div class="stat-card"><div class="stat-num">${ratingCount}</div><div class="stat-label">${t('mp_stat_reviews')}</div></div>
+      <div class="stat-card"><div class="stat-num">${open}<span class="mp-stat-of">/${max}</span></div><div class="stat-label">${t('mp_stat_spots')}</div></div>
     </div>
-    <div class="mc-sheet-actions">${actions}</div>`;
+
+    ${topics.length ? `
+    <div class="profile-tabs" role="tablist">
+      <button type="button" id="mpTabAbout" class="profile-tab${tab === 'about' ? ' active' : ''}" role="tab" aria-selected="${tab === 'about'}" onclick="switchMentorProfileTab('about')">
+        ${MP_ICONS.user.replace('<svg ', '<svg width="18" height="18" ')}<span>${t('sheet_about')}</span>
+      </button>
+      <button type="button" id="mpTabTopics" class="profile-tab${tab === 'topics' ? ' active' : ''}" role="tab" aria-selected="${tab === 'topics'}" onclick="switchMentorProfileTab('topics')">
+        ${MP_ICONS.tag.replace('<svg ', '<svg width="18" height="18" ')}<span>${t('sheet_topics')}</span>
+      </button>
+    </div>` : ''}
+
+    <div id="mpPaneAbout" class="profile-pane${tab === 'about' ? ' active' : ''}">
+      <nav class="profile-menu-list" aria-label="${escapeHtml(t('sheet_about'))}">
+        ${aboutCards}
+        <div class="mp-duo">
+          ${mpInfoCard({ icon: MP_ICONS.cake, label: t('sheet_age'), text: m.age_range || '—', duo: true })}
+          ${mpInfoCard({ icon: MP_ICONS.people, label: t('sheet_gender'), text: sexLabel, duo: true })}
+        </div>
+      </nav>
+    </div>
+
+    ${topics.length ? `
+    <div id="mpPaneTopics" class="profile-pane${tab === 'topics' ? ' active' : ''}">
+      <nav class="profile-menu-list" aria-label="${escapeHtml(t('sheet_topics'))}">${topicCards}</nav>
+    </div>` : ''}
+  `;
   hydrateAvatars(body);
-  $('mentorSheet')?.classList.add('open');
 }
 
-function closeMentorSheet() {
+function switchMentorProfileTab(tab) {
+  haptic('selection');
+  mentorProfileTab = tab;
+  $('mpTabAbout')?.classList.toggle('active', tab === 'about');
+  $('mpTabTopics')?.classList.toggle('active', tab === 'topics');
+  $('mpTabAbout')?.setAttribute('aria-selected', tab === 'about');
+  $('mpTabTopics')?.setAttribute('aria-selected', tab === 'topics');
+  $('mpPaneAbout')?.classList.toggle('active', tab === 'about');
+  $('mpPaneTopics')?.classList.toggle('active', tab === 'topics');
+}
+
+// Switch pages without navigate()'s data loaders: the mentors list stays as it was.
+function showAppPageQuiet(page, navId) {
+  currentPage = page;
+  $$('.page').forEach(p => p.classList.remove('active'));
+  $$('.nav-item').forEach(nv => nv.classList.remove('active'));
+  $(`page-${page}`)?.classList.add('active');
+  $(navId)?.classList.add('active');
+  updateFab();
+  syncTelegramBack();
+}
+
+function openMentorSheet(id) {   // name kept: every "open this mentor" caller still works
+  const m = findMentorById(id);
+  if (!m || !$('mentorProfileBody')) return;
+  haptic('light');
+  const alreadyOpen = currentPage === 'mentor-profile';
+  if (!alreadyOpen) {
+    mentorsListScrollTop = document.querySelector('#page-mentors .page-content')?.scrollTop || 0;
+    mentorProfileTab = 'about';
+  }
+  openMentorSheetId = id;
+  renderMentorProfilePage(id);
+  if (!alreadyOpen) {
+    showAppPageQuiet('mentor-profile', 'nav-mentors');
+    const pc = document.querySelector('#page-mentor-profile .page-content');
+    if (pc) pc.scrollTop = 0;
+  }
+}
+
+function closeMentorProfile() {
+  if (currentPage !== 'mentor-profile') return;
+  haptic('light');
   openMentorSheetId = null;
+  showAppPageQuiet('mentors', 'nav-mentors');
+  requestAnimationFrame(() => {
+    const pc = document.querySelector('#page-mentors .page-content');
+    if (pc) pc.scrollTop = mentorsListScrollTop;
+  });
+}
+
+function toggleSaveMentorFromProfile() {
+  if (openMentorSheetId != null) toggleSaveMentor(openMentorSheetId);  // re-renders the page too
+}
+
+// Only the small "end mentorship?" confirmation still uses the sheet.
+function closeMentorSheet() {
   $('mentorSheet')?.classList.remove('open');
 }
 
@@ -3582,8 +3719,7 @@ async function toggleMentorWaitlist(event, mentorId) {
   if (!m) return;
   const joining = !m.on_waitlist;
   const refresh = () => {
-    renderMentorsList();
-    if ($('mentorSheet')?.classList.contains('open')) openMentorSheet(mentorId);
+    renderMentorsList();   // also redraws the profile page when it is open
   };
   m.on_waitlist = joining;
   refresh();
@@ -3600,6 +3736,8 @@ async function toggleMentorWaitlist(event, mentorId) {
 }
 
 function renderMentorsList() {
+  // Keep an open mentor profile page in sync (saved / waitlist / request state).
+  if (currentPage === 'mentor-profile' && openMentorSheetId != null) renderMentorProfilePage(openMentorSheetId);
   const container = $('mentorsList');
   if (!container) return;
 
@@ -6737,7 +6875,9 @@ function refreshLanguageContent() {
         updateFilterActiveIndicators();
         renderActiveMentorCard();
         renderMentorsList();
-        if (openMentorSheetId != null && $('mentorSheet')?.classList.contains('open')) openMentorSheet(openMentorSheetId);
+        break;
+      case 'mentor-profile':
+        if (openMentorSheetId != null) renderMentorProfilePage(openMentorSheetId);
         break;
       case 'sessions': loadSessions(); break;
       case 'requests': loadRequests(); break;

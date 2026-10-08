@@ -11054,3 +11054,154 @@ input:focus, textarea:focus, select:focus {
 
 /* keep the compact 38px mentor-card buttons compact (the pill rule above sets a 44px floor) */
 .btn-mentor-request, .btn.btn-not-accepting, .mentor-card .btn-sm { min-height: 38px; }
+
+
+/* ═══ Mentor full profile page ═══════════════════════════════════════════════
+   Built from the Profile page's own classes (.profile-hero, .avatar-preview-xl,
+   .profile-pills, .profile-tabs, .profile-menu-item, …) so it matches exactly:
+   gold glow behind the hero, 112px framed avatar, 40px glass pills, gold
+   segmented tabs, 26px stacked cards with gold icon tiles, pill buttons.
+   Only the pieces the Profile page doesn't have are defined here. ═══ */
+
+#page-mentor-profile.active {
+  background: radial-gradient(120% 420px at 50% 0%, rgba(201, 168, 76, 0.30) 0%, rgba(168, 124, 42, 0.12) 45%, transparent 78%) no-repeat;
+}
+[data-theme="light"] #page-mentor-profile.active {
+  background: radial-gradient(120% 420px at 50% 0%, rgba(201, 168, 76, 0.32) 0%, rgba(201, 168, 76, 0.10) 45%, transparent 78%) no-repeat;
+}
+#page-mentor-profile .app-header { background: transparent; border-bottom-color: transparent; box-shadow: none; }
+#page-mentor-profile .page-content { animation: profilePaneIn 0.3s ease both; }
+
+/* header pills: Back + bookmark (same 40px glass pill as Edit Profile) */
+.mp-header .profile-pill { padding: 0 16px 0 12px; gap: 6px; }
+.mp-header .mp-save { width: 40px; padding: 0; justify-content: center; }
+.mp-header .mp-save svg { width: 18px; height: 18px; }
+.mp-header .mp-save.saved { background: rgba(201, 168, 76, 0.18); border-color: rgba(201, 168, 76, 0.45); }
+.mp-header .mp-save.saved svg { color: var(--gold-light); }
+
+/* hero extras */
+.mp-hero .profile-hero-rating { margin-top: 8px; }
+.mp-spec {
+  max-width: 86%;
+  margin-top: 8px;
+  font-size: 0.9rem;
+  color: var(--text2);
+  line-height: 1.4;
+}
+.mp-online-dot {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--success);
+  border: 3px solid var(--bg);
+  box-shadow: 0 0 12px rgba(91, 173, 122, 0.7);
+}
+.mp-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text3);
+}
+.mp-dot.on { background: var(--success); box-shadow: 0 0 8px rgba(91, 173, 122, 0.8); }
+.profile-pills .chip.mp-chip-match {
+  background: rgba(201, 168, 76, 0.14);
+  border-color: rgba(201, 168, 76, 0.4);
+}
+
+/* actions: big pill buttons under the chips (where Edit Profile lives on Profile) */
+.mp-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  max-width: 380px;
+  margin-top: 18px;
+}
+.mp-actions .btn {
+  flex: 1;
+  min-height: 52px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.mp-actions .btn-danger { background: transparent; border: 1px solid rgba(224, 92, 92, 0.55); color: var(--danger); }
+
+/* stat tiles */
+.mp-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 2px 2px 18px;
+}
+.mp-stat-of { font-size: 0.8rem; color: var(--text3); text-shadow: none; }
+
+/* info cards = the Profile menu cards, minus the tap behavior */
+.mp-info { cursor: default; align-items: flex-start; }
+.mp-info:hover { background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319; }
+.mp-info.pm-gold:hover {
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.22) 0%, rgba(201, 168, 76, 0.06) 55%, transparent 100%),
+    #17140c;
+}
+[data-theme="light"] .mp-info:hover { background: linear-gradient(160deg, #fff, #f6f3ea); }
+[data-theme="light"] .mp-info.pm-gold:hover {
+  background: radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.28), rgba(201, 168, 76, 0.08) 60%, #fffaf0);
+}
+.mp-info:active { transform: none; }
+.mp-info .profile-menu-icon { flex: none; }
+.mp-info-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 2px; }
+.mp-info-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+}
+[data-theme="light"] .mp-info-label { color: #7A5812; }
+.mp-info-text {
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.mp-info.pm-gold .mp-info-text { color: var(--text); }
+
+/* Age + Gender side by side */
+.mp-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mp-info-duo { min-height: 74px; padding: 14px; gap: 12px; align-items: center; }
+.mp-info-duo .profile-menu-icon { width: 42px; height: 42px; border-radius: 14px; }
+.mp-info-duo .mp-info-body { padding-top: 0; }
+.mp-info-duo .mp-info-text { font-size: 1rem; font-weight: 700; line-height: 1.2; }
+.mp-info-duo .mp-info-label { letter-spacing: 0.12em; }
+
+/* topics */
+.mp-topic { align-items: center; min-height: 66px; }
+.mp-topic .profile-menu-label { font-size: 1rem; }
+.mp-mine-chip {
+  flex: none;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #1a1300;
+  background: linear-gradient(180deg, #EBCD72, #C9A84C);
+  box-shadow: 0 4px 12px rgba(201, 168, 76, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+@media (max-width: 360px) {
+  .mp-actions { flex-direction: column; }
+  .mp-duo { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { #page-mentor-profile .page-content { animation: none; } }
