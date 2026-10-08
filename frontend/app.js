@@ -1704,6 +1704,7 @@ function navigate(page) {
   if (currentPage === 'my-mentees' && page !== 'my-mentees') flushMentorNotes();
 
   currentPage = page;
+  updateChatKeyboard();                    // leaving chat clears the docked-composer state
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
   $(`page-${page}`)?.classList.add('active');
@@ -1844,6 +1845,38 @@ function syncChatCoveredSpace() {
   messages._lastCovered = covered;
   messages.style.setProperty('--chat-covered', covered + 'px');
   if (atBottom) messages.scrollTop = messages.scrollHeight;      // keep the newest message in view
+}
+// ─── Chat: dock the composer when the keyboard is open ───────
+// With the keyboard up, Telegram shrinks the viewport, so the fixed nav pill used
+// to ride on top of the keyboard with the composer floating above it. While the
+// keyboard is open on the chat page we hide the nav and sit the composer directly
+// on the keyboard (body.chat-kb; see styles.css). When the keyboard closes the
+// nav comes back and the composer docks on top of it again.
+let _chatKbBase = 0;
+function updateChatKeyboard() {
+  const ae = document.activeElement;
+  const typing = !!ae && /^(INPUT|TEXTAREA)$/.test(ae.tagName);
+  const h = window.visualViewport?.height || window.innerHeight;
+  if (!typing || !_chatKbBase) _chatKbBase = h;       // nothing is shrinking the viewport: this is the full height
+  const tg = window.Telegram?.WebApp;
+  const tgDiff = tg ? (Number(tg.viewportStableHeight) || 0) - (Number(tg.viewportHeight) || 0) : 0;
+  const open = typing && currentPage === 'chat' && (_chatKbBase - h > 120 || tgDiff > 120);
+  if (document.body.classList.contains('chat-kb') === open) return;
+  document.body.classList.toggle('chat-kb', open);
+  requestAnimationFrame(() => {                       // nav gone / back: re-measure, keep the newest message in view
+    syncChatInputHeight();
+    const m = $('chatMessages');
+    if (open && m) m.scrollTop = m.scrollHeight;
+  });
+}
+{
+  let _kbRaf = 0;
+  const schedule = () => { if (_kbRaf) return; _kbRaf = requestAnimationFrame(() => { _kbRaf = 0; updateChatKeyboard(); }); };
+  document.addEventListener('focusin', () => setTimeout(updateChatKeyboard, 60));
+  document.addEventListener('focusout', () => setTimeout(updateChatKeyboard, 120));
+  window.visualViewport?.addEventListener('resize', schedule);
+  window.addEventListener('resize', schedule);
+  try { window.Telegram?.WebApp?.onEvent?.('viewportChanged', schedule); } catch { }
 }
 window.addEventListener('resize', syncChatInputHeight);
 window.visualViewport?.addEventListener('resize', syncChatInputHeight);
@@ -4293,98 +4326,93 @@ function getSessionState(scheduledAt, status) {
   return { isJoinable: true, label: '', labelClass: '' };
 }
 
+// ─── Session cards (Live page) ───────────────────────────────
+// One builder for private + group cards, used by loadSessions() and the 30 s
+// refresh, so the buttons can never drift apart again.
+const ICON_SESSION_END_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>';
+const ICON_SESSION_CLOCK_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>';
+
+// The three parts of a card that change with time: status chip, status note, buttons.
+function sessionCardParts(id, scheduledAt, status, { isHost, withBrowser }) {
+  const st = getSessionState(scheduledAt, status);
+  const notYet = st.labelClass === 'chip chip-muted session-not-yet';
+  const canEnd = isHost && status !== 'ended' && status !== 'cleared' && status !== 'cancelled';
+  const lobby = st.isJoinable && st.labelClass === 'chip chip-soon';
+
+  let chip = '';
+  if (notYet) chip = `<span class="chip chip-muted">${escapeHtml(t('session_upcoming') || 'Upcoming')}</span>`;
+  else if (st.label && !lobby) chip = `<span class="${st.labelClass}">${escapeHtml(st.label)}</span>`;
+
+  const note = lobby ? escapeHtml(st.label) : '';
+
+  let actions = '';
+  if (st.isJoinable) {
+    actions = `<div class="sc-buttons">
+        <button type="button" class="btn btn-primary sc-join" onclick="joinSession('${id}')">${joinSessionBtnLabel()}</button>
+        ${withBrowser ? `<button type="button" class="btn btn-outline sc-browser" onclick="openSessionInBrowser('${id}')" aria-label="${escapeHtml(t('btn_join_browser') || 'Join via Browser')}">${ICON_JOIN_BROWSER_SVG}<span>${escapeHtml(t('btn_join_browser_short') || 'Browser')}</span></button>` : ''}
+      </div>`;
+  } else if (notYet) {
+    actions = `<div class="sc-wait">${ICON_SESSION_CLOCK_SVG}<span>${escapeHtml(t('session_opens_hint') || 'Join opens 5 min before the start')}</span></div>`;
+  }
+  if (canEnd) {
+    actions += `<button type="button" class="sc-end" onclick="endSession('${id}')">${ICON_SESSION_END_SVG}<span>${escapeHtml(t('btn_end_session') || 'End Session')}</span></button>`;
+  }
+  return { st, chip, note, actions };
+}
+
+function sessionCardHtml(s, { isGroup, withBrowser, title }) {
+  const isHost = String(s.host_id) === String(currentUser?.telegram_id);
+  const p = sessionCardParts(s.id, s.scheduled_at, s.status, { isHost, withBrowser });
+  const cls = (s.status === 'active' ? ' is-live' : '') + (!p.st.isJoinable && !p.actions ? ' is-done' : '');
+  return `
+    <div class="session-item sc${cls}"
+        data-session-id="${s.id}"
+        data-scheduled-at="${s.scheduled_at}"
+        data-status="${s.status}"
+        data-host="${escapeHtml(String(s.host_id ?? ''))}"
+        data-browser="${withBrowser ? 1 : 0}">
+      <div class="sc-top">
+        <div class="session-icon">${isGroup ? ICON_GROUP_SVG : ICON_USER_SVG}</div>
+        <div class="session-body">
+          <div class="session-title">${escapeHtml(title)}</div>
+          <div class="session-sub">${formatDateTime(s.scheduled_at)}</div>
+        </div>
+        <div class="sc-chip">${p.chip}</div>
+      </div>
+      <div class="sc-note"${p.note ? '' : ' hidden'}>${p.note}</div>
+      <div class="sc-actions"${p.actions ? '' : ' hidden'}>${p.actions}</div>
+    </div>`;
+}
+
 /**
- * Refresh only the status labels / buttons on already-rendered session cards
+ * Refresh only the status chip / note / buttons on already-rendered session cards
  * using the cached data — no API call. Called every 30 s by the timer.
  */
 function refreshSessionLabels() {
   let activeSessionCount = 0;
-
-  // Private sessions
-  const privateContainer = document.getElementById('privateSessionsList');
-  if (privateContainer) {
-    const items = privateContainer.querySelectorAll('.session-item[data-session-id]');
-    items.forEach(item => {
+  ['privateSessionsList', 'upcomingSessions'].forEach(listId => {
+    const list = document.getElementById(listId);
+    if (!list) return;
+    list.querySelectorAll('.session-item[data-session-id]').forEach(item => {
       const scheduledAt = item.dataset.scheduledAt;
-      const status = item.dataset.status;
       if (!scheduledAt) return;
-      const { isJoinable, label, labelClass } = getSessionState(scheduledAt, status);
-
-      if (isJoinable) {
-        activeSessionCount++;
-      }
-
-      const labelEl = item.querySelector('.session-live-label');
-      const actionEl = item.querySelector('.session-action');
-      if (labelEl) {
-        if (label) {
-          labelEl.className = labelClass;
-          labelEl.textContent = label;
-          labelEl.style.display = '';
-        } else {
-          labelEl.textContent = '';
-          labelEl.style.display = 'none';
-        }
-      }
-      if (actionEl) {
-        const sid = item.dataset.sessionId;
-        const status = item.dataset.status;
-        if (isJoinable) {
-          actionEl.innerHTML = `
-            <div style="display:flex;flex-direction:column;gap:6px;">
-              <button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${joinSessionBtnLabel()}</button>
-              <button class="btn btn-outline btn-sm"  onclick="openSessionInBrowser('${sid}')">${joinBrowserBtnLabel()}</button>
-            </div>`;
-        } else if (labelClass === 'chip chip-muted session-not-yet') {
-          // Scheduled but too early — show disabled buttons + "Starts at" text
-          actionEl.innerHTML = `
-            <div style="display:flex;flex-direction:column;gap:6px;">
-              <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinSessionBtnLabel()}</button>
-              <button class="btn btn-outline btn-sm"  disabled style="opacity:.45;cursor:not-allowed;">${joinBrowserBtnLabel()}</button>
-              <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
-            </div>`;
-        } else {
-          actionEl.innerHTML = `<span class="${labelClass}">${label}</span>`;
-        }
-      }
+      const p = sessionCardParts(item.dataset.sessionId, scheduledAt, item.dataset.status, {
+        isHost: String(item.dataset.host) === String(currentUser?.telegram_id),
+        withBrowser: item.dataset.browser === '1',
+      });
+      if (p.st.isJoinable) activeSessionCount++;
+      const set = (sel, html) => {
+        const el = item.querySelector(sel);
+        if (!el) return;
+        if (el.innerHTML !== html) el.innerHTML = html;
+        if (el.hasAttribute('hidden') !== !html) el.toggleAttribute('hidden', !html);
+      };
+      set('.sc-chip', p.chip);
+      set('.sc-note', p.note);
+      set('.sc-actions', p.actions);
+      item.classList.toggle('is-done', !p.st.isJoinable && !p.actions);
     });
-  }
-
-  // Group sessions
-  const groupContainer = document.getElementById('upcomingSessions');
-  if (groupContainer) {
-    const items = groupContainer.querySelectorAll('.session-item[data-session-id]');
-    items.forEach(item => {
-      const scheduledAt = item.dataset.scheduledAt;
-      const status = item.dataset.status;
-      if (!scheduledAt) return;
-      const { isJoinable, label, labelClass } = getSessionState(scheduledAt, status);
-
-      if (isJoinable) {
-        activeSessionCount++;
-      }
-
-      const labelEl = item.querySelector('.session-live-label');
-      const actionEl = item.querySelector('.session-action');
-      if (labelEl) { labelEl.className = labelClass; labelEl.textContent = label; }
-      if (actionEl) {
-        const sid = item.dataset.sessionId;
-        if (isJoinable) {
-          actionEl.innerHTML = `<button class="btn btn-primary btn-sm" onclick="joinSession('${sid}')">${joinSessionBtnLabel()}</button>`;
-        } else if (labelClass === 'chip chip-muted session-not-yet') {
-          // Scheduled but too early — show disabled button + "Starts at" text
-          actionEl.innerHTML = `
-            <div style="display:flex;flex-direction:column;gap:6px;">
-              <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinSessionBtnLabel()}</button>
-              <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
-            </div>`;
-        } else {
-          actionEl.innerHTML = `<span class="${labelClass}">${label}</span>`;
-        }
-      }
-    });
-  }
-
+  });
   updateSessionsBadge(activeSessionCount);
 }
 
@@ -4407,47 +4435,10 @@ async function loadSessions() {
         privateContainer.innerHTML = mySessions.map(s => {
           const session = s.session;
           if (!session) return '';
+          if (getSessionState(session.scheduled_at, session.status).isJoinable) activeSessionCount++;
           const isGroup = session.is_group;
           const title = session.title || (isGroup ? 'Group Session' : 'Private Session');
-          const scheduled = formatDateTime(session.scheduled_at);
-          const { isJoinable, label, labelClass } = getSessionState(session.scheduled_at, session.status);
-
-          if (isJoinable) {
-            activeSessionCount++;
-          }
-
-          // Check if the current user is the host and the session is not already ended/cleared
-          const isHost = String(session.host_id) === String(currentUser?.telegram_id);
-          const canEnd = isHost && session.status !== 'ended' && session.status !== 'cleared';
-
-          const actionHtml = isJoinable
-            ? `<div style="display:flex; flex-direction:column; gap:6px;">
-                <button class="btn btn-primary btn-sm" onclick="joinSession('${session.id}')">${joinSessionBtnLabel()}</button>
-                <button class="btn btn-outline btn-sm" onclick="openSessionInBrowser('${session.id}')">${joinBrowserBtnLabel()}</button>
-                ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${session.id}')">${escapeHtml(t('btn_end_session') || 'End Session')}</button>` : ''}
-              </div>`
-            : (labelClass === 'chip chip-muted session-not-yet'
-              ? `<div style="display:flex; flex-direction:column; gap:6px;">
-                  <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinSessionBtnLabel()}</button>
-                  <button class="btn btn-outline btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinBrowserBtnLabel()}</button>
-                  ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${session.id}')">${escapeHtml(t('btn_end_session') || 'End Session')}</button>` : ''}
-                  <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
-                </div>`
-              : `<span class="${labelClass}">${label}</span>`);
-
-          return `
-            <div class="session-item"
-                data-session-id="${session.id}"
-                data-scheduled-at="${session.scheduled_at}"
-                data-status="${session.status}">
-              <div class="session-icon">${isGroup ? ICON_GROUP_SVG : ICON_USER_SVG}</div>
-              <div class="session-body">
-                <div class="session-title">${escapeHtml(title)}</div>
-                <div class="session-sub">${scheduled}</div>
-                ${(label && isJoinable) ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
-              </div>
-              <div class="session-action">${actionHtml}</div>
-            </div>`;
+          return sessionCardHtml(session, { isGroup, withBrowser: true, title });
         }).filter(Boolean).join('');
       }
     }
@@ -4462,50 +4453,8 @@ async function loadSessions() {
         container.innerHTML = `<div class="empty-state"><span>${t('no_upcoming_group_sessions')}</span></div>`;
       } else {
         container.innerHTML = upcoming.map(s => {
-          const { isJoinable, label, labelClass } = getSessionState(s.scheduled_at, s.status);
-          if (isJoinable) {
-            activeSessionCount++;
-          }
-
-          // Check if the current user is the host and the session is not already ended/cleared
-          const isHost = String(s.host_id) === String(currentUser?.telegram_id);
-          const canEnd = isHost && s.status !== 'ended' && s.status !== 'cleared';
-
-          // Build action buttons
-          let actionHtml;
-          if (isJoinable) {
-            actionHtml = `<div style="display:flex; flex-direction:column; gap:6px;">
-                <button class="btn btn-primary btn-sm" onclick="joinSession('${s.id}')">${joinSessionBtnLabel()}</button>
-                ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')">${escapeHtml(t('btn_end_session') || 'End Session')}</button>` : ''}
-              </div>`;
-          } else if (labelClass === 'chip chip-muted session-not-yet') {
-            actionHtml = `<div style="display:flex; flex-direction:column; gap:6px;">
-                <button class="btn btn-primary btn-sm" disabled style="opacity:.45;cursor:not-allowed;">${joinSessionBtnLabel()}</button>
-                ${canEnd ? `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')">${escapeHtml(t('btn_end_session') || 'End Session')}</button>` : ''}
-                <span class="${labelClass}" style="font-size:.72rem;margin-top:2px;">${label}</span>
-              </div>`;
-          } else {
-            actionHtml = `<span class="${labelClass}">${label}</span>`;
-            // Even if the session is already done, host can still end it? Actually, if it's done, the button is not needed.
-            // But we keep it simple: only show if canEnd is true.
-            if (canEnd) {
-              actionHtml += `<button class="btn btn-danger btn-sm" onclick="endSession('${s.id}')" style="margin-top:4px;">${escapeHtml(t('btn_end_session') || 'End Session')}</button>`;
-            }
-          }
-
-          return `
-            <div class="session-item"
-                data-session-id="${s.id}"
-                data-scheduled-at="${s.scheduled_at}"
-                data-status="${s.status}">
-              <div class="session-icon">${ICON_GROUP_SVG}</div>
-              <div class="session-body">
-                <div class="session-title">${escapeHtml(s.title)}</div>
-                <div class="session-sub">${formatDateTime(s.scheduled_at)}</div>
-                ${(label && isJoinable) ? `<div class="session-live-label ${labelClass}" style="margin-top:4px;font-size:.75rem;">${label}</div>` : ''}
-              </div>
-              <div class="session-action">${actionHtml}</div>
-            </div>`;
+          if (getSessionState(s.scheduled_at, s.status).isJoinable) activeSessionCount++;
+          return sessionCardHtml(s, { isGroup: true, withBrowser: false, title: s.title });
         }).join('');
       }
     }

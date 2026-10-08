@@ -11857,3 +11857,121 @@ input:focus, textarea:focus, select:focus {
 .reply-cancel svg, .edit-cancel svg { width: 16px; height: 16px; }
 .reply-cancel:hover, .edit-cancel:hover,
 .reply-cancel:active, .edit-cancel:active { background: rgba(224, 92, 92, 0.2); color: var(--danger); }
+
+/* ═══ Live page: session cards ═══════════════════════════════════
+   Title / date / status on top, then ONE clean action row: a wide Join button
+   with a compact Browser button beside it. Hosts get a quiet "End session"
+   link under a hairline instead of a third stacked button. ═══ */
+.session-item.sc {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.sc-top { display: flex; align-items: center; gap: 14px; }
+.sc-top .session-body { flex: 1 1 auto; min-width: 0; }
+.sc-chip { flex: 0 0 auto; align-self: flex-start; }
+.sc-chip:empty { display: none; }
+.sc-chip .chip { font-size: 0.68rem; padding: 4px 11px; border-radius: 999px; white-space: nowrap; }
+
+.sc-note {
+  padding: 9px 13px;
+  border-radius: 12px;
+  background: var(--gold-dim);
+  color: var(--gold-light);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.sc-actions { display: flex; flex-direction: column; gap: 10px; }
+.sc-note[hidden], .sc-actions[hidden] { display: none; }
+
+.sc-buttons { display: flex; gap: 10px; }
+.sc-buttons .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  border-radius: 999px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sc-join { flex: 1 1 0; min-width: 0; }
+.sc-browser { flex: 0 0 auto; padding: 0 18px; }
+.sc-browser svg, .sc-join svg { width: 17px; height: 17px; flex: none; }
+
+.sc-wait {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: var(--bg3);
+  border: 1px solid var(--border-dim);
+  color: var(--text2);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+.sc-wait svg { flex: none; color: var(--gold); }
+
+.sc-end {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 0 0;
+  margin-top: 2px;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--border-dim);
+  border-radius: 0;
+  color: var(--danger);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sc-end:active { opacity: 0.6; }
+
+.session-item.is-live {
+  border-color: rgba(255, 90, 90, 0.38);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3), 0 0 30px rgba(255, 90, 90, 0.1), var(--inset-hi);
+}
+.session-item.is-done { opacity: 0.72; }
+
+@media (max-width: 340px) {
+  .sc-browser span { display: none; }
+  .sc-browser { padding: 0 16px; }
+}
+
+/* ═══ Chat composer: docked, never floating ══════════════════════
+   Closed keyboard: the composer's solid background runs down behind the nav pill,
+   so there is no gap strip and the two read as one dock. The content stays exactly
+   where it was (the extension is a pseudo-element, so --chat-input-h is unchanged).
+   Open keyboard (body.chat-kb, set by updateChatKeyboard in app.js): the nav
+   hides and the composer sits directly on the keyboard. ═══ */
+.chat-input-row { border-top-color: var(--border); }
+.chat-input-row::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: calc(var(--nav-h) + var(--safe-bottom));
+  background: var(--bg2);
+  pointer-events: none;
+}
+
+body.chat-kb .bottom-nav { display: none !important; }
+body.chat-kb .chat-input-row { bottom: 0; padding-bottom: 8px; box-shadow: 0 -2px 14px rgba(0, 0, 0, 0.2); }
+body.chat-kb .chat-input-row::after { display: none; }
+body.chat-kb #page-chat.active { height: var(--app-height); }
+body.chat-kb .chat-container { height: calc(var(--app-height) - 60px); }
