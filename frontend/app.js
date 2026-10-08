@@ -2291,6 +2291,7 @@ function startApp() {
     $('nav-requests')?.classList.remove('hidden');
     $('nav-my-mentees')?.style.setProperty('display', 'flex');
     document.querySelectorAll('.mentor-hidden').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.mentor-only').forEach(el => el.classList.remove('hidden'));
   }
 
   applyLanguage();

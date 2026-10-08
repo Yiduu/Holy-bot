@@ -1,0 +1,128 @@
+From c2e0776dd2f0b663911868f2e903befff37004c0 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 8 Oct 2026 11:20:41 +0300
+Subject: [PATCH] Live page: remove duplicate start buttons; mentors get a New
+ Private/Group Session card inside each tab
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HMz7Hx1S3UR1ZoBBRD3Qqi
+---
+ frontend/app.js     |  1 +
+ frontend/index.html | 52 ++++++++++++++++++++++++++-------------------
+ frontend/locales.js |  4 ++++
+ 3 files changed, 35 insertions(+), 22 deletions(-)
+
+diff --git a/frontend/app.js b/frontend/app.js
+index 23f753c..757c8d0 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -2291,6 +2291,7 @@ function startApp() {
+     $('nav-requests')?.classList.remove('hidden');
+     $('nav-my-mentees')?.style.setProperty('display', 'flex');
+     document.querySelectorAll('.mentor-hidden').forEach(el => el.style.display = 'none');
++    document.querySelectorAll('.mentor-only').forEach(el => el.classList.remove('hidden'));
+   }
+ 
+   applyLanguage();
+diff --git a/frontend/index.html b/frontend/index.html
+index fdfe57a..1bc6f18 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -744,28 +744,6 @@
+           data-i18n="btn_clear">Clear</button>
+       </div>
+       <div class="page-content">
+-        <div class="section-title" data-i18n="Start a Session (Mentors Only)">Start a Session (Mentors Only)</div>
+-        <div class="grid-2 mb-16">
+-          <button class="btn btn-primary" onclick="openPrivateSessionFlow()">
+-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+-              stroke="currentColor" stroke-width="2">
+-              <polygon points="23 7 16 12 23 17 23 7" />
+-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+-            </svg>
+-            <span data-i18n="1-on-1 Session">1-on-1 Session</span>
+-          </button>
+-          <button class="btn btn-outline" onclick="showScheduleModal(true)">
+-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+-              stroke="currentColor" stroke-width="2">
+-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+-              <circle cx="9" cy="7" r="4" />
+-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+-            </svg>
+-            <span data-i18n="Group Session">Group Session</span>
+-          </button>
+-        </div>
+-
+         <div class="profile-tabs" role="tablist">
+           <button type="button" id="sessTabPrivate" class="profile-tab active" role="tab" aria-selected="true"
+             onclick="switchSessionsTab('private')">
+@@ -787,6 +765,21 @@
+         </div>
+ 
+         <div id="sessPanePrivate" class="profile-pane active">
++          <nav class="profile-menu-list mb-16 mentor-only hidden" aria-label="New Private Session">
++            <button type="button" class="profile-menu-item pm-gold" onclick="openPrivateSessionFlow()">
++              <span class="profile-menu-icon">
++                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
++                  stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
++                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
++                </svg>
++              </span>
++              <span class="profile-menu-label" data-i18n="sess_new_private">New Private Session</span>
++              <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
++                stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
++                <polyline points="9 6 15 12 9 18" />
++              </svg>
++            </button>
++          </nav>
+           <div class="section-title" data-i18n="My Private Sessions">My Private Sessions</div>
+           <div id="privateSessionsList" class="mb-16">
+             <div class="loading-spinner" style="margin:30px auto"></div>
+@@ -794,6 +787,21 @@
+         </div>
+ 
+         <div id="sessPaneGroup" class="profile-pane">
++          <nav class="profile-menu-list mb-16 mentor-only hidden" aria-label="New Group Session">
++            <button type="button" class="profile-menu-item pm-gold" onclick="showScheduleModal(true)">
++              <span class="profile-menu-icon">
++                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
++                  stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
++                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
++                </svg>
++              </span>
++              <span class="profile-menu-label" data-i18n="sess_new_group">New Group Session</span>
++              <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
++                stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
++                <polyline points="9 6 15 12 9 18" />
++              </svg>
++            </button>
++          </nav>
+           <div class="section-title" data-i18n="Upcoming Group Sessions">Upcoming Group Sessions</div>
+           <div id="upcomingSessions">
+             <div class="loading-spinner" style="margin:30px auto"></div>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 5ffaa05..b9c4abb 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -154,6 +154,8 @@ const I18N = {
+     "nav_live": "Live",
+     "sess_tab_private": "Private",
+     "sess_tab_group": "Group",
++    "sess_new_private": "New Private Session",
++    "sess_new_group": "New Group Session",
+     "Mentors": "Mentors",
+     "Sessions": "Live",
+     "Chat": "Chat",
+@@ -853,6 +855,8 @@ const I18N = {
+     "nav_live": "ቀጥታ",
+     "sess_tab_private": "የግል",
+     "sess_tab_group": "የቡድን",
++    "sess_new_private": "አዲስ የግል ክፍለ-ጊዜ",
++    "sess_new_group": "አዲስ የቡድን ክፍለ-ጊዜ",
+     "Mentors": "አማካሪዎች",
+     "Sessions": "ቀጥታ",
+     "Chat": "ቻት",
+-- 
+2.43.0
+
