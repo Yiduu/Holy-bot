@@ -196,7 +196,7 @@ async function safeSend(chatId, text, extra = {}) {
   catch (err) { console.error(`[Bot] Failed to send to ${chatId}:`, err.message); }
 }
 
-// Send a styled notification card (HTML) with an optional gold "open app" button.
+// Send a styled notification card (HTML) with an optional coloured "open app" button.
 //   content: { icon, title, body, quote, fields, footer }  (plain text, escaped by card())
 //   btn:     { label, url? }  -> gold web-app button; url defaults to the app home.
 function sendCard(chatId, content, btn) {
@@ -1717,8 +1717,8 @@ async function notifyAdminNewMentorApplication(applicantTelegramId, sex, educati
         ...HTML,
         reply_markup: {
           inline_keyboard: [[
-            { text: '✅ Approve', callback_data: `admin_approve_${applicantTelegramId}` },
-            { text: '❌ Reject', callback_data: `admin_reject_${applicantTelegramId}` }
+            { text: '✅ Approve', callback_data: `admin_approve_${applicantTelegramId}`, style: 'success' },
+            { text: '❌ Reject', callback_data: `admin_reject_${applicantTelegramId}`, style: 'danger' }
           ]]
         }
       });

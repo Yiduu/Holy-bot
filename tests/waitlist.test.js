@@ -46,12 +46,12 @@ const wait = (id, user, t) => db.mentor_waitlist.push({ id, mentor_id: 1, user_i
   reset(); wait(1, 10, 1);
   assert.equal(await notifyMentorWaitlist(supabase, 1, deps), 1);
   assert.ok(sent[0].text.includes('Pastor_Sam*&lt;b&gt;') && !sent[0].text.includes('<b>Pastor') && sent[0].extra.parse_mode === 'HTML'); ok('mentor name is HTML-escaped in a card');
-  assert.equal(sent[0].extra.reply_markup.inline_keyboard[0][0].web_app.url.endsWith('?start=mentors') && sent[0].extra.reply_markup.inline_keyboard[0][0].text.includes('🌟'), true); ok('message carries a gold "Open mentors" button that deep-links to the Mentors page');
+  assert.equal(sent[0].extra.reply_markup.inline_keyboard[0][0].web_app.url.endsWith('?start=mentors') && sent[0].extra.reply_markup.inline_keyboard[0][0].style === 'success', true); ok('message carries a green "Open mentors" button that deep-links to the Mentors page');
   assert.equal(db.mentor_waitlist.length, 0); ok('notified person is removed from the list');
 
   // Amharic users get Amharic
   reset(); wait(1, 20, 1); await notifyMentorWaitlist(supabase, 1, deps);
-  assert.ok(/ክፍት ቦታ/.test(sent[0].text) && sent[0].extra.reply_markup.inline_keyboard[0][0].text.includes('አማካሪዎችን ክፈት')); ok('Amharic message + button for Amharic users');
+  assert.ok(/ክፍት ቦታ/.test(sent[0].text) && sent[0].extra.reply_markup.inline_keyboard[0][0].text === 'አማካሪዎችን ክፈት'); ok('Amharic message + button for Amharic users');
 
   // one message per free spot, oldest first
   reset(); wait(1, 10, 1); wait(2, 11, 2); wait(3, 12, 3);

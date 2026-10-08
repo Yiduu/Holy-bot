@@ -3,16 +3,18 @@
 /**
  * Shared look for every Telegram notification the bot sends.
  *
- * Telegram does not let a bot pick a hex colour for an inline button (the
- * button tint comes from the user's chat theme), so the "golden" button is
- * built the only way the platform allows: a gold glyph on both sides of the
- * label. Change GOLD_ICON (or set NOTIFY_GOLD_ICON) to restyle all of them.
+ * Buttons are coloured with Telegram's native InlineKeyboardButton `style`
+ * field: 'success' (green), 'primary' (blue) or 'danger' (red). The exact
+ * shade comes from the user's Telegram client/theme. Set NOTIFY_BUTTON_STYLE
+ * to 'primary' to make every notification button blue instead of green.
  *
  * Messages are sent with parse_mode HTML. Anything that came from a user or
  * the database (names, goal titles, chat text) MUST go through esc().
  */
 
-const GOLD_ICON = process.env.NOTIFY_GOLD_ICON || '🌟';
+const BUTTON_STYLE = ['success', 'primary', 'danger'].includes(process.env.NOTIFY_BUTTON_STYLE)
+  ? process.env.NOTIFY_BUTTON_STYLE
+  : 'success';
 const DIVIDER = '━━━━━━━━━━━━━━';
 
 // Options to spread into safeSend / bot.sendMessage for a card.
@@ -23,17 +25,17 @@ const esc = (s) => String(s ?? '')
   .replace(/</g, '&lt;')
   .replace(/>/g, '&gt;');
 
-/** Gold-styled button that opens the mini app at `url`. */
+/** Coloured button that opens the mini app at `url`. */
 function goldButton(label, url) {
-  return { text: `${GOLD_ICON} ${label} ${GOLD_ICON}`, web_app: { url } };
+  return { text: label, web_app: { url }, style: BUTTON_STYLE };
 }
 
-/** Gold-styled button that fires a bot callback instead of opening the app. */
+/** Coloured button that fires a bot callback instead of opening the app. */
 function goldCallback(label, data) {
-  return { text: `${GOLD_ICON} ${label} ${GOLD_ICON}`, callback_data: data };
+  return { text: label, callback_data: data, style: BUTTON_STYLE };
 }
 
-/** inline_keyboard markup with a single gold web-app button. */
+/** inline_keyboard markup with a single coloured web-app button. */
 function goldKeyboard(label, url) {
   return { inline_keyboard: [[goldButton(label, url)]] };
 }
@@ -73,4 +75,4 @@ function card({ icon = '', title, body = [], quote = '', fields = [], footer = '
   return out.join('\n');
 }
 
-module.exports = { GOLD_ICON, DIVIDER, HTML, esc, goldButton, goldCallback, goldKeyboard, card };
+module.exports = { BUTTON_STYLE, DIVIDER, HTML, esc, goldButton, goldCallback, goldKeyboard, card };
