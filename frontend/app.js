@@ -2308,9 +2308,6 @@ window.loadDashboard = async function loadDashboard() {
     const verse = await apiFetch('/api/auth/verse');
     $('verseText').textContent = verse.text;
     $('verseRef').textContent = verse.reference;
-    $('verseText').classList.toggle('is-am', /[\u1200-\u137F]/.test(verse.text || ''));
-    const verseDateEl = $('verseDate');
-    if (verseDateEl) verseDateEl.textContent = new Date().toLocaleDateString(currentLanguage === 'am' ? 'am-ET' : 'en-US', { month: 'short', day: 'numeric' });
 
     // Once-a-day invitation to actually read the verse, gated purely
     // on the calendar date so it never shows more than once per day.
@@ -2375,62 +2372,31 @@ const WEEK_DAY_INITIALS = {
   am: ['እ', 'ሰ', 'ማ', 'ረ', 'ሐ', 'ዓ', 'ቅ'],
 };
 
-const WEEKDAY_SHORT_AM = ['እሑድ', 'ሰኞ', 'ማክሰኞ', 'ረቡዕ', 'ሐሙስ', 'ዓርብ', 'ቅዳሜ'];
-const STREAK_ICON_LOCK = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
-const STREAK_ICON_FLAME = '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><path fill="currentColor" d="M12.5 2c.6 2.4-.4 3.9-1.8 5.4C9 9.2 7 11 7 14a5 5 0 0 0 10 0c0-1.7-.7-2.7-1.4-3.7-.3 1.6-1.1 2.4-1.9 2.9.4-2.1-.3-3.6-1.6-5-1-1.1-1.3-2.3.4-4z"/></svg>';
-const STREAK_UPCOMING_DAYS = 3;   // locked "Soon" boxes after today, like the daily-bonus strip
-
 function renderStreakWeek(week) {
   const el = $('streakWeek');
-  if (!el || !Array.isArray(week) || !week.length) return;
+  if (!el || !Array.isArray(week)) return;
 
-  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  // The server sends the last 7 days; add a few locked days after today client-side.
-  const days = week.map(d => ({ ...d }));
-  const last = new Date(days[days.length - 1].date + 'T00:00:00');
-  for (let n = 1; n <= STREAK_UPCOMING_DAYS; n++) {
-    const d = new Date(last); d.setDate(d.getDate() + n);
-    days.push({ date: fmt(d), future: true });
-  }
-
-  const boxes = days.map(day => {
+  el.innerHTML = week.map(day => {
     const d = new Date(day.date + 'T00:00:00');
-    const name = currentLanguage === 'am'
-      ? WEEKDAY_SHORT_AM[d.getDay()]
-      : d.toLocaleDateString('en-US', { weekday: 'short' });
+    const initials = WEEK_DAY_INITIALS[currentLanguage] || WEEK_DAY_INITIALS.en;
+    const label = initials[d.getDay()];
 
-    let cls = 'sd-box', medal = '', cap = '', lock = '';
-    if (day.future) {
-      cls += ' is-future'; lock = `<span class="sd-lock">${STREAK_ICON_LOCK}</span>`; cap = t('streak_cap_soon');
-    } else if (day.used_freeze) {
-      cls += ' is-frozen'; medal = STREAK_ICON_SHIELD_SM.replace('width="12" height="12"', 'width="20" height="20"'); cap = t('streak_cap_saved');
+    let dotClass = 'streak-week-dot';
+    let icon = '';
+    if (day.used_freeze) {
+      dotClass += ' is-frozen';
+      icon = STREAK_ICON_SHIELD_SM;
     } else if (day.read) {
-      cls += ' is-read'; medal = STREAK_ICON_CHECK.replace('width="14" height="14"', 'width="20" height="20"'); cap = t('streak_cap_read');
-    } else if (day.is_today) {
-      cap = t('Today');
-    } else {
-      cls += ' is-missed'; cap = t('streak_cap_missed');
+      dotClass += ' is-read';
+      icon = STREAK_ICON_CHECK;
     }
-    if (day.is_today) { cls += ' is-today'; if (!medal) medal = STREAK_ICON_FLAME; cap = t('Today'); }
+    if (day.is_today) dotClass += ' is-today';
 
-    return `<div class="${cls}" role="listitem"${day.is_today ? ' aria-current="date"' : ''}>
-      ${lock}
-      <span class="sd-name">${escapeHtml(name)}</span>
-      <span class="sd-medal">${medal}</span>
-      <span class="sd-num">${d.getDate()}</span>
-      <span class="sd-cap">${escapeHtml(cap)}</span>
+    return `<div class="streak-week-item">
+      <div class="${dotClass}">${icon}</div>
+      <span class="streak-week-label">${label}</span>
     </div>`;
   }).join('');
-  el.setAttribute('role', 'list');
-  el.innerHTML = boxes;
-
-  // Bring today into view (one box before it stays visible, the next one peeks in).
-  requestAnimationFrame(() => {
-    const today = el.querySelector('.is-today');
-    if (!today || !el.clientWidth) return;
-    const prev = today.previousElementSibling || today;
-    el.scrollLeft = Math.max(0, prev.offsetLeft - 20);
-  });
 }
 
 async function loadStreak() {
