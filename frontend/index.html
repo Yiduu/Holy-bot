@@ -601,40 +601,65 @@
 
         <!-- Quick Actions -->
         <div class="section-title" data-i18n="Quick Actions">Quick Actions</div>
-        <div class="grid-2 mb-16">
-          <button class="btn btn-outline mentor-hidden" onclick="navigate('mentors')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
+        <nav class="profile-menu-list mb-16" aria-label="Quick Actions">
+          <button type="button" class="profile-menu-item mentor-hidden" onclick="navigate('mentors')">
+            <span class="profile-menu-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+            </span>
+            <span class="profile-menu-label" data-i18n="Find Mentor">Find Mentor</span>
+            <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 6 15 12 9 18" />
             </svg>
-            <span data-i18n="Find Mentor">Find Mentor</span>
           </button>
-          <button class="btn btn-outline" onclick="navigate('sessions')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2">
-              <polygon points="23 7 16 12 23 17 23 7" />
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+          <button type="button" class="profile-menu-item pm-gold" onclick="navigate('sessions')">
+            <span class="profile-menu-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="23 7 16 12 23 17 23 7" />
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+              </svg>
+            </span>
+            <span class="profile-menu-label" data-i18n="nav_live">Live</span>
+            <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 6 15 12 9 18" />
             </svg>
-            <span data-i18n="nav_live">Live</span>
           </button>
-          <button class="btn btn-outline mentor-hidden" onclick="openApplyModal()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07" />
-              <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+          <button type="button" class="profile-menu-item mentor-hidden" onclick="openApplyModal()">
+            <span class="profile-menu-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
+              </svg>
+            </span>
+            <span class="profile-menu-label" data-i18n="Become Mentor">Become Mentor</span>
+            <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 6 15 12 9 18" />
             </svg>
-            <span data-i18n="Become Mentor">Become Mentor</span>
           </button>
-          <button class="btn btn-outline" onclick="navigate('settings')">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
+          <button type="button" class="profile-menu-item" onclick="navigate('settings')">
+            <span class="profile-menu-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </span>
+            <span class="profile-menu-label" data-i18n="Profile">Profile</span>
+            <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 6 15 12 9 18" />
             </svg>
-            <span data-i18n="Profile">Profile</span>
           </button>
-        </div>
+        </nav>
 
       </div>
     </div>
@@ -741,14 +766,38 @@
           </button>
         </div>
 
-        <div class="section-title" data-i18n="My Private Sessions">My Private Sessions</div>
-        <div id="privateSessionsList" class="mb-16">
-          <div class="loading-spinner" style="margin:30px auto"></div>
+        <div class="profile-tabs" role="tablist">
+          <button type="button" id="sessTabPrivate" class="profile-tab active" role="tab" aria-selected="true"
+            onclick="switchSessionsTab('private')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+            </svg>
+            <span data-i18n="sess_tab_private">Private</span>
+          </button>
+          <button type="button" id="sessTabGroup" class="profile-tab" role="tab" aria-selected="false"
+            onclick="switchSessionsTab('group')">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <span data-i18n="sess_tab_group">Group</span>
+          </button>
         </div>
 
-        <div class="section-title" data-i18n="Upcoming Group Sessions">Upcoming Group Sessions</div>
-        <div id="upcomingSessions">
-          <div class="loading-spinner" style="margin:30px auto"></div>
+        <div id="sessPanePrivate" class="profile-pane active">
+          <div class="section-title" data-i18n="My Private Sessions">My Private Sessions</div>
+          <div id="privateSessionsList" class="mb-16">
+            <div class="loading-spinner" style="margin:30px auto"></div>
+          </div>
+        </div>
+
+        <div id="sessPaneGroup" class="profile-pane">
+          <div class="section-title" data-i18n="Upcoming Group Sessions">Upcoming Group Sessions</div>
+          <div id="upcomingSessions">
+            <div class="loading-spinner" style="margin:30px auto"></div>
+          </div>
         </div>
       </div>
     </div>

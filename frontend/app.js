@@ -5705,6 +5705,19 @@ function updateProfileIdentity() {
   if ($('editProfileRole')) $('editProfileRole').textContent = formattedRole;
 }
 
+// Live page segmented switch: Private | Group (both lists keep refreshing while hidden)
+function switchSessionsTab(tab) {
+  const group = tab === 'group';
+  $('sessPanePrivate')?.classList.toggle('active', !group);
+  $('sessPaneGroup')?.classList.toggle('active', group);
+  [['sessTabPrivate', !group], ['sessTabGroup', group]].forEach(([id, on]) => {
+    const el = $(id); if (!el) return;
+    el.classList.toggle('active', on);
+    el.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  haptic('selection');
+}
+
 // Profile page segmented switch: Preferences | Support
 function switchProfileTab(tab) {
   const help = tab === 'help';
