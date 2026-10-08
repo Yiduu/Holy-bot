@@ -10840,14 +10840,16 @@ input:focus, textarea:focus, select:focus {
 .profile-menu-trailing { font-size: 0.82rem; }
 
 /* first card of each list = the golden one */
-.profile-menu-list > .profile-menu-item:first-child {
+#page-settings .profile-menu-list > .profile-menu-item:first-child,
+.profile-menu-item.pm-gold {
   border-color: rgba(201, 168, 76, 0.35);
   background:
     radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.22) 0%, rgba(201, 168, 76, 0.06) 55%, transparent 100%),
     #17140c;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38), 0 0 26px rgba(201, 168, 76, 0.12), inset 0 1px 0 rgba(255, 233, 160, 0.12);
 }
-.profile-menu-list > .profile-menu-item:first-child .profile-menu-icon {
+#page-settings .profile-menu-list > .profile-menu-item:first-child .profile-menu-icon,
+.profile-menu-item.pm-gold .profile-menu-icon {
   background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%);
   color: #2a1e05;
   box-shadow: 0 6px 16px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5);
@@ -10859,7 +10861,8 @@ input:focus, textarea:focus, select:focus {
   box-shadow: 0 8px 20px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff;
 }
 [data-theme="light"] .profile-menu-icon { background: rgba(201, 168, 76, 0.16); color: #7A5812; box-shadow: inset 0 0 0 1px rgba(150, 120, 40, 0.25); }
-[data-theme="light"] .profile-menu-list > .profile-menu-item:first-child {
+[data-theme="light"] #page-settings .profile-menu-list > .profile-menu-item:first-child,
+[data-theme="light"] .profile-menu-item.pm-gold {
   background: radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.28), rgba(201, 168, 76, 0.08) 60%, #fffaf0);
   border-color: rgba(150, 120, 40, 0.35);
 }
@@ -10937,3 +10940,117 @@ input:focus, textarea:focus, select:focus {
   background: transparent;
   border-bottom-color: transparent;
 }
+
+/* ═══ The profile concept, everywhere ═══════════════════════════════════════
+   Pill buttons, display-type headings with a soft glow, gold eyebrow labels,
+   gold icon tiles, press feedback and the slide-up entrance. Backgrounds of
+   existing (golden) cards are untouched. ═══ */
+
+.profile-menu-list.mb-16 { margin-bottom: 16px; }
+
+/* ── Buttons: pills with a lift on press ── */
+.btn {
+  border-radius: 999px;
+  min-height: 44px;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+.btn-sm { min-height: 36px; padding-left: 16px; padding-right: 16px; }
+.btn:active { transform: scale(0.96); }
+.btn-primary {
+  box-shadow: 0 8px 22px rgba(201, 168, 76, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+.btn-outline {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.btn-outline svg { color: var(--gold-light); }
+[data-theme="light"] .btn-outline {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(150, 120, 40, 0.28);
+  box-shadow: 0 6px 16px rgba(30, 25, 15, 0.12);
+}
+[data-theme="light"] .btn-outline svg { color: #7A5812; }
+.btn-danger { border-radius: 999px; }
+.btn-mentor-request { border-radius: 999px; }
+.btn-mentor-msg { border-radius: 50%; }
+.btn-filter-trigger { border-radius: 50%; width: 44px; height: 44px; }
+.mentor-search-wrap { border-radius: 999px; padding-left: 16px; }
+
+/* ── Headings & labels ── */
+.app-header h2 {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
+}
+[data-theme="light"] .app-header h2 { text-shadow: none; }
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 0.74rem;
+  letter-spacing: 0.16em;
+  margin: 4px 2px 12px;
+}
+.section-title::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold-light);
+  box-shadow: 0 0 10px rgba(232, 201, 107, 0.7);
+  flex-shrink: 0;
+}
+
+.page-intro-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  background: rgba(201, 168, 76, 0.12);
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  color: var(--gold-light);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+[data-theme="light"] .page-intro-eyebrow { color: #7A5812; }
+.page-intro-text { font-size: 0.9rem; }
+
+/* stat tiles: glowing gold numbers */
+.stat-num { color: var(--gold-light); text-shadow: 0 0 18px rgba(201, 168, 76, 0.4); }
+[data-theme="light"] .stat-num { color: #7A5812; text-shadow: none; }
+.stat-card { border-color: rgba(201, 168, 76, 0.16); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28), var(--inset-hi); }
+
+/* ── Icon tiles ── */
+.journal-mood {
+  width: 46px;
+  height: 46px;
+  margin-right: 0;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  font-size: 1.4rem;
+  background: rgba(201, 168, 76, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.24);
+}
+.session-title { font-size: 1rem; font-weight: 700; }
+
+/* ── Entrance: content slides up like the profile tabs ── */
+:is(#page-dashboard, #page-mentors, #page-sessions, #page-requests, #page-my-mentees,
+    #page-journal, #page-support, #page-ticket-detail).active .page-content {
+  animation: profilePaneIn 0.3s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(#page-dashboard, #page-mentors, #page-sessions, #page-requests, #page-my-mentees,
+      #page-journal, #page-support, #page-ticket-detail).active .page-content { animation: none; }
+  .btn:active { transform: none; }
+}
+
+/* keep the compact 38px mentor-card buttons compact (the pill rule above sets a 44px floor) */
+.btn-mentor-request, .btn.btn-not-accepting, .mentor-card .btn-sm { min-height: 38px; }

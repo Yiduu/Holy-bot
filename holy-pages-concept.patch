@@ -1,0 +1,357 @@
+From 810f3f1d97ae2ec42ba8e7debcd9f6b072ab23b6 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 8 Oct 2026 11:14:13 +0300
+Subject: [PATCH] Bring the profile concept to every page: pill buttons,
+ display headings, gold eyebrows, icon tiles, Live Private|Group tabs,
+ dashboard action cards
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HMz7Hx1S3UR1ZoBBRD3Qqi
+---
+ frontend/app.js     |  13 +++++
+ frontend/index.html | 113 ++++++++++++++++++++++++++++------------
+ frontend/locales.js |   4 ++
+ frontend/styles.css | 123 ++++++++++++++++++++++++++++++++++++++++++--
+ 4 files changed, 218 insertions(+), 35 deletions(-)
+
+diff --git a/frontend/app.js b/frontend/app.js
+index dcfc5d4..23f753c 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -5705,6 +5705,19 @@ function updateProfileIdentity() {
+   if ($('editProfileRole')) $('editProfileRole').textContent = formattedRole;
+ }
+ 
++// Live page segmented switch: Private | Group (both lists keep refreshing while hidden)
++function switchSessionsTab(tab) {
++  const group = tab === 'group';
++  $('sessPanePrivate')?.classList.toggle('active', !group);
++  $('sessPaneGroup')?.classList.toggle('active', group);
++  [['sessTabPrivate', !group], ['sessTabGroup', group]].forEach(([id, on]) => {
++    const el = $(id); if (!el) return;
++    el.classList.toggle('active', on);
++    el.setAttribute('aria-selected', on ? 'true' : 'false');
++  });
++  haptic('selection');
++}
++
+ // Profile page segmented switch: Preferences | Support
+ function switchProfileTab(tab) {
+   const help = tab === 'help';
+diff --git a/frontend/index.html b/frontend/index.html
+index 8e1dd32..fdfe57a 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -601,40 +601,65 @@
+ 
+         <!-- Quick Actions -->
+         <div class="section-title" data-i18n="Quick Actions">Quick Actions</div>
+-        <div class="grid-2 mb-16">
+-          <button class="btn btn-outline mentor-hidden" onclick="navigate('mentors')">
+-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+-              stroke="currentColor" stroke-width="2">
+-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+-              <circle cx="9" cy="7" r="4" />
++        <nav class="profile-menu-list mb-16" aria-label="Quick Actions">
++          <button type="button" class="profile-menu-item mentor-hidden" onclick="navigate('mentors')">
++            <span class="profile-menu-icon">
++              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
++                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
++                <circle cx="9" cy="7" r="4" />
++                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
++                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
++              </svg>
++            </span>
++            <span class="profile-menu-label" data-i18n="Find Mentor">Find Mentor</span>
++            <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
++              <polyline points="9 6 15 12 9 18" />
+             </svg>
+-            <span data-i18n="Find Mentor">Find Mentor</span>
+           </button>
+-          <button class="btn btn-outline" onclick="navigate('sessions')">
+-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+-              stroke="currentColor" stroke-width="2">
+-              <polygon points="23 7 16 12 23 17 23 7" />
+-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
++          <button type="button" class="profile-menu-item pm-gold" onclick="navigate('sessions')">
++            <span class="profile-menu-icon">
++              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
++                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++                <polygon points="23 7 16 12 23 17 23 7" />
++                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
++              </svg>
++            </span>
++            <span class="profile-menu-label" data-i18n="nav_live">Live</span>
++            <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
++              <polyline points="9 6 15 12 9 18" />
+             </svg>
+-            <span data-i18n="nav_live">Live</span>
+           </button>
+-          <button class="btn btn-outline mentor-hidden" onclick="openApplyModal()">
+-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+-              stroke="currentColor" stroke-width="2">
+-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07" />
+-              <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
++          <button type="button" class="profile-menu-item mentor-hidden" onclick="openApplyModal()">
++            <span class="profile-menu-icon">
++              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
++                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" />
++              </svg>
++            </span>
++            <span class="profile-menu-label" data-i18n="Become Mentor">Become Mentor</span>
++            <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
++              <polyline points="9 6 15 12 9 18" />
+             </svg>
+-            <span data-i18n="Become Mentor">Become Mentor</span>
+           </button>
+-          <button class="btn btn-outline" onclick="navigate('settings')">
+-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+-              <circle cx="12" cy="7" r="4" />
++          <button type="button" class="profile-menu-item" onclick="navigate('settings')">
++            <span class="profile-menu-icon">
++              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
++                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
++                <circle cx="12" cy="7" r="4" />
++              </svg>
++            </span>
++            <span class="profile-menu-label" data-i18n="Profile">Profile</span>
++            <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
++              <polyline points="9 6 15 12 9 18" />
+             </svg>
+-            <span data-i18n="Profile">Profile</span>
+           </button>
+-        </div>
++        </nav>
+ 
+       </div>
+     </div>
+@@ -741,14 +766,38 @@
+           </button>
+         </div>
+ 
+-        <div class="section-title" data-i18n="My Private Sessions">My Private Sessions</div>
+-        <div id="privateSessionsList" class="mb-16">
+-          <div class="loading-spinner" style="margin:30px auto"></div>
++        <div class="profile-tabs" role="tablist">
++          <button type="button" id="sessTabPrivate" class="profile-tab active" role="tab" aria-selected="true"
++            onclick="switchSessionsTab('private')">
++            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
++            </svg>
++            <span data-i18n="sess_tab_private">Private</span>
++          </button>
++          <button type="button" id="sessTabGroup" class="profile-tab" role="tab" aria-selected="false"
++            onclick="switchSessionsTab('group')">
++            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
++              <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
++            </svg>
++            <span data-i18n="sess_tab_group">Group</span>
++          </button>
++        </div>
++
++        <div id="sessPanePrivate" class="profile-pane active">
++          <div class="section-title" data-i18n="My Private Sessions">My Private Sessions</div>
++          <div id="privateSessionsList" class="mb-16">
++            <div class="loading-spinner" style="margin:30px auto"></div>
++          </div>
+         </div>
+ 
+-        <div class="section-title" data-i18n="Upcoming Group Sessions">Upcoming Group Sessions</div>
+-        <div id="upcomingSessions">
+-          <div class="loading-spinner" style="margin:30px auto"></div>
++        <div id="sessPaneGroup" class="profile-pane">
++          <div class="section-title" data-i18n="Upcoming Group Sessions">Upcoming Group Sessions</div>
++          <div id="upcomingSessions">
++            <div class="loading-spinner" style="margin:30px auto"></div>
++          </div>
+         </div>
+       </div>
+     </div>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 09c83ca..5ffaa05 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -152,6 +152,8 @@ const I18N = {
+     "no_verse": "No verse available today.",
+     "Home": "Home",
+     "nav_live": "Live",
++    "sess_tab_private": "Private",
++    "sess_tab_group": "Group",
+     "Mentors": "Mentors",
+     "Sessions": "Live",
+     "Chat": "Chat",
+@@ -849,6 +851,8 @@ const I18N = {
+     "no_verse": "ዛሬ ጥቅስ አልተገኘም።",
+     "Home": "ዋና ገጽ",
+     "nav_live": "ቀጥታ",
++    "sess_tab_private": "የግል",
++    "sess_tab_group": "የቡድን",
+     "Mentors": "አማካሪዎች",
+     "Sessions": "ቀጥታ",
+     "Chat": "ቻት",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 684f046..e7613d2 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -10840,14 +10840,16 @@ input:focus, textarea:focus, select:focus {
+ .profile-menu-trailing { font-size: 0.82rem; }
+ 
+ /* first card of each list = the golden one */
+-.profile-menu-list > .profile-menu-item:first-child {
++#page-settings .profile-menu-list > .profile-menu-item:first-child,
++.profile-menu-item.pm-gold {
+   border-color: rgba(201, 168, 76, 0.35);
+   background:
+     radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.22) 0%, rgba(201, 168, 76, 0.06) 55%, transparent 100%),
+     #17140c;
+   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38), 0 0 26px rgba(201, 168, 76, 0.12), inset 0 1px 0 rgba(255, 233, 160, 0.12);
+ }
+-.profile-menu-list > .profile-menu-item:first-child .profile-menu-icon {
++#page-settings .profile-menu-list > .profile-menu-item:first-child .profile-menu-icon,
++.profile-menu-item.pm-gold .profile-menu-icon {
+   background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%);
+   color: #2a1e05;
+   box-shadow: 0 6px 16px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+@@ -10859,7 +10861,8 @@ input:focus, textarea:focus, select:focus {
+   box-shadow: 0 8px 20px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff;
+ }
+ [data-theme="light"] .profile-menu-icon { background: rgba(201, 168, 76, 0.16); color: #7A5812; box-shadow: inset 0 0 0 1px rgba(150, 120, 40, 0.25); }
+-[data-theme="light"] .profile-menu-list > .profile-menu-item:first-child {
++[data-theme="light"] #page-settings .profile-menu-list > .profile-menu-item:first-child,
++[data-theme="light"] .profile-menu-item.pm-gold {
+   background: radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.28), rgba(201, 168, 76, 0.08) 60%, #fffaf0);
+   border-color: rgba(150, 120, 40, 0.35);
+ }
+@@ -10937,3 +10940,117 @@ input:focus, textarea:focus, select:focus {
+   background: transparent;
+   border-bottom-color: transparent;
+ }
++
++/* ═══ The profile concept, everywhere ═══════════════════════════════════════
++   Pill buttons, display-type headings with a soft glow, gold eyebrow labels,
++   gold icon tiles, press feedback and the slide-up entrance. Backgrounds of
++   existing (golden) cards are untouched. ═══ */
++
++.profile-menu-list.mb-16 { margin-bottom: 16px; }
++
++/* ── Buttons: pills with a lift on press ── */
++.btn {
++  border-radius: 999px;
++  min-height: 44px;
++  padding-left: 20px;
++  padding-right: 20px;
++}
++.btn-sm { min-height: 36px; padding-left: 16px; padding-right: 16px; }
++.btn:active { transform: scale(0.96); }
++.btn-primary {
++  box-shadow: 0 8px 22px rgba(201, 168, 76, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.38);
++}
++.btn-outline {
++  background: rgba(255, 255, 255, 0.06);
++  border: 1px solid rgba(255, 255, 255, 0.12);
++  color: var(--text);
++  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
++}
++.btn-outline svg { color: var(--gold-light); }
++[data-theme="light"] .btn-outline {
++  background: rgba(255, 255, 255, 0.85);
++  border-color: rgba(150, 120, 40, 0.28);
++  box-shadow: 0 6px 16px rgba(30, 25, 15, 0.12);
++}
++[data-theme="light"] .btn-outline svg { color: #7A5812; }
++.btn-danger { border-radius: 999px; }
++.btn-mentor-request { border-radius: 999px; }
++.btn-mentor-msg { border-radius: 50%; }
++.btn-filter-trigger { border-radius: 50%; width: 44px; height: 44px; }
++.mentor-search-wrap { border-radius: 999px; padding-left: 16px; }
++
++/* ── Headings & labels ── */
++.app-header h2 {
++  font-family: var(--font-display);
++  font-size: 1.3rem;
++  letter-spacing: 0.02em;
++  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
++}
++[data-theme="light"] .app-header h2 { text-shadow: none; }
++
++.section-title {
++  display: flex;
++  align-items: center;
++  gap: 9px;
++  font-size: 0.74rem;
++  letter-spacing: 0.16em;
++  margin: 4px 2px 12px;
++}
++.section-title::before {
++  content: '';
++  width: 7px;
++  height: 7px;
++  border-radius: 50%;
++  background: var(--gold-light);
++  box-shadow: 0 0 10px rgba(232, 201, 107, 0.7);
++  flex-shrink: 0;
++}
++
++.page-intro-eyebrow {
++  display: inline-flex;
++  align-items: center;
++  padding: 6px 14px;
++  margin-bottom: 8px;
++  border-radius: 999px;
++  background: rgba(201, 168, 76, 0.12);
++  border: 1px solid rgba(201, 168, 76, 0.3);
++  color: var(--gold-light);
++  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
++}
++[data-theme="light"] .page-intro-eyebrow { color: #7A5812; }
++.page-intro-text { font-size: 0.9rem; }
++
++/* stat tiles: glowing gold numbers */
++.stat-num { color: var(--gold-light); text-shadow: 0 0 18px rgba(201, 168, 76, 0.4); }
++[data-theme="light"] .stat-num { color: #7A5812; text-shadow: none; }
++.stat-card { border-color: rgba(201, 168, 76, 0.16); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28), var(--inset-hi); }
++
++/* ── Icon tiles ── */
++.journal-mood {
++  width: 46px;
++  height: 46px;
++  margin-right: 0;
++  flex-shrink: 0;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  border-radius: 16px;
++  font-size: 1.4rem;
++  background: rgba(201, 168, 76, 0.13);
++  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.24);
++}
++.session-title { font-size: 1rem; font-weight: 700; }
++
++/* ── Entrance: content slides up like the profile tabs ── */
++:is(#page-dashboard, #page-mentors, #page-sessions, #page-requests, #page-my-mentees,
++    #page-journal, #page-support, #page-ticket-detail).active .page-content {
++  animation: profilePaneIn 0.3s ease both;
++}
++@media (prefers-reduced-motion: reduce) {
++  :is(#page-dashboard, #page-mentors, #page-sessions, #page-requests, #page-my-mentees,
++      #page-journal, #page-support, #page-ticket-detail).active .page-content { animation: none; }
++  .btn:active { transform: none; }
++}
++
++/* keep the compact 38px mentor-card buttons compact (the pill rule above sets a 44px floor) */
++.btn-mentor-request, .btn.btn-not-accepting, .mentor-card .btn-sm { min-height: 38px; }
+-- 
+2.43.0
+
