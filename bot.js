@@ -1717,8 +1717,8 @@ async function notifyAdminNewMentorApplication(applicantTelegramId, sex, educati
         ...HTML,
         reply_markup: {
           inline_keyboard: [[
-            { text: '✅ Approve', callback_data: `admin_approve_${applicantTelegramId}`, style: 'success' },
-            { text: '❌ Reject', callback_data: `admin_reject_${applicantTelegramId}`, style: 'danger' }
+            { text: 'Approve', callback_data: `admin_approve_${applicantTelegramId}`, style: 'success' },
+            { text: 'Reject', callback_data: `admin_reject_${applicantTelegramId}`, style: 'danger' }
           ]]
         }
       });
@@ -3222,7 +3222,7 @@ setInterval(async () => {
       });
       if (lang === 'am') {
         const amVerse = await getAmharicVerse(v.text);
-        if (amVerse) text += `\n\n🇪🇹 <b>${esc(tSync('am', 'amharic_translation'))}:</b>\n<blockquote>${esc(amVerse)}</blockquote>`;
+        if (amVerse) text += `\n\n<b>${esc(tSync('am', 'amharic_translation'))}:</b>\n<blockquote>${esc(amVerse)}</blockquote>`;
       }
       text += `\n\n<i>${lang === 'am' ? 'ዛሬ ቃሉ ብርሃን ይሁንልዎ ✨' : 'May the Word light your day ✨'}</i>`;
       await safeSend(u.telegram_id, text, { ...HTML, reply_markup: goldKeyboard(tSync(lang, 'btn_open_app'), APP_URL) });
