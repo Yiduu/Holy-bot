@@ -15,7 +15,6 @@
 const BUTTON_STYLE = ['success', 'primary', 'danger'].includes(process.env.NOTIFY_BUTTON_STYLE)
   ? process.env.NOTIFY_BUTTON_STYLE
   : 'success';
-const DIVIDER = '━━━━━━━━━━━━━━';
 
 // Options to spread into safeSend / bot.sendMessage for a card.
 const HTML = { parse_mode: 'HTML', disable_web_page_preview: true };
@@ -50,14 +49,11 @@ function goldKeyboard(label, url) {
  * Build a notification card.
  *
  *   <b>New Goal Assigned</b>
- *   ━━━━━━━━━━━━━━
  *   Pastor Sam set a new goal for you
  *
  *   <blockquote>“Read Psalm 23”</blockquote>
  *
  *   <b>Due:</b> Oct 12
- *
- *   <i>You've got this</i>
  *
  * Every text argument is plain text and is escaped here, so callers never
  * pre-escape. `fields` is [[icon, label, value], ...]; empty values are
@@ -66,7 +62,6 @@ function goldKeyboard(label, url) {
 function card({ title, body = [], quote = '', fields = [], footer = '' }) {
   const out = [];
   out.push(`<b>${esc(plain(title))}</b>`);
-  out.push(DIVIDER);
 
   const paras = (Array.isArray(body) ? body : [body]).map(plain).filter(Boolean);
   if (paras.length) out.push('', paras.map(esc).join('\n\n'));
@@ -77,8 +72,9 @@ function card({ title, body = [], quote = '', fields = [], footer = '' }) {
     .map(([, label, v]) => `<b>${esc(plain(label))}:</b> ${esc(v)}`);
   if (rows.length) out.push('', rows.join('\n'));
 
-  if (footer && plain(footer)) out.push('', `<i>${esc(plain(footer))}</i>`);
+  // `footer` is accepted for compatibility but intentionally not rendered:
+  // cards have no divider line and no closing tagline.
   return out.join('\n');
 }
 
-module.exports = { plain, BUTTON_STYLE, DIVIDER, HTML, esc, goldButton, goldCallback, goldKeyboard, card };
+module.exports = { plain, BUTTON_STYLE, HTML, esc, goldButton, goldCallback, goldKeyboard, card };
