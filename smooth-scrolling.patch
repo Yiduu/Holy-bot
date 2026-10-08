@@ -1,0 +1,74 @@
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -248,6 +248,7 @@
+       const url = await loadAvatarUrl(tid, v);
+       const img = document.createElement('img');
+       img.alt = '';
++      img.decoding = 'async';   // decode off the main thread so scrolling stays smooth
+       img.onerror = () => { el.classList.remove('avatar-loaded', 'has-photo'); img.remove(); };
+       img.src = url;
+       el.innerHTML = '';
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -12034,3 +12034,61 @@
+   .nav-item svg { width: 25px; height: 25px; }
+   .nav-item span:not(.nav-badge) { font-size: clamp(0.62rem, 2.9vw, 0.74rem); font-weight: 700; }
+ }
++
++/* ─── Smooth scrolling on phones ───────────────────────────────────────────
++   What was making fast scrolls stutter, and what this block does about it:
++   • text-shadow on <body> is inherited by EVERY piece of text, so each glyph was
++     painted several times per frame  → removed on phones.
++   • a full-screen fixed noise overlay sat above the page → hidden on phones.
++   • backdrop-filter blur on every card (mentors, journal, tickets, streak, pills)
++     forces the GPU to re-blur whatever scrolls behind each card, every frame
++     → removed on phones (header/nav/modals unaffected).
++   • box-shadow pulse animations (online dots) repaint on the main thread forever
++     → static on phones.
++   • the page layer kept will-change permanently → released.
++   • very large soft shadows on long lists → lighter shadows on list rows.
++   Visual look stays the same; only the expensive effects are dropped. */
++@media (hover: none), (max-width: 600px) {
++  body {
++    text-shadow: none;
++    text-rendering: auto;
++  }
++  body::after { display: none; }
++
++  .mentor-card, .mc-card, .journal-item, .ticket-card-premium, .streak-card-hero,
++  .status-pill, .mentor-tag-chip, .glass, .onboarding-card, .ticket-reply-panel,
++  .session-item, .profile-menu-item {
++    backdrop-filter: none;
++    -webkit-backdrop-filter: none;
++  }
++
++  .halo-online-dot, .live-dot--live { animation: none; }
++
++  .page { will-change: auto; }
++
++  /* long-list rows: smaller, cheaper shadows */
++  .mc-card, .session-item, .journal-item, .ticket-card-premium, .mentee-card,
++  .profile-menu-item, .sch-person {
++    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
++  }
++  [data-theme="light"] .mc-card, [data-theme="light"] .session-item,
++  [data-theme="light"] .journal-item, [data-theme="light"] .ticket-card-premium,
++  [data-theme="light"] .mentee-card, [data-theme="light"] .profile-menu-item {
++    box-shadow: 0 4px 12px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff;
++  }
++
++  /* scrolling surfaces: keep the gesture on the list, own compositor layer */
++  .page-content, .chat-messages, .modal-sheet, .rt-list, .sch-people {
++    overscroll-behavior-y: contain;
++    -webkit-overflow-scrolling: touch;
++  }
++  .page-content { touch-action: pan-y; }
++}
++
++/* Never animate while the person is scrolling the tab-strip / day boxes sideways */
++.streak-week, .mc-chips { overscroll-behavior-x: contain; }
++
++/* Respect the OS "reduce motion" setting everywhere */
++@media (prefers-reduced-motion: reduce) {
++  .streak-flame, .streak-glow, .halo-online-dot, .live-dot--live { animation: none !important; }
++}

@@ -248,6 +248,7 @@ function hydrateAvatars(container) {
       const url = await loadAvatarUrl(tid, v);
       const img = document.createElement('img');
       img.alt = '';
+      img.decoding = 'async';   // decode off the main thread so scrolling stays smooth
       img.onerror = () => { el.classList.remove('avatar-loaded', 'has-photo'); img.remove(); };
       img.src = url;
       el.innerHTML = '';
