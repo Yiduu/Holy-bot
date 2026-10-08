@@ -1005,13 +1005,58 @@ function toggleTheme() {
 }
 setTheme(localStorage.getItem('theme') || 'dark');
 
+// ─── Telegram chrome: fullscreen + native Back button ────────────
+// Close / minimise / ⋮ are drawn by Telegram, not by us. Fullscreen (Bot API 8.0+,
+// phones only) lets the app run edge-to-edge underneath them; styles.css keeps
+// content clear of them via --safe-top / --safe-bottom. To opt a user out of
+// fullscreen: localStorage.setItem('holy_fullscreen', 'off').
+function setupTelegramChrome(tg) {
+  try { tg.disableVerticalSwipes?.(); } catch { }
+
+  let want = true;
+  try { want = localStorage.getItem('holy_fullscreen') !== 'off'; } catch { }
+  const phone = tg.platform === 'android' || tg.platform === 'ios';
+  if (want && phone && tg.isVersionAtLeast?.('8.0') && !tg.isFullscreen) {
+    try { tg.requestFullscreen(); } catch { }
+  }
+
+  const sync = () => {
+    document.documentElement.classList.toggle('tg-fullscreen', !!tg.isFullscreen);
+    applyAppHeight(true);
+  };
+  ['fullscreenChanged', 'safeAreaChanged', 'contentSafeAreaChanged'].forEach(ev => tg.onEvent?.(ev, sync));
+  sync();
+
+  if (tg.BackButton && tg.isVersionAtLeast?.('6.1')) {
+    tg.BackButton.onClick(handleTelegramBack);
+    syncTelegramBack();
+  }
+}
+
+// Back closes the top-most popup/sheet first, otherwise returns to Home.
+function handleTelegramBack() {
+  haptic('light');
+  if ($('engagementPopupOverlay')) { closeEngagementPopup(); return; }
+  const sheets = document.querySelectorAll('.modal-overlay.open');
+  if (sheets.length) { sheets[sheets.length - 1].click(); return; }
+  if (document.body.classList.contains('in-call')) return;
+  if (currentPage !== 'dashboard') navigate('dashboard');
+}
+
+// Shows Telegram's "Back" (instead of "Close") on every page except Home.
+function syncTelegramBack() {
+  const bb = window.Telegram?.WebApp?.BackButton;
+  if (!bb) return;
+  try { currentPage !== 'dashboard' ? bb.show() : bb.hide(); } catch { }
+}
+
 // ─── Init ─────────────────────────────────────────────────────
 let __initStarted = false;
 async function init() {
   if (__initStarted) return;
   __initStarted = true;
   const tg = window.Telegram?.WebApp;
-  if (tg) { tg.ready(); tg.expand(); }
+  if (tg) { tg.ready(); tg.expand(); setupTelegramChrome(tg); }
   applyAppHeight();
   // tg.expand() doesn't resize the WebView synchronously — Telegram
   // reports the new viewportStableHeight a little later via its own
@@ -1691,6 +1736,7 @@ function navigate(page) {
   updateFab();
 
   updateSessionsBadge();
+  syncTelegramBack();
 }
 
 // ─── Floating Action Button (FAB) ────────────────────────────
