@@ -1,0 +1,269 @@
+diff --git a/bot.js b/bot.js
+index e84c295..56b8381 100644
+--- a/bot.js
++++ b/bot.js
+@@ -1755,17 +1755,19 @@ async function notifyMentorshipRequest(mentorId, requesterId, requesterName, req
+ async function notifyMenteeReferral(toMentorId, { menteeName, fromName, note }) {
+   const am = (await getUserLang(toMentorId)) === 'am';
+   const text = card({
+-    icon: '🤝',
+     title: am ? 'አዲስ የተላከ ተመካሪ' : 'New Mentee Referral',
+     body: am
+-      ? 'አንድ አማካሪ ተመካሪ ወደ እርስዎ ልከዋል። ለመቀበል ወይም ላለመቀበል መተግበሪያውን ይክፈቱ።'
+-      : 'A fellow mentor has referred a mentee to you. Open the app to accept or decline.',
++      ? (note
++        ? `${fromName} ተመካሪ ወደ እርስዎ ልከዋል። ማስታወሻቸው ከታች አለ። ለመቀበል ወይም ላለመቀበል መተግበሪያውን ይክፈቱ።`
++        : `${fromName} ተመካሪ ወደ እርስዎ ልከዋል። ለመቀበል ወይም ላለመቀበል መተግበሪያውን ይክፈቱ።`)
++      : (note
++        ? `${fromName} referred a mentee to you and left a note, shown below. Open the app to accept or decline.`
++        : `${fromName} referred a mentee to you. Open the app to accept or decline.`),
++    quote: note || '',
+     fields: [
+-      ['👤', am ? 'ተመካሪ' : 'Mentee', menteeName],
+-      ['🙏', am ? 'ከአማካሪ' : 'Referred by', fromName],
++      ['', am ? 'ተመካሪ' : 'Mentee', menteeName],
++      ['', am ? 'ከአማካሪ' : 'Referred by', fromName],
+     ],
+-    quote: note || '',
+-    footer: am ? 'ፈጣን ምላሽ ትልቅ ተስፋ ይሰጣል 💛' : 'A quick reply can mean a lot 💛',
+   });
+   await safeSend(toMentorId, text, {
+     ...HTML,
+@@ -1776,14 +1778,12 @@ async function notifyMenteeReferral(toMentorId, { menteeName, fromName, note })
+ async function notifyMenteeReferralResult(fromMentorId, { menteeName, toName, accepted }) {
+   const am = (await getUserLang(fromMentorId)) === 'am';
+   const text = card({
+-    icon: accepted ? '✅' : '🕊️',
+     title: accepted
+       ? (am ? 'ዝውውሩ ተቀባይነት አግኝቷል' : 'Referral Accepted')
+       : (am ? 'ዝውውሩ አልተቀበለም' : 'Referral Declined'),
+     body: accepted
+       ? (am ? `${toName} ተመካሪ ${menteeName}ን ተቀብለዋል።` : `${toName} accepted ${menteeName}. They are now their mentor.`)
+       : (am ? `${toName} ተመካሪ ${menteeName}ን አልተቀበሉም። ተመካሪው አሁንም ከእርስዎ ጋር ነው።` : `${toName} couldn't take ${menteeName}. They remain with you.`),
+-    footer: am ? 'ስለ አገልግሎትዎ እናመሰግናለን 🙏' : 'Thank you for serving 🙏',
+   });
+   await safeSend(fromMentorId, text, { ...HTML, reply_markup: goldKeyboard(am ? 'መተግበሪያውን ክፈት' : 'Open App', APP_URL) });
+ }
+diff --git a/frontend/app.js b/frontend/app.js
+index fdb8059..fd29553 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1531,9 +1531,24 @@ function connectSocket() {
+     }
+   });
+ 
++  // In-app notification for the Requests page: plain text plus a "View" button,
++  // the same banner the live-session invites use. `tab` picks the tab it opens on.
++  const notifyRequests = (text, tab) => {
++    const open = () => {
++      _requestsTabChosen = true;
++      navigate('requests');
++      setRequestsTab(tab, { byUser: false });
++    };
++    if (window.SRsocket?.notify) {
++      window.SRsocket.notify({ text, actionLabel: t('sr_view'), onAction: open, ttl: 12000 });
++    } else {
++      showToast(text, 'success');
++    }
++  };
++
+   socket.on('new_mentorship_request', () => {
+     haptic('success');
+-    showToast('New mentorship request received! 🙏', 'success');
++    notifyRequests(t('req_toast_new_request'), 'mentee');
+     updateRequestsBadge();
+     if (currentPage === 'requests') loadRequests();
+   });
+@@ -1541,7 +1556,7 @@ function connectSocket() {
+   // Another mentor referred one of their mentees to me
+   socket.on('new_referral_request', () => {
+     haptic('success');
+-    showToast(t('req_toast_new_referral'), 'success');
++    notifyRequests(t('req_toast_new_referral'), 'referred');
+     updateRequestsBadge();
+     if (currentPage === 'requests') loadRequests();
+   });
+diff --git a/frontend/index.html b/frontend/index.html
+index 0e98dcd..7864efc 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -1114,13 +1114,23 @@
+           <p id="requestsIntro" class="page-intro-text" data-i18n="req_intro_mentee">People asking you to be their mentor.</p>
+         </div>
+ 
+-        <div class="req-tabs" role="tablist">
+-          <button type="button" id="reqTabMentee" class="req-tab active" role="tab" aria-selected="true" onclick="setRequestsTab('mentee')">
+-            <span data-i18n="req_tab_mentee">Mentee Requests</span>
++        <div class="profile-tabs req-tabs" role="tablist">
++          <button type="button" id="reqTabMentee" class="profile-tab active" role="tab" aria-selected="true"
++            onclick="setRequestsTab('mentee')">
++            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
++            </svg>
++            <span class="req-tab-label" data-i18n="req_tab_mentee">Mentee Requests</span>
+             <span id="reqTabMenteeCount" class="req-tab-count" hidden>0</span>
+           </button>
+-          <button type="button" id="reqTabReferred" class="req-tab" role="tab" aria-selected="false" onclick="setRequestsTab('referred')">
+-            <span data-i18n="req_tab_referred">Referred</span>
++          <button type="button" id="reqTabReferred" class="profile-tab" role="tab" aria-selected="false"
++            onclick="setRequestsTab('referred')">
++            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++              <path d="M7 3v14" /><path d="m3 7 4-4 4 4" /><path d="M17 21V7" /><path d="m21 17-4 4-4-4" />
++            </svg>
++            <span class="req-tab-label" data-i18n="req_tab_referred">Referred</span>
+             <span id="reqTabReferredCount" class="req-tab-count" hidden>0</span>
+           </button>
+         </div>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 4975c3f..ef9f245 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -60,7 +60,7 @@ const I18N = {
+     "transfer_sending": "Transferring…",
+     "transfer_pick_first": "Please choose a mentor first.",
+     "transfer_failed_missing": "Transfer failed: missing assignment.",
+-    "transfer_success": "Mentee transferred successfully 🔀",
++    "transfer_success": "Mentee transferred successfully",
+     "transfer_load_failed": "We couldn't load mentors.",
+     "transfer_none": "No other mentors are available right now.",
+     "transfer_none_topic": "No mentors cover this topic yet.",
+@@ -432,8 +432,9 @@ const I18N = {
+     "req_toast_accepted": "Request accepted",
+     "req_toast_declined": "Request declined",
+     "req_toast_referral_accepted": "{name} is now your mentee",
+-    "req_toast_new_referral": "A mentee was referred to you 🤝",
+-    "req_toast_sender_accepted": "Your referral was accepted ✓",
++    "req_toast_new_request": "New mentorship request",
++    "req_toast_new_referral": "A mentee was referred to you",
++    "req_toast_sender_accepted": "Your referral was accepted",
+     "req_toast_sender_declined": "Your referral was declined",
+     "transfer_sent": "Referral sent. Your mentee stays with you until they accept.",
+     "no_upcoming_group_sessions": "No upcoming group sessions",
+@@ -793,8 +794,9 @@ const I18N = {
+     "req_toast_accepted": "ጥያቄው ተቀብለዋል",
+     "req_toast_declined": "ጥያቄው አልተቀበለም",
+     "req_toast_referral_accepted": "{name} አሁን ተመካሪዎ ነው",
+-    "req_toast_new_referral": "አንድ ተመካሪ ወደ እርስዎ ተልኳል 🤝",
+-    "req_toast_sender_accepted": "የላኩት ተመካሪ ተቀባይነት አግኝቷል ✓",
++    "req_toast_new_request": "አዲስ የምክር ጥያቄ",
++    "req_toast_new_referral": "አንድ ተመካሪ ወደ እርስዎ ተልኳል",
++    "req_toast_sender_accepted": "የላኩት ተመካሪ ተቀባይነት አግኝቷል",
+     "req_toast_sender_declined": "የላኩት ተመካሪ አልተቀበለም",
+     "transfer_sent": "ጥያቄው ተልኳል። እስኪቀበሉ ድረስ ተመካሪው ከእርስዎ ጋር ይቆያል።",
+     "btn_reject": "ውድቅ አድርግ",
+@@ -843,7 +845,7 @@ const I18N = {
+     "transfer_sending": "በማስተላለፍ ላይ…",
+     "transfer_pick_first": "እባክዎ መጀመሪያ አማካሪ ይምረጡ።",
+     "transfer_failed_missing": "ማስተላለፍ አልተሳካም፦ የምደባ መለያ የለም።",
+-    "transfer_success": "ተመካሪው በተሳካ ሁኔታ ተላልፏል 🔀",
++    "transfer_success": "ተመካሪው በተሳካ ሁኔታ ተላልፏል",
+     "transfer_load_failed": "አማካሪዎችን መጫን አልተቻለም።",
+     "transfer_none": "ለጊዜው ሌላ አማካሪ የለም።",
+     "transfer_none_topic": "ይህን ርዕስ የሚሸፍን አማካሪ እስካሁን የለም።",
+diff --git a/frontend/session-room.js b/frontend/session-room.js
+index ec761b4..e26f2db 100644
+--- a/frontend/session-room.js
++++ b/frontend/session-room.js
+@@ -892,6 +892,8 @@
+     invite(sessionId, title) {
+       banner({ text: `${sr('invite', 'New session')}: ${title || ''}`, actionLabel: sr('view', 'View'), onAction: () => navigate('sessions'), ttl: 12000 });
+     },
++    // Same banner for any other in-app notification (mentee requests, referrals).
++    notify(opts) { banner(opts || {}); },
+   };
+ 
+   // ── handlers for inline onclick in the lobby ───────────────────────────────
+diff --git a/frontend/styles.css b/frontend/styles.css
+index a9865a4..7cfa7a4 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -12710,41 +12710,14 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+ /* ═══ Requests page: mentee requests + referred mentees ═══
+    Same surface language as My Mentees (soft gradient card, gold accent), and the
+    same smoothness rules: no per-card layers, no blur, no hover/active transforms. */
+-.req-tabs {
+-  display: flex;
+-  gap: 4px;
+-  padding: 4px;
+-  margin-bottom: 14px;
+-  background: var(--surface);
+-  border: 1px solid var(--border-dim);
+-  border-radius: 16px;
+-}
+-.req-tab {
+-  flex: 1;
+-  min-width: 0;
+-  display: flex;
+-  align-items: center;
+-  justify-content: center;
+-  gap: 8px;
+-  padding: 11px 8px;
+-  border: 0;
+-  border-radius: 12px;
+-  background: transparent;
+-  color: var(--text3);
+-  font-family: var(--font-body);
+-  font-size: var(--fs-sm);
+-  font-weight: 600;
+-  cursor: pointer;
+-  transition: background-color 0.2s ease, color 0.2s ease;
+-  -webkit-tap-highlight-color: transparent;
+-}
+-.req-tab > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+-.req-tab.active {
+-  background: rgba(201, 168, 76, 0.16);
+-  color: var(--gold-light);
+-  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.28);
+-}
++/* The two tabs reuse the Live page's Private / Group switch (.profile-tabs / .profile-tab):
++   same pill track, same gold active pill, same icon + label. Only what that switch
++   doesn't have is defined here: a shrinking label and the count badge. */
++.req-tabs .profile-tab { min-width: 0; padding: 0 10px; }
++.req-tabs .profile-tab svg { flex: none; }
++.req-tab-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ .req-tab-count {
++  flex: none;
+   min-width: 20px;
+   height: 20px;
+   padding: 0 6px;
+@@ -12758,6 +12731,8 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+   font-weight: 800;
+ }
+ .req-tab-count[hidden] { display: none; }
++/* On the gold active pill a gold badge would disappear, so it flips to dark. */
++.req-tabs .profile-tab.active .req-tab-count { background: #1a1300; color: var(--gold-light); }
+ 
+ .req-list { display: flex; flex-direction: column; gap: 14px; }
+ .req-list[hidden] { display: none; }
+@@ -12977,7 +12952,6 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+ [data-theme="light"] .req-note { background: rgba(255, 255, 255, 0.7); border-color: rgba(150, 120, 40, 0.2); }
+ [data-theme="light"] .req-note-icon { background: rgba(201, 168, 76, 0.16); color: #7A5812; box-shadow: inset 0 0 0 1px rgba(150, 120, 40, 0.25); }
+ [data-theme="light"] .req-note-label { color: #7A5812; }
+-[data-theme="light"] .req-tab.active,
+ [data-theme="light"] .req-ribbon,
+ [data-theme="light"] .req-chip-topic { color: #7A5812; }
+ [data-theme="light"] .req-btn-decline { color: #B53A3A; }
+@@ -12986,5 +12960,5 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+ #page-requests { will-change: auto; transform: none; -webkit-transform: none; }
+ #page-requests .page-content { overscroll-behavior-y: contain; }
+ @media (prefers-reduced-motion: reduce) {
+-  .req-card, .req-tab, .req-btn { transition: none; }
++  .req-card, .req-btn { transition: none; }
+ }
+diff --git a/routes/mentors.js b/routes/mentors.js
+index 0dc4fea..f69ef44 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -1221,10 +1221,8 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+         if (action === 'accepted' && menteeUser?.chat_id) {
+           const am = (await getUserLang(ref.mentee_id)) === 'am';
+           await sendCard(menteeUser.chat_id, {
+-            icon: '🔄',
+             title: am ? 'አማካሪዎ ተቀይሯል' : 'Your Mentor Has Changed',
+             body: am ? `የምክር አገልግሎትዎ ወደ አማካሪ ${myName} ተላልፏል።` : `Your mentorship has been transferred to ${myName}.`,
+-            footer: am ? 'አዲስ ጉዞዎ በበረከት ይሁን 🌱' : 'Wishing you a blessed new chapter 🌱',
+           }, { label: am ? 'ቻት ክፈት' : 'Open Chat' });
+         }
+       } catch (notifyErr) {

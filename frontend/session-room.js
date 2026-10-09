@@ -892,6 +892,8 @@
     invite(sessionId, title) {
       banner({ text: `${sr('invite', 'New session')}: ${title || ''}`, actionLabel: sr('view', 'View'), onAction: () => navigate('sessions'), ttl: 12000 });
     },
+    // Same banner for any other in-app notification (mentee requests, referrals).
+    notify(opts) { banner(opts || {}); },
   };
 
   // ── handlers for inline onclick in the lobby ───────────────────────────────
