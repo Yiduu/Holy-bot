@@ -2400,11 +2400,17 @@ window.loadDashboard = async function loadDashboard() {
         variant: 'gold',
         layout: 'sheet',
         hint: t('daily_verse_invite_hint'),
-        onAction: () => {
+        onAction: async () => {
+          // "Read Now" counts as reading: mark today's streak right away instead
+          // of making the user tap "Mark as Read" a second time.
           if (currentPage !== 'dashboard') navigate('dashboard');
           requestAnimationFrame(() => {
             $('verseText')?.closest('.verse-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           });
+          // Refresh first so we know whether today is already marked
+          // (markStreakRead() does nothing when the button is disabled).
+          await loadStreak();
+          await markStreakRead();
         },
         onSecondary: () => {
           // Free to show again on the next dashboard load today.
