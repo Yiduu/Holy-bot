@@ -1,0 +1,987 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index c273f2d..c0952b2 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -6898,6 +6898,7 @@ function toggleLanguage() {
+ // what is already loaded where we can, so the switch is instant.
+ function refreshLanguageContent() {
+   try {
++    if (_transferAssignmentId != null && $('transferModal')?.classList.contains('open')) { renderTransferSheet(); }
+     switch (currentPage) {
+       case 'mentors':
+         renderMentorTopicChips();
+@@ -7109,7 +7110,7 @@ function renderMenteesList() {
+             <div class="premium-dropdown mentee-actions" data-dropdown id="${actionsId}">
+               <button type="button" class="mentee-actions-btn" data-dropdown-toggle aria-haspopup="menu" aria-label="${t('mentee_actions_label')}" title="${t('mentee_actions_label')}">${menteeIcon('more', 18)}</button>
+               <div class="premium-dropdown-menu" data-dropdown-menu>
+-                <button type="button" class="dropdown-item" onclick="openTransferModal('${assignId}', '${user.telegram_id}', '${escapeHtml(displayName)}')">${menteeIcon('transfer', 14)}${t('btn_transfer')}</button>
++                <button type="button" class="dropdown-item" onclick="openTransferModal('${assignId}')">${menteeIcon('transfer', 14)}${t('btn_transfer')}</button>
+                 <button type="button" class="dropdown-item" style="color:var(--danger)" onclick="endMentorship('${assignId}')">${menteeIcon('userMinus', 14)}${t('btn_end')}</button>
+               </div>
+             </div>
+@@ -7600,190 +7601,360 @@ document.addEventListener('visibilitychange', () => {
+ window.addEventListener('pagehide', () => { flushMentorNotes({ keepalive: true }); });
+ 
+ // ─── Transfer Mentee ──────────────────────────────────────────
+-// Module-level state for the transfer modal
++// A bottom sheet where a mentor hands a mentee to another mentor. Mentors come
++// from one /api/mentors call and are filtered, searched and ranked in the
++// browser, so switching a topic chip or typing is instant (no reload flicker).
+ let _transferAssignmentId = null;
+-let _transferMenteeId = null;
++let _transferMentee = null;        // { id, name, user }
++let _transferMentors = [];         // every other mentor
++let _transferMenteeTopics = [];    // [{ id, name, name_am }]
++let _transferTopicFilter = '';     // topic id as string; '' = all mentors
++let _transferQuery = '';
++let _transferSelectedId = null;
++let _transferLoadState = 'idle';   // 'loading' | 'ready' | 'error'
++let _transferBusy = false;
++const TRANSFER_NOTE_MAX = 300;
++
++const TRANSFER_ICON_STAR = '<svg class="tf-star" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
++const TRANSFER_ICON_EMPTY = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 4.5a3.5 3.5 0 0 1 0 7"/><path d="M19 14.3c1.9.7 3 2.5 3 5.2"/></svg>';
+ 
+ /**
+- * Opens the Transfer Mentee modal for the given assignment.
+- * @param {string} assignmentId  – the mentorship_assignments.id
+- * @param {string} menteeId      – the mentee's telegram_id (unused by the API, kept for future use)
+- * @param {string} menteeName    – the mentee's display name (shown in the modal)
++ * Opens the Transfer Mentee sheet for an active assignment.
++ * Only the assignment id is needed: the mentee is looked up in the My Mentees
++ * list already on screen, so names with quotes can't break an inline handler.
++ * menteeId / menteeName are accepted for older callers.
+  */
+ async function openTransferModal(assignmentId, menteeId, menteeName) {
+   haptic('light');
++  const row = (_myMenteesCache || []).find(m => String(m.id) === String(assignmentId));
++  const user = row?.user || null;
++  const id = user?.telegram_id ?? menteeId;
++  const name = user ? (user.user_settings?.display_name || user.anonymous_id) : (menteeName || '');
+ 
+-  // Store state so confirmTransfer() can read it
+   _transferAssignmentId = assignmentId;
+-  _transferMenteeId = menteeId;
+-
+-  // Update the sub-label with the mentee's name
+-  const nameEl = $('transferMenteeName');
+-  if (nameEl) nameEl.textContent = `Transferring: ${escapeHtml(menteeName)}`;
+-
+-  // Reset filter dropdown
+-  const topicSelect = $('transferTopicSelect');
+-  if (topicSelect) {
+-    topicSelect.innerHTML = '<option value="">All Topics (show all mentors)</option>';
+-  }
+-
+-  // Hide the filter group until topics are loaded
+-  const filterGroup = $('transferTopicFilterGroup');
+-  if (filterGroup) {
+-    filterGroup.style.display = 'none';
+-  }
+-
+-  // Reset target mentor list
+-  const select = $('transferMentorSelect');
+-  if (select) select.innerHTML = '<option value="">Loading mentors…</option>';
+-
+-  // Show modal
++  _transferMentee = { id, name: name || '', user, assignedAt: row?.assigned_at || null };
++  _transferMentors = [];
++  _transferMenteeTopics = [];
++  _transferTopicFilter = '';
++  _transferQuery = '';
++  _transferSelectedId = null;
++  _transferBusy = false;
++  _transferLoadState = 'loading';
++
++  const search = $('transferSearch'); if (search) search.value = '';
++  $('transferSearchClear') && ($('transferSearchClear').style.display = 'none');
++  const note = $('transferNote'); if (note) note.value = '';
++  $('transferNoteBox')?.setAttribute('hidden', '');
++  $('transferNoteToggle')?.setAttribute('aria-expanded', 'false');
++  onTransferNoteInput();
++
++  renderTransferSheet();
+   $('transferModal').classList.add('open');
+ 
+-  // Fetch mentee's struggle topics to populate the filter dropdown
+   try {
+-    const topics = await apiFetch(`/api/mentors/mentee-topics/${menteeId}`);
+-    if (topics && topics.length > 0) {
+-      if (topicSelect) {
+-        topicSelect.innerHTML = '<option value="">All Topics (show all mentors)</option>' +
+-          topics.map(t => {
+-            const topic = t.topics;
+-            return `<option value="${topic.id}">${escapeHtml(topicLabel(topic))}</option>`;
+-          }).join('');
+-      }
+-      if (filterGroup) {
+-        filterGroup.style.display = 'block';
+-      }
+-    }
++    const [mentors, topics] = await Promise.all([
++      apiFetch(`/api/mentors?for_mentee=${encodeURIComponent(id)}`),
++      apiFetch(`/api/mentors/mentee-topics/${encodeURIComponent(id)}`).catch(() => []),
++    ]);
++    if (_transferAssignmentId !== assignmentId) return; // closed or reopened meanwhile
++    const me = String(currentUser?.telegram_id || '');
++    _transferMentors = (mentors || []).filter(m => String(m.telegram_id) !== me);
++    _transferMenteeTopics = (topics || []).map(x => x.topics).filter(Boolean);
++    _transferLoadState = 'ready';
+   } catch (e) {
+-    console.error('Failed to fetch mentee topics:', e);
++    if (_transferAssignmentId !== assignmentId) return;
++    _transferLoadState = 'error';
+   }
+-
+-  // Initially load all mentors (no topic filter selected)
+-  loadTransferMentors();
++  renderTransferSheet();
+ }
+ 
+-/** Closes the Transfer Mentee modal and resets its state. */
++/** Closes the sheet and clears its state. Ignored while a transfer is being sent. */
+ function closeTransferModal() {
++  if (_transferBusy) return;
+   haptic('light');
+   $('transferModal')?.classList.remove('open');
+   _transferAssignmentId = null;
+-  _transferMenteeId = null;
+-  const topicSelect = $('transferTopicSelect');
+-  if (topicSelect) topicSelect.value = '';
++  _transferMentee = null;
++  _transferMentors = [];
++  _transferSelectedId = null;
+ }
+ 
+-/**
+- * Fetches all mentors from GET /api/mentors and populates the dropdown,
+- * excluding the currently logged-in mentor (current user).
+- * Supports filtering by topic_id.
+- * @param {string} topicId - Optional topic ID to filter mentors by.
+- */
+-async function loadTransferMentors(topicId = '') {
+-  const select = $('transferMentorSelect');
+-  if (!select) return;
+-
+-  try {
+-    let url = '/api/mentors';
+-    if (topicId) {
+-      url += `?topic_id=${topicId}`;
++// Per-mentor facts used for ranking, badges and availability.
++function transferMentorInfo(m, topicIds) {
++  const max = mentorMax(m);
++  const count = m.mentee_count || 0;
++  const paused = m.accepting_requests === false;
++  const full = count >= max;
++  const matched = (m.topics || []).filter(tp => topicIds.has(Number(tp.id))).length;
++  return { max, count, paused, full, available: !paused && !full, matched };
++}
++
++// Mentors after the topic chip + search box, best candidates first:
++// open mentors before unavailable ones, then topic match, rating, free spots.
++function transferVisibleMentors() {
++  const topicIds = new Set(_transferMenteeTopics.map(tp => Number(tp.id)));
++  const q = _transferQuery.trim().toLowerCase();
++  const rows = _transferMentors
++    .filter(m => !_transferTopicFilter || (m.topics || []).some(tp => String(tp.id) === _transferTopicFilter))
++    .filter(m => {
++      if (!q) return true;
++      const hay = [
++        mentorNameOf(m), m.user_settings?.specialization, m.user_settings?.bio,
++        ...(m.topics || []).map(tp => `${tp.name || ''} ${tp.name_am || ''}`),
++      ].join(' ').toLowerCase();
++      return hay.includes(q);
++    })
++    .map(m => ({ m, info: transferMentorInfo(m, topicIds) }));
++  rows.sort((a, b) =>
++    (b.info.available - a.info.available) ||
++    (b.info.matched - a.info.matched) ||
++    ((b.m.rating || 0) - (a.m.rating || 0)) ||
++    ((b.info.max - b.info.count) - (a.info.max - a.info.count)) ||
++    mentorNameOf(a.m).localeCompare(mentorNameOf(b.m)));
++  return rows;
++}
++
++function renderTransferSheet() {
++  const mentee = _transferMentee;
++  if (!mentee) return;
++  const safeName = escapeHtml(mentee.name);
++
++  // Subtitle
++  const sub = $('transferSubtitle');
++  if (sub) sub.innerHTML = t('transfer_sub', { name: `<strong>${safeName}</strong>` });
++
++  // Mentee card
++  const card = $('transferMenteeCard');
++  if (card) {
++    const letter = (mentee.name || '?').charAt(0).toUpperCase();
++    const dateLocale = currentLanguage === 'am' ? 'am-ET' : undefined;
++    const since = mentee.assignedAt
++      ? new Date(mentee.assignedAt).toLocaleDateString(dateLocale, { year: 'numeric', month: 'short', day: 'numeric' })
++      : '';
++    card.hidden = false;
++    card.innerHTML = `
++      ${renderAvatar(mentee.user || { telegram_id: mentee.id }, letter)}
++      <div class="tf-mentee-body">
++        <div class="tf-mentee-name">${safeName}</div>
++        ${since ? `<div class="tf-mentee-since">${escapeHtml(t('transfer_since', { date: since }))}</div>` : ''}
++      </div>`;
++    hydrateAvatars(card);
++  }
++
++  // Topic filter chips
++  const chipsEl = $('transferTopicChips');
++  if (chipsEl) {
++    const show = _transferLoadState === 'ready' && _transferMenteeTopics.length > 0;
++    chipsEl.hidden = !show;
++    if (show) {
++      const all = `<button type="button" class="tf-chip${_transferTopicFilter === '' ? ' active' : ''}" aria-pressed="${_transferTopicFilter === ''}" onclick="setTransferTopic('')">${t('transfer_filter_all')}</button>`;
++      chipsEl.setAttribute('aria-label', t('transfer_filter_label'));
++      chipsEl.innerHTML = all + _transferMenteeTopics.map(tp => {
++        const on = String(tp.id) === _transferTopicFilter;
++        return `<button type="button" class="tf-chip${on ? ' active' : ''}" aria-pressed="${on}" onclick="setTransferTopic('${tp.id}')">${escapeHtml(topicLabel(tp))}</button>`;
++      }).join('');
+     }
+-    const mentors = await apiFetch(url);
+-    const currentId = String(currentUser?.telegram_id || '');
++  }
+ 
+-    // Filter out the current mentor from the list
+-    const others = (mentors || []).filter(
+-      m => String(m.telegram_id) !== currentId
+-    );
++  renderTransferList();
++  updateTransferConfirm();
++}
+ 
+-    if (!others.length) {
+-      select.innerHTML = `<option value="">${topicId ? 'No mentors available for this topic' : 'No other mentors available'}</option>`;
+-      return;
+-    }
++function renderTransferList() {
++  const list = $('transferMentorList');
++  if (!list) return;
+ 
+-    // Check if any mentor is both accepting requests AND has available capacity
+-    const hasAcceptingAvailable = others.some(m => {
+-      const mentees = m.mentee_count || 0;
+-      const max = m.user_settings?.max_mentees || 5;
+-      return m.accepting_requests !== false && mentees < max;
+-    });
++  if (_transferLoadState === 'loading') {
++    list.innerHTML = Array.from({ length: 3 }, () => `
++      <div class="tf-skel"><span class="tf-skel-av"></span><span class="tf-skel-lines"><i></i><i></i></span></div>`).join('');
++    return;
++  }
++  if (_transferLoadState === 'error') {
++    list.innerHTML = `
++      <div class="tf-empty">
++        <span class="tf-empty-icon">${TRANSFER_ICON_EMPTY}</span>
++        <p>${t('transfer_load_failed')}</p>
++        <button type="button" class="btn btn-outline btn-sm" onclick="retryTransferLoad()">${t('btn_retry')}</button>
++      </div>`;
++    return;
++  }
+ 
+-    if (topicId && !hasAcceptingAvailable) {
+-      select.innerHTML = '<option value="">No accepting mentors available for this topic.</option>';
+-      return;
+-    }
++  const rows = transferVisibleMentors();
++  if (!rows.length) {
++    const filtered = !!(_transferTopicFilter || _transferQuery.trim());
++    const msg = !_transferMentors.length ? t('transfer_none')
++      : _transferQuery.trim() ? t('transfer_none_search') : t('transfer_none_topic');
++    list.innerHTML = `
++      <div class="tf-empty">
++        <span class="tf-empty-icon">${TRANSFER_ICON_EMPTY}</span>
++        <p>${msg}</p>
++        ${filtered && _transferMentors.length ? `<button type="button" class="btn btn-outline btn-sm" onclick="resetTransferFilters()">${t('transfer_show_all')}</button>` : ''}
++      </div>`;
++    return;
++  }
+ 
+-    select.innerHTML = others.map(m => {
+-      const name = m.user_settings?.display_name || m.anonymous_id || `Mentor ${m.telegram_id}`;
+-      const mentees = m.mentee_count || 0;
+-      const max = m.user_settings?.max_mentees || 5;
+-      const isFull = mentees >= max;
+-      const isNotAccepting = m.accepting_requests === false;
++  const totalTopics = _transferMenteeTopics.length;
++  const firstAvail = rows.findIndex(r => r.info.available);
++  const manyAvail = rows.filter(r => r.info.available).length > 1;
++
++  list.innerHTML = rows.map(({ m, info }, i) => {
++    const name = mentorNameOf(m) || `Mentor ${m.telegram_id}`;
++    const letter = name.charAt(0).toUpperCase();
++    const sel = String(m.telegram_id) === String(_transferSelectedId);
++    const pct = Math.min(100, Math.round((info.count / info.max) * 100));
++    const status = mentorStatus(m);
++    const best = manyAvail && i === firstAvail && info.matched > 0;
++    const stateChip = info.paused ? t('not_accepting') : info.full ? t('capacity_full') : '';
++    const trailing = stateChip
++      ? `<span class="tf-state-chip">${escapeHtml(stateChip)}</span>`
++      : `<span class="rt-radio" aria-hidden="true"></span>`;
++    return `
++      <button type="button" role="radio" aria-checked="${sel}" ${info.available ? '' : 'disabled aria-disabled="true"'}
++        class="profile-menu-item rt-topic tf-mentor${sel ? ' pm-gold selected' : ''}${info.available ? '' : ' is-unavailable'}"
++        data-mentor-id="${m.telegram_id}" onclick="selectTransferMentor('${m.telegram_id}')">
++        ${renderAvatar(m, letter)}
++        <span class="profile-menu-label rt-label tf-mentor-body">
++          <span class="tf-mentor-top">
++            <span class="rt-name">${escapeHtml(name)}</span>
++          </span>
++          ${renderModernRating(m.rating, m.rating_count)}
++          <span class="tf-cap-row">
++            <span class="tf-cap" aria-hidden="true"><i class="${info.full ? 'full' : ''}" style="width:${pct}%"></i></span>
++            <span class="tf-cap-text">${info.count}/${info.max}${info.available ? ` · ${escapeHtml(status.text)}` : ''}</span>
++          </span>
++          ${best ? `<span class="tf-best">${TRANSFER_ICON_STAR}${escapeHtml(t('transfer_best_match'))}</span>` : ''}
++          ${info.matched > 0 && totalTopics > 0 ? `<span class="tf-match">${escapeHtml(t(info.matched === 1 ? 'transfer_match_one' : 'transfer_match', { n: info.matched, total: totalTopics }))}</span>` : ''}
++        </span>
++        ${trailing}
++      </button>`;
++  }).join('');
++  hydrateAvatars(list);
++}
+ 
+-      const disabledAttr = (isFull || isNotAccepting) ? 'disabled' : '';
++function updateTransferConfirm() {
++  const btn = $('transferConfirmBtn');
++  if (!btn) return;
++  const m = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
++  // The picked mentor is already highlighted in the list, so the button stays short.
++  btn.disabled = _transferBusy || !m;
++  btn.textContent = _transferBusy ? t('transfer_sending') : t('btn_transfer');
++}
+ 
+-      let suffixText = '';
+-      if (isNotAccepting) suffixText += ' (Not Accepting)';
+-      if (isFull) suffixText += ' - At capacity';
++function selectTransferMentor(id) {
++  if (_transferBusy) return;
++  const m = _transferMentors.find(x => String(x.telegram_id) === String(id));
++  if (!m || !transferMentorInfo(m, new Set()).available) return;
++  haptic('selection');
++  _transferSelectedId = String(id);
++  renderTransferList();
++  updateTransferConfirm();
++}
+ 
+-      const statusText = isFull ? ' <span style="color:var(--danger);font-size:var(--fs-2xs);">full</span>' : '';
++function setTransferTopic(topicId) {
++  haptic('light');
++  _transferTopicFilter = String(topicId || '');
++  // The pick may no longer be in the list; drop it instead of hiding it.
++  const stillThere = transferVisibleMentors().some(r => String(r.m.telegram_id) === String(_transferSelectedId));
++  if (!stillThere) _transferSelectedId = null;
++  renderTransferSheet();
++}
+ 
+-      return `<option value="${m.telegram_id}" ${disabledAttr}>${escapeHtml(name)}${suffixText} <sup>${mentees}/${max}</sup>${statusText}</option>`;
+-    }).join('');
+-  } catch (e) {
+-    if (select) select.innerHTML = '<option value="">Failed to load mentors</option>';
+-    showToast(e.message, 'error');
+-  }
++function onTransferSearch(value) {
++  _transferQuery = value || '';
++  const clear = $('transferSearchClear');
++  if (clear) clear.style.display = _transferQuery ? '' : 'none';
++  const stillThere = transferVisibleMentors().some(r => String(r.m.telegram_id) === String(_transferSelectedId));
++  if (!stillThere) _transferSelectedId = null;
++  renderTransferList();
++  updateTransferConfirm();
+ }
+ 
+-/**
+- * Event handler triggered when the topic filter dropdown value changes.
+- * @param {string} topicId - The selected topic ID or empty string.
+- */
+-async function onTransferTopicChange(topicId) {
++function clearTransferSearch() {
++  const input = $('transferSearch');
++  if (input) { input.value = ''; input.focus(); }
++  onTransferSearch('');
++}
++
++function resetTransferFilters() {
++  haptic('light');
++  const input = $('transferSearch'); if (input) input.value = '';
++  _transferQuery = '';
++  _transferTopicFilter = '';
++  $('transferSearchClear') && ($('transferSearchClear').style.display = 'none');
++  renderTransferSheet();
++}
++
++async function retryTransferLoad() {
++  if (_transferAssignmentId == null || !_transferMentee) return;
++  const id = _transferAssignmentId;
++  const mentee = _transferMentee;
++  haptic('light');
++  // openTransferModal rebuilds state from the mentees list, which is still loaded.
++  await openTransferModal(id, mentee.id, mentee.name);
++}
++
++function toggleTransferNote() {
+   haptic('light');
+-  const select = $('transferMentorSelect');
+-  if (select) select.innerHTML = '<option value="">Loading mentors…</option>';
+-  await loadTransferMentors(topicId);
++  const box = $('transferNoteBox');
++  const btn = $('transferNoteToggle');
++  if (!box || !btn) return;
++  const open = box.hasAttribute('hidden');
++  if (open) box.removeAttribute('hidden'); else box.setAttribute('hidden', '');
++  btn.setAttribute('aria-expanded', String(open));
++  if (open) $('transferNote')?.focus();
++}
++
++function onTransferNoteInput() {
++  const ta = $('transferNote');
++  const count = $('transferNoteCount');
++  if (count) count.textContent = `${(ta?.value || '').length}/${TRANSFER_NOTE_MAX}`;
+ }
+ 
+ /**
+- * Confirms the transfer by calling POST /api/mentors/transfer with
+- * type='assignment', then refreshes the My Mentees list.
++ * Sends POST /api/mentors/transfer (type 'assignment'), then refreshes My Mentees.
++ * The note is optional and goes only to the new mentor.
+  */
+ async function confirmTransfer() {
+-  haptic('medium');
+-
+-  const select = $('transferMentorSelect');
+-  const target_mentor_id = select?.value;
++  if (_transferBusy) return;
++  const target_mentor_id = _transferSelectedId;
+ 
+   if (!target_mentor_id) {
+     haptic('error');
+-    showToast('Please select a mentor to transfer to.', 'error');
++    showToast(t('transfer_pick_first'), 'error');
+     return;
+   }
+-
+   if (!_transferAssignmentId) {
+     haptic('error');
+-    showToast('Transfer failed: missing assignment ID.', 'error');
++    showToast(t('transfer_failed_missing'), 'error');
+     return;
+   }
+ 
++  const note = ($('transferNote')?.value || '').trim().slice(0, TRANSFER_NOTE_MAX);
++  haptic('medium');
++  _transferBusy = true;
++  updateTransferConfirm();
++  $('transferMentorList')?.classList.add('is-busy');
++
+   try {
+     await apiFetch('/api/mentors/transfer', {
+       method: 'POST',
+       body: {
+         type: 'assignment',
+         id: _transferAssignmentId,
+-        target_mentor_id
+-      }
++        target_mentor_id,
++        ...(note ? { note } : {}),
++      },
+     });
+ 
++    _transferBusy = false;
+     haptic('success');
+-    showToast('Mentee transferred successfully! 🔀', 'success');
++    showToast(t('transfer_success'), 'success');
+     closeTransferModal();
+     loadMyMentees(); // Refresh the My Mentees list
+   } catch (e) {
++    _transferBusy = false;
++    $('transferMentorList')?.classList.remove('is-busy');
++    updateTransferConfirm();
+     haptic('error');
+     showToast(e.message, 'error');
+   }
+diff --git a/frontend/index.html b/frontend/index.html
+index 62835ad..ecc3ce8 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -2358,34 +2358,56 @@
+ 
+   <!-- ── Modal: Transfer Mentee ────────────────────────────── -->
+   <div id="transferModal" class="modal-overlay" onclick="if(event.target===this)closeTransferModal()">
+-    <div class="modal-sheet">
++    <div class="modal-sheet tf-sheet" role="dialog" aria-modal="true" aria-labelledby="transferTitle">
+       <div class="modal-handle"></div>
+-      <div class="modal-title">Transfer Mentee</div>
+-
+-      <!-- Mentee name sub-label -->
+-      <p id="transferMenteeName" class="text-sm text-dim" style="text-align:center; margin-bottom:16px;"></p>
+ 
+-      <!-- Topic filter (shown only when the mentee has struggle topics) -->
+-      <div id="transferTopicFilterGroup" class="form-group" style="display:none;">
+-        <label class="form-label">Filter by Topic</label>
+-        <select id="transferTopicSelect" class="form-control" onchange="onTransferTopicChange(this.value)">
+-          <option value="" data-i18n="all_topics_transfer">All Topics (show all mentors)</option>
+-        </select>
+-        <div style="height:1px;background:var(--border-dim);margin:14px 0;"></div>
++      <div class="tf-head">
++        <div class="hb-icon">
++          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v14"/><path d="M3 7l4-4 4 4"/><path d="M17 21V7"/><path d="M21 17l-4 4-4-4"/></svg>
++        </div>
++        <div id="transferTitle" class="modal-title tf-title" data-i18n="transfer_title">Transfer Mentee</div>
++        <p id="transferSubtitle" class="hb-text tf-sub"></p>
+       </div>
+ 
+-      <!-- Target mentor dropdown -->
+-      <div class="form-group">
+-        <label class="form-label">Transfer to Mentor</label>
+-        <select id="transferMentorSelect" class="form-control">
+-          <option value="">Loading mentors…</option>
+-        </select>
++      <div class="tf-scroll">
++        <!-- Who is being transferred, and the topics they need help with -->
++        <div id="transferMenteeCard" class="tf-mentee" hidden></div>
++
++        <!-- Topic filter chips (only shown when the mentee has topics) -->
++        <div id="transferTopicChips" class="tf-chips" role="group" hidden></div>
++
++        <!-- Search -->
++        <div class="mentor-search-wrap tf-search">
++          <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
++          <input id="transferSearch" type="text" class="mentor-search-input" data-i18n="transfer_search_placeholder" placeholder="Search mentors…" oninput="onTransferSearch(this.value)" autocomplete="off" aria-label="Search mentors" />
++          <button id="transferSearchClear" type="button" class="search-clear-btn" onclick="clearTransferSearch()" style="display:none;" aria-label="Clear search">
++            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
++          </button>
++        </div>
++
++        <!-- Mentor cards -->
++        <nav id="transferMentorList" class="profile-menu-list rt-list tf-list" role="radiogroup" aria-label="Mentors"></nav>
++
++        <!-- Optional hand-over note for the new mentor -->
++        <div class="tf-note">
++          <button id="transferNoteToggle" type="button" class="tf-note-toggle" onclick="toggleTransferNote()" aria-expanded="false" aria-controls="transferNoteBox">
++            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
++            <span data-i18n="transfer_note_toggle">Add a note for the new mentor</span>
++            <span class="tf-note-opt" data-i18n="transfer_optional">Optional</span>
++          </button>
++          <div id="transferNoteBox" class="tf-note-box" hidden>
++            <textarea id="transferNote" class="form-control" rows="3" maxlength="300" data-i18n="transfer_note_placeholder" placeholder="Anything that will help them support this mentee…" oninput="onTransferNoteInput()"></textarea>
++            <div class="tf-note-foot">
++              <span data-i18n="transfer_note_hint">Only the new mentor sees this.</span>
++              <span id="transferNoteCount">0/300</span>
++            </div>
++          </div>
++        </div>
+       </div>
+ 
+-      <!-- Action buttons -->
+-      <div class="flex gap-8 mt-16">
+-        <button class="btn btn-ghost flex-1" onclick="closeTransferModal()">Cancel</button>
+-        <button class="btn btn-primary flex-1" onclick="confirmTransfer()">Transfer</button>
++      <div class="hb-actions tf-actions">
++        <button type="button" class="btn btn-outline" onclick="closeTransferModal()" data-i18n="btn_cancel">Cancel</button>
++        <button type="button" id="transferConfirmBtn" class="btn btn-primary" onclick="confirmTransfer()" disabled>Transfer</button>
+       </div>
+     </div>
+   </div>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 35770ea..42f8211 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -39,6 +39,28 @@ const I18N = {
+     "btn_message": "Message",
+     "btn_session": "Session",
+     "btn_transfer": "Transfer",
++    "transfer_title": "Transfer Mentee",
++    "transfer_since": "With you since {date}",
++    "transfer_sub": "Choose a new mentor for {name}.",
++    "transfer_search_placeholder": "Search mentors…",
++    "transfer_filter_all": "All mentors",
++    "transfer_filter_label": "Filter by topic",
++    "transfer_best_match": "Best match",
++    "transfer_match": "{n} of {total} topics match",
++    "transfer_match_one": "{n} of {total} topics match",
++    "transfer_note_toggle": "Add a note for the new mentor",
++    "transfer_optional": "Optional",
++    "transfer_note_placeholder": "Anything that will help them support this mentee…",
++    "transfer_note_hint": "Only the new mentor sees this.",
++    "transfer_sending": "Transferring…",
++    "transfer_pick_first": "Please choose a mentor first.",
++    "transfer_failed_missing": "Transfer failed: missing assignment.",
++    "transfer_success": "Mentee transferred successfully 🔀",
++    "transfer_load_failed": "We couldn't load mentors.",
++    "transfer_none": "No other mentors are available right now.",
++    "transfer_none_topic": "No mentors cover this topic yet.",
++    "transfer_none_search": "No mentors match your search.",
++    "transfer_show_all": "Show all mentors",
+     "mentee_actions_label": "Actions",
+     "mentorship_ended": "Mentorship has ended. Thank you for your time.",
+     "mentorship_ended_by_mentor": "📋 Your mentor *{mentor}* has ended the mentorship.",
+@@ -751,6 +773,28 @@ const I18N = {
+     "btn_message": "መልዕክት",
+     "btn_session": "ክፍለጊዜ",
+     "btn_transfer": "አስተላልፍ",
++    "transfer_title": "ተመካሪ አስተላልፍ",
++    "transfer_since": "ከእርስዎ ጋር ከ{date} ጀምሮ",
++    "transfer_sub": "ለ{name} አዲስ አማካሪ ይምረጡ።",
++    "transfer_search_placeholder": "አማካሪዎችን ይፈልጉ…",
++    "transfer_filter_all": "ሁሉም አማካሪዎች",
++    "transfer_filter_label": "በርዕስ አጣራ",
++    "transfer_best_match": "ምርጥ ምርጫ",
++    "transfer_match": "ከ{total} ርዕሶች በ{n}ቱ ይዛመዳል",
++    "transfer_match_one": "ከ{total} ርዕስ በ{n} ይዛመዳል",
++    "transfer_note_toggle": "ለአዲሱ አማካሪ ማስታወሻ ጨምር",
++    "transfer_optional": "አማራጭ",
++    "transfer_note_placeholder": "ተመካሪውን ለመርዳት የሚጠቅም ማንኛውም መረጃ…",
++    "transfer_note_hint": "አዲሱ አማካሪ ብቻ ያየዋል።",
++    "transfer_sending": "በማስተላለፍ ላይ…",
++    "transfer_pick_first": "እባክዎ መጀመሪያ አማካሪ ይምረጡ።",
++    "transfer_failed_missing": "ማስተላለፍ አልተሳካም፦ የምደባ መለያ የለም።",
++    "transfer_success": "ተመካሪው በተሳካ ሁኔታ ተላልፏል 🔀",
++    "transfer_load_failed": "አማካሪዎችን መጫን አልተቻለም።",
++    "transfer_none": "ለጊዜው ሌላ አማካሪ የለም።",
++    "transfer_none_topic": "ይህን ርዕስ የሚሸፍን አማካሪ እስካሁን የለም።",
++    "transfer_none_search": "ከፍለጋዎ ጋር የሚመሳሰል አማካሪ የለም።",
++    "transfer_show_all": "ሁሉንም አማካሪዎች አሳይ",
+     "mentee_actions_label": "ተግባራት",
+     "mentorship_ended": "አማካሪነቱ ተጠናቋል። ለጊዜዎ እናመሰግናለን።",
+     "mentorship_ended_by_mentor": "📋 አማካሪዎ *{mentor}* የምክር አገልግሎቱን አቋርጠዋል።",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index e82fc9c..7c9163b 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -12300,3 +12300,281 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+ 
+ /* Logo: no glow disc behind it (it showed as a visible round halo with rings in dark mode) */
+ #onboarding .ob-logo-clean::after { content: none; display: none; animation: none; }
++
++/* ═══ Transfer Mentee sheet ═══
++   Same family as the Request Topic / Schedule sheets: gold icon tile, pill
++   actions, stacked selectable cards. Header and actions stay put; only the
++   middle scrolls, so the main button is always reachable on small phones. */
++#transferModal .tf-sheet {
++  display: flex;
++  flex-direction: column;
++  max-height: 90vh;
++  max-height: 90dvh;
++  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
++  overflow: hidden;
++}
++#transferModal .tf-head { flex: none; }
++#transferModal .tf-title { text-align: center; font-size: var(--fs-lg); margin-bottom: 6px; }
++#transferModal .tf-sub { margin-bottom: 14px; font-size: var(--fs-md); }
++#transferModal .tf-scroll {
++  flex: 1 1 auto;
++  min-height: 0;
++  overflow-y: auto;
++  overscroll-behavior: contain;
++  -webkit-overflow-scrolling: touch;
++  margin: 0 -4px;
++  padding: 2px 4px 6px;
++}
++#transferModal .tf-actions { flex: none; margin-top: 12px; }
++#transferModal .tf-actions .btn:disabled { opacity: 0.55; box-shadow: none; }
++
++/* Who is being transferred */
++#transferModal .tf-mentee {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  padding: 12px 14px;
++  margin-bottom: 12px;
++  border-radius: 20px;
++  border: 1px solid rgba(201, 168, 76, 0.28);
++  background: linear-gradient(160deg, rgba(201, 168, 76, 0.12), rgba(201, 168, 76, 0.03)), #111319;
++}
++#transferModal .tf-mentee[hidden] { display: none; }
++#transferModal .tf-mentee-body { min-width: 0; flex: 1; }
++#transferModal .tf-mentee-name {
++  font-weight: 700;
++  font-size: var(--fs-base);
++  color: var(--text);
++  overflow-wrap: anywhere;
++  line-height: 1.3;
++}
++#transferModal .tf-mentee-topics { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
++#transferModal .tf-topic-pill {
++  padding: 3px 10px;
++  border-radius: 999px;
++  font-size: var(--fs-2xs);
++  font-weight: 700;
++  color: var(--gold-light);
++  background: rgba(201, 168, 76, 0.12);
++  border: 1px solid rgba(201, 168, 76, 0.28);
++  line-height: 1.4;
++}
++
++/* Topic filter chips: one swipeable row */
++#transferModal .tf-chips {
++  display: flex;
++  gap: 8px;
++  overflow-x: auto;
++  padding: 2px 2px 10px;
++  scrollbar-width: none;
++  -webkit-overflow-scrolling: touch;
++}
++#transferModal .tf-chips[hidden] { display: none; }
++#transferModal .tf-chips::-webkit-scrollbar { display: none; }
++#transferModal .tf-chip {
++  flex: none;
++  min-height: 38px;
++  padding: 0 16px;
++  border-radius: 999px;
++  border: 1px solid rgba(255, 255, 255, 0.1);
++  background: rgba(255, 255, 255, 0.04);
++  color: var(--text2);
++  font-family: var(--font-body);
++  font-size: var(--fs-sm);
++  font-weight: 700;
++  white-space: nowrap;
++  cursor: pointer;
++  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
++}
++#transferModal .tf-chip:active { transform: scale(0.97); }
++#transferModal .tf-chip.active {
++  color: #1a1300;
++  border-color: transparent;
++  background: linear-gradient(180deg, #EBCD72, #C9A84C);
++  box-shadow: 0 4px 14px rgba(201, 168, 76, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.4);
++}
++
++/* Search */
++#transferModal .tf-search { margin-bottom: 12px; border-radius: 18px; padding: 12px 16px; }
++
++/* Mentor cards */
++#transferModal .tf-list {
++  max-height: none;
++  overflow: visible;
++  padding: 2px 2px 4px;
++  margin-bottom: 4px;
++  gap: 10px;
++}
++#transferModal .tf-list.is-busy { opacity: 0.6; pointer-events: none; }
++#transferModal .tf-mentor {
++  align-items: center;
++  min-height: 0;
++  padding: 12px 14px;
++  gap: 12px;
++  border-radius: 22px;
++}
++#transferModal .tf-mentor .mentor-avatar { width: 48px; height: 48px; min-width: 48px; min-height: 48px; }
++#transferModal .tf-mentor-body { flex: 1; min-width: 0; gap: 5px; align-items: flex-start; }
++#transferModal .tf-mentor-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; max-width: 100%; }
++#transferModal .tf-mentor .rt-name { font-weight: 700; overflow-wrap: anywhere; line-height: 1.25; }
++#transferModal .tf-mentor .mentor-stats-row { margin-top: 0; }
++#transferModal .tf-mentor .mp-mine-chip { padding: 3px 9px; }
++
++/* Capacity: slim bar + "2/5 · 3 spots open" */
++#transferModal .tf-cap-row { display: flex; align-items: center; gap: 8px; max-width: 100%; }
++#transferModal .tf-cap {
++  flex: none;
++  width: 54px;
++  height: 5px;
++  border-radius: 999px;
++  background: rgba(255, 255, 255, 0.1);
++  overflow: hidden;
++}
++#transferModal .tf-cap i {
++  display: block;
++  height: 100%;
++  border-radius: inherit;
++  background: linear-gradient(90deg, #C9A84C, #EBCD72);
++}
++#transferModal .tf-cap i.full { background: rgba(255, 255, 255, 0.35); }
++#transferModal .tf-cap-text { font-size: var(--fs-xs); font-weight: 600; color: var(--text2); }
++#transferModal .tf-match { font-size: var(--fs-xs); font-weight: 700; color: var(--gold-light); }
++
++/* Unavailable mentors stay visible (so the list is honest) but can't be picked */
++#transferModal .tf-mentor.is-unavailable { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
++#transferModal .tf-state-chip {
++  flex: none;
++  padding: 4px 10px;
++  border-radius: 999px;
++  font-size: var(--fs-2xs);
++  font-weight: 700;
++  letter-spacing: 0.03em;
++  color: var(--text2);
++  background: rgba(255, 255, 255, 0.08);
++  border: 1px solid rgba(255, 255, 255, 0.12);
++}
++
++/* Loading skeleton + empty / error state */
++#transferModal .tf-skel {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  padding: 14px;
++  border-radius: 22px;
++  border: 1px solid rgba(255, 255, 255, 0.06);
++  background: rgba(255, 255, 255, 0.03);
++}
++#transferModal .tf-skel-av { width: 48px; height: 48px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); flex: none; }
++#transferModal .tf-skel-lines { flex: 1; display: grid; gap: 8px; }
++#transferModal .tf-skel-lines i { display: block; height: 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); }
++#transferModal .tf-skel-lines i:last-child { width: 55%; }
++#transferModal .tf-empty { text-align: center; padding: 22px 12px 14px; color: var(--text2); }
++#transferModal .tf-empty p { margin: 8px 0 14px; font-size: var(--fs-md); line-height: 1.5; }
++#transferModal .tf-empty-icon {
++  display: inline-grid;
++  place-items: center;
++  width: 52px;
++  height: 52px;
++  border-radius: 18px;
++  color: var(--gold-light);
++  background: rgba(201, 168, 76, 0.1);
++  border: 1px solid rgba(201, 168, 76, 0.25);
++}
++
++/* Optional note for the new mentor */
++#transferModal .tf-note { margin-top: 10px; }
++#transferModal .tf-note-toggle {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  width: 100%;
++  min-height: 48px;
++  padding: 0 16px;
++  border-radius: 18px;
++  border: 1px dashed rgba(201, 168, 76, 0.4);
++  background: transparent;
++  color: var(--gold-light);
++  font-family: var(--font-body);
++  font-size: var(--fs-sm);
++  font-weight: 700;
++  text-align: left;
++  cursor: pointer;
++}
++#transferModal .tf-note-toggle[aria-expanded="true"] { border-style: solid; background: rgba(201, 168, 76, 0.08); }
++#transferModal .tf-note-opt { margin-left: auto; font-size: var(--fs-2xs); font-weight: 600; color: var(--text3); }
++#transferModal .tf-note-box { margin-top: 10px; }
++#transferModal .tf-note-box[hidden] { display: none; }
++#transferModal .tf-note-box textarea {
++  width: 100%;
++  min-height: 84px;
++  padding: 14px 16px;
++  border-radius: 18px;
++  resize: none;
++  font-size: var(--fs-base);
++  line-height: 1.5;
++}
++#transferModal .tf-note-foot {
++  display: flex;
++  justify-content: space-between;
++  gap: 10px;
++  margin: 6px 6px 0;
++  font-size: var(--fs-xs);
++  color: var(--text3);
++}
++
++/* Light theme */
++[data-theme="light"] #transferModal .tf-mentee { background: linear-gradient(160deg, rgba(201, 168, 76, 0.18), rgba(201, 168, 76, 0.05)), #fffaf0; }
++[data-theme="light"] #transferModal .tf-topic-pill,
++[data-theme="light"] #transferModal .tf-match,
++[data-theme="light"] #transferModal .tf-note-toggle { color: #7A5812; }
++[data-theme="light"] #transferModal .tf-chip { background: #fffaf0; border-color: rgba(150, 120, 40, 0.3); color: #5b4710; }
++[data-theme="light"] #transferModal .tf-chip.active { color: #1a1300; background: linear-gradient(180deg, #EBCD72, #C9A84C); }
++[data-theme="light"] #transferModal .tf-cap { background: rgba(150, 120, 40, 0.18); }
++[data-theme="light"] #transferModal .tf-cap i.full { background: rgba(80, 60, 20, 0.35); }
++[data-theme="light"] #transferModal .tf-state-chip { background: rgba(80, 60, 20, 0.08); border-color: rgba(80, 60, 20, 0.2); }
++[data-theme="light"] #transferModal .tf-skel { background: #fffaf0; border-color: rgba(150, 120, 40, 0.2); }
++[data-theme="light"] #transferModal .tf-skel-av,
++[data-theme="light"] #transferModal .tf-skel-lines i { background: rgba(150, 120, 40, 0.16); }
++[data-theme="light"] #transferModal .tf-empty-icon { color: #7A5812; }
++
++/* Phones: keep it tight; touch devices skip the skeleton shimmer entirely */
++@media (max-width: 360px) {
++  #transferModal .tf-mentor { padding: 10px 12px; gap: 10px; }
++  #transferModal .tf-cap { width: 40px; }
++}
++
++/* Transfer sheet: compact header, single-line action row, scroll hint on chips */
++#transferModal .tf-head .hb-icon { width: 48px; height: 48px; margin-bottom: 8px; border-radius: 16px; }
++#transferModal .tf-head .hb-icon svg { width: 22px; height: 22px; }
++#transferModal .tf-sub { margin-bottom: 10px; }
++#transferModal .tf-actions { grid-template-columns: auto 1fr; }
++#transferModal .tf-actions .btn { min-height: 50px; padding-left: 22px; padding-right: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
++#transferModal .tf-actions .btn-primary { min-width: 0; }
++#transferModal .tf-mentee { padding: 10px 14px; }
++#transferModal .tf-mentee-since { margin-top: 3px; font-size: var(--fs-xs); font-weight: 600; color: var(--text2); }
++#transferModal .tf-chips {
++  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
++  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
++  padding-right: 28px;
++}
++@media (max-height: 720px) {
++  #transferModal .tf-head .hb-icon { display: none; }
++  #transferModal .tf-title { margin-bottom: 2px; }
++  #transferModal .tf-sub { margin-bottom: 6px; font-size: var(--fs-sm); }
++  #transferModal .tf-sheet { padding-top: 14px; }
++  #transferModal .modal-handle { margin-bottom: 10px; }
++}
++
++#transferModal .tf-actions .btn-primary { display: inline-flex; align-items: center; justify-content: center; }
++#transferModal .tf-match { display: inline-flex; align-items: center; gap: 5px; }
++#transferModal .tf-star { flex: none; }
++
++#transferModal .tf-best { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.03em; color: var(--gold-light); }
++[data-theme="light"] #transferModal .tf-best { color: #7A5812; }
++#transferModal .tf-actions .btn { font-size: var(--fs-base); padding-left: 16px; padding-right: 16px; }
++#transferModal .tf-actions .btn-outline { padding-left: 22px; padding-right: 22px; }
++
++
++/* The global input:focus ring would draw a second box inside the search pill */
++#transferModal .mentor-search-input:focus { box-shadow: none; border: none; }
++#transferModal .tf-state-chip { max-width: 38%; text-align: center; line-height: 1.25; }
+diff --git a/routes/mentors.js b/routes/mentors.js
+index 5ebe287..2eb9ab8 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -41,10 +41,26 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+ 
+     // Get the requesting mentee's biological sex so we can match
+     // it against each mentor's preferred_mentee_sex preference.
++    // When a mentor is choosing who to transfer a mentee to (?for_mentee=<id>),
++    // the preference check must use that MENTEE's sex, not the mentor's own.
++    // Only honoured if the caller really has that mentee assigned.
++    let sexSourceId = req.telegramUser.id;
++    const forMentee = parseInt(req.query.for_mentee, 10);
++    if (forMentee) {
++      const { data: owns } = await supabase
++        .from('mentorship_assignments')
++        .select('id')
++        .eq('mentor_id', req.telegramUser.id)
++        .eq('user_id', forMentee)
++        .eq('is_active', true)
++        .limit(1)
++        .maybeSingle();
++      if (owns) sexSourceId = forMentee;
++    }
+     const { data: userData } = await supabase
+       .from('users')
+       .select('sex')
+-      .eq('telegram_id', req.telegramUser.id)
++      .eq('telegram_id', sexSourceId)
+       .single();
+     const DEFAULT_MAX_MENTEES = parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
+ 
+@@ -959,6 +975,10 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+   router.post('/transfer', requireAuth, async (req, res) => {
+     const { id: current_mentor_id } = req.telegramUser;
+     const { type, id, target_mentor_id } = req.body;
++    // Optional hand-over note for the new mentor (plain text, escaped when sent).
++    const handoffNote = typeof req.body.note === 'string'
++      ? req.body.note.replace(/\s+/g, ' ').trim().slice(0, 300)
++      : '';
+ 
+     if (!type || !id || !target_mentor_id) {
+       return res.status(400).json({ error: 'Missing required fields' });
+@@ -1081,6 +1101,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+           icon: '🤝',
+           title: tAm ? 'አዲስ ተመካሪ ተመድቦልዎታል' : 'New Mentee Assigned',
+           body: tAm ? `አዲስ ተመካሪ በዝውውር ቀርቦልዎታል፦ ${menteeName}` : `A new mentee has been transferred to you: ${menteeName}`,
++          quote: handoffNote,
+           footer: tAm ? 'እግዚአብሔር ያበርታዎት 🙏' : 'Thank you for serving 🙏',
+         }, { label: tAm ? 'መተግበሪያውን ክፈት' : 'Open App' });
+ 

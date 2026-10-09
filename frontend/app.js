@@ -6898,6 +6898,7 @@ function toggleLanguage() {
 // what is already loaded where we can, so the switch is instant.
 function refreshLanguageContent() {
   try {
+    if (_transferAssignmentId != null && $('transferModal')?.classList.contains('open')) { renderTransferSheet(); }
     switch (currentPage) {
       case 'mentors':
         renderMentorTopicChips();
@@ -7109,7 +7110,7 @@ function renderMenteesList() {
             <div class="premium-dropdown mentee-actions" data-dropdown id="${actionsId}">
               <button type="button" class="mentee-actions-btn" data-dropdown-toggle aria-haspopup="menu" aria-label="${t('mentee_actions_label')}" title="${t('mentee_actions_label')}">${menteeIcon('more', 18)}</button>
               <div class="premium-dropdown-menu" data-dropdown-menu>
-                <button type="button" class="dropdown-item" onclick="openTransferModal('${assignId}', '${user.telegram_id}', '${escapeHtml(displayName)}')">${menteeIcon('transfer', 14)}${t('btn_transfer')}</button>
+                <button type="button" class="dropdown-item" onclick="openTransferModal('${assignId}')">${menteeIcon('transfer', 14)}${t('btn_transfer')}</button>
                 <button type="button" class="dropdown-item" style="color:var(--danger)" onclick="endMentorship('${assignId}')">${menteeIcon('userMinus', 14)}${t('btn_end')}</button>
               </div>
             </div>
@@ -7600,174 +7601,339 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', () => { flushMentorNotes({ keepalive: true }); });
 
 // ─── Transfer Mentee ──────────────────────────────────────────
-// Module-level state for the transfer modal
+// A bottom sheet where a mentor hands a mentee to another mentor. Mentors come
+// from one /api/mentors call and are filtered, searched and ranked in the
+// browser, so switching a topic chip or typing is instant (no reload flicker).
 let _transferAssignmentId = null;
-let _transferMenteeId = null;
+let _transferMentee = null;        // { id, name, user }
+let _transferMentors = [];         // every other mentor
+let _transferMenteeTopics = [];    // [{ id, name, name_am }]
+let _transferTopicFilter = '';     // topic id as string; '' = all mentors
+let _transferQuery = '';
+let _transferSelectedId = null;
+let _transferLoadState = 'idle';   // 'loading' | 'ready' | 'error'
+let _transferBusy = false;
+const TRANSFER_NOTE_MAX = 300;
+
+const TRANSFER_ICON_STAR = '<svg class="tf-star" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+const TRANSFER_ICON_EMPTY = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 4.5a3.5 3.5 0 0 1 0 7"/><path d="M19 14.3c1.9.7 3 2.5 3 5.2"/></svg>';
 
 /**
- * Opens the Transfer Mentee modal for the given assignment.
- * @param {string} assignmentId  – the mentorship_assignments.id
- * @param {string} menteeId      – the mentee's telegram_id (unused by the API, kept for future use)
- * @param {string} menteeName    – the mentee's display name (shown in the modal)
+ * Opens the Transfer Mentee sheet for an active assignment.
+ * Only the assignment id is needed: the mentee is looked up in the My Mentees
+ * list already on screen, so names with quotes can't break an inline handler.
+ * menteeId / menteeName are accepted for older callers.
  */
 async function openTransferModal(assignmentId, menteeId, menteeName) {
   haptic('light');
+  const row = (_myMenteesCache || []).find(m => String(m.id) === String(assignmentId));
+  const user = row?.user || null;
+  const id = user?.telegram_id ?? menteeId;
+  const name = user ? (user.user_settings?.display_name || user.anonymous_id) : (menteeName || '');
 
-  // Store state so confirmTransfer() can read it
   _transferAssignmentId = assignmentId;
-  _transferMenteeId = menteeId;
+  _transferMentee = { id, name: name || '', user, assignedAt: row?.assigned_at || null };
+  _transferMentors = [];
+  _transferMenteeTopics = [];
+  _transferTopicFilter = '';
+  _transferQuery = '';
+  _transferSelectedId = null;
+  _transferBusy = false;
+  _transferLoadState = 'loading';
 
-  // Update the sub-label with the mentee's name
-  const nameEl = $('transferMenteeName');
-  if (nameEl) nameEl.textContent = `Transferring: ${escapeHtml(menteeName)}`;
+  const search = $('transferSearch'); if (search) search.value = '';
+  $('transferSearchClear') && ($('transferSearchClear').style.display = 'none');
+  const note = $('transferNote'); if (note) note.value = '';
+  $('transferNoteBox')?.setAttribute('hidden', '');
+  $('transferNoteToggle')?.setAttribute('aria-expanded', 'false');
+  onTransferNoteInput();
 
-  // Reset filter dropdown
-  const topicSelect = $('transferTopicSelect');
-  if (topicSelect) {
-    topicSelect.innerHTML = '<option value="">All Topics (show all mentors)</option>';
-  }
-
-  // Hide the filter group until topics are loaded
-  const filterGroup = $('transferTopicFilterGroup');
-  if (filterGroup) {
-    filterGroup.style.display = 'none';
-  }
-
-  // Reset target mentor list
-  const select = $('transferMentorSelect');
-  if (select) select.innerHTML = '<option value="">Loading mentors…</option>';
-
-  // Show modal
+  renderTransferSheet();
   $('transferModal').classList.add('open');
 
-  // Fetch mentee's struggle topics to populate the filter dropdown
   try {
-    const topics = await apiFetch(`/api/mentors/mentee-topics/${menteeId}`);
-    if (topics && topics.length > 0) {
-      if (topicSelect) {
-        topicSelect.innerHTML = '<option value="">All Topics (show all mentors)</option>' +
-          topics.map(t => {
-            const topic = t.topics;
-            return `<option value="${topic.id}">${escapeHtml(topicLabel(topic))}</option>`;
-          }).join('');
-      }
-      if (filterGroup) {
-        filterGroup.style.display = 'block';
-      }
-    }
+    const [mentors, topics] = await Promise.all([
+      apiFetch(`/api/mentors?for_mentee=${encodeURIComponent(id)}`),
+      apiFetch(`/api/mentors/mentee-topics/${encodeURIComponent(id)}`).catch(() => []),
+    ]);
+    if (_transferAssignmentId !== assignmentId) return; // closed or reopened meanwhile
+    const me = String(currentUser?.telegram_id || '');
+    _transferMentors = (mentors || []).filter(m => String(m.telegram_id) !== me);
+    _transferMenteeTopics = (topics || []).map(x => x.topics).filter(Boolean);
+    _transferLoadState = 'ready';
   } catch (e) {
-    console.error('Failed to fetch mentee topics:', e);
+    if (_transferAssignmentId !== assignmentId) return;
+    _transferLoadState = 'error';
   }
-
-  // Initially load all mentors (no topic filter selected)
-  loadTransferMentors();
+  renderTransferSheet();
 }
 
-/** Closes the Transfer Mentee modal and resets its state. */
+/** Closes the sheet and clears its state. Ignored while a transfer is being sent. */
 function closeTransferModal() {
+  if (_transferBusy) return;
   haptic('light');
   $('transferModal')?.classList.remove('open');
   _transferAssignmentId = null;
-  _transferMenteeId = null;
-  const topicSelect = $('transferTopicSelect');
-  if (topicSelect) topicSelect.value = '';
+  _transferMentee = null;
+  _transferMentors = [];
+  _transferSelectedId = null;
 }
 
-/**
- * Fetches all mentors from GET /api/mentors and populates the dropdown,
- * excluding the currently logged-in mentor (current user).
- * Supports filtering by topic_id.
- * @param {string} topicId - Optional topic ID to filter mentors by.
- */
-async function loadTransferMentors(topicId = '') {
-  const select = $('transferMentorSelect');
-  if (!select) return;
+// Per-mentor facts used for ranking, badges and availability.
+function transferMentorInfo(m, topicIds) {
+  const max = mentorMax(m);
+  const count = m.mentee_count || 0;
+  const paused = m.accepting_requests === false;
+  const full = count >= max;
+  const matched = (m.topics || []).filter(tp => topicIds.has(Number(tp.id))).length;
+  return { max, count, paused, full, available: !paused && !full, matched };
+}
 
-  try {
-    let url = '/api/mentors';
-    if (topicId) {
-      url += `?topic_id=${topicId}`;
-    }
-    const mentors = await apiFetch(url);
-    const currentId = String(currentUser?.telegram_id || '');
+// Mentors after the topic chip + search box, best candidates first:
+// open mentors before unavailable ones, then topic match, rating, free spots.
+function transferVisibleMentors() {
+  const topicIds = new Set(_transferMenteeTopics.map(tp => Number(tp.id)));
+  const q = _transferQuery.trim().toLowerCase();
+  const rows = _transferMentors
+    .filter(m => !_transferTopicFilter || (m.topics || []).some(tp => String(tp.id) === _transferTopicFilter))
+    .filter(m => {
+      if (!q) return true;
+      const hay = [
+        mentorNameOf(m), m.user_settings?.specialization, m.user_settings?.bio,
+        ...(m.topics || []).map(tp => `${tp.name || ''} ${tp.name_am || ''}`),
+      ].join(' ').toLowerCase();
+      return hay.includes(q);
+    })
+    .map(m => ({ m, info: transferMentorInfo(m, topicIds) }));
+  rows.sort((a, b) =>
+    (b.info.available - a.info.available) ||
+    (b.info.matched - a.info.matched) ||
+    ((b.m.rating || 0) - (a.m.rating || 0)) ||
+    ((b.info.max - b.info.count) - (a.info.max - a.info.count)) ||
+    mentorNameOf(a.m).localeCompare(mentorNameOf(b.m)));
+  return rows;
+}
 
-    // Filter out the current mentor from the list
-    const others = (mentors || []).filter(
-      m => String(m.telegram_id) !== currentId
-    );
+function renderTransferSheet() {
+  const mentee = _transferMentee;
+  if (!mentee) return;
+  const safeName = escapeHtml(mentee.name);
 
-    if (!others.length) {
-      select.innerHTML = `<option value="">${topicId ? 'No mentors available for this topic' : 'No other mentors available'}</option>`;
-      return;
-    }
+  // Subtitle
+  const sub = $('transferSubtitle');
+  if (sub) sub.innerHTML = t('transfer_sub', { name: `<strong>${safeName}</strong>` });
 
-    // Check if any mentor is both accepting requests AND has available capacity
-    const hasAcceptingAvailable = others.some(m => {
-      const mentees = m.mentee_count || 0;
-      const max = m.user_settings?.max_mentees || 5;
-      return m.accepting_requests !== false && mentees < max;
-    });
-
-    if (topicId && !hasAcceptingAvailable) {
-      select.innerHTML = '<option value="">No accepting mentors available for this topic.</option>';
-      return;
-    }
-
-    select.innerHTML = others.map(m => {
-      const name = m.user_settings?.display_name || m.anonymous_id || `Mentor ${m.telegram_id}`;
-      const mentees = m.mentee_count || 0;
-      const max = m.user_settings?.max_mentees || 5;
-      const isFull = mentees >= max;
-      const isNotAccepting = m.accepting_requests === false;
-
-      const disabledAttr = (isFull || isNotAccepting) ? 'disabled' : '';
-
-      let suffixText = '';
-      if (isNotAccepting) suffixText += ' (Not Accepting)';
-      if (isFull) suffixText += ' - At capacity';
-
-      const statusText = isFull ? ' <span style="color:var(--danger);font-size:var(--fs-2xs);">full</span>' : '';
-
-      return `<option value="${m.telegram_id}" ${disabledAttr}>${escapeHtml(name)}${suffixText} <sup>${mentees}/${max}</sup>${statusText}</option>`;
-    }).join('');
-  } catch (e) {
-    if (select) select.innerHTML = '<option value="">Failed to load mentors</option>';
-    showToast(e.message, 'error');
+  // Mentee card
+  const card = $('transferMenteeCard');
+  if (card) {
+    const letter = (mentee.name || '?').charAt(0).toUpperCase();
+    const dateLocale = currentLanguage === 'am' ? 'am-ET' : undefined;
+    const since = mentee.assignedAt
+      ? new Date(mentee.assignedAt).toLocaleDateString(dateLocale, { year: 'numeric', month: 'short', day: 'numeric' })
+      : '';
+    card.hidden = false;
+    card.innerHTML = `
+      ${renderAvatar(mentee.user || { telegram_id: mentee.id }, letter)}
+      <div class="tf-mentee-body">
+        <div class="tf-mentee-name">${safeName}</div>
+        ${since ? `<div class="tf-mentee-since">${escapeHtml(t('transfer_since', { date: since }))}</div>` : ''}
+      </div>`;
+    hydrateAvatars(card);
   }
+
+  // Topic filter chips
+  const chipsEl = $('transferTopicChips');
+  if (chipsEl) {
+    const show = _transferLoadState === 'ready' && _transferMenteeTopics.length > 0;
+    chipsEl.hidden = !show;
+    if (show) {
+      const all = `<button type="button" class="tf-chip${_transferTopicFilter === '' ? ' active' : ''}" aria-pressed="${_transferTopicFilter === ''}" onclick="setTransferTopic('')">${t('transfer_filter_all')}</button>`;
+      chipsEl.setAttribute('aria-label', t('transfer_filter_label'));
+      chipsEl.innerHTML = all + _transferMenteeTopics.map(tp => {
+        const on = String(tp.id) === _transferTopicFilter;
+        return `<button type="button" class="tf-chip${on ? ' active' : ''}" aria-pressed="${on}" onclick="setTransferTopic('${tp.id}')">${escapeHtml(topicLabel(tp))}</button>`;
+      }).join('');
+    }
+  }
+
+  renderTransferList();
+  updateTransferConfirm();
 }
 
-/**
- * Event handler triggered when the topic filter dropdown value changes.
- * @param {string} topicId - The selected topic ID or empty string.
- */
-async function onTransferTopicChange(topicId) {
+function renderTransferList() {
+  const list = $('transferMentorList');
+  if (!list) return;
+
+  if (_transferLoadState === 'loading') {
+    list.innerHTML = Array.from({ length: 3 }, () => `
+      <div class="tf-skel"><span class="tf-skel-av"></span><span class="tf-skel-lines"><i></i><i></i></span></div>`).join('');
+    return;
+  }
+  if (_transferLoadState === 'error') {
+    list.innerHTML = `
+      <div class="tf-empty">
+        <span class="tf-empty-icon">${TRANSFER_ICON_EMPTY}</span>
+        <p>${t('transfer_load_failed')}</p>
+        <button type="button" class="btn btn-outline btn-sm" onclick="retryTransferLoad()">${t('btn_retry')}</button>
+      </div>`;
+    return;
+  }
+
+  const rows = transferVisibleMentors();
+  if (!rows.length) {
+    const filtered = !!(_transferTopicFilter || _transferQuery.trim());
+    const msg = !_transferMentors.length ? t('transfer_none')
+      : _transferQuery.trim() ? t('transfer_none_search') : t('transfer_none_topic');
+    list.innerHTML = `
+      <div class="tf-empty">
+        <span class="tf-empty-icon">${TRANSFER_ICON_EMPTY}</span>
+        <p>${msg}</p>
+        ${filtered && _transferMentors.length ? `<button type="button" class="btn btn-outline btn-sm" onclick="resetTransferFilters()">${t('transfer_show_all')}</button>` : ''}
+      </div>`;
+    return;
+  }
+
+  const totalTopics = _transferMenteeTopics.length;
+  const firstAvail = rows.findIndex(r => r.info.available);
+  const manyAvail = rows.filter(r => r.info.available).length > 1;
+
+  list.innerHTML = rows.map(({ m, info }, i) => {
+    const name = mentorNameOf(m) || `Mentor ${m.telegram_id}`;
+    const letter = name.charAt(0).toUpperCase();
+    const sel = String(m.telegram_id) === String(_transferSelectedId);
+    const pct = Math.min(100, Math.round((info.count / info.max) * 100));
+    const status = mentorStatus(m);
+    const best = manyAvail && i === firstAvail && info.matched > 0;
+    const stateChip = info.paused ? t('not_accepting') : info.full ? t('capacity_full') : '';
+    const trailing = stateChip
+      ? `<span class="tf-state-chip">${escapeHtml(stateChip)}</span>`
+      : `<span class="rt-radio" aria-hidden="true"></span>`;
+    return `
+      <button type="button" role="radio" aria-checked="${sel}" ${info.available ? '' : 'disabled aria-disabled="true"'}
+        class="profile-menu-item rt-topic tf-mentor${sel ? ' pm-gold selected' : ''}${info.available ? '' : ' is-unavailable'}"
+        data-mentor-id="${m.telegram_id}" onclick="selectTransferMentor('${m.telegram_id}')">
+        ${renderAvatar(m, letter)}
+        <span class="profile-menu-label rt-label tf-mentor-body">
+          <span class="tf-mentor-top">
+            <span class="rt-name">${escapeHtml(name)}</span>
+          </span>
+          ${renderModernRating(m.rating, m.rating_count)}
+          <span class="tf-cap-row">
+            <span class="tf-cap" aria-hidden="true"><i class="${info.full ? 'full' : ''}" style="width:${pct}%"></i></span>
+            <span class="tf-cap-text">${info.count}/${info.max}${info.available ? ` · ${escapeHtml(status.text)}` : ''}</span>
+          </span>
+          ${best ? `<span class="tf-best">${TRANSFER_ICON_STAR}${escapeHtml(t('transfer_best_match'))}</span>` : ''}
+          ${info.matched > 0 && totalTopics > 0 ? `<span class="tf-match">${escapeHtml(t(info.matched === 1 ? 'transfer_match_one' : 'transfer_match', { n: info.matched, total: totalTopics }))}</span>` : ''}
+        </span>
+        ${trailing}
+      </button>`;
+  }).join('');
+  hydrateAvatars(list);
+}
+
+function updateTransferConfirm() {
+  const btn = $('transferConfirmBtn');
+  if (!btn) return;
+  const m = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
+  // The picked mentor is already highlighted in the list, so the button stays short.
+  btn.disabled = _transferBusy || !m;
+  btn.textContent = _transferBusy ? t('transfer_sending') : t('btn_transfer');
+}
+
+function selectTransferMentor(id) {
+  if (_transferBusy) return;
+  const m = _transferMentors.find(x => String(x.telegram_id) === String(id));
+  if (!m || !transferMentorInfo(m, new Set()).available) return;
+  haptic('selection');
+  _transferSelectedId = String(id);
+  renderTransferList();
+  updateTransferConfirm();
+}
+
+function setTransferTopic(topicId) {
   haptic('light');
-  const select = $('transferMentorSelect');
-  if (select) select.innerHTML = '<option value="">Loading mentors…</option>';
-  await loadTransferMentors(topicId);
+  _transferTopicFilter = String(topicId || '');
+  // The pick may no longer be in the list; drop it instead of hiding it.
+  const stillThere = transferVisibleMentors().some(r => String(r.m.telegram_id) === String(_transferSelectedId));
+  if (!stillThere) _transferSelectedId = null;
+  renderTransferSheet();
+}
+
+function onTransferSearch(value) {
+  _transferQuery = value || '';
+  const clear = $('transferSearchClear');
+  if (clear) clear.style.display = _transferQuery ? '' : 'none';
+  const stillThere = transferVisibleMentors().some(r => String(r.m.telegram_id) === String(_transferSelectedId));
+  if (!stillThere) _transferSelectedId = null;
+  renderTransferList();
+  updateTransferConfirm();
+}
+
+function clearTransferSearch() {
+  const input = $('transferSearch');
+  if (input) { input.value = ''; input.focus(); }
+  onTransferSearch('');
+}
+
+function resetTransferFilters() {
+  haptic('light');
+  const input = $('transferSearch'); if (input) input.value = '';
+  _transferQuery = '';
+  _transferTopicFilter = '';
+  $('transferSearchClear') && ($('transferSearchClear').style.display = 'none');
+  renderTransferSheet();
+}
+
+async function retryTransferLoad() {
+  if (_transferAssignmentId == null || !_transferMentee) return;
+  const id = _transferAssignmentId;
+  const mentee = _transferMentee;
+  haptic('light');
+  // openTransferModal rebuilds state from the mentees list, which is still loaded.
+  await openTransferModal(id, mentee.id, mentee.name);
+}
+
+function toggleTransferNote() {
+  haptic('light');
+  const box = $('transferNoteBox');
+  const btn = $('transferNoteToggle');
+  if (!box || !btn) return;
+  const open = box.hasAttribute('hidden');
+  if (open) box.removeAttribute('hidden'); else box.setAttribute('hidden', '');
+  btn.setAttribute('aria-expanded', String(open));
+  if (open) $('transferNote')?.focus();
+}
+
+function onTransferNoteInput() {
+  const ta = $('transferNote');
+  const count = $('transferNoteCount');
+  if (count) count.textContent = `${(ta?.value || '').length}/${TRANSFER_NOTE_MAX}`;
 }
 
 /**
- * Confirms the transfer by calling POST /api/mentors/transfer with
- * type='assignment', then refreshes the My Mentees list.
+ * Sends POST /api/mentors/transfer (type 'assignment'), then refreshes My Mentees.
+ * The note is optional and goes only to the new mentor.
  */
 async function confirmTransfer() {
-  haptic('medium');
-
-  const select = $('transferMentorSelect');
-  const target_mentor_id = select?.value;
+  if (_transferBusy) return;
+  const target_mentor_id = _transferSelectedId;
 
   if (!target_mentor_id) {
     haptic('error');
-    showToast('Please select a mentor to transfer to.', 'error');
+    showToast(t('transfer_pick_first'), 'error');
+    return;
+  }
+  if (!_transferAssignmentId) {
+    haptic('error');
+    showToast(t('transfer_failed_missing'), 'error');
     return;
   }
 
-  if (!_transferAssignmentId) {
-    haptic('error');
-    showToast('Transfer failed: missing assignment ID.', 'error');
-    return;
-  }
+  const note = ($('transferNote')?.value || '').trim().slice(0, TRANSFER_NOTE_MAX);
+  haptic('medium');
+  _transferBusy = true;
+  updateTransferConfirm();
+  $('transferMentorList')?.classList.add('is-busy');
 
   try {
     await apiFetch('/api/mentors/transfer', {
@@ -7775,15 +7941,20 @@ async function confirmTransfer() {
       body: {
         type: 'assignment',
         id: _transferAssignmentId,
-        target_mentor_id
-      }
+        target_mentor_id,
+        ...(note ? { note } : {}),
+      },
     });
 
+    _transferBusy = false;
     haptic('success');
-    showToast('Mentee transferred successfully! 🔀', 'success');
+    showToast(t('transfer_success'), 'success');
     closeTransferModal();
     loadMyMentees(); // Refresh the My Mentees list
   } catch (e) {
+    _transferBusy = false;
+    $('transferMentorList')?.classList.remove('is-busy');
+    updateTransferConfirm();
     haptic('error');
     showToast(e.message, 'error');
   }

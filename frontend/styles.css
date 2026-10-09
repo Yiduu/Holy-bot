@@ -12300,3 +12300,281 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
 
 /* Logo: no glow disc behind it (it showed as a visible round halo with rings in dark mode) */
 #onboarding .ob-logo-clean::after { content: none; display: none; animation: none; }
+
+/* ═══ Transfer Mentee sheet ═══
+   Same family as the Request Topic / Schedule sheets: gold icon tile, pill
+   actions, stacked selectable cards. Header and actions stay put; only the
+   middle scrolls, so the main button is always reachable on small phones. */
+#transferModal .tf-sheet {
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  max-height: 90dvh;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  overflow: hidden;
+}
+#transferModal .tf-head { flex: none; }
+#transferModal .tf-title { text-align: center; font-size: var(--fs-lg); margin-bottom: 6px; }
+#transferModal .tf-sub { margin-bottom: 14px; font-size: var(--fs-md); }
+#transferModal .tf-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -4px;
+  padding: 2px 4px 6px;
+}
+#transferModal .tf-actions { flex: none; margin-top: 12px; }
+#transferModal .tf-actions .btn:disabled { opacity: 0.55; box-shadow: none; }
+
+/* Who is being transferred */
+#transferModal .tf-mentee {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(201, 168, 76, 0.28);
+  background: linear-gradient(160deg, rgba(201, 168, 76, 0.12), rgba(201, 168, 76, 0.03)), #111319;
+}
+#transferModal .tf-mentee[hidden] { display: none; }
+#transferModal .tf-mentee-body { min-width: 0; flex: 1; }
+#transferModal .tf-mentee-name {
+  font-weight: 700;
+  font-size: var(--fs-base);
+  color: var(--text);
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+#transferModal .tf-mentee-topics { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+#transferModal .tf-topic-pill {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  color: var(--gold-light);
+  background: rgba(201, 168, 76, 0.12);
+  border: 1px solid rgba(201, 168, 76, 0.28);
+  line-height: 1.4;
+}
+
+/* Topic filter chips: one swipeable row */
+#transferModal .tf-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+#transferModal .tf-chips[hidden] { display: none; }
+#transferModal .tf-chips::-webkit-scrollbar { display: none; }
+#transferModal .tf-chip {
+  flex: none;
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text2);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+#transferModal .tf-chip:active { transform: scale(0.97); }
+#transferModal .tf-chip.active {
+  color: #1a1300;
+  border-color: transparent;
+  background: linear-gradient(180deg, #EBCD72, #C9A84C);
+  box-shadow: 0 4px 14px rgba(201, 168, 76, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Search */
+#transferModal .tf-search { margin-bottom: 12px; border-radius: 18px; padding: 12px 16px; }
+
+/* Mentor cards */
+#transferModal .tf-list {
+  max-height: none;
+  overflow: visible;
+  padding: 2px 2px 4px;
+  margin-bottom: 4px;
+  gap: 10px;
+}
+#transferModal .tf-list.is-busy { opacity: 0.6; pointer-events: none; }
+#transferModal .tf-mentor {
+  align-items: center;
+  min-height: 0;
+  padding: 12px 14px;
+  gap: 12px;
+  border-radius: 22px;
+}
+#transferModal .tf-mentor .mentor-avatar { width: 48px; height: 48px; min-width: 48px; min-height: 48px; }
+#transferModal .tf-mentor-body { flex: 1; min-width: 0; gap: 5px; align-items: flex-start; }
+#transferModal .tf-mentor-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; max-width: 100%; }
+#transferModal .tf-mentor .rt-name { font-weight: 700; overflow-wrap: anywhere; line-height: 1.25; }
+#transferModal .tf-mentor .mentor-stats-row { margin-top: 0; }
+#transferModal .tf-mentor .mp-mine-chip { padding: 3px 9px; }
+
+/* Capacity: slim bar + "2/5 · 3 spots open" */
+#transferModal .tf-cap-row { display: flex; align-items: center; gap: 8px; max-width: 100%; }
+#transferModal .tf-cap {
+  flex: none;
+  width: 54px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+#transferModal .tf-cap i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #C9A84C, #EBCD72);
+}
+#transferModal .tf-cap i.full { background: rgba(255, 255, 255, 0.35); }
+#transferModal .tf-cap-text { font-size: var(--fs-xs); font-weight: 600; color: var(--text2); }
+#transferModal .tf-match { font-size: var(--fs-xs); font-weight: 700; color: var(--gold-light); }
+
+/* Unavailable mentors stay visible (so the list is honest) but can't be picked */
+#transferModal .tf-mentor.is-unavailable { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+#transferModal .tf-state-chip {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text2);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Loading skeleton + empty / error state */
+#transferModal .tf-skel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+}
+#transferModal .tf-skel-av { width: 48px; height: 48px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); flex: none; }
+#transferModal .tf-skel-lines { flex: 1; display: grid; gap: 8px; }
+#transferModal .tf-skel-lines i { display: block; height: 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); }
+#transferModal .tf-skel-lines i:last-child { width: 55%; }
+#transferModal .tf-empty { text-align: center; padding: 22px 12px 14px; color: var(--text2); }
+#transferModal .tf-empty p { margin: 8px 0 14px; font-size: var(--fs-md); line-height: 1.5; }
+#transferModal .tf-empty-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 18px;
+  color: var(--gold-light);
+  background: rgba(201, 168, 76, 0.1);
+  border: 1px solid rgba(201, 168, 76, 0.25);
+}
+
+/* Optional note for the new mentor */
+#transferModal .tf-note { margin-top: 10px; }
+#transferModal .tf-note-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 18px;
+  border: 1px dashed rgba(201, 168, 76, 0.4);
+  background: transparent;
+  color: var(--gold-light);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+#transferModal .tf-note-toggle[aria-expanded="true"] { border-style: solid; background: rgba(201, 168, 76, 0.08); }
+#transferModal .tf-note-opt { margin-left: auto; font-size: var(--fs-2xs); font-weight: 600; color: var(--text3); }
+#transferModal .tf-note-box { margin-top: 10px; }
+#transferModal .tf-note-box[hidden] { display: none; }
+#transferModal .tf-note-box textarea {
+  width: 100%;
+  min-height: 84px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  resize: none;
+  font-size: var(--fs-base);
+  line-height: 1.5;
+}
+#transferModal .tf-note-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 6px 6px 0;
+  font-size: var(--fs-xs);
+  color: var(--text3);
+}
+
+/* Light theme */
+[data-theme="light"] #transferModal .tf-mentee { background: linear-gradient(160deg, rgba(201, 168, 76, 0.18), rgba(201, 168, 76, 0.05)), #fffaf0; }
+[data-theme="light"] #transferModal .tf-topic-pill,
+[data-theme="light"] #transferModal .tf-match,
+[data-theme="light"] #transferModal .tf-note-toggle { color: #7A5812; }
+[data-theme="light"] #transferModal .tf-chip { background: #fffaf0; border-color: rgba(150, 120, 40, 0.3); color: #5b4710; }
+[data-theme="light"] #transferModal .tf-chip.active { color: #1a1300; background: linear-gradient(180deg, #EBCD72, #C9A84C); }
+[data-theme="light"] #transferModal .tf-cap { background: rgba(150, 120, 40, 0.18); }
+[data-theme="light"] #transferModal .tf-cap i.full { background: rgba(80, 60, 20, 0.35); }
+[data-theme="light"] #transferModal .tf-state-chip { background: rgba(80, 60, 20, 0.08); border-color: rgba(80, 60, 20, 0.2); }
+[data-theme="light"] #transferModal .tf-skel { background: #fffaf0; border-color: rgba(150, 120, 40, 0.2); }
+[data-theme="light"] #transferModal .tf-skel-av,
+[data-theme="light"] #transferModal .tf-skel-lines i { background: rgba(150, 120, 40, 0.16); }
+[data-theme="light"] #transferModal .tf-empty-icon { color: #7A5812; }
+
+/* Phones: keep it tight; touch devices skip the skeleton shimmer entirely */
+@media (max-width: 360px) {
+  #transferModal .tf-mentor { padding: 10px 12px; gap: 10px; }
+  #transferModal .tf-cap { width: 40px; }
+}
+
+/* Transfer sheet: compact header, single-line action row, scroll hint on chips */
+#transferModal .tf-head .hb-icon { width: 48px; height: 48px; margin-bottom: 8px; border-radius: 16px; }
+#transferModal .tf-head .hb-icon svg { width: 22px; height: 22px; }
+#transferModal .tf-sub { margin-bottom: 10px; }
+#transferModal .tf-actions { grid-template-columns: auto 1fr; }
+#transferModal .tf-actions .btn { min-height: 50px; padding-left: 22px; padding-right: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#transferModal .tf-actions .btn-primary { min-width: 0; }
+#transferModal .tf-mentee { padding: 10px 14px; }
+#transferModal .tf-mentee-since { margin-top: 3px; font-size: var(--fs-xs); font-weight: 600; color: var(--text2); }
+#transferModal .tf-chips {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  padding-right: 28px;
+}
+@media (max-height: 720px) {
+  #transferModal .tf-head .hb-icon { display: none; }
+  #transferModal .tf-title { margin-bottom: 2px; }
+  #transferModal .tf-sub { margin-bottom: 6px; font-size: var(--fs-sm); }
+  #transferModal .tf-sheet { padding-top: 14px; }
+  #transferModal .modal-handle { margin-bottom: 10px; }
+}
+
+#transferModal .tf-actions .btn-primary { display: inline-flex; align-items: center; justify-content: center; }
+#transferModal .tf-match { display: inline-flex; align-items: center; gap: 5px; }
+#transferModal .tf-star { flex: none; }
+
+#transferModal .tf-best { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.03em; color: var(--gold-light); }
+[data-theme="light"] #transferModal .tf-best { color: #7A5812; }
+#transferModal .tf-actions .btn { font-size: var(--fs-base); padding-left: 16px; padding-right: 16px; }
+#transferModal .tf-actions .btn-outline { padding-left: 22px; padding-right: 22px; }
+
+
+/* The global input:focus ring would draw a second box inside the search pill */
+#transferModal .mentor-search-input:focus { box-shadow: none; border: none; }
+#transferModal .tf-state-chip { max-width: 38%; text-align: center; line-height: 1.25; }

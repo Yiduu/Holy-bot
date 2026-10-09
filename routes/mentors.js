@@ -41,10 +41,26 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
 
     // Get the requesting mentee's biological sex so we can match
     // it against each mentor's preferred_mentee_sex preference.
+    // When a mentor is choosing who to transfer a mentee to (?for_mentee=<id>),
+    // the preference check must use that MENTEE's sex, not the mentor's own.
+    // Only honoured if the caller really has that mentee assigned.
+    let sexSourceId = req.telegramUser.id;
+    const forMentee = parseInt(req.query.for_mentee, 10);
+    if (forMentee) {
+      const { data: owns } = await supabase
+        .from('mentorship_assignments')
+        .select('id')
+        .eq('mentor_id', req.telegramUser.id)
+        .eq('user_id', forMentee)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (owns) sexSourceId = forMentee;
+    }
     const { data: userData } = await supabase
       .from('users')
       .select('sex')
-      .eq('telegram_id', req.telegramUser.id)
+      .eq('telegram_id', sexSourceId)
       .single();
     const DEFAULT_MAX_MENTEES = parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
 
@@ -959,6 +975,10 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
   router.post('/transfer', requireAuth, async (req, res) => {
     const { id: current_mentor_id } = req.telegramUser;
     const { type, id, target_mentor_id } = req.body;
+    // Optional hand-over note for the new mentor (plain text, escaped when sent).
+    const handoffNote = typeof req.body.note === 'string'
+      ? req.body.note.replace(/\s+/g, ' ').trim().slice(0, 300)
+      : '';
 
     if (!type || !id || !target_mentor_id) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -1081,6 +1101,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
           icon: '🤝',
           title: tAm ? 'አዲስ ተመካሪ ተመድቦልዎታል' : 'New Mentee Assigned',
           body: tAm ? `አዲስ ተመካሪ በዝውውር ቀርቦልዎታል፦ ${menteeName}` : `A new mentee has been transferred to you: ${menteeName}`,
+          quote: handoffNote,
           footer: tAm ? 'እግዚአብሔር ያበርታዎት 🙏' : 'Thank you for serving 🙏',
         }, { label: tAm ? 'መተግበሪያውን ክፈት' : 'Open App' });
 
