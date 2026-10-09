@@ -12680,14 +12680,20 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
   -webkit-backdrop-filter: none;
   background: rgba(0, 0, 0, 0.72);
   bottom: auto;
-  height: var(--app-height, 100%);
+  /* Follow the keyboard via --app-height, but never exceed the real visible
+     height: Telegram can report a taller value, which pushed the buttons off-screen. */
+  height: 100vh;
+  height: min(var(--app-height, 100dvh), 100dvh);
   overscroll-behavior: contain;
 }
 #transferModal .tf-sheet {
-  height: min(calc(var(--app-height, 100dvh) * 0.9), 680px);
+  height: min(calc(min(var(--app-height, 100dvh), 100dvh) * 0.88), 680px);
   max-height: none;
   will-change: auto;
+  /* extra room under the buttons so they never sit on the screen edge / home bar */
+  padding-bottom: calc(26px + env(safe-area-inset-bottom, 0px));
 }
+#transferModal .tf-actions { padding-bottom: 2px; }
 #transferModal .tf-note-step { display: flex; flex-direction: column; }
 #transferModal .tf-note-step[hidden] { display: none; }
 #transferModal .tf-note-step textarea {
