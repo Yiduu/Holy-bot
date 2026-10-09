@@ -7946,7 +7946,21 @@ function setTransferStep(step) {
       hydrateAvatars(box);
     }
   }
-  renderTransferSheet();
+  updateTransferSubtitle();
+  updateTransferConfirm();
+}
+
+/** Subtitle only; switching steps must not rebuild the mentor list underneath. */
+function updateTransferSubtitle() {
+  const sub = $('transferSubtitle');
+  if (!sub || !_transferMentee) return;
+  if (_transferStep === 'note') {
+    const picked = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
+    sub.innerHTML = t('transfer_note_step_sub', { name: `<strong>${escapeHtml(picked ? (mentorNameOf(picked) || '') : '')}</strong>` });
+  } else {
+    const nm = escapeHtml(_transferMentee.name || (_transferMentee.user && (_transferMentee.user.user_settings?.display_name || _transferMentee.user.anonymous_id)) || '');
+    sub.innerHTML = t('transfer_sub', { name: `<strong>${nm}</strong>` });
+  }
 }
 
 function backToTransferPick() {
@@ -7965,9 +7979,8 @@ function onTransferPrimary() {
   }
   haptic('light');
   if (_transferStep === 'pick') {
+    // No auto-focus: popping the keyboard open during the step change made the sheet jump.
     setTransferStep('note');
-    // Let the step swap paint first so the keyboard doesn't fight the sheet animation.
-    setTimeout(() => $('transferNote')?.focus({ preventScroll: true }), 120);
     return;
   }
   openTransferConfirm();

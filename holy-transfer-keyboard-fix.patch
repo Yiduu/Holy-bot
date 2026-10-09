@@ -1,0 +1,81 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 8a3bbd5..4b837c9 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -7946,7 +7946,21 @@ function setTransferStep(step) {
+       hydrateAvatars(box);
+     }
+   }
+-  renderTransferSheet();
++  updateTransferSubtitle();
++  updateTransferConfirm();
++}
++
++/** Subtitle only; switching steps must not rebuild the mentor list underneath. */
++function updateTransferSubtitle() {
++  const sub = $('transferSubtitle');
++  if (!sub || !_transferMentee) return;
++  if (_transferStep === 'note') {
++    const picked = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
++    sub.innerHTML = t('transfer_note_step_sub', { name: `<strong>${escapeHtml(picked ? (mentorNameOf(picked) || '') : '')}</strong>` });
++  } else {
++    const nm = escapeHtml(_transferMentee.name || (_transferMentee.user && (_transferMentee.user.user_settings?.display_name || _transferMentee.user.anonymous_id)) || '');
++    sub.innerHTML = t('transfer_sub', { name: `<strong>${nm}</strong>` });
++  }
+ }
+ 
+ function backToTransferPick() {
+@@ -7965,9 +7979,8 @@ function onTransferPrimary() {
+   }
+   haptic('light');
+   if (_transferStep === 'pick') {
++    // No auto-focus: popping the keyboard open during the step change made the sheet jump.
+     setTransferStep('note');
+-    // Let the step swap paint first so the keyboard doesn't fight the sheet animation.
+-    setTimeout(() => $('transferNote')?.focus({ preventScroll: true }), 120);
+     return;
+   }
+   openTransferConfirm();
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 990663c..1ab4b88 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -12665,3 +12665,38 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+ }
+ /* Fixed avatar box so a late-arriving photo can never shift the card height. */
+ #menteesList .mentee-card-head .mentor-avatar { width: 44px; height: 44px; }
++
++/* ═══ Transfer sheet: stable while stepping and while the keyboard opens ═══
++   - The overlay followed the full screen and re-blurred it every time the keyboard
++     resized the viewport. It now has a solid scrim (no backdrop blur) and tracks the
++     visible height (--app-height, kept current by app.js), so the sheet simply sits
++     on top of the keyboard.
++   - The sheet had a content-driven height, so swapping "pick" -> "note" resized it.
++     It now has one fixed height for both steps.
++   - Inputs under 16px make iOS zoom the page on focus, which looked like a glitch. */
++#transferModal,
++#transferConfirmModal {
++  backdrop-filter: none;
++  -webkit-backdrop-filter: none;
++  background: rgba(0, 0, 0, 0.72);
++  bottom: auto;
++  height: var(--app-height, 100%);
++  overscroll-behavior: contain;
++}
++#transferModal .tf-sheet {
++  height: min(calc(var(--app-height, 100dvh) * 0.9), 680px);
++  max-height: none;
++  will-change: auto;
++}
++#transferModal .tf-note-step { display: flex; flex-direction: column; }
++#transferModal .tf-note-step[hidden] { display: none; }
++#transferModal .tf-note-step textarea {
++  flex: 1 1 auto;
++  min-height: 110px;
++  font-size: 16px;
++  -webkit-text-size-adjust: 100%;
++}
++#transferModal .mentor-search-input { font-size: 16px; }
++@media (prefers-reduced-motion: reduce) {
++  #transferModal .modal-sheet, #transferConfirmModal .modal-sheet { transition: none; }
++}

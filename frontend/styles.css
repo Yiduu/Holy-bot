@@ -12665,3 +12665,38 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
 }
 /* Fixed avatar box so a late-arriving photo can never shift the card height. */
 #menteesList .mentee-card-head .mentor-avatar { width: 44px; height: 44px; }
+
+/* ═══ Transfer sheet: stable while stepping and while the keyboard opens ═══
+   - The overlay followed the full screen and re-blurred it every time the keyboard
+     resized the viewport. It now has a solid scrim (no backdrop blur) and tracks the
+     visible height (--app-height, kept current by app.js), so the sheet simply sits
+     on top of the keyboard.
+   - The sheet had a content-driven height, so swapping "pick" -> "note" resized it.
+     It now has one fixed height for both steps.
+   - Inputs under 16px make iOS zoom the page on focus, which looked like a glitch. */
+#transferModal,
+#transferConfirmModal {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(0, 0, 0, 0.72);
+  bottom: auto;
+  height: var(--app-height, 100%);
+  overscroll-behavior: contain;
+}
+#transferModal .tf-sheet {
+  height: min(calc(var(--app-height, 100dvh) * 0.9), 680px);
+  max-height: none;
+  will-change: auto;
+}
+#transferModal .tf-note-step { display: flex; flex-direction: column; }
+#transferModal .tf-note-step[hidden] { display: none; }
+#transferModal .tf-note-step textarea {
+  flex: 1 1 auto;
+  min-height: 110px;
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+#transferModal .mentor-search-input { font-size: 16px; }
+@media (prefers-reduced-motion: reduce) {
+  #transferModal .modal-sheet, #transferConfirmModal .modal-sheet { transition: none; }
+}
