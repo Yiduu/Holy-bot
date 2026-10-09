@@ -1,0 +1,1085 @@
+diff --git a/bot.js b/bot.js
+index 652334e..e84c295 100644
+--- a/bot.js
++++ b/bot.js
+@@ -1752,6 +1752,42 @@ async function notifyMentorshipRequest(mentorId, requesterId, requesterName, req
+   });
+ }
+ 
++async function notifyMenteeReferral(toMentorId, { menteeName, fromName, note }) {
++  const am = (await getUserLang(toMentorId)) === 'am';
++  const text = card({
++    icon: '🤝',
++    title: am ? 'አዲስ የተላከ ተመካሪ' : 'New Mentee Referral',
++    body: am
++      ? 'አንድ አማካሪ ተመካሪ ወደ እርስዎ ልከዋል። ለመቀበል ወይም ላለመቀበል መተግበሪያውን ይክፈቱ።'
++      : 'A fellow mentor has referred a mentee to you. Open the app to accept or decline.',
++    fields: [
++      ['👤', am ? 'ተመካሪ' : 'Mentee', menteeName],
++      ['🙏', am ? 'ከአማካሪ' : 'Referred by', fromName],
++    ],
++    quote: note || '',
++    footer: am ? 'ፈጣን ምላሽ ትልቅ ተስፋ ይሰጣል 💛' : 'A quick reply can mean a lot 💛',
++  });
++  await safeSend(toMentorId, text, {
++    ...HTML,
++    reply_markup: goldKeyboard(am ? 'ጥያቄውን ይመልከቱ' : 'Review Referral', `${APP_URL}?start=requests_referred`)
++  });
++}
++
++async function notifyMenteeReferralResult(fromMentorId, { menteeName, toName, accepted }) {
++  const am = (await getUserLang(fromMentorId)) === 'am';
++  const text = card({
++    icon: accepted ? '✅' : '🕊️',
++    title: accepted
++      ? (am ? 'ዝውውሩ ተቀባይነት አግኝቷል' : 'Referral Accepted')
++      : (am ? 'ዝውውሩ አልተቀበለም' : 'Referral Declined'),
++    body: accepted
++      ? (am ? `${toName} ተመካሪ ${menteeName}ን ተቀብለዋል።` : `${toName} accepted ${menteeName}. They are now their mentor.`)
++      : (am ? `${toName} ተመካሪ ${menteeName}ን አልተቀበሉም። ተመካሪው አሁንም ከእርስዎ ጋር ነው።` : `${toName} couldn't take ${menteeName}. They remain with you.`),
++    footer: am ? 'ስለ አገልግሎትዎ እናመሰግናለን 🙏' : 'Thank you for serving 🙏',
++  });
++  await safeSend(fromMentorId, text, { ...HTML, reply_markup: goldKeyboard(am ? 'መተግበሪያውን ክፈት' : 'Open App', APP_URL) });
++}
++
+ async function notifyMentorshipAccepted(userId, mentorName) {
+   const lang = await getUserLang(userId);
+   const am = lang === 'am';
+@@ -3619,6 +3655,8 @@ module.exports = {
+   notifyAdminNewMentorApplication,
+   notifyMentorshipAccepted,
+   notifyMentorshipRejected,
++  notifyMenteeReferral,
++  notifyMenteeReferralResult,
+   notifyMessage,
+   notifyFileMessage,
+   syncNotificationEdit,
+diff --git a/frontend/app.js b/frontend/app.js
+index 4b837c9..1911169 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1149,7 +1149,11 @@ function handleDeepLink() {
+       return;
+     }
+     if (startParam === 'requests' || startParam.startsWith('requests') || startParam.startsWith('request_')) {
+-      setTimeout(() => navigate('requests'), 100);
++      const toReferred = startParam.includes('referred');
++      setTimeout(() => {
++        navigate('requests');
++        if (toReferred) { _requestsTabChosen = true; setRequestsTab('referred', { byUser: false }); }
++      }, 100);
+       return;
+     }
+     if (startParam === 'mentors') {
+@@ -1534,6 +1538,25 @@ function connectSocket() {
+     if (currentPage === 'requests') loadRequests();
+   });
+ 
++  // Another mentor referred one of their mentees to me
++  socket.on('new_referral_request', () => {
++    haptic('success');
++    showToast(t('req_toast_new_referral'), 'success');
++    updateRequestsBadge();
++    if (currentPage === 'requests') loadRequests();
++  });
++
++  // A referral changed: the receiver answered it (sender sees the outcome), or it was cancelled
++  socket.on('referral_updated', ({ status, role } = {}) => {
++    updateRequestsBadge();
++    if (currentPage === 'requests') loadRequests();
++    if (role === 'sender') {
++      haptic(status === 'accepted' ? 'success' : 'warning');
++      showToast(t(status === 'accepted' ? 'req_toast_sender_accepted' : 'req_toast_sender_declined'), status === 'accepted' ? 'success' : 'info');
++      if (currentPage === 'my-mentees') loadMyMentees();
++    }
++  });
++
+   socket.on('ticket_reply', (data) => {
+     haptic('success');
+     const msg = data.reply
+@@ -4268,57 +4291,243 @@ function closeMentorRequestSentModal() {
+ }
+ 
+ // ─── Mentorship Requests ──────────────────────────────────────
++/* ═══════════════════════════════════════════════════════════════
++   Requests page: mentee requests + referred mentees
++   ═══════════════════════════════════════════════════════════════ */
++let _requestsTab = 'mentee';              // 'mentee' | 'referred'
++let _requestsTabChosen = false;           // user picked a tab by hand -> never auto-switch
++let _reqData = { mentee: [], referred: [] };
++let _reqRenderedSig = '';
++const _reqBusy = new Set();
++let _declineTarget = null;
++
++const REQ_ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
++const REQ_ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
++const REQ_ICON_SWAP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v14"/><path d="m3 7 4-4 4 4"/><path d="M17 21V7"/><path d="m21 17-4 4-4-4"/></svg>';
++
++function reqPersonName(u) {
++  return u?.user_settings?.display_name || u?.anonymous_id || 'Anonymous';
++}
++
++function reqChips(u, topic) {
++  const chips = [];
++  if (u?.sex === 'M') chips.push(`<span class="req-chip">${escapeHtml(t('sex_male'))}</span>`);
++  else if (u?.sex === 'F') chips.push(`<span class="req-chip">${escapeHtml(t('sex_female'))}</span>`);
++  if (u?.age_range) chips.push(`<span class="req-chip">${escapeHtml(u.age_range)}</span>`);
++  if (topic) chips.push(`<span class="req-chip req-chip-topic">${escapeHtml(topic)}</span>`);
++  return chips.length ? `<div class="req-chips">${chips.join('')}</div>` : '';
++}
++
++function renderRequestCard(r) {
++  const name = reqPersonName(r.user);
++  const topic = topicLabel(r.topic) || '';
++  const msg = (r.message || '').trim();
++  return `
++    <article class="req-card" data-kind="request" data-id="${r.id}" data-name="${escapeHtml(name)}">
++      <div class="req-top">
++        <div class="req-avatar" aria-hidden="true">${escapeHtml(name.charAt(0).toUpperCase())}</div>
++        <div class="req-id">
++          <div class="req-name">${escapeHtml(name)}</div>
++          <div class="req-time">${r.created_at ? escapeHtml(timeAgo(r.created_at)) : ''}</div>
++        </div>
++        <span class="req-pill">${escapeHtml(t('req_new'))}</span>
++      </div>
++      ${reqChips(r.user, topic)}
++      ${msg ? `<blockquote class="req-quote">${escapeHtml(msg)}</blockquote>` : ''}
++      ${renderRequestActions('request', r.id)}
++    </article>`;
++}
++
++function renderReferralCard(r) {
++  const name = reqPersonName(r.mentee);
++  const from = reqPersonName(r.from_mentor);
++  const note = (r.note || '').trim();
++  return `
++    <article class="req-card req-card-referral" data-kind="referral" data-id="${r.id}" data-name="${escapeHtml(name)}" data-from="${escapeHtml(from)}">
++      <div class="req-ribbon">${REQ_ICON_SWAP}<span>${escapeHtml(t('req_referred_by', { name: from }))}</span></div>
++      <div class="req-top">
++        <div class="req-avatar" aria-hidden="true">${escapeHtml(name.charAt(0).toUpperCase())}</div>
++        <div class="req-id">
++          <div class="req-name">${escapeHtml(name)}</div>
++          <div class="req-time">${r.created_at ? escapeHtml(timeAgo(r.created_at)) : ''}</div>
++        </div>
++      </div>
++      ${reqChips(r.mentee, '')}
++      ${note ? `<div class="req-quote-label">${escapeHtml(t('req_note_from', { name: from }))}</div><blockquote class="req-quote">${escapeHtml(note)}</blockquote>` : ''}
++      ${renderRequestActions('referral', r.id)}
++    </article>`;
++}
++
++function renderRequestActions(kind, id) {
++  return `
++      <div class="req-actions">
++        <button type="button" class="req-btn req-btn-decline" onclick="askRequestDecline('${kind}', '${id}')">${REQ_ICON_X}<span>${escapeHtml(t('btn_reject'))}</span></button>
++        <button type="button" class="req-btn req-btn-accept" onclick="answerRequest('${kind}', '${id}', 'accepted', this)">${REQ_ICON_CHECK}<span>${escapeHtml(t('btn_accept'))}</span></button>
++      </div>`;
++}
++
++function reqEmptyHTML(kind) {
++  const key = kind === 'referral' ? 'req_empty_referred' : 'no_pending_requests';
++  const sub = kind === 'referral' ? 'req_empty_referred_sub' : 'req_empty_mentee_sub';
++  return `<div class="req-empty"><div class="req-empty-icon">${kind === 'referral' ? REQ_ICON_SWAP : REQ_ICON_CHECK}</div><div class="req-empty-title">${escapeHtml(t(key))}</div><div class="req-empty-sub">${escapeHtml(t(sub))}</div></div>`;
++}
++
++function updateRequestCounts() {
++  const counts = { mentee: _reqData.mentee.length, referred: _reqData.referred.length };
++  [['reqTabMenteeCount', counts.mentee], ['reqTabReferredCount', counts.referred]].forEach(([id, n]) => {
++    const el = $(id);
++    if (!el) return;
++    el.textContent = n;
++    el.hidden = n <= 0;
++  });
++  setRequestsBadgeCount(counts.mentee + counts.referred);
++}
++
++function setRequestsBadgeCount(count) {
++  const badge = $('requestsBadge');
++  if (!badge) return;
++  badge.textContent = count;
++  badge.style.display = count > 0 ? 'flex' : 'none';
++}
++
++function setRequestsTab(tab, { byUser = true } = {}) {
++  if (byUser) { _requestsTabChosen = true; haptic('light'); }
++  _requestsTab = tab === 'referred' ? 'referred' : 'mentee';
++  const referred = _requestsTab === 'referred';
++  $('reqTabMentee')?.classList.toggle('active', !referred);
++  $('reqTabReferred')?.classList.toggle('active', referred);
++  $('reqTabMentee')?.setAttribute('aria-selected', String(!referred));
++  $('reqTabReferred')?.setAttribute('aria-selected', String(referred));
++  const mBox = $('requestsList'), rBox = $('referralsList');
++  if (mBox) mBox.hidden = referred;
++  if (rBox) rBox.hidden = !referred;
++  const intro = $('requestsIntro');
++  if (intro) intro.textContent = t(referred ? 'req_intro_referred' : 'req_intro_mentee');
++}
++
+ async function loadRequests() {
+-  const container = $('requestsList');
+-  if (!container) return;
+-  container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
++  const mBox = $('requestsList'), rBox = $('referralsList');
++  if (!mBox || !rBox) return;
++  // Skeleton only on the very first load; later refreshes update quietly so the
++  // list never flashes while you are looking at it.
++  const drawn = mBox.dataset.drawn === '1';
++  if (!drawn) {
++    const sk = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
++    mBox.innerHTML = sk;
++    rBox.innerHTML = '';
++  }
+   try {
+-    const requests = await apiFetch('/api/mentors/my-requests');
+-    if (!requests.length) {
+-      container.innerHTML = `<div class="empty-state"><span>${t('no_pending_requests')}</span></div>`;
+-      return;
+-    }
+-    container.innerHTML = requests.map(r => {
+-      const name = r.user?.user_settings?.display_name || r.user?.anonymous_id || 'Anonymous';
+-      const sex = r.user?.sex === 'M' ? 'Male' : (r.user?.sex === 'F' ? 'Female' : 'Not specified');
+-      const age = r.user?.age_range || 'Not specified';
+-      const topic = topicLabel(r.topic) || 'General';
+-      return `
+-        <div class="mentor-card">
+-          <div class="mentor-info">
+-            <div class="mentor-id">${escapeHtml(name)}</div>
+-            <div class="text-xs text-dim mt-1">${sex} · ${age} · Topic: ${escapeHtml(topic)}</div>
+-            <div class="mentor-bio" style="margin-top:4px">${escapeHtml(r.message || 'No message provided')}</div>
+-          </div>
+-          <div class="flex gap-8 mt-12">
+-            <button class="btn btn-primary btn-sm flex-1" onclick="respondToRequest('${r.id}', 'accepted')">${t('btn_accept')}</button>
+-            <button class="btn btn-outline btn-sm flex-1" onclick="respondToRequest('${r.id}', 'rejected')">${t('btn_reject')}</button>
+-          </div>
+-        </div>`;
+-    }).join('');
+-    updateRequestsBadge();  // ensure badge updates after loading
++    const [requests, referrals] = await Promise.all([
++      apiFetch('/api/mentors/my-requests'),
++      apiFetch('/api/mentors/referrals').catch(() => []),
++    ]);
++    _reqData = { mentee: requests || [], referred: referrals || [] };
++
++    const sig = JSON.stringify([currentLanguage, _reqData.mentee.map(r => r.id), _reqData.referred.map(r => r.id)]);
++    if (drawn && sig === _reqRenderedSig) { updateRequestCounts(); return; }
++    _reqRenderedSig = sig;
++
++    mBox.innerHTML = _reqData.mentee.length ? _reqData.mentee.map(renderRequestCard).join('') : reqEmptyHTML('request');
++    rBox.innerHTML = _reqData.referred.length ? _reqData.referred.map(renderReferralCard).join('') : reqEmptyHTML('referral');
++    mBox.dataset.drawn = '1';
++
++    // First time in: land on whichever tab actually has something waiting.
++    if (!_requestsTabChosen && !_reqData.mentee.length && _reqData.referred.length) _requestsTab = 'referred';
++    setRequestsTab(_requestsTab, { byUser: false });
++    updateRequestCounts();
+   } catch (e) {
+-    container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`;
++    mBox.innerHTML = `<div class="empty-state"><span>${escapeHtml(e.message)}</span></div>`;
++  }
++}
++
++function askRequestDecline(kind, id) {
++  const card = document.querySelector(`.req-card[data-kind="${kind}"][data-id="${id}"]`);
++  if (!card) return;
++  haptic('light');
++  _declineTarget = { kind, id };
++  const name = `<strong>${escapeHtml(card.dataset.name || '')}</strong>`;
++  const body = $('requestDeclineBody');
++  if (body) {
++    body.innerHTML = kind === 'referral'
++      ? t('req_decline_body_referral', { name, from: `<strong>${escapeHtml(card.dataset.from || '')}</strong>` })
++      : t('req_decline_body_request', { name });
+   }
++  const yes = $('requestDeclineYes');
++  if (yes) { yes.disabled = false; yes.textContent = t('req_decline_yes'); }
++  $('requestDeclineModal')?.classList.add('open');
+ }
+ 
+-async function respondToRequest(requestId, action) {
++function closeRequestDecline() {
++  $('requestDeclineModal')?.classList.remove('open');
++  _declineTarget = null;
++}
++
++async function confirmRequestDecline() {
++  const target = _declineTarget;
++  if (!target) return;
++  const yes = $('requestDeclineYes');
++  if (yes) yes.disabled = true;
++  closeRequestDecline();
++  await answerRequest(target.kind, target.id, 'rejected');
++}
++
++async function answerRequest(kind, id, action, btn) {
++  const key = `${kind}:${id}`;
++  if (_reqBusy.has(key)) return;
++  const card = document.querySelector(`.req-card[data-kind="${kind}"][data-id="${id}"]`);
++  _reqBusy.add(key);
+   haptic('medium');
++  card?.classList.add('is-busy');
++  btn?.classList.add('is-loading');
+   try {
+-    await apiFetch(`/api/mentors/request/${requestId}`, {
++    await apiFetch(kind === 'referral' ? `/api/mentors/referral/${id}` : `/api/mentors/request/${id}`, {
+       method: 'PATCH',
+-      body: { action }
++      body: { action },
+     });
+-    haptic('success');
+-    showToast(`Request ${action}`, 'success');
+-    loadRequests();
+-    updateRequestsBadge();   // refresh badge after action
++    haptic(action === 'accepted' ? 'success' : 'light');
++    const name = card?.dataset.name || '';
++    showToast(
++      action === 'accepted'
++        ? (kind === 'referral' ? t('req_toast_referral_accepted', { name }) : t('req_toast_accepted'))
++        : t('req_toast_declined'),
++      action === 'accepted' ? 'success' : 'info'
++    );
++    removeRequestCard(card, kind, id);
++    if (action === 'accepted') loadMyMentees?.();   // keep My Mentees in step (no-op if the page isn't drawn)
+   } catch (e) {
+     haptic('error');
+     showToast(e.message, 'error');
++    card?.classList.remove('is-busy');
++    btn?.classList.remove('is-loading');
++    loadRequests();   // the request may have been answered elsewhere; resync quietly
++  } finally {
++    _reqBusy.delete(key);
+   }
+ }
+ 
++/** Collapses a card out of the list in place (no list rebuild, no flash). */
++function removeRequestCard(card, kind, id) {
++  const list = kind === 'referral' ? _reqData.referred : _reqData.mentee;
++  const idx = list.findIndex(r => String(r.id) === String(id));
++  if (idx >= 0) list.splice(idx, 1);
++  _reqRenderedSig = JSON.stringify([currentLanguage, _reqData.mentee.map(r => r.id), _reqData.referred.map(r => r.id)]);
++  updateRequestCounts();
++
++  const box = kind === 'referral' ? $('referralsList') : $('requestsList');
++  const finish = () => {
++    card?.remove();
++    if (box && !box.querySelector('.req-card')) box.innerHTML = reqEmptyHTML(kind);
++  };
++  if (!card) return finish();
++  card.style.height = `${card.offsetHeight}px`;
++  void card.offsetHeight;   // commit the fixed height so the collapse can animate
++  card.classList.add('is-leaving');
++  let done = false;
++  const once = () => { if (done) return; done = true; finish(); };
++  card.addEventListener('transitionend', e => { if (e.target === card && e.propertyName === 'height') once(); });
++  setTimeout(once, 450);
++}
++
+ // ─── Sessions ─────────────────────────────────────────────────
+ 
+ // How long after the scheduled time a session is still joinable
+@@ -5698,13 +5907,12 @@ async function updateMessageBadge() {
+ async function updateRequestsBadge() {
+   if (currentUser?.role !== 'mentor') return;
+   try {
+-    const requests = await apiFetch('/api/mentors/my-requests');
+-    const count = requests.length;
+-    const badge = $('requestsBadge');
+-    if (badge) {
+-      badge.textContent = count;
+-      badge.style.display = count > 0 ? 'flex' : 'none';
+-    }
++    const [requests, referrals] = await Promise.all([
++      apiFetch('/api/mentors/my-requests'),
++      apiFetch('/api/mentors/referrals').catch(() => []),
++    ]);
++    _reqData = { mentee: requests || [], referred: referrals || [] };
++    updateRequestCounts();
+   } catch (e) {
+     console.error('Failed to load requests count:', e);
+   }
+@@ -7745,10 +7953,10 @@ function renderTransferSheet() {
+   const sub = $('transferSubtitle');
+   if (sub) {
+     if (_transferStep === 'note') {
+-      const picked = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
+-      const mn = escapeHtml(picked ? (mentorNameOf(picked) || '') : '');
+-      sub.innerHTML = t('transfer_note_step_sub', { name: `<strong>${mn}</strong>` });
++      sub.hidden = true;
++      sub.textContent = '';
+     } else {
++      sub.hidden = false;
+       sub.innerHTML = t('transfer_sub', { name: `<strong>${safeName}</strong>` });
+     }
+   }
+@@ -7955,9 +8163,10 @@ function updateTransferSubtitle() {
+   const sub = $('transferSubtitle');
+   if (!sub || !_transferMentee) return;
+   if (_transferStep === 'note') {
+-    const picked = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
+-    sub.innerHTML = t('transfer_note_step_sub', { name: `<strong>${escapeHtml(picked ? (mentorNameOf(picked) || '') : '')}</strong>` });
++    sub.hidden = true;
++    sub.textContent = '';
+   } else {
++    sub.hidden = false;
+     const nm = escapeHtml(_transferMentee.name || (_transferMentee.user && (_transferMentee.user.user_settings?.display_name || _transferMentee.user.anonymous_id)) || '');
+     sub.innerHTML = t('transfer_sub', { name: `<strong>${nm}</strong>` });
+   }
+@@ -8049,7 +8258,7 @@ async function confirmTransfer() {
+ 
+     _transferBusy = false;
+     haptic('success');
+-    showToast(t('transfer_success'), 'success');
++    showToast(t('transfer_sent'), 'success');
+     closeTransferModal();   // also closes the confirmation dialog
+     loadMyMentees(); // Refresh the My Mentees list
+   } catch (e) {
+diff --git a/frontend/index.html b/frontend/index.html
+index 867998c..0e98dcd 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -1103,7 +1103,7 @@
+ 
+     </div>
+ 
+-    <!-- ── Page: Mentorship Requests ──────────────────────────────── -->
++    <!-- ── Page: Requests (mentee requests + referred mentees) ─────── -->
+     <div id="page-requests" class="page">
+       <div class="app-header">
+         <h2 data-i18n="Requests">Requests</h2>
+@@ -1111,11 +1111,24 @@
+       <div class="page-content">
+         <div class="page-intro mb-12 stagger-fade">
+           <span class="page-intro-eyebrow" data-i18n="Requests">Requests</span>
+-          <p class="page-intro-text" data-i18n="Pending mentorship applications.">Pending mentorship applications.</p>
++          <p id="requestsIntro" class="page-intro-text" data-i18n="req_intro_mentee">People asking you to be their mentor.</p>
+         </div>
+-        <div id="requestsList" style="display:flex;flex-direction:column;gap:10px">
++
++        <div class="req-tabs" role="tablist">
++          <button type="button" id="reqTabMentee" class="req-tab active" role="tab" aria-selected="true" onclick="setRequestsTab('mentee')">
++            <span data-i18n="req_tab_mentee">Mentee Requests</span>
++            <span id="reqTabMenteeCount" class="req-tab-count" hidden>0</span>
++          </button>
++          <button type="button" id="reqTabReferred" class="req-tab" role="tab" aria-selected="false" onclick="setRequestsTab('referred')">
++            <span data-i18n="req_tab_referred">Referred</span>
++            <span id="reqTabReferredCount" class="req-tab-count" hidden>0</span>
++          </button>
++        </div>
++
++        <div id="requestsList" class="req-list" role="tabpanel">
+           <div class="loading-spinner" style="margin:40px auto"></div>
+         </div>
++        <div id="referralsList" class="req-list" role="tabpanel" hidden></div>
+       </div>
+     </div>
+ 
+@@ -2429,6 +2442,24 @@
+     </div>
+   </div>
+ 
++  <!-- ── Modal: Decline a request / referral ───────────────── -->
++  <div id="requestDeclineModal" class="modal-overlay" onclick="if(event.target===this)closeRequestDecline()">
++    <div class="modal-sheet tf-confirm-sheet" role="alertdialog" aria-modal="true" aria-labelledby="requestDeclineTitle" aria-describedby="requestDeclineBody">
++      <div class="modal-handle"></div>
++      <div class="hb-confirm">
++        <div class="hb-icon req-decline-icon">
++          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
++        </div>
++        <div id="requestDeclineTitle" class="modal-title" style="text-align:center" data-i18n="req_decline_title">Decline this request?</div>
++        <p id="requestDeclineBody" class="hb-text"></p>
++        <div class="hb-actions">
++          <button type="button" class="btn btn-outline" onclick="closeRequestDecline()" data-i18n="btn_cancel">Cancel</button>
++          <button type="button" id="requestDeclineYes" class="btn btn-primary" onclick="confirmRequestDecline()" data-i18n="req_decline_yes">Yes, decline</button>
++        </div>
++      </div>
++    </div>
++  </div>
++
+   <!-- ── Modal: Schedule Session ───────────────────────────── -->
+   <div id="scheduleModal" class="modal-overlay" onclick="if(event.target===this)closeScheduleModal()">
+     <div class="modal-sheet sch-sheet">
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 688f8fa..e605ece 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -52,7 +52,6 @@ const I18N = {
+     "transfer_optional": "Optional",
+     "transfer_note_placeholder": "Anything that will help them support this mentee…",
+     "transfer_note_hint": "Only the new mentor sees this.",
+-    "transfer_note_step_sub": "Anything {name} should know about this mentee? You can skip this.",
+     "transfer_to": "Transferring to",
+     "transfer_change_mentor": "Change mentor",
+     "transfer_confirm_title": "Are you sure you want to transfer this mentee?",
+@@ -415,6 +414,27 @@ const I18N = {
+     "select_your_topics": "Select Topics",
+     "Pending mentorship applications.": "Pending mentorship applications.",
+     "no_pending_requests": "No pending requests",
++    "req_tab_mentee": "Mentee Requests",
++    "req_tab_referred": "Referred",
++    "req_intro_mentee": "People asking you to be their mentor.",
++    "req_intro_referred": "Mentees other mentors have referred to you.",
++    "req_new": "New",
++    "req_referred_by": "Referred by {name}",
++    "req_note_from": "Note from {name}",
++    "req_empty_referred": "No referred mentees",
++    "req_empty_referred_sub": "When another mentor refers a mentee to you, they will appear here.",
++    "req_empty_mentee_sub": "New mentorship requests will appear here.",
++    "req_decline_title": "Decline this request?",
++    "req_decline_body_request": "{name} will be told you can't take this request.",
++    "req_decline_body_referral": "{name} will stay with {from}, who will be told you declined.",
++    "req_decline_yes": "Yes, decline",
++    "req_toast_accepted": "Request accepted",
++    "req_toast_declined": "Request declined",
++    "req_toast_referral_accepted": "{name} is now your mentee",
++    "req_toast_new_referral": "A mentee was referred to you 🤝",
++    "req_toast_sender_accepted": "Your referral was accepted ✓",
++    "req_toast_sender_declined": "Your referral was declined",
++    "transfer_sent": "Referral sent. Your mentee stays with you until they accept.",
+     "no_upcoming_group_sessions": "No upcoming group sessions",
+     "no_active_mentorship": "No active mentorship.",
+     "no_active_mentorship_with_user": "No active mentorship with this user.",
+@@ -754,6 +774,27 @@ const I18N = {
+     "btn_cancel": "ሰርዝ",
+     "btn_close": "ዝጋ",
+     "btn_accept": "ተቀበል",
++    "req_tab_mentee": "የተመካሪ ጥያቄዎች",
++    "req_tab_referred": "የተላኩ",
++    "req_intro_mentee": "አማካሪ እንዲሆኑላቸው የሚጠይቁ ሰዎች።",
++    "req_intro_referred": "ሌሎች አማካሪዎች ወደ እርስዎ የላኳቸው ተመካሪዎች።",
++    "req_new": "አዲስ",
++    "req_referred_by": "በ{name} የተላከ",
++    "req_note_from": "ከ{name} የተላከ ማስታወሻ",
++    "req_empty_referred": "የተላኩ ተመካሪዎች የሉም",
++    "req_empty_referred_sub": "ሌላ አማካሪ ተመካሪ ሲልክልዎ እዚህ ይታያል።",
++    "req_empty_mentee_sub": "አዲስ የምክር ጥያቄዎች እዚህ ይታያሉ።",
++    "req_decline_title": "ይህን ጥያቄ ላለመቀበል እርግጠኛ ነዎት?",
++    "req_decline_body_request": "{name} ጥያቄው እንዳልተቀበለ ይነገራቸዋል።",
++    "req_decline_body_referral": "{name} ከ{from} ጋር ይቆያል፤ አለመቀበልዎ ለእሳቸው ይነገራል።",
++    "req_decline_yes": "አዎ፣ አልቀበልም",
++    "req_toast_accepted": "ጥያቄው ተቀብለዋል",
++    "req_toast_declined": "ጥያቄው አልተቀበለም",
++    "req_toast_referral_accepted": "{name} አሁን ተመካሪዎ ነው",
++    "req_toast_new_referral": "አንድ ተመካሪ ወደ እርስዎ ተልኳል 🤝",
++    "req_toast_sender_accepted": "የላኩት ተመካሪ ተቀባይነት አግኝቷል ✓",
++    "req_toast_sender_declined": "የላኩት ተመካሪ አልተቀበለም",
++    "transfer_sent": "ጥያቄው ተልኳል። እስኪቀበሉ ድረስ ተመካሪው ከእርስዎ ጋር ይቆያል።",
+     "btn_reject": "ውድቅ አድርግ",
+     "btn_back": "ተመለስ",
+     "btn_prev": "ቀዳሚ",
+@@ -792,7 +833,6 @@ const I18N = {
+     "transfer_optional": "አማራጭ",
+     "transfer_note_placeholder": "ተመካሪውን ለመርዳት የሚጠቅም ማንኛውም መረጃ…",
+     "transfer_note_hint": "አዲሱ አማካሪ ብቻ ያየዋል።",
+-    "transfer_note_step_sub": "{name} ስለዚህ ተመካሪ ማወቅ ያለበት ነገር አለ? ይህን መዝለል ይችላሉ።",
+     "transfer_to": "የሚተላለፈው ወደ",
+     "transfer_change_mentor": "አማካሪ ቀይር",
+     "transfer_confirm_title": "ይህን ተመካሪ ማስተላለፍ እርግጠኛ ነዎት?",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 36bc478..8ed13a2 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -12706,3 +12706,251 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+ @media (prefers-reduced-motion: reduce) {
+   #transferModal .modal-sheet, #transferConfirmModal .modal-sheet { transition: none; }
+ }
++
++/* ═══ Requests page: mentee requests + referred mentees ═══
++   Same surface language as My Mentees (soft gradient card, gold accent), and the
++   same smoothness rules: no per-card layers, no blur, no hover/active transforms. */
++.req-tabs {
++  display: flex;
++  gap: 4px;
++  padding: 4px;
++  margin-bottom: 14px;
++  background: var(--surface);
++  border: 1px solid var(--border-dim);
++  border-radius: 16px;
++}
++.req-tab {
++  flex: 1;
++  min-width: 0;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: 8px;
++  padding: 11px 8px;
++  border: 0;
++  border-radius: 12px;
++  background: transparent;
++  color: var(--text3);
++  font-family: var(--font-body);
++  font-size: var(--fs-sm);
++  font-weight: 600;
++  cursor: pointer;
++  transition: background-color 0.2s ease, color 0.2s ease;
++  -webkit-tap-highlight-color: transparent;
++}
++.req-tab > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.req-tab.active {
++  background: rgba(201, 168, 76, 0.16);
++  color: var(--gold-light);
++  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.28);
++}
++.req-tab-count {
++  min-width: 20px;
++  height: 20px;
++  padding: 0 6px;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  border-radius: 999px;
++  background: linear-gradient(135deg, var(--gold-light), var(--gold));
++  color: #20180a;
++  font-size: var(--fs-2xs);
++  font-weight: 800;
++}
++.req-tab-count[hidden] { display: none; }
++
++.req-list { display: flex; flex-direction: column; gap: 14px; }
++.req-list[hidden] { display: none; }
++
++.req-card {
++  position: relative;
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++  padding: 16px;
++  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
++  border: 1px solid var(--border-dim);
++  border-radius: 20px;
++  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
++  transition: height 0.32s ease, opacity 0.22s ease, margin-top 0.32s ease,
++              padding 0.32s ease, border-color 0.2s ease, filter 0.2s ease;
++}
++.req-card::before {           /* thin gold sheen on the top edge, like the mentee cards */
++  content: '';
++  position: absolute;
++  top: 0; left: 18px; right: 18px;
++  height: 1px;
++  background: linear-gradient(90deg, transparent, rgba(232, 201, 107, 0.55), transparent);
++  pointer-events: none;
++}
++.req-card-referral { border-color: rgba(201, 168, 76, 0.32); }
++.req-card.is-busy { pointer-events: none; filter: saturate(0.7); opacity: 0.85; }
++.req-card.is-leaving {
++  height: 0 !important;
++  opacity: 0;
++  margin-top: -14px;       /* swallows the flex gap so neighbours close up smoothly */
++  padding-top: 0;
++  padding-bottom: 0;
++  border-width: 0;
++  overflow: hidden;
++  pointer-events: none;
++}
++
++.req-ribbon {
++  display: inline-flex;
++  align-items: center;
++  gap: 7px;
++  align-self: flex-start;
++  max-width: 100%;
++  padding: 6px 12px 6px 10px;
++  border-radius: 999px;
++  background: rgba(201, 168, 76, 0.12);
++  border: 1px solid rgba(201, 168, 76, 0.3);
++  color: var(--gold-light);
++  font-size: var(--fs-xs);
++  font-weight: 700;
++}
++.req-ribbon svg { width: 14px; height: 14px; flex: none; }
++.req-ribbon span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++
++.req-top { display: flex; align-items: center; gap: 12px; }
++.req-avatar {
++  flex: none;
++  width: 46px;
++  height: 46px;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  border-radius: 50%;
++  background: linear-gradient(135deg, rgba(232, 201, 107, 0.28), rgba(201, 168, 76, 0.1));
++  border: 1.5px solid rgba(201, 168, 76, 0.5);
++  color: var(--gold-light);
++  font-family: var(--font-display, var(--font-body));
++  font-size: 1.1rem;
++  font-weight: 700;
++}
++.req-id { flex: 1; min-width: 0; }
++.req-name { font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
++.req-time { margin-top: 2px; font-size: var(--fs-xs); color: var(--text3); }
++.req-pill {
++  flex: none;
++  padding: 4px 10px;
++  border-radius: 999px;
++  background: rgba(91, 173, 122, 0.14);
++  border: 1px solid rgba(91, 173, 122, 0.35);
++  color: var(--success);
++  font-size: var(--fs-2xs);
++  font-weight: 800;
++  letter-spacing: 0.04em;
++  text-transform: uppercase;
++}
++
++.req-chips { display: flex; flex-wrap: wrap; gap: 6px; }
++.req-chip {
++  padding: 5px 11px;
++  border-radius: 999px;
++  background: var(--surface);
++  border: 1px solid var(--border-dim);
++  color: var(--text2);
++  font-size: var(--fs-xs);
++  font-weight: 600;
++}
++.req-chip-topic {
++  background: rgba(201, 168, 76, 0.1);
++  border-color: rgba(201, 168, 76, 0.3);
++  color: var(--gold-light);
++}
++
++.req-quote-label { margin-bottom: -6px; font-size: var(--fs-xs); font-weight: 700; color: var(--text3); }
++.req-quote {
++  margin: 0;
++  padding: 11px 14px;
++  border-left: 3px solid var(--gold);
++  border-radius: 4px 14px 14px 4px;
++  background: rgba(201, 168, 76, 0.06);
++  color: var(--text2);
++  font-size: var(--fs-sm);
++  line-height: 1.55;
++  overflow-wrap: anywhere;
++  white-space: pre-wrap;
++}
++
++.req-actions { display: flex; gap: 10px; margin-top: 2px; }
++.req-btn {
++  flex: 1;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  gap: 8px;
++  min-height: 48px;
++  padding: 0 14px;
++  border-radius: 16px;
++  border: 1px solid transparent;
++  font-family: var(--font-body);
++  font-size: var(--fs-sm);
++  font-weight: 700;
++  cursor: pointer;
++  -webkit-tap-highlight-color: transparent;
++  transition: opacity 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
++}
++.req-btn svg { width: 18px; height: 18px; flex: none; }
++.req-btn-accept {
++  flex: 1.4;
++  background: linear-gradient(135deg, var(--gold-light), var(--gold) 65%, #A87C2A);
++  color: #20180a;
++  box-shadow: 0 8px 20px rgba(201, 168, 76, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.38);
++}
++.req-btn-decline {
++  background: rgba(224, 92, 92, 0.08);
++  border-color: rgba(224, 92, 92, 0.38);
++  color: var(--danger);
++}
++.req-btn:active { opacity: 0.8; }
++.req-btn.is-loading { pointer-events: none; opacity: 0.75; }
++.req-btn.is-loading svg {
++  border: 2px solid currentColor;
++  border-top-color: transparent;
++  border-radius: 50%;
++  stroke: none;
++  fill: none;
++  animation: reqSpin 0.7s linear infinite;
++}
++.req-btn.is-loading svg * { display: none; }
++@keyframes reqSpin { to { transform: rotate(360deg); } }
++
++.req-empty {
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  gap: 8px;
++  padding: 44px 24px;
++  text-align: center;
++  border: 1px dashed var(--border-dim);
++  border-radius: 20px;
++}
++.req-empty-icon {
++  width: 54px; height: 54px;
++  display: flex; align-items: center; justify-content: center;
++  border-radius: 50%;
++  background: rgba(201, 168, 76, 0.1);
++  color: var(--gold-light);
++}
++.req-empty-icon svg { width: 24px; height: 24px; }
++.req-empty-title { font-weight: 700; color: var(--text); }
++.req-empty-sub { font-size: var(--fs-sm); color: var(--text3); max-width: 28ch; }
++
++.req-decline-icon { background: rgba(224, 92, 92, 0.12); color: var(--danger); border-color: rgba(224, 92, 92, 0.35); }
++#requestDeclineModal { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0, 0, 0, 0.72); }
++
++[data-theme="light"] .req-card { background: #fff; box-shadow: 0 4px 16px rgba(60, 44, 10, 0.08); }
++[data-theme="light"] .req-tab.active,
++[data-theme="light"] .req-ribbon,
++[data-theme="light"] .req-chip-topic { color: #7A5812; }
++[data-theme="light"] .req-btn-decline { color: #B53A3A; }
++
++/* While a page's own scroll area is moving, keep the cards free of extra layers. */
++#page-requests { will-change: auto; transform: none; -webkit-transform: none; }
++#page-requests .page-content { overscroll-behavior-y: contain; }
++@media (prefers-reduced-motion: reduce) {
++  .req-card, .req-tab, .req-btn { transition: none; }
++}
+diff --git a/migrations/20261009_mentee_referrals.sql b/migrations/20261009_mentee_referrals.sql
+new file mode 100644
+index 0000000..dd335c1
+--- /dev/null
++++ b/migrations/20261009_mentee_referrals.sql
+@@ -0,0 +1,27 @@
++BEGIN;
++
++-- A mentor "transfers" an active mentee by referring them to another mentor.
++-- The mentee stays with the sender until the receiving mentor accepts; a decline
++-- leaves everything as it was. Safe to run more than once.
++CREATE TABLE IF NOT EXISTS mentee_referrals (
++  id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
++  assignment_id  UUID   NOT NULL REFERENCES mentorship_assignments(id) ON DELETE CASCADE,
++  mentee_id      BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
++  from_mentor_id BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
++  to_mentor_id   BIGINT NOT NULL REFERENCES users(telegram_id) ON DELETE CASCADE,
++  note           TEXT,
++  status         TEXT   NOT NULL DEFAULT 'pending'
++                 CHECK (status IN ('pending','accepted','rejected','cancelled')),
++  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
++  responded_at   TIMESTAMPTZ
++);
++
++CREATE INDEX IF NOT EXISTS idx_mentee_referrals_to   ON mentee_referrals (to_mentor_id, status);
++CREATE INDEX IF NOT EXISTS idx_mentee_referrals_from ON mentee_referrals (from_mentor_id, status);
++-- Only one open referral per mentee assignment at a time.
++CREATE UNIQUE INDEX IF NOT EXISTS one_pending_referral_per_assignment
++  ON mentee_referrals (assignment_id) WHERE status = 'pending';
++
++ALTER TABLE mentee_referrals ENABLE ROW LEVEL SECURITY;
++
++COMMIT;
+diff --git a/routes/mentors.js b/routes/mentors.js
+index 2eb9ab8..0dc4fea 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -1063,55 +1063,181 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+           return res.status(400).json({ error: 'Target mentor has reached their maximum capacity.' });
+         }
+ 
+-        const { error: updateErr } = await supabase
++        if (targetTid === current_mentor_id) {
++          return res.status(400).json({ error: 'Choose a different mentor.' });
++        }
++
++        // The mentee stays with the current mentor until the new one accepts.
++        // One open referral per mentee at a time (also enforced by a unique index).
++        const { data: openReferral } = await supabase
++          .from('mentee_referrals')
++          .select('id')
++          .eq('assignment_id', id)
++          .eq('status', 'pending')
++          .maybeSingle();
++        if (openReferral) {
++          return res.status(409).json({ error: 'This mentee already has a referral waiting for a response.' });
++        }
++
++        const { data: referral, error: insertErr } = await supabase
++          .from('mentee_referrals')
++          .insert({
++            assignment_id: id,
++            mentee_id: assignment.user_id,
++            from_mentor_id: current_mentor_id,
++            to_mentor_id: targetTid,
++            note: handoffNote || null,
++          })
++          .select('id')
++          .single();
++        if (insertErr) {
++          const missing = insertErr.code === '42P01' || /mentee_referrals/.test(insertErr.message || '');
++          return res.status(missing ? 503 : 500).json({
++            error: missing ? 'Referrals are not set up yet (run migrations/20261009_mentee_referrals.sql).' : insertErr.message,
++          });
++        }
++
++        try {
++          const [{ data: menteeUser }, { data: fromUser }] = await Promise.all([
++            supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', assignment.user_id).single(),
++            supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', current_mentor_id).single(),
++          ]);
++          const { notifyMenteeReferral } = require('../bot');
++          await notifyMenteeReferral(targetTid, {
++            menteeName: menteeUser?.user_settings?.display_name || menteeUser?.anonymous_id || 'A mentee',
++            fromName: fromUser?.user_settings?.display_name || fromUser?.anonymous_id || 'A mentor',
++            note: handoffNote,
++          });
++        } catch (notifyErr) {
++          console.error('[mentors] referral notification error (non-fatal):', notifyErr.message);
++        }
++        emitToUserRoom(targetTid, 'new_referral_request', { referralId: referral.id });
++
++        return res.json({ success: true, pending: true, referral_id: referral.id });
++      }
++    } catch (err) {
++      return res.status(500).json({ error: err.message });
++    }
++
++    res.status(400).json({ error: 'Invalid type' });
++  });
++
++  // GET /api/mentors/referrals – mentees other mentors have referred to me
++  router.get('/referrals', requireAuth, async (req, res) => {
++    const { id: me } = req.telegramUser;
++    const { data, error } = await supabase
++      .from('mentee_referrals')
++      .select('id, note, created_at, mentee:mentee_id(telegram_id, anonymous_id, sex, age_range, user_settings(display_name)), from_mentor:from_mentor_id(telegram_id, anonymous_id, user_settings(display_name))')
++      .eq('to_mentor_id', me)
++      .eq('status', 'pending')
++      .order('created_at', { ascending: false });
++    if (error) {
++      // Table not migrated yet: behave as "no referrals" so the Requests page still works.
++      if (error.code === '42P01' || /mentee_referrals/.test(error.message || '')) return res.json([]);
++      return res.status(500).json({ error: error.message });
++    }
++    res.json(data || []);
++  });
++
++  // PATCH /api/mentors/referral/:id – accept or decline a referred mentee
++  router.patch('/referral/:id', requireAuth, async (req, res) => {
++    const { id: me } = req.telegramUser;
++    const { action } = req.body; // 'accepted' | 'rejected'
++    if (!['accepted', 'rejected'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
++
++    try {
++      const { data: ref, error: fetchErr } = await supabase
++        .from('mentee_referrals')
++        .select('*')
++        .eq('id', req.params.id)
++        .eq('to_mentor_id', me)
++        .maybeSingle();
++      if (fetchErr) return res.status(500).json({ error: fetchErr.message });
++      if (!ref) return res.status(404).json({ error: 'Referral not found' });
++      if (ref.status !== 'pending') return res.status(409).json({ error: 'This referral was already answered.' });
++
++      const now = new Date().toISOString();
++      const setStatus = (status) => supabase
++        .from('mentee_referrals')
++        .update({ status, responded_at: now })
++        .eq('id', ref.id)
++        .eq('status', 'pending')
++        .select('id');
++
++      if (action === 'accepted') {
++        // The mentee must still be with the mentor who sent the referral.
++        const { data: assignment } = await supabase
+           .from('mentorship_assignments')
+-          .update({ mentor_id: targetTid })
+-          .eq('id', id);
++          .select('id, user_id, mentor_id, is_active')
++          .eq('id', ref.assignment_id)
++          .maybeSingle();
++        if (!assignment || !assignment.is_active || String(assignment.mentor_id) !== String(ref.from_mentor_id)) {
++          await setStatus('cancelled');
++          emitToUserRoom(me, 'referral_updated', { referralId: ref.id, status: 'cancelled' });
++          return res.status(409).json({ error: 'This mentee is no longer available to transfer.' });
++        }
+ 
+-        if (updateErr) return res.status(500).json({ error: updateErr.message });
++        const DEFAULT_MAX_MENTEES = parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
++        const [{ count }, { data: me_ }] = await Promise.all([
++          supabase.from('mentorship_assignments').select('id', { count: 'exact', head: true }).eq('mentor_id', me).eq('is_active', true),
++          supabase.from('users').select('user_settings(max_mentees)').eq('telegram_id', me).single(),
++        ]);
++        const maxMentees = me_?.user_settings?.max_mentees || DEFAULT_MAX_MENTEES;
++        if ((count || 0) >= maxMentees) {
++          return res.status(409).json({ error: 'You have reached your maximum number of mentees.' });
++        }
++
++        const { data: claimed } = await setStatus('accepted');
++        if (!claimed || !claimed.length) return res.status(409).json({ error: 'This referral was already answered.' });
+ 
+-        const [{ data: user }, { data: newMentor }] = await Promise.all([
+-          supabase.from('users').select('chat_id').eq('telegram_id', assignment.user_id).single(),
+-          supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', targetTid).single()
++        const { data: moved, error: moveErr } = await supabase
++          .from('mentorship_assignments')
++          .update({ mentor_id: me })
++          .eq('id', ref.assignment_id)
++          .eq('mentor_id', ref.from_mentor_id)
++          .eq('is_active', true)
++          .select('id');
++        if (moveErr || !moved || !moved.length) {
++          await supabase.from('mentee_referrals').update({ status: 'cancelled' }).eq('id', ref.id);
++          return res.status(moveErr ? 500 : 409).json({ error: moveErr ? moveErr.message : 'This mentee is no longer available to transfer.' });
++        }
++      } else {
++        const { data: claimed } = await setStatus('rejected');
++        if (!claimed || !claimed.length) return res.status(409).json({ error: 'This referral was already answered.' });
++      }
++
++      // Notifications are best-effort: never block the response on Telegram.
++      try {
++        const { sendCard, getUserLang, notifyMenteeReferralResult } = require('../bot');
++        const [{ data: menteeUser }, { data: meUser }] = await Promise.all([
++          supabase.from('users').select('chat_id, anonymous_id, user_settings(display_name)').eq('telegram_id', ref.mentee_id).single(),
++          supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', me).single(),
+         ]);
++        const menteeName = menteeUser?.user_settings?.display_name || menteeUser?.anonymous_id || 'A mentee';
++        const myName = meUser?.user_settings?.display_name || meUser?.anonymous_id || 'A mentor';
+ 
+-        const newMentorName = newMentor?.user_settings?.display_name || newMentor?.anonymous_id || 'Your new mentor';
+-        const { sendCard, getUserLang } = require('../bot');
+-        if (user?.chat_id) {
+-          const lang = await getUserLang(assignment.user_id);
+-          const am = lang === 'am';
+-          await sendCard(user.chat_id, {
++        await notifyMenteeReferralResult(ref.from_mentor_id, { menteeName, toName: myName, accepted: action === 'accepted' });
++
++        if (action === 'accepted' && menteeUser?.chat_id) {
++          const am = (await getUserLang(ref.mentee_id)) === 'am';
++          await sendCard(menteeUser.chat_id, {
+             icon: '🔄',
+             title: am ? 'አማካሪዎ ተቀይሯል' : 'Your Mentor Has Changed',
+-            body: am ? `የምክር አገልግሎትዎ ወደ አማካሪ ${newMentorName} ተላልፏል።` : `Your mentorship has been transferred to ${newMentorName}.`,
++            body: am ? `የምክር አገልግሎትዎ ወደ አማካሪ ${myName} ተላልፏል።` : `Your mentorship has been transferred to ${myName}.`,
+             footer: am ? 'አዲስ ጉዞዎ በበረከት ይሁን 🌱' : 'Wishing you a blessed new chapter 🌱',
+           }, { label: am ? 'ቻት ክፈት' : 'Open Chat' });
+         }
++      } catch (notifyErr) {
++        console.error('[mentors] referral result notification error (non-fatal):', notifyErr.message);
++      }
+ 
+-        const { data: menteeUser } = await supabase
+-          .from('users')
+-          .select('anonymous_id, user_settings(display_name)')
+-          .eq('telegram_id', assignment.user_id)
+-          .single();
+-        const menteeName = menteeUser?.user_settings?.display_name || menteeUser?.anonymous_id || 'A mentee';
+-
+-        const targetLang = await getUserLang(targetTid);
+-        const tAm = targetLang === 'am';
+-        await sendCard(targetTid, {
+-          icon: '🤝',
+-          title: tAm ? 'አዲስ ተመካሪ ተመድቦልዎታል' : 'New Mentee Assigned',
+-          body: tAm ? `አዲስ ተመካሪ በዝውውር ቀርቦልዎታል፦ ${menteeName}` : `A new mentee has been transferred to you: ${menteeName}`,
+-          quote: handoffNote,
+-          footer: tAm ? 'እግዚአብሔር ያበርታዎት 🙏' : 'Thank you for serving 🙏',
+-        }, { label: tAm ? 'መተግበሪያውን ክፈት' : 'Open App' });
++      emitToUserRoom(ref.from_mentor_id, 'referral_updated', { referralId: ref.id, status: action, role: 'sender' });
++      emitToUserRoom(me, 'referral_updated', { referralId: ref.id, status: action, role: 'receiver' });
+ 
+-        return res.json({ success: true });
+-      }
++      res.json({ success: true, status: action });
+     } catch (err) {
+-      return res.status(500).json({ error: err.message });
++      res.status(500).json({ error: err.message });
+     }
+-
+-    res.status(400).json({ error: 'Invalid type' });
+   });
+ 
+   // POST /api/mentors/rate – mentee rates a mentor from the mini app

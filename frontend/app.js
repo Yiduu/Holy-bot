@@ -1149,7 +1149,11 @@ function handleDeepLink() {
       return;
     }
     if (startParam === 'requests' || startParam.startsWith('requests') || startParam.startsWith('request_')) {
-      setTimeout(() => navigate('requests'), 100);
+      const toReferred = startParam.includes('referred');
+      setTimeout(() => {
+        navigate('requests');
+        if (toReferred) { _requestsTabChosen = true; setRequestsTab('referred', { byUser: false }); }
+      }, 100);
       return;
     }
     if (startParam === 'mentors') {
@@ -1532,6 +1536,25 @@ function connectSocket() {
     showToast('New mentorship request received! 🙏', 'success');
     updateRequestsBadge();
     if (currentPage === 'requests') loadRequests();
+  });
+
+  // Another mentor referred one of their mentees to me
+  socket.on('new_referral_request', () => {
+    haptic('success');
+    showToast(t('req_toast_new_referral'), 'success');
+    updateRequestsBadge();
+    if (currentPage === 'requests') loadRequests();
+  });
+
+  // A referral changed: the receiver answered it (sender sees the outcome), or it was cancelled
+  socket.on('referral_updated', ({ status, role } = {}) => {
+    updateRequestsBadge();
+    if (currentPage === 'requests') loadRequests();
+    if (role === 'sender') {
+      haptic(status === 'accepted' ? 'success' : 'warning');
+      showToast(t(status === 'accepted' ? 'req_toast_sender_accepted' : 'req_toast_sender_declined'), status === 'accepted' ? 'success' : 'info');
+      if (currentPage === 'my-mentees') loadMyMentees();
+    }
   });
 
   socket.on('ticket_reply', (data) => {
@@ -4268,55 +4291,241 @@ function closeMentorRequestSentModal() {
 }
 
 // ─── Mentorship Requests ──────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════
+   Requests page: mentee requests + referred mentees
+   ═══════════════════════════════════════════════════════════════ */
+let _requestsTab = 'mentee';              // 'mentee' | 'referred'
+let _requestsTabChosen = false;           // user picked a tab by hand -> never auto-switch
+let _reqData = { mentee: [], referred: [] };
+let _reqRenderedSig = '';
+const _reqBusy = new Set();
+let _declineTarget = null;
+
+const REQ_ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+const REQ_ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+const REQ_ICON_SWAP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v14"/><path d="m3 7 4-4 4 4"/><path d="M17 21V7"/><path d="m21 17-4 4-4-4"/></svg>';
+
+function reqPersonName(u) {
+  return u?.user_settings?.display_name || u?.anonymous_id || 'Anonymous';
+}
+
+function reqChips(u, topic) {
+  const chips = [];
+  if (u?.sex === 'M') chips.push(`<span class="req-chip">${escapeHtml(t('sex_male'))}</span>`);
+  else if (u?.sex === 'F') chips.push(`<span class="req-chip">${escapeHtml(t('sex_female'))}</span>`);
+  if (u?.age_range) chips.push(`<span class="req-chip">${escapeHtml(u.age_range)}</span>`);
+  if (topic) chips.push(`<span class="req-chip req-chip-topic">${escapeHtml(topic)}</span>`);
+  return chips.length ? `<div class="req-chips">${chips.join('')}</div>` : '';
+}
+
+function renderRequestCard(r) {
+  const name = reqPersonName(r.user);
+  const topic = topicLabel(r.topic) || '';
+  const msg = (r.message || '').trim();
+  return `
+    <article class="req-card" data-kind="request" data-id="${r.id}" data-name="${escapeHtml(name)}">
+      <div class="req-top">
+        <div class="req-avatar" aria-hidden="true">${escapeHtml(name.charAt(0).toUpperCase())}</div>
+        <div class="req-id">
+          <div class="req-name">${escapeHtml(name)}</div>
+          <div class="req-time">${r.created_at ? escapeHtml(timeAgo(r.created_at)) : ''}</div>
+        </div>
+        <span class="req-pill">${escapeHtml(t('req_new'))}</span>
+      </div>
+      ${reqChips(r.user, topic)}
+      ${msg ? `<blockquote class="req-quote">${escapeHtml(msg)}</blockquote>` : ''}
+      ${renderRequestActions('request', r.id)}
+    </article>`;
+}
+
+function renderReferralCard(r) {
+  const name = reqPersonName(r.mentee);
+  const from = reqPersonName(r.from_mentor);
+  const note = (r.note || '').trim();
+  return `
+    <article class="req-card req-card-referral" data-kind="referral" data-id="${r.id}" data-name="${escapeHtml(name)}" data-from="${escapeHtml(from)}">
+      <div class="req-ribbon">${REQ_ICON_SWAP}<span>${escapeHtml(t('req_referred_by', { name: from }))}</span></div>
+      <div class="req-top">
+        <div class="req-avatar" aria-hidden="true">${escapeHtml(name.charAt(0).toUpperCase())}</div>
+        <div class="req-id">
+          <div class="req-name">${escapeHtml(name)}</div>
+          <div class="req-time">${r.created_at ? escapeHtml(timeAgo(r.created_at)) : ''}</div>
+        </div>
+      </div>
+      ${reqChips(r.mentee, '')}
+      ${note ? `<div class="req-quote-label">${escapeHtml(t('req_note_from', { name: from }))}</div><blockquote class="req-quote">${escapeHtml(note)}</blockquote>` : ''}
+      ${renderRequestActions('referral', r.id)}
+    </article>`;
+}
+
+function renderRequestActions(kind, id) {
+  return `
+      <div class="req-actions">
+        <button type="button" class="req-btn req-btn-decline" onclick="askRequestDecline('${kind}', '${id}')">${REQ_ICON_X}<span>${escapeHtml(t('btn_reject'))}</span></button>
+        <button type="button" class="req-btn req-btn-accept" onclick="answerRequest('${kind}', '${id}', 'accepted', this)">${REQ_ICON_CHECK}<span>${escapeHtml(t('btn_accept'))}</span></button>
+      </div>`;
+}
+
+function reqEmptyHTML(kind) {
+  const key = kind === 'referral' ? 'req_empty_referred' : 'no_pending_requests';
+  const sub = kind === 'referral' ? 'req_empty_referred_sub' : 'req_empty_mentee_sub';
+  return `<div class="req-empty"><div class="req-empty-icon">${kind === 'referral' ? REQ_ICON_SWAP : REQ_ICON_CHECK}</div><div class="req-empty-title">${escapeHtml(t(key))}</div><div class="req-empty-sub">${escapeHtml(t(sub))}</div></div>`;
+}
+
+function updateRequestCounts() {
+  const counts = { mentee: _reqData.mentee.length, referred: _reqData.referred.length };
+  [['reqTabMenteeCount', counts.mentee], ['reqTabReferredCount', counts.referred]].forEach(([id, n]) => {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = n;
+    el.hidden = n <= 0;
+  });
+  setRequestsBadgeCount(counts.mentee + counts.referred);
+}
+
+function setRequestsBadgeCount(count) {
+  const badge = $('requestsBadge');
+  if (!badge) return;
+  badge.textContent = count;
+  badge.style.display = count > 0 ? 'flex' : 'none';
+}
+
+function setRequestsTab(tab, { byUser = true } = {}) {
+  if (byUser) { _requestsTabChosen = true; haptic('light'); }
+  _requestsTab = tab === 'referred' ? 'referred' : 'mentee';
+  const referred = _requestsTab === 'referred';
+  $('reqTabMentee')?.classList.toggle('active', !referred);
+  $('reqTabReferred')?.classList.toggle('active', referred);
+  $('reqTabMentee')?.setAttribute('aria-selected', String(!referred));
+  $('reqTabReferred')?.setAttribute('aria-selected', String(referred));
+  const mBox = $('requestsList'), rBox = $('referralsList');
+  if (mBox) mBox.hidden = referred;
+  if (rBox) rBox.hidden = !referred;
+  const intro = $('requestsIntro');
+  if (intro) intro.textContent = t(referred ? 'req_intro_referred' : 'req_intro_mentee');
+}
+
 async function loadRequests() {
-  const container = $('requestsList');
-  if (!container) return;
-  container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
+  const mBox = $('requestsList'), rBox = $('referralsList');
+  if (!mBox || !rBox) return;
+  // Skeleton only on the very first load; later refreshes update quietly so the
+  // list never flashes while you are looking at it.
+  const drawn = mBox.dataset.drawn === '1';
+  if (!drawn) {
+    const sk = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
+    mBox.innerHTML = sk;
+    rBox.innerHTML = '';
+  }
   try {
-    const requests = await apiFetch('/api/mentors/my-requests');
-    if (!requests.length) {
-      container.innerHTML = `<div class="empty-state"><span>${t('no_pending_requests')}</span></div>`;
-      return;
-    }
-    container.innerHTML = requests.map(r => {
-      const name = r.user?.user_settings?.display_name || r.user?.anonymous_id || 'Anonymous';
-      const sex = r.user?.sex === 'M' ? 'Male' : (r.user?.sex === 'F' ? 'Female' : 'Not specified');
-      const age = r.user?.age_range || 'Not specified';
-      const topic = topicLabel(r.topic) || 'General';
-      return `
-        <div class="mentor-card">
-          <div class="mentor-info">
-            <div class="mentor-id">${escapeHtml(name)}</div>
-            <div class="text-xs text-dim mt-1">${sex} · ${age} · Topic: ${escapeHtml(topic)}</div>
-            <div class="mentor-bio" style="margin-top:4px">${escapeHtml(r.message || 'No message provided')}</div>
-          </div>
-          <div class="flex gap-8 mt-12">
-            <button class="btn btn-primary btn-sm flex-1" onclick="respondToRequest('${r.id}', 'accepted')">${t('btn_accept')}</button>
-            <button class="btn btn-outline btn-sm flex-1" onclick="respondToRequest('${r.id}', 'rejected')">${t('btn_reject')}</button>
-          </div>
-        </div>`;
-    }).join('');
-    updateRequestsBadge();  // ensure badge updates after loading
+    const [requests, referrals] = await Promise.all([
+      apiFetch('/api/mentors/my-requests'),
+      apiFetch('/api/mentors/referrals').catch(() => []),
+    ]);
+    _reqData = { mentee: requests || [], referred: referrals || [] };
+
+    const sig = JSON.stringify([currentLanguage, _reqData.mentee.map(r => r.id), _reqData.referred.map(r => r.id)]);
+    if (drawn && sig === _reqRenderedSig) { updateRequestCounts(); return; }
+    _reqRenderedSig = sig;
+
+    mBox.innerHTML = _reqData.mentee.length ? _reqData.mentee.map(renderRequestCard).join('') : reqEmptyHTML('request');
+    rBox.innerHTML = _reqData.referred.length ? _reqData.referred.map(renderReferralCard).join('') : reqEmptyHTML('referral');
+    mBox.dataset.drawn = '1';
+
+    // First time in: land on whichever tab actually has something waiting.
+    if (!_requestsTabChosen && !_reqData.mentee.length && _reqData.referred.length) _requestsTab = 'referred';
+    setRequestsTab(_requestsTab, { byUser: false });
+    updateRequestCounts();
   } catch (e) {
-    container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`;
+    mBox.innerHTML = `<div class="empty-state"><span>${escapeHtml(e.message)}</span></div>`;
   }
 }
 
-async function respondToRequest(requestId, action) {
+function askRequestDecline(kind, id) {
+  const card = document.querySelector(`.req-card[data-kind="${kind}"][data-id="${id}"]`);
+  if (!card) return;
+  haptic('light');
+  _declineTarget = { kind, id };
+  const name = `<strong>${escapeHtml(card.dataset.name || '')}</strong>`;
+  const body = $('requestDeclineBody');
+  if (body) {
+    body.innerHTML = kind === 'referral'
+      ? t('req_decline_body_referral', { name, from: `<strong>${escapeHtml(card.dataset.from || '')}</strong>` })
+      : t('req_decline_body_request', { name });
+  }
+  const yes = $('requestDeclineYes');
+  if (yes) { yes.disabled = false; yes.textContent = t('req_decline_yes'); }
+  $('requestDeclineModal')?.classList.add('open');
+}
+
+function closeRequestDecline() {
+  $('requestDeclineModal')?.classList.remove('open');
+  _declineTarget = null;
+}
+
+async function confirmRequestDecline() {
+  const target = _declineTarget;
+  if (!target) return;
+  const yes = $('requestDeclineYes');
+  if (yes) yes.disabled = true;
+  closeRequestDecline();
+  await answerRequest(target.kind, target.id, 'rejected');
+}
+
+async function answerRequest(kind, id, action, btn) {
+  const key = `${kind}:${id}`;
+  if (_reqBusy.has(key)) return;
+  const card = document.querySelector(`.req-card[data-kind="${kind}"][data-id="${id}"]`);
+  _reqBusy.add(key);
   haptic('medium');
+  card?.classList.add('is-busy');
+  btn?.classList.add('is-loading');
   try {
-    await apiFetch(`/api/mentors/request/${requestId}`, {
+    await apiFetch(kind === 'referral' ? `/api/mentors/referral/${id}` : `/api/mentors/request/${id}`, {
       method: 'PATCH',
-      body: { action }
+      body: { action },
     });
-    haptic('success');
-    showToast(`Request ${action}`, 'success');
-    loadRequests();
-    updateRequestsBadge();   // refresh badge after action
+    haptic(action === 'accepted' ? 'success' : 'light');
+    const name = card?.dataset.name || '';
+    showToast(
+      action === 'accepted'
+        ? (kind === 'referral' ? t('req_toast_referral_accepted', { name }) : t('req_toast_accepted'))
+        : t('req_toast_declined'),
+      action === 'accepted' ? 'success' : 'info'
+    );
+    removeRequestCard(card, kind, id);
+    if (action === 'accepted') loadMyMentees?.();   // keep My Mentees in step (no-op if the page isn't drawn)
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
+    card?.classList.remove('is-busy');
+    btn?.classList.remove('is-loading');
+    loadRequests();   // the request may have been answered elsewhere; resync quietly
+  } finally {
+    _reqBusy.delete(key);
   }
+}
+
+/** Collapses a card out of the list in place (no list rebuild, no flash). */
+function removeRequestCard(card, kind, id) {
+  const list = kind === 'referral' ? _reqData.referred : _reqData.mentee;
+  const idx = list.findIndex(r => String(r.id) === String(id));
+  if (idx >= 0) list.splice(idx, 1);
+  _reqRenderedSig = JSON.stringify([currentLanguage, _reqData.mentee.map(r => r.id), _reqData.referred.map(r => r.id)]);
+  updateRequestCounts();
+
+  const box = kind === 'referral' ? $('referralsList') : $('requestsList');
+  const finish = () => {
+    card?.remove();
+    if (box && !box.querySelector('.req-card')) box.innerHTML = reqEmptyHTML(kind);
+  };
+  if (!card) return finish();
+  card.style.height = `${card.offsetHeight}px`;
+  void card.offsetHeight;   // commit the fixed height so the collapse can animate
+  card.classList.add('is-leaving');
+  let done = false;
+  const once = () => { if (done) return; done = true; finish(); };
+  card.addEventListener('transitionend', e => { if (e.target === card && e.propertyName === 'height') once(); });
+  setTimeout(once, 450);
 }
 
 // ─── Sessions ─────────────────────────────────────────────────
@@ -5698,13 +5907,12 @@ async function updateMessageBadge() {
 async function updateRequestsBadge() {
   if (currentUser?.role !== 'mentor') return;
   try {
-    const requests = await apiFetch('/api/mentors/my-requests');
-    const count = requests.length;
-    const badge = $('requestsBadge');
-    if (badge) {
-      badge.textContent = count;
-      badge.style.display = count > 0 ? 'flex' : 'none';
-    }
+    const [requests, referrals] = await Promise.all([
+      apiFetch('/api/mentors/my-requests'),
+      apiFetch('/api/mentors/referrals').catch(() => []),
+    ]);
+    _reqData = { mentee: requests || [], referred: referrals || [] };
+    updateRequestCounts();
   } catch (e) {
     console.error('Failed to load requests count:', e);
   }
@@ -7745,10 +7953,10 @@ function renderTransferSheet() {
   const sub = $('transferSubtitle');
   if (sub) {
     if (_transferStep === 'note') {
-      const picked = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
-      const mn = escapeHtml(picked ? (mentorNameOf(picked) || '') : '');
-      sub.innerHTML = t('transfer_note_step_sub', { name: `<strong>${mn}</strong>` });
+      sub.hidden = true;
+      sub.textContent = '';
     } else {
+      sub.hidden = false;
       sub.innerHTML = t('transfer_sub', { name: `<strong>${safeName}</strong>` });
     }
   }
@@ -7955,9 +8163,10 @@ function updateTransferSubtitle() {
   const sub = $('transferSubtitle');
   if (!sub || !_transferMentee) return;
   if (_transferStep === 'note') {
-    const picked = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
-    sub.innerHTML = t('transfer_note_step_sub', { name: `<strong>${escapeHtml(picked ? (mentorNameOf(picked) || '') : '')}</strong>` });
+    sub.hidden = true;
+    sub.textContent = '';
   } else {
+    sub.hidden = false;
     const nm = escapeHtml(_transferMentee.name || (_transferMentee.user && (_transferMentee.user.user_settings?.display_name || _transferMentee.user.anonymous_id)) || '');
     sub.innerHTML = t('transfer_sub', { name: `<strong>${nm}</strong>` });
   }
@@ -8049,7 +8258,7 @@ async function confirmTransfer() {
 
     _transferBusy = false;
     haptic('success');
-    showToast(t('transfer_success'), 'success');
+    showToast(t('transfer_sent'), 'success');
     closeTransferModal();   // also closes the confirmation dialog
     loadMyMentees(); // Refresh the My Mentees list
   } catch (e) {

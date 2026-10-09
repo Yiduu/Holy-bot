@@ -1103,7 +1103,7 @@
 
     </div>
 
-    <!-- ── Page: Mentorship Requests ──────────────────────────────── -->
+    <!-- ── Page: Requests (mentee requests + referred mentees) ─────── -->
     <div id="page-requests" class="page">
       <div class="app-header">
         <h2 data-i18n="Requests">Requests</h2>
@@ -1111,11 +1111,24 @@
       <div class="page-content">
         <div class="page-intro mb-12 stagger-fade">
           <span class="page-intro-eyebrow" data-i18n="Requests">Requests</span>
-          <p class="page-intro-text" data-i18n="Pending mentorship applications.">Pending mentorship applications.</p>
+          <p id="requestsIntro" class="page-intro-text" data-i18n="req_intro_mentee">People asking you to be their mentor.</p>
         </div>
-        <div id="requestsList" style="display:flex;flex-direction:column;gap:10px">
+
+        <div class="req-tabs" role="tablist">
+          <button type="button" id="reqTabMentee" class="req-tab active" role="tab" aria-selected="true" onclick="setRequestsTab('mentee')">
+            <span data-i18n="req_tab_mentee">Mentee Requests</span>
+            <span id="reqTabMenteeCount" class="req-tab-count" hidden>0</span>
+          </button>
+          <button type="button" id="reqTabReferred" class="req-tab" role="tab" aria-selected="false" onclick="setRequestsTab('referred')">
+            <span data-i18n="req_tab_referred">Referred</span>
+            <span id="reqTabReferredCount" class="req-tab-count" hidden>0</span>
+          </button>
+        </div>
+
+        <div id="requestsList" class="req-list" role="tabpanel">
           <div class="loading-spinner" style="margin:40px auto"></div>
         </div>
+        <div id="referralsList" class="req-list" role="tabpanel" hidden></div>
       </div>
     </div>
 
@@ -2424,6 +2437,24 @@
         <div class="hb-actions">
           <button type="button" id="transferConfirmNo" class="btn btn-outline" onclick="closeTransferConfirm()" data-i18n="btn_cancel">Cancel</button>
           <button type="button" id="transferConfirmYes" class="btn btn-primary" onclick="confirmTransfer()" data-i18n="transfer_confirm_yes">Yes, transfer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: Decline a request / referral ───────────────── -->
+  <div id="requestDeclineModal" class="modal-overlay" onclick="if(event.target===this)closeRequestDecline()">
+    <div class="modal-sheet tf-confirm-sheet" role="alertdialog" aria-modal="true" aria-labelledby="requestDeclineTitle" aria-describedby="requestDeclineBody">
+      <div class="modal-handle"></div>
+      <div class="hb-confirm">
+        <div class="hb-icon req-decline-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </div>
+        <div id="requestDeclineTitle" class="modal-title" style="text-align:center" data-i18n="req_decline_title">Decline this request?</div>
+        <p id="requestDeclineBody" class="hb-text"></p>
+        <div class="hb-actions">
+          <button type="button" class="btn btn-outline" onclick="closeRequestDecline()" data-i18n="btn_cancel">Cancel</button>
+          <button type="button" id="requestDeclineYes" class="btn btn-primary" onclick="confirmRequestDecline()" data-i18n="req_decline_yes">Yes, decline</button>
         </div>
       </div>
     </div>

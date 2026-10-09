@@ -1752,6 +1752,42 @@ async function notifyMentorshipRequest(mentorId, requesterId, requesterName, req
   });
 }
 
+async function notifyMenteeReferral(toMentorId, { menteeName, fromName, note }) {
+  const am = (await getUserLang(toMentorId)) === 'am';
+  const text = card({
+    icon: '🤝',
+    title: am ? 'አዲስ የተላከ ተመካሪ' : 'New Mentee Referral',
+    body: am
+      ? 'አንድ አማካሪ ተመካሪ ወደ እርስዎ ልከዋል። ለመቀበል ወይም ላለመቀበል መተግበሪያውን ይክፈቱ።'
+      : 'A fellow mentor has referred a mentee to you. Open the app to accept or decline.',
+    fields: [
+      ['👤', am ? 'ተመካሪ' : 'Mentee', menteeName],
+      ['🙏', am ? 'ከአማካሪ' : 'Referred by', fromName],
+    ],
+    quote: note || '',
+    footer: am ? 'ፈጣን ምላሽ ትልቅ ተስፋ ይሰጣል 💛' : 'A quick reply can mean a lot 💛',
+  });
+  await safeSend(toMentorId, text, {
+    ...HTML,
+    reply_markup: goldKeyboard(am ? 'ጥያቄውን ይመልከቱ' : 'Review Referral', `${APP_URL}?start=requests_referred`)
+  });
+}
+
+async function notifyMenteeReferralResult(fromMentorId, { menteeName, toName, accepted }) {
+  const am = (await getUserLang(fromMentorId)) === 'am';
+  const text = card({
+    icon: accepted ? '✅' : '🕊️',
+    title: accepted
+      ? (am ? 'ዝውውሩ ተቀባይነት አግኝቷል' : 'Referral Accepted')
+      : (am ? 'ዝውውሩ አልተቀበለም' : 'Referral Declined'),
+    body: accepted
+      ? (am ? `${toName} ተመካሪ ${menteeName}ን ተቀብለዋል።` : `${toName} accepted ${menteeName}. They are now their mentor.`)
+      : (am ? `${toName} ተመካሪ ${menteeName}ን አልተቀበሉም። ተመካሪው አሁንም ከእርስዎ ጋር ነው።` : `${toName} couldn't take ${menteeName}. They remain with you.`),
+    footer: am ? 'ስለ አገልግሎትዎ እናመሰግናለን 🙏' : 'Thank you for serving 🙏',
+  });
+  await safeSend(fromMentorId, text, { ...HTML, reply_markup: goldKeyboard(am ? 'መተግበሪያውን ክፈት' : 'Open App', APP_URL) });
+}
+
 async function notifyMentorshipAccepted(userId, mentorName) {
   const lang = await getUserLang(userId);
   const am = lang === 'am';
@@ -3619,6 +3655,8 @@ module.exports = {
   notifyAdminNewMentorApplication,
   notifyMentorshipAccepted,
   notifyMentorshipRejected,
+  notifyMenteeReferral,
+  notifyMenteeReferralResult,
   notifyMessage,
   notifyFileMessage,
   syncNotificationEdit,

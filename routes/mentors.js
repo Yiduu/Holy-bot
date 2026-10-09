@@ -1063,55 +1063,181 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
           return res.status(400).json({ error: 'Target mentor has reached their maximum capacity.' });
         }
 
-        const { error: updateErr } = await supabase
-          .from('mentorship_assignments')
-          .update({ mentor_id: targetTid })
-          .eq('id', id);
-
-        if (updateErr) return res.status(500).json({ error: updateErr.message });
-
-        const [{ data: user }, { data: newMentor }] = await Promise.all([
-          supabase.from('users').select('chat_id').eq('telegram_id', assignment.user_id).single(),
-          supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', targetTid).single()
-        ]);
-
-        const newMentorName = newMentor?.user_settings?.display_name || newMentor?.anonymous_id || 'Your new mentor';
-        const { sendCard, getUserLang } = require('../bot');
-        if (user?.chat_id) {
-          const lang = await getUserLang(assignment.user_id);
-          const am = lang === 'am';
-          await sendCard(user.chat_id, {
-            icon: '🔄',
-            title: am ? 'አማካሪዎ ተቀይሯል' : 'Your Mentor Has Changed',
-            body: am ? `የምክር አገልግሎትዎ ወደ አማካሪ ${newMentorName} ተላልፏል።` : `Your mentorship has been transferred to ${newMentorName}.`,
-            footer: am ? 'አዲስ ጉዞዎ በበረከት ይሁን 🌱' : 'Wishing you a blessed new chapter 🌱',
-          }, { label: am ? 'ቻት ክፈት' : 'Open Chat' });
+        if (targetTid === current_mentor_id) {
+          return res.status(400).json({ error: 'Choose a different mentor.' });
         }
 
-        const { data: menteeUser } = await supabase
-          .from('users')
-          .select('anonymous_id, user_settings(display_name)')
-          .eq('telegram_id', assignment.user_id)
+        // The mentee stays with the current mentor until the new one accepts.
+        // One open referral per mentee at a time (also enforced by a unique index).
+        const { data: openReferral } = await supabase
+          .from('mentee_referrals')
+          .select('id')
+          .eq('assignment_id', id)
+          .eq('status', 'pending')
+          .maybeSingle();
+        if (openReferral) {
+          return res.status(409).json({ error: 'This mentee already has a referral waiting for a response.' });
+        }
+
+        const { data: referral, error: insertErr } = await supabase
+          .from('mentee_referrals')
+          .insert({
+            assignment_id: id,
+            mentee_id: assignment.user_id,
+            from_mentor_id: current_mentor_id,
+            to_mentor_id: targetTid,
+            note: handoffNote || null,
+          })
+          .select('id')
           .single();
-        const menteeName = menteeUser?.user_settings?.display_name || menteeUser?.anonymous_id || 'A mentee';
+        if (insertErr) {
+          const missing = insertErr.code === '42P01' || /mentee_referrals/.test(insertErr.message || '');
+          return res.status(missing ? 503 : 500).json({
+            error: missing ? 'Referrals are not set up yet (run migrations/20261009_mentee_referrals.sql).' : insertErr.message,
+          });
+        }
 
-        const targetLang = await getUserLang(targetTid);
-        const tAm = targetLang === 'am';
-        await sendCard(targetTid, {
-          icon: '🤝',
-          title: tAm ? 'አዲስ ተመካሪ ተመድቦልዎታል' : 'New Mentee Assigned',
-          body: tAm ? `አዲስ ተመካሪ በዝውውር ቀርቦልዎታል፦ ${menteeName}` : `A new mentee has been transferred to you: ${menteeName}`,
-          quote: handoffNote,
-          footer: tAm ? 'እግዚአብሔር ያበርታዎት 🙏' : 'Thank you for serving 🙏',
-        }, { label: tAm ? 'መተግበሪያውን ክፈት' : 'Open App' });
+        try {
+          const [{ data: menteeUser }, { data: fromUser }] = await Promise.all([
+            supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', assignment.user_id).single(),
+            supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', current_mentor_id).single(),
+          ]);
+          const { notifyMenteeReferral } = require('../bot');
+          await notifyMenteeReferral(targetTid, {
+            menteeName: menteeUser?.user_settings?.display_name || menteeUser?.anonymous_id || 'A mentee',
+            fromName: fromUser?.user_settings?.display_name || fromUser?.anonymous_id || 'A mentor',
+            note: handoffNote,
+          });
+        } catch (notifyErr) {
+          console.error('[mentors] referral notification error (non-fatal):', notifyErr.message);
+        }
+        emitToUserRoom(targetTid, 'new_referral_request', { referralId: referral.id });
 
-        return res.json({ success: true });
+        return res.json({ success: true, pending: true, referral_id: referral.id });
       }
     } catch (err) {
       return res.status(500).json({ error: err.message });
     }
 
     res.status(400).json({ error: 'Invalid type' });
+  });
+
+  // GET /api/mentors/referrals – mentees other mentors have referred to me
+  router.get('/referrals', requireAuth, async (req, res) => {
+    const { id: me } = req.telegramUser;
+    const { data, error } = await supabase
+      .from('mentee_referrals')
+      .select('id, note, created_at, mentee:mentee_id(telegram_id, anonymous_id, sex, age_range, user_settings(display_name)), from_mentor:from_mentor_id(telegram_id, anonymous_id, user_settings(display_name))')
+      .eq('to_mentor_id', me)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    if (error) {
+      // Table not migrated yet: behave as "no referrals" so the Requests page still works.
+      if (error.code === '42P01' || /mentee_referrals/.test(error.message || '')) return res.json([]);
+      return res.status(500).json({ error: error.message });
+    }
+    res.json(data || []);
+  });
+
+  // PATCH /api/mentors/referral/:id – accept or decline a referred mentee
+  router.patch('/referral/:id', requireAuth, async (req, res) => {
+    const { id: me } = req.telegramUser;
+    const { action } = req.body; // 'accepted' | 'rejected'
+    if (!['accepted', 'rejected'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
+
+    try {
+      const { data: ref, error: fetchErr } = await supabase
+        .from('mentee_referrals')
+        .select('*')
+        .eq('id', req.params.id)
+        .eq('to_mentor_id', me)
+        .maybeSingle();
+      if (fetchErr) return res.status(500).json({ error: fetchErr.message });
+      if (!ref) return res.status(404).json({ error: 'Referral not found' });
+      if (ref.status !== 'pending') return res.status(409).json({ error: 'This referral was already answered.' });
+
+      const now = new Date().toISOString();
+      const setStatus = (status) => supabase
+        .from('mentee_referrals')
+        .update({ status, responded_at: now })
+        .eq('id', ref.id)
+        .eq('status', 'pending')
+        .select('id');
+
+      if (action === 'accepted') {
+        // The mentee must still be with the mentor who sent the referral.
+        const { data: assignment } = await supabase
+          .from('mentorship_assignments')
+          .select('id, user_id, mentor_id, is_active')
+          .eq('id', ref.assignment_id)
+          .maybeSingle();
+        if (!assignment || !assignment.is_active || String(assignment.mentor_id) !== String(ref.from_mentor_id)) {
+          await setStatus('cancelled');
+          emitToUserRoom(me, 'referral_updated', { referralId: ref.id, status: 'cancelled' });
+          return res.status(409).json({ error: 'This mentee is no longer available to transfer.' });
+        }
+
+        const DEFAULT_MAX_MENTEES = parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
+        const [{ count }, { data: me_ }] = await Promise.all([
+          supabase.from('mentorship_assignments').select('id', { count: 'exact', head: true }).eq('mentor_id', me).eq('is_active', true),
+          supabase.from('users').select('user_settings(max_mentees)').eq('telegram_id', me).single(),
+        ]);
+        const maxMentees = me_?.user_settings?.max_mentees || DEFAULT_MAX_MENTEES;
+        if ((count || 0) >= maxMentees) {
+          return res.status(409).json({ error: 'You have reached your maximum number of mentees.' });
+        }
+
+        const { data: claimed } = await setStatus('accepted');
+        if (!claimed || !claimed.length) return res.status(409).json({ error: 'This referral was already answered.' });
+
+        const { data: moved, error: moveErr } = await supabase
+          .from('mentorship_assignments')
+          .update({ mentor_id: me })
+          .eq('id', ref.assignment_id)
+          .eq('mentor_id', ref.from_mentor_id)
+          .eq('is_active', true)
+          .select('id');
+        if (moveErr || !moved || !moved.length) {
+          await supabase.from('mentee_referrals').update({ status: 'cancelled' }).eq('id', ref.id);
+          return res.status(moveErr ? 500 : 409).json({ error: moveErr ? moveErr.message : 'This mentee is no longer available to transfer.' });
+        }
+      } else {
+        const { data: claimed } = await setStatus('rejected');
+        if (!claimed || !claimed.length) return res.status(409).json({ error: 'This referral was already answered.' });
+      }
+
+      // Notifications are best-effort: never block the response on Telegram.
+      try {
+        const { sendCard, getUserLang, notifyMenteeReferralResult } = require('../bot');
+        const [{ data: menteeUser }, { data: meUser }] = await Promise.all([
+          supabase.from('users').select('chat_id, anonymous_id, user_settings(display_name)').eq('telegram_id', ref.mentee_id).single(),
+          supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', me).single(),
+        ]);
+        const menteeName = menteeUser?.user_settings?.display_name || menteeUser?.anonymous_id || 'A mentee';
+        const myName = meUser?.user_settings?.display_name || meUser?.anonymous_id || 'A mentor';
+
+        await notifyMenteeReferralResult(ref.from_mentor_id, { menteeName, toName: myName, accepted: action === 'accepted' });
+
+        if (action === 'accepted' && menteeUser?.chat_id) {
+          const am = (await getUserLang(ref.mentee_id)) === 'am';
+          await sendCard(menteeUser.chat_id, {
+            icon: '🔄',
+            title: am ? 'አማካሪዎ ተቀይሯል' : 'Your Mentor Has Changed',
+            body: am ? `የምክር አገልግሎትዎ ወደ አማካሪ ${myName} ተላልፏል።` : `Your mentorship has been transferred to ${myName}.`,
+            footer: am ? 'አዲስ ጉዞዎ በበረከት ይሁን 🌱' : 'Wishing you a blessed new chapter 🌱',
+          }, { label: am ? 'ቻት ክፈት' : 'Open Chat' });
+        }
+      } catch (notifyErr) {
+        console.error('[mentors] referral result notification error (non-fatal):', notifyErr.message);
+      }
+
+      emitToUserRoom(ref.from_mentor_id, 'referral_updated', { referralId: ref.id, status: action, role: 'sender' });
+      emitToUserRoom(me, 'referral_updated', { referralId: ref.id, status: action, role: 'receiver' });
+
+      res.json({ success: true, status: action });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // POST /api/mentors/rate – mentee rates a mentor from the mini app
