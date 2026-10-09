@@ -1221,10 +1221,8 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
         if (action === 'accepted' && menteeUser?.chat_id) {
           const am = (await getUserLang(ref.mentee_id)) === 'am';
           await sendCard(menteeUser.chat_id, {
-            icon: '🔄',
             title: am ? 'አማካሪዎ ተቀይሯል' : 'Your Mentor Has Changed',
             body: am ? `የምክር አገልግሎትዎ ወደ አማካሪ ${myName} ተላልፏል።` : `Your mentorship has been transferred to ${myName}.`,
-            footer: am ? 'አዲስ ጉዞዎ በበረከት ይሁን 🌱' : 'Wishing you a blessed new chapter 🌱',
           }, { label: am ? 'ቻት ክፈት' : 'Open Chat' });
         }
       } catch (notifyErr) {

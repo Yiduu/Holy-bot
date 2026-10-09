@@ -1531,9 +1531,24 @@ function connectSocket() {
     }
   });
 
+  // In-app notification for the Requests page: plain text plus a "View" button,
+  // the same banner the live-session invites use. `tab` picks the tab it opens on.
+  const notifyRequests = (text, tab) => {
+    const open = () => {
+      _requestsTabChosen = true;
+      navigate('requests');
+      setRequestsTab(tab, { byUser: false });
+    };
+    if (window.SRsocket?.notify) {
+      window.SRsocket.notify({ text, actionLabel: t('sr_view'), onAction: open, ttl: 12000 });
+    } else {
+      showToast(text, 'success');
+    }
+  };
+
   socket.on('new_mentorship_request', () => {
     haptic('success');
-    showToast('New mentorship request received! 🙏', 'success');
+    notifyRequests(t('req_toast_new_request'), 'mentee');
     updateRequestsBadge();
     if (currentPage === 'requests') loadRequests();
   });
@@ -1541,7 +1556,7 @@ function connectSocket() {
   // Another mentor referred one of their mentees to me
   socket.on('new_referral_request', () => {
     haptic('success');
-    showToast(t('req_toast_new_referral'), 'success');
+    notifyRequests(t('req_toast_new_referral'), 'referred');
     updateRequestsBadge();
     if (currentPage === 'requests') loadRequests();
   });
