@@ -10747,11 +10747,28 @@ input:focus, textarea:focus, select:focus {
 .profile-pills .chip { color: var(--gold-light); cursor: default; }
 .profile-pill:active { transform: scale(0.96); }
 .profile-pill svg { color: var(--gold-light); flex-shrink: 0; }
+/* Edit Profile is the page's main action, so it is the gold pill (same as the active
+   tab and the Accept / Request buttons) instead of another glass chip. */
+.profile-pills .profile-edit-btn {
+  height: 44px;
+  padding: 0 22px;
+  color: #1a1300;
+  background: linear-gradient(180deg, #EBCD72, #C9A84C);
+  border-color: rgba(255, 233, 160, 0.55);
+  box-shadow: 0 8px 22px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.profile-pills .profile-edit-btn svg { color: #1a1300; }
 [data-theme="light"] .profile-pills .chip, [data-theme="light"] .profile-pill {
   background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.24); color: var(--text);
   box-shadow: 0 6px 16px rgba(30, 25, 15, 0.14);
 }
 [data-theme="light"] .profile-pills .chip { color: #6B4E0F; }
+[data-theme="light"] .profile-pills .profile-edit-btn {
+  color: #1a1300;
+  background: linear-gradient(180deg, #EBCD72, #C9A84C);
+  border-color: rgba(150, 120, 40, 0.45);
+  box-shadow: 0 8px 20px rgba(150, 120, 40, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
 
 /* segmented switch */
 .profile-tabs {
@@ -12713,9 +12730,16 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
 /* The two tabs reuse the Live page's Private / Group switch (.profile-tabs / .profile-tab):
    same pill track, same gold active pill, same icon + label. Only what that switch
    doesn't have is defined here: a shrinking label and the count badge. */
-.req-tabs .profile-tab { min-width: 0; padding: 0 10px; }
-.req-tabs .profile-tab svg { flex: none; }
-.req-tab-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.req-tabs .profile-tab {
+  min-width: 0;
+  height: auto;            /* grows to two lines instead of cutting the label off */
+  min-height: 46px;
+  padding: 5px 10px;
+  gap: 6px;
+  font-size: var(--fs-md);
+}
+.req-tabs .profile-tab svg { flex: none; width: 16px; height: 16px; }
+.req-tab-label { min-width: 0; text-align: center; line-height: 1.15; white-space: normal; overflow-wrap: break-word; }
 .req-tab-count {
   flex: none;
   min-width: 20px;
@@ -12961,4 +12985,98 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
 #page-requests .page-content { overscroll-behavior-y: contain; }
 @media (prefers-reduced-motion: reduce) {
   .req-card, .req-btn { transition: none; }
+}
+
+/* ═══ Edit Profile sheet — same language as the Profile page ═══
+   Framed photo with a gold glow and gold camera button, uppercase gold labels,
+   a pill-shaped field, the info rows as soft cards and a big gold Save pill.
+   Every id / onclick the sheet already uses is unchanged. ═══ */
+.edit-profile-sheet {
+  padding: 18px 20px calc(22px + var(--safe-bottom, 0px));
+  border-radius: 30px 30px 0 0;
+  background:
+    radial-gradient(120% 220px at 50% 0%, rgba(201, 168, 76, 0.18) 0%, rgba(201, 168, 76, 0.05) 55%, transparent 85%) no-repeat,
+    var(--bg2);
+}
+.edit-profile-sheet .modal-title {
+  text-align: center;
+  font-size: var(--fs-xl, 1.25rem);
+  letter-spacing: 0.04em;
+  margin-bottom: 18px;
+}
+
+/* photo: centred, framed like the Profile hero, actions underneath */
+.edit-profile-sheet .edit-profile-avatar-row { flex-direction: column; justify-content: center; gap: 16px; }
+.edit-profile-sheet .avatar-preview-wrap {
+  padding: 5px;
+  border-radius: 34px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5), 0 0 30px rgba(201, 168, 76, 0.24);
+}
+.edit-profile-sheet .avatar-camera-btn {
+  right: -6px;
+  bottom: -6px;
+  width: 38px;
+  height: 38px;
+  color: #1a1300;
+  background: linear-gradient(180deg, #EBCD72, #C9A84C);
+  border: 3px solid var(--bg2);
+  box-shadow: 0 6px 16px rgba(201, 168, 76, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.edit-profile-sheet .avatar-camera-btn svg { width: 16px; height: 16px; }
+.edit-profile-sheet .edit-profile-avatar-actions { justify-content: center; }
+.edit-profile-sheet .edit-profile-hint { margin: 14px 8px 0; text-align: center; color: var(--text3); }
+
+/* display name */
+.edit-profile-sheet .form-group { margin-top: 20px; }
+.edit-profile-sheet .form-label { margin: 0 0 8px 6px; letter-spacing: 0.14em; color: var(--gold-light); }
+.edit-profile-sheet .input {
+  padding: 14px 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+.edit-profile-sheet .input:focus {
+  transform: none;
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.18);
+}
+
+/* Anonymous ID / Role rows as soft cards */
+.edit-profile-sheet .edit-profile-meta-row {
+  margin-top: 10px;
+  padding: 12px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 22px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.edit-profile-sheet .form-group + .edit-profile-meta-row { margin-top: 18px; }
+
+.edit-profile-sheet .btn-primary.btn-full { min-height: 54px; margin-top: 22px; font-size: var(--fs-md); font-weight: 700; }
+
+[data-theme="light"] .edit-profile-sheet {
+  background:
+    radial-gradient(120% 220px at 50% 0%, rgba(201, 168, 76, 0.28) 0%, rgba(201, 168, 76, 0.08) 55%, transparent 85%) no-repeat,
+    #fbf8f0;
+}
+[data-theme="light"] .edit-profile-sheet .avatar-preview-wrap {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(150, 120, 40, 0.25);
+  box-shadow: 0 12px 28px rgba(30, 25, 15, 0.16), 0 0 24px rgba(201, 168, 76, 0.22);
+}
+[data-theme="light"] .edit-profile-sheet .avatar-camera-btn { border-color: #fbf8f0; }
+[data-theme="light"] .edit-profile-sheet .form-label { color: #7A5812; }
+[data-theme="light"] .edit-profile-sheet .input {
+  background: #fff;
+  border-color: rgba(150, 120, 40, 0.28);
+  box-shadow: inset 0 1px 3px rgba(30, 25, 15, 0.08);
+}
+[data-theme="light"] .edit-profile-sheet .edit-profile-meta-row {
+  background: linear-gradient(160deg, #fff, #f6f3ea);
+  border-color: rgba(150, 120, 40, 0.2);
+  box-shadow: 0 6px 16px rgba(30, 25, 15, 0.10), inset 0 1px 0 #fff;
 }
