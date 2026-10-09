@@ -4303,7 +4303,8 @@ let _declineTarget = null;
 
 const REQ_ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
 const REQ_ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
-const REQ_ICON_SWAP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v14"/><path d="m3 7 4-4 4 4"/><path d="M17 21V7"/><path d="m21 17-4 4-4-4"/></svg>';
+const REQ_ICON_NOTE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+const REQ_ICON_SWAP ='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v14"/><path d="m3 7 4-4 4 4"/><path d="M17 21V7"/><path d="m21 17-4 4-4-4"/></svg>';
 
 function reqPersonName(u) {
   return u?.user_settings?.display_name || u?.anonymous_id || 'Anonymous';
@@ -4316,6 +4317,19 @@ function reqChips(u, topic) {
   if (u?.age_range) chips.push(`<span class="req-chip">${escapeHtml(u.age_range)}</span>`);
   if (topic) chips.push(`<span class="req-chip req-chip-topic">${escapeHtml(topic)}</span>`);
   return chips.length ? `<div class="req-chips">${chips.join('')}</div>` : '';
+}
+
+// Mentee note / referral note: plain text in a profile-style info row (icon tile + label),
+// no quotation block, no quote bar.
+function reqNoteHTML(label, text) {
+  return `
+      <div class="req-note">
+        <span class="req-note-icon" aria-hidden="true">${REQ_ICON_NOTE}</span>
+        <div class="req-note-body">
+          <div class="req-note-label">${escapeHtml(label)}</div>
+          <div class="req-note-text">${escapeHtml(text)}</div>
+        </div>
+      </div>`;
 }
 
 function renderRequestCard(r) {
@@ -4333,7 +4347,7 @@ function renderRequestCard(r) {
         <span class="req-pill">${escapeHtml(t('req_new'))}</span>
       </div>
       ${reqChips(r.user, topic)}
-      ${msg ? `<blockquote class="req-quote">${escapeHtml(msg)}</blockquote>` : ''}
+      ${msg ? reqNoteHTML(t('req_message_label'), msg) : ''}
       ${renderRequestActions('request', r.id)}
     </article>`;
 }
@@ -4353,7 +4367,7 @@ function renderReferralCard(r) {
         </div>
       </div>
       ${reqChips(r.mentee, '')}
-      ${note ? `<div class="req-quote-label">${escapeHtml(t('req_note_from', { name: from }))}</div><blockquote class="req-quote">${escapeHtml(note)}</blockquote>` : ''}
+      ${note ? reqNoteHTML(t('req_note_from', { name: from }), note) : ''}
       ${renderRequestActions('referral', r.id)}
     </article>`;
 }
@@ -4361,8 +4375,8 @@ function renderReferralCard(r) {
 function renderRequestActions(kind, id) {
   return `
       <div class="req-actions">
-        <button type="button" class="req-btn req-btn-decline" onclick="askRequestDecline('${kind}', '${id}')">${REQ_ICON_X}<span>${escapeHtml(t('btn_reject'))}</span></button>
-        <button type="button" class="req-btn req-btn-accept" onclick="answerRequest('${kind}', '${id}', 'accepted', this)">${REQ_ICON_CHECK}<span>${escapeHtml(t('btn_accept'))}</span></button>
+        <button type="button" class="btn btn-primary req-btn req-btn-accept" onclick="answerRequest('${kind}', '${id}', 'accepted', this)">${REQ_ICON_CHECK}<span>${escapeHtml(t('btn_accept'))}</span></button>
+        <button type="button" class="btn btn-danger req-btn req-btn-decline" onclick="askRequestDecline('${kind}', '${id}')">${REQ_ICON_X}<span>${escapeHtml(t('btn_reject'))}</span></button>
       </div>`;
 }
 
