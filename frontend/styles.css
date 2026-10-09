@@ -12578,3 +12578,90 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
 /* The global input:focus ring would draw a second box inside the search pill */
 #transferModal .mentor-search-input:focus { box-shadow: none; border: none; }
 #transferModal .tf-state-chip { max-width: 38%; text-align: center; line-height: 1.25; }
+
+
+/* ═══ Transfer Mentee: note step + confirmation ═══ */
+#transferModal .tf-scroll[hidden] { display: none; }
+#transferModal .tf-picked {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 22px;
+  border: 1px solid rgba(201, 168, 76, 0.3);
+  background: rgba(201, 168, 76, 0.08);
+}
+#transferModal .tf-picked .mentor-avatar { width: 48px; height: 48px; min-width: 48px; min-height: 48px; }
+#transferModal .tf-picked-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+#transferModal .tf-picked-label { font-size: var(--fs-xs); font-weight: 600; color: var(--text3); }
+#transferModal .tf-picked-name { font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+#transferModal .tf-change-link {
+  display: block;
+  margin: 8px 4px 14px auto;
+  padding: 6px 4px;
+  background: none;
+  border: 0;
+  color: var(--gold-light);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+#transferModal .tf-note-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 4px 8px;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text);
+}
+#transferModal .tf-note-step textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  resize: none;
+  font-size: var(--fs-base);
+  line-height: 1.5;
+}
+[data-theme="light"] #transferModal .tf-change-link { color: #7A5812; }
+#transferConfirmModal .tf-confirm-sheet { padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+#transferConfirmModal .hb-actions .btn:disabled { opacity: 0.55; box-shadow: none; }
+
+/* ═══ My Mentees: smooth scrolling ═══
+   What was making the list glitch while scrolling:
+   - every .card is promoted to its own GPU layer (translateZ(0)) and the whole
+     page keeps will-change: transform, so long lists blow up layer memory and
+     tiles blank out / re-raster mid-scroll;
+   - :active scaled a card down the moment a finger landed on it to scroll, and
+     :hover lifted the card under the cursor as content moved past it, so
+     cards twitched during a scroll;
+   - the list was wiped to a skeleton and rebuilt on every visit (see app.js). */
+#page-my-mentees {
+  will-change: auto;
+  transform: none;
+  -webkit-transform: none;
+  backface-visibility: visible;
+  -webkit-backface-visibility: visible;
+}
+#page-my-mentees .page-content {
+  overscroll-behavior-y: contain;
+  scroll-behavior: auto;
+}
+#page-my-mentees .card,
+#page-my-mentees .mentee-card {
+  transform: none;
+  -webkit-transform: none;
+  will-change: auto;
+}
+#page-my-mentees .card:active,
+#page-my-mentees .mentee-card:active { transform: none; }
+#page-my-mentees .mentee-card { transition: box-shadow 0.2s ease, border-color 0.2s ease; }
+@media (hover: hover) {
+  #page-my-mentees .card:hover,
+  #page-my-mentees .mentee-card:hover,
+  #page-my-mentees .mentee-stats-hero:hover { transform: none; }
+}
+/* Fixed avatar box so a late-arriving photo can never shift the card height. */
+#menteesList .mentee-card-head .mentor-avatar { width: 44px; height: 44px; }

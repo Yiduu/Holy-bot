@@ -1,0 +1,392 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index c0952b2..8a3bbd5 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -215,6 +215,10 @@ const avatarInflight = new Map();
+ function renderAvatar(m, letter) {
+   const safeLetter = escapeHtml(letter || '?');
+   if (m?.photo_file_id) {
++    const cachedUrl = avatarUrlCache.get(`${m.telegram_id}:${m.photo_updated_at || ''}`);
++    if (cachedUrl) {
++      return `<div class="mentor-avatar has-photo avatar-loaded" data-avatar-tid="${m.telegram_id}" data-avatar-v="${m.photo_updated_at || ''}" onclick="viewAvatar(this)"><img alt="" src="${cachedUrl}" onerror="this.parentNode.classList.remove('avatar-loaded','has-photo');this.parentNode.textContent='${safeLetter}'"></div>`;
++    }
+     return `<div class="mentor-avatar has-photo" data-avatar-tid="${m.telegram_id}" data-avatar-v="${m.photo_updated_at || ''}" onclick="viewAvatar(this)">${safeLetter}</div>`;
+   }
+   return `<div class="mentor-avatar">${safeLetter}</div>`;
+@@ -6935,6 +6939,7 @@ let menteeSortMode = 'recent';
+ let _myMenteesCache = [];
+ let _myMenteesFollowupCache = {};
+ let _myMenteesStreakCache = {};
++let _myMenteesRenderedSig = '';
+ 
+ /**
+  * Single source of truth for a mentee's activity state — online / last-active
+@@ -7037,7 +7042,12 @@ async function loadMyMentees() {
+   const container = $('menteesList');
+   // The list is about to be replaced; make sure nothing typed is left unsaved.
+   await flushMentorNotes();
+-  container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
++  // Only show the skeleton when there is nothing on screen yet. Wiping a list that
++  // is already drawn and rebuilding it a moment later was the visible "blink".
++  const alreadyDrawn = !!container.querySelector('.mentee-card');
++  if (!alreadyDrawn) {
++    container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
++  }
+   try {
+     const [mentees, followup, streaks, notes] = await Promise.all([
+       apiFetch('/api/mentors/my-mentees'),
+@@ -7065,6 +7075,17 @@ async function loadMyMentees() {
+       return;
+     }
+ 
++    // Same data as what is already on screen: leave the DOM (and scroll position,
++    // open goal panels, half-typed notes) alone.
++    const signature = JSON.stringify([
++      currentLanguage,
++      _myMenteesCache.map(m => [m.id, m.user.telegram_id, m.user.last_active, m.user.photo_updated_at, m.user.user_settings?.display_name]),
++      _myMenteesFollowupCache,
++      _myMenteesStreakCache,
++    ]);
++    if (alreadyDrawn && signature === _myMenteesRenderedSig) return;
++    _myMenteesRenderedSig = signature;
++
+     renderMenteesList();
+   } catch (e) { showToast(e.message, 'error'); }
+ }
+@@ -7613,6 +7634,7 @@ let _transferQuery = '';
+ let _transferSelectedId = null;
+ let _transferLoadState = 'idle';   // 'loading' | 'ready' | 'error'
+ let _transferBusy = false;
++let _transferStep = 'pick';        // 'pick' (choose a mentor) | 'note' (optional note)
+ const TRANSFER_NOTE_MAX = 300;
+ 
+ const TRANSFER_ICON_STAR = '<svg class="tf-star" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+@@ -7644,9 +7666,8 @@ async function openTransferModal(assignmentId, menteeId, menteeName) {
+   const search = $('transferSearch'); if (search) search.value = '';
+   $('transferSearchClear') && ($('transferSearchClear').style.display = 'none');
+   const note = $('transferNote'); if (note) note.value = '';
+-  $('transferNoteBox')?.setAttribute('hidden', '');
+-  $('transferNoteToggle')?.setAttribute('aria-expanded', 'false');
+   onTransferNoteInput();
++  setTransferStep('pick');
+ 
+   renderTransferSheet();
+   $('transferModal').classList.add('open');
+@@ -7671,6 +7692,7 @@ async function openTransferModal(assignmentId, menteeId, menteeName) {
+ /** Closes the sheet and clears its state. Ignored while a transfer is being sent. */
+ function closeTransferModal() {
+   if (_transferBusy) return;
++  $('transferConfirmModal')?.classList.remove('open');
+   haptic('light');
+   $('transferModal')?.classList.remove('open');
+   _transferAssignmentId = null;
+@@ -7721,7 +7743,15 @@ function renderTransferSheet() {
+ 
+   // Subtitle
+   const sub = $('transferSubtitle');
+-  if (sub) sub.innerHTML = t('transfer_sub', { name: `<strong>${safeName}</strong>` });
++  if (sub) {
++    if (_transferStep === 'note') {
++      const picked = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
++      const mn = escapeHtml(picked ? (mentorNameOf(picked) || '') : '');
++      sub.innerHTML = t('transfer_note_step_sub', { name: `<strong>${mn}</strong>` });
++    } else {
++      sub.innerHTML = t('transfer_sub', { name: `<strong>${safeName}</strong>` });
++    }
++  }
+ 
+   // Mentee card
+   const card = $('transferMenteeCard');
+@@ -7838,6 +7868,13 @@ function updateTransferConfirm() {
+   // The picked mentor is already highlighted in the list, so the button stays short.
+   btn.disabled = _transferBusy || !m;
+   btn.textContent = _transferBusy ? t('transfer_sending') : t('btn_transfer');
++  const yes = $('transferConfirmYes');
++  if (yes) {
++    yes.disabled = _transferBusy;
++    yes.textContent = _transferBusy ? t('transfer_sending') : t('transfer_confirm_yes');
++  }
++  const no = $('transferConfirmNo');
++  if (no) no.disabled = _transferBusy;
+ }
+ 
+ function selectTransferMentor(id) {
+@@ -7893,15 +7930,66 @@ async function retryTransferLoad() {
+   await openTransferModal(id, mentee.id, mentee.name);
+ }
+ 
+-function toggleTransferNote() {
++/** Switches the sheet between "pick a mentor" and "add an optional note". */
++function setTransferStep(step) {
++  _transferStep = step === 'note' ? 'note' : 'pick';
++  const note = _transferStep === 'note';
++  $('transferNoteStep')?.toggleAttribute('hidden', !note);
++  document.querySelector('#transferModal .tf-scroll:not(.tf-note-step)')?.toggleAttribute('hidden', note);
++  if (note) {
++    const m = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
++    const name = m ? (mentorNameOf(m) || `Mentor ${m.telegram_id}`) : '';
++    const box = $('transferPickedMentor');
++    if (box && m) {
++      box.innerHTML = `${renderAvatar(m, name.charAt(0).toUpperCase())}
++        <span class="tf-picked-body"><span class="tf-picked-label">${escapeHtml(t('transfer_to'))}</span><span class="tf-picked-name">${escapeHtml(name)}</span></span>`;
++      hydrateAvatars(box);
++    }
++  }
++  renderTransferSheet();
++}
++
++function backToTransferPick() {
++  if (_transferBusy) return;
++  haptic('light');
++  setTransferStep('pick');
++}
++
++/** The sheet's main button: step 1 moves on to the note, step 2 asks for confirmation. */
++function onTransferPrimary() {
++  if (_transferBusy) return;
++  if (!_transferSelectedId) {
++    haptic('error');
++    showToast(t('transfer_pick_first'), 'error');
++    return;
++  }
+   haptic('light');
+-  const box = $('transferNoteBox');
+-  const btn = $('transferNoteToggle');
+-  if (!box || !btn) return;
+-  const open = box.hasAttribute('hidden');
+-  if (open) box.removeAttribute('hidden'); else box.setAttribute('hidden', '');
+-  btn.setAttribute('aria-expanded', String(open));
+-  if (open) $('transferNote')?.focus();
++  if (_transferStep === 'pick') {
++    setTransferStep('note');
++    // Let the step swap paint first so the keyboard doesn't fight the sheet animation.
++    setTimeout(() => $('transferNote')?.focus({ preventScroll: true }), 120);
++    return;
++  }
++  openTransferConfirm();
++}
++
++function openTransferConfirm() {
++  const m = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
++  if (!m || !_transferMentee) return;
++  const body = $('transferConfirmBody');
++  if (body) {
++    body.innerHTML = t('transfer_confirm_body', {
++      mentee: `<strong>${escapeHtml(_transferMentee.name || '')}</strong>`,
++      mentor: `<strong>${escapeHtml(mentorNameOf(m) || '')}</strong>`,
++    });
++  }
++  updateTransferConfirm();
++  $('transferConfirmModal')?.classList.add('open');
++}
++
++function closeTransferConfirm() {
++  if (_transferBusy) return;
++  $('transferConfirmModal')?.classList.remove('open');
+ }
+ 
+ function onTransferNoteInput() {
+@@ -7949,12 +8037,13 @@ async function confirmTransfer() {
+     _transferBusy = false;
+     haptic('success');
+     showToast(t('transfer_success'), 'success');
+-    closeTransferModal();
++    closeTransferModal();   // also closes the confirmation dialog
+     loadMyMentees(); // Refresh the My Mentees list
+   } catch (e) {
+     _transferBusy = false;
+     $('transferMentorList')?.classList.remove('is-busy');
+     updateTransferConfirm();
++    $('transferConfirmModal')?.classList.remove('open');
+     haptic('error');
+     showToast(e.message, 'error');
+   }
+diff --git a/frontend/index.html b/frontend/index.html
+index ecc3ce8..867998c 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -2387,27 +2387,44 @@
+ 
+         <!-- Mentor cards -->
+         <nav id="transferMentorList" class="profile-menu-list rt-list tf-list" role="radiogroup" aria-label="Mentors"></nav>
++      </div>
+ 
+-        <!-- Optional hand-over note for the new mentor -->
+-        <div class="tf-note">
+-          <button id="transferNoteToggle" type="button" class="tf-note-toggle" onclick="toggleTransferNote()" aria-expanded="false" aria-controls="transferNoteBox">
+-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+-            <span data-i18n="transfer_note_toggle">Add a note for the new mentor</span>
+-            <span class="tf-note-opt" data-i18n="transfer_optional">Optional</span>
+-          </button>
+-          <div id="transferNoteBox" class="tf-note-box" hidden>
+-            <textarea id="transferNote" class="form-control" rows="3" maxlength="300" data-i18n="transfer_note_placeholder" placeholder="Anything that will help them support this mentee…" oninput="onTransferNoteInput()"></textarea>
+-            <div class="tf-note-foot">
+-              <span data-i18n="transfer_note_hint">Only the new mentor sees this.</span>
+-              <span id="transferNoteCount">0/300</span>
+-            </div>
+-          </div>
++      <!-- Step 2: optional hand-over note (shown after the mentor is picked and Transfer is tapped) -->
++      <div id="transferNoteStep" class="tf-scroll tf-note-step" hidden>
++        <div id="transferPickedMentor" class="tf-picked"></div>
++        <button type="button" class="tf-change-link" onclick="backToTransferPick()" data-i18n="transfer_change_mentor">Change mentor</button>
++        <label class="tf-note-label" for="transferNote">
++          <span data-i18n="transfer_note_toggle">Add a note for the new mentor</span>
++          <span class="tf-note-opt" data-i18n="transfer_optional">Optional</span>
++        </label>
++        <textarea id="transferNote" class="form-control" rows="4" maxlength="300" data-i18n="transfer_note_placeholder" placeholder="Anything that will help them support this mentee…" oninput="onTransferNoteInput()"></textarea>
++        <div class="tf-note-foot">
++          <span data-i18n="transfer_note_hint">Only the new mentor sees this.</span>
++          <span id="transferNoteCount">0/300</span>
+         </div>
+       </div>
+ 
+       <div class="hb-actions tf-actions">
+         <button type="button" class="btn btn-outline" onclick="closeTransferModal()" data-i18n="btn_cancel">Cancel</button>
+-        <button type="button" id="transferConfirmBtn" class="btn btn-primary" onclick="confirmTransfer()" disabled>Transfer</button>
++        <button type="button" id="transferConfirmBtn" class="btn btn-primary" onclick="onTransferPrimary()" disabled>Transfer</button>
++      </div>
++    </div>
++  </div>
++
++  <!-- ── Modal: Confirm Transfer ───────────────────────────── -->
++  <div id="transferConfirmModal" class="modal-overlay" onclick="if(event.target===this)closeTransferConfirm()">
++    <div class="modal-sheet tf-confirm-sheet" role="alertdialog" aria-modal="true" aria-labelledby="transferConfirmTitle" aria-describedby="transferConfirmBody">
++      <div class="modal-handle"></div>
++      <div class="hb-confirm">
++        <div class="hb-icon">
++          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v14"/><path d="M3 7l4-4 4 4"/><path d="M17 21V7"/><path d="M21 17l-4 4-4-4"/></svg>
++        </div>
++        <div id="transferConfirmTitle" class="modal-title" style="text-align:center" data-i18n="transfer_confirm_title">Are you sure you want to transfer this mentee?</div>
++        <p id="transferConfirmBody" class="hb-text"></p>
++        <div class="hb-actions">
++          <button type="button" id="transferConfirmNo" class="btn btn-outline" onclick="closeTransferConfirm()" data-i18n="btn_cancel">Cancel</button>
++          <button type="button" id="transferConfirmYes" class="btn btn-primary" onclick="confirmTransfer()" data-i18n="transfer_confirm_yes">Yes, transfer</button>
++        </div>
+       </div>
+     </div>
+   </div>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 42f8211..688f8fa 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -52,6 +52,12 @@ const I18N = {
+     "transfer_optional": "Optional",
+     "transfer_note_placeholder": "Anything that will help them support this mentee…",
+     "transfer_note_hint": "Only the new mentor sees this.",
++    "transfer_note_step_sub": "Anything {name} should know about this mentee? You can skip this.",
++    "transfer_to": "Transferring to",
++    "transfer_change_mentor": "Change mentor",
++    "transfer_confirm_title": "Are you sure you want to transfer this mentee?",
++    "transfer_confirm_body": "{mentee} will be handed over to {mentor}.",
++    "transfer_confirm_yes": "Yes, transfer",
+     "transfer_sending": "Transferring…",
+     "transfer_pick_first": "Please choose a mentor first.",
+     "transfer_failed_missing": "Transfer failed: missing assignment.",
+@@ -786,6 +792,12 @@ const I18N = {
+     "transfer_optional": "አማራጭ",
+     "transfer_note_placeholder": "ተመካሪውን ለመርዳት የሚጠቅም ማንኛውም መረጃ…",
+     "transfer_note_hint": "አዲሱ አማካሪ ብቻ ያየዋል።",
++    "transfer_note_step_sub": "{name} ስለዚህ ተመካሪ ማወቅ ያለበት ነገር አለ? ይህን መዝለል ይችላሉ።",
++    "transfer_to": "የሚተላለፈው ወደ",
++    "transfer_change_mentor": "አማካሪ ቀይር",
++    "transfer_confirm_title": "ይህን ተመካሪ ማስተላለፍ እርግጠኛ ነዎት?",
++    "transfer_confirm_body": "{mentee} ለ{mentor} ይተላለፋል።",
++    "transfer_confirm_yes": "አዎ፣ አስተላልፍ",
+     "transfer_sending": "በማስተላለፍ ላይ…",
+     "transfer_pick_first": "እባክዎ መጀመሪያ አማካሪ ይምረጡ።",
+     "transfer_failed_missing": "ማስተላለፍ አልተሳካም፦ የምደባ መለያ የለም።",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 7c9163b..990663c 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -12578,3 +12578,90 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+ /* The global input:focus ring would draw a second box inside the search pill */
+ #transferModal .mentor-search-input:focus { box-shadow: none; border: none; }
+ #transferModal .tf-state-chip { max-width: 38%; text-align: center; line-height: 1.25; }
++
++
++/* ═══ Transfer Mentee: note step + confirmation ═══ */
++#transferModal .tf-scroll[hidden] { display: none; }
++#transferModal .tf-picked {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  padding: 12px 14px;
++  border-radius: 22px;
++  border: 1px solid rgba(201, 168, 76, 0.3);
++  background: rgba(201, 168, 76, 0.08);
++}
++#transferModal .tf-picked .mentor-avatar { width: 48px; height: 48px; min-width: 48px; min-height: 48px; }
++#transferModal .tf-picked-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
++#transferModal .tf-picked-label { font-size: var(--fs-xs); font-weight: 600; color: var(--text3); }
++#transferModal .tf-picked-name { font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
++#transferModal .tf-change-link {
++  display: block;
++  margin: 8px 4px 14px auto;
++  padding: 6px 4px;
++  background: none;
++  border: 0;
++  color: var(--gold-light);
++  font-family: var(--font-body);
++  font-size: var(--fs-sm);
++  font-weight: 700;
++  cursor: pointer;
++}
++#transferModal .tf-note-label {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  margin: 0 4px 8px;
++  font-size: var(--fs-sm);
++  font-weight: 700;
++  color: var(--text);
++}
++#transferModal .tf-note-step textarea {
++  width: 100%;
++  min-height: 110px;
++  padding: 14px 16px;
++  border-radius: 18px;
++  resize: none;
++  font-size: var(--fs-base);
++  line-height: 1.5;
++}
++[data-theme="light"] #transferModal .tf-change-link { color: #7A5812; }
++#transferConfirmModal .tf-confirm-sheet { padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
++#transferConfirmModal .hb-actions .btn:disabled { opacity: 0.55; box-shadow: none; }
++
++/* ═══ My Mentees: smooth scrolling ═══
++   What was making the list glitch while scrolling:
++   - every .card is promoted to its own GPU layer (translateZ(0)) and the whole
++     page keeps will-change: transform, so long lists blow up layer memory and
++     tiles blank out / re-raster mid-scroll;
++   - :active scaled a card down the moment a finger landed on it to scroll, and
++     :hover lifted the card under the cursor as content moved past it, so
++     cards twitched during a scroll;
++   - the list was wiped to a skeleton and rebuilt on every visit (see app.js). */
++#page-my-mentees {
++  will-change: auto;
++  transform: none;
++  -webkit-transform: none;
++  backface-visibility: visible;
++  -webkit-backface-visibility: visible;
++}
++#page-my-mentees .page-content {
++  overscroll-behavior-y: contain;
++  scroll-behavior: auto;
++}
++#page-my-mentees .card,
++#page-my-mentees .mentee-card {
++  transform: none;
++  -webkit-transform: none;
++  will-change: auto;
++}
++#page-my-mentees .card:active,
++#page-my-mentees .mentee-card:active { transform: none; }
++#page-my-mentees .mentee-card { transition: box-shadow 0.2s ease, border-color 0.2s ease; }
++@media (hover: hover) {
++  #page-my-mentees .card:hover,
++  #page-my-mentees .mentee-card:hover,
++  #page-my-mentees .mentee-stats-hero:hover { transform: none; }
++}
++/* Fixed avatar box so a late-arriving photo can never shift the card height. */
++#menteesList .mentee-card-head .mentor-avatar { width: 44px; height: 44px; }

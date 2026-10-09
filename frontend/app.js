@@ -215,6 +215,10 @@ const avatarInflight = new Map();
 function renderAvatar(m, letter) {
   const safeLetter = escapeHtml(letter || '?');
   if (m?.photo_file_id) {
+    const cachedUrl = avatarUrlCache.get(`${m.telegram_id}:${m.photo_updated_at || ''}`);
+    if (cachedUrl) {
+      return `<div class="mentor-avatar has-photo avatar-loaded" data-avatar-tid="${m.telegram_id}" data-avatar-v="${m.photo_updated_at || ''}" onclick="viewAvatar(this)"><img alt="" src="${cachedUrl}" onerror="this.parentNode.classList.remove('avatar-loaded','has-photo');this.parentNode.textContent='${safeLetter}'"></div>`;
+    }
     return `<div class="mentor-avatar has-photo" data-avatar-tid="${m.telegram_id}" data-avatar-v="${m.photo_updated_at || ''}" onclick="viewAvatar(this)">${safeLetter}</div>`;
   }
   return `<div class="mentor-avatar">${safeLetter}</div>`;
@@ -6935,6 +6939,7 @@ let menteeSortMode = 'recent';
 let _myMenteesCache = [];
 let _myMenteesFollowupCache = {};
 let _myMenteesStreakCache = {};
+let _myMenteesRenderedSig = '';
 
 /**
  * Single source of truth for a mentee's activity state — online / last-active
@@ -7037,7 +7042,12 @@ async function loadMyMentees() {
   const container = $('menteesList');
   // The list is about to be replaced; make sure nothing typed is left unsaved.
   await flushMentorNotes();
-  container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
+  // Only show the skeleton when there is nothing on screen yet. Wiping a list that
+  // is already drawn and rebuilding it a moment later was the visible "blink".
+  const alreadyDrawn = !!container.querySelector('.mentee-card');
+  if (!alreadyDrawn) {
+    container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
+  }
   try {
     const [mentees, followup, streaks, notes] = await Promise.all([
       apiFetch('/api/mentors/my-mentees'),
@@ -7064,6 +7074,17 @@ async function loadMyMentees() {
       container.innerHTML = `<div class="empty-state"><span>${t('no_active_mentees_yet')}</span></div>`;
       return;
     }
+
+    // Same data as what is already on screen: leave the DOM (and scroll position,
+    // open goal panels, half-typed notes) alone.
+    const signature = JSON.stringify([
+      currentLanguage,
+      _myMenteesCache.map(m => [m.id, m.user.telegram_id, m.user.last_active, m.user.photo_updated_at, m.user.user_settings?.display_name]),
+      _myMenteesFollowupCache,
+      _myMenteesStreakCache,
+    ]);
+    if (alreadyDrawn && signature === _myMenteesRenderedSig) return;
+    _myMenteesRenderedSig = signature;
 
     renderMenteesList();
   } catch (e) { showToast(e.message, 'error'); }
@@ -7613,6 +7634,7 @@ let _transferQuery = '';
 let _transferSelectedId = null;
 let _transferLoadState = 'idle';   // 'loading' | 'ready' | 'error'
 let _transferBusy = false;
+let _transferStep = 'pick';        // 'pick' (choose a mentor) | 'note' (optional note)
 const TRANSFER_NOTE_MAX = 300;
 
 const TRANSFER_ICON_STAR = '<svg class="tf-star" viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
@@ -7644,9 +7666,8 @@ async function openTransferModal(assignmentId, menteeId, menteeName) {
   const search = $('transferSearch'); if (search) search.value = '';
   $('transferSearchClear') && ($('transferSearchClear').style.display = 'none');
   const note = $('transferNote'); if (note) note.value = '';
-  $('transferNoteBox')?.setAttribute('hidden', '');
-  $('transferNoteToggle')?.setAttribute('aria-expanded', 'false');
   onTransferNoteInput();
+  setTransferStep('pick');
 
   renderTransferSheet();
   $('transferModal').classList.add('open');
@@ -7671,6 +7692,7 @@ async function openTransferModal(assignmentId, menteeId, menteeName) {
 /** Closes the sheet and clears its state. Ignored while a transfer is being sent. */
 function closeTransferModal() {
   if (_transferBusy) return;
+  $('transferConfirmModal')?.classList.remove('open');
   haptic('light');
   $('transferModal')?.classList.remove('open');
   _transferAssignmentId = null;
@@ -7721,7 +7743,15 @@ function renderTransferSheet() {
 
   // Subtitle
   const sub = $('transferSubtitle');
-  if (sub) sub.innerHTML = t('transfer_sub', { name: `<strong>${safeName}</strong>` });
+  if (sub) {
+    if (_transferStep === 'note') {
+      const picked = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
+      const mn = escapeHtml(picked ? (mentorNameOf(picked) || '') : '');
+      sub.innerHTML = t('transfer_note_step_sub', { name: `<strong>${mn}</strong>` });
+    } else {
+      sub.innerHTML = t('transfer_sub', { name: `<strong>${safeName}</strong>` });
+    }
+  }
 
   // Mentee card
   const card = $('transferMenteeCard');
@@ -7838,6 +7868,13 @@ function updateTransferConfirm() {
   // The picked mentor is already highlighted in the list, so the button stays short.
   btn.disabled = _transferBusy || !m;
   btn.textContent = _transferBusy ? t('transfer_sending') : t('btn_transfer');
+  const yes = $('transferConfirmYes');
+  if (yes) {
+    yes.disabled = _transferBusy;
+    yes.textContent = _transferBusy ? t('transfer_sending') : t('transfer_confirm_yes');
+  }
+  const no = $('transferConfirmNo');
+  if (no) no.disabled = _transferBusy;
 }
 
 function selectTransferMentor(id) {
@@ -7893,15 +7930,66 @@ async function retryTransferLoad() {
   await openTransferModal(id, mentee.id, mentee.name);
 }
 
-function toggleTransferNote() {
+/** Switches the sheet between "pick a mentor" and "add an optional note". */
+function setTransferStep(step) {
+  _transferStep = step === 'note' ? 'note' : 'pick';
+  const note = _transferStep === 'note';
+  $('transferNoteStep')?.toggleAttribute('hidden', !note);
+  document.querySelector('#transferModal .tf-scroll:not(.tf-note-step)')?.toggleAttribute('hidden', note);
+  if (note) {
+    const m = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
+    const name = m ? (mentorNameOf(m) || `Mentor ${m.telegram_id}`) : '';
+    const box = $('transferPickedMentor');
+    if (box && m) {
+      box.innerHTML = `${renderAvatar(m, name.charAt(0).toUpperCase())}
+        <span class="tf-picked-body"><span class="tf-picked-label">${escapeHtml(t('transfer_to'))}</span><span class="tf-picked-name">${escapeHtml(name)}</span></span>`;
+      hydrateAvatars(box);
+    }
+  }
+  renderTransferSheet();
+}
+
+function backToTransferPick() {
+  if (_transferBusy) return;
   haptic('light');
-  const box = $('transferNoteBox');
-  const btn = $('transferNoteToggle');
-  if (!box || !btn) return;
-  const open = box.hasAttribute('hidden');
-  if (open) box.removeAttribute('hidden'); else box.setAttribute('hidden', '');
-  btn.setAttribute('aria-expanded', String(open));
-  if (open) $('transferNote')?.focus();
+  setTransferStep('pick');
+}
+
+/** The sheet's main button: step 1 moves on to the note, step 2 asks for confirmation. */
+function onTransferPrimary() {
+  if (_transferBusy) return;
+  if (!_transferSelectedId) {
+    haptic('error');
+    showToast(t('transfer_pick_first'), 'error');
+    return;
+  }
+  haptic('light');
+  if (_transferStep === 'pick') {
+    setTransferStep('note');
+    // Let the step swap paint first so the keyboard doesn't fight the sheet animation.
+    setTimeout(() => $('transferNote')?.focus({ preventScroll: true }), 120);
+    return;
+  }
+  openTransferConfirm();
+}
+
+function openTransferConfirm() {
+  const m = _transferMentors.find(x => String(x.telegram_id) === String(_transferSelectedId));
+  if (!m || !_transferMentee) return;
+  const body = $('transferConfirmBody');
+  if (body) {
+    body.innerHTML = t('transfer_confirm_body', {
+      mentee: `<strong>${escapeHtml(_transferMentee.name || '')}</strong>`,
+      mentor: `<strong>${escapeHtml(mentorNameOf(m) || '')}</strong>`,
+    });
+  }
+  updateTransferConfirm();
+  $('transferConfirmModal')?.classList.add('open');
+}
+
+function closeTransferConfirm() {
+  if (_transferBusy) return;
+  $('transferConfirmModal')?.classList.remove('open');
 }
 
 function onTransferNoteInput() {
@@ -7949,12 +8037,13 @@ async function confirmTransfer() {
     _transferBusy = false;
     haptic('success');
     showToast(t('transfer_success'), 'success');
-    closeTransferModal();
+    closeTransferModal();   // also closes the confirmation dialog
     loadMyMentees(); // Refresh the My Mentees list
   } catch (e) {
     _transferBusy = false;
     $('transferMentorList')?.classList.remove('is-busy');
     updateTransferConfirm();
+    $('transferConfirmModal')?.classList.remove('open');
     haptic('error');
     showToast(e.message, 'error');
   }

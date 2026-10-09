@@ -2387,27 +2387,44 @@
 
         <!-- Mentor cards -->
         <nav id="transferMentorList" class="profile-menu-list rt-list tf-list" role="radiogroup" aria-label="Mentors"></nav>
+      </div>
 
-        <!-- Optional hand-over note for the new mentor -->
-        <div class="tf-note">
-          <button id="transferNoteToggle" type="button" class="tf-note-toggle" onclick="toggleTransferNote()" aria-expanded="false" aria-controls="transferNoteBox">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            <span data-i18n="transfer_note_toggle">Add a note for the new mentor</span>
-            <span class="tf-note-opt" data-i18n="transfer_optional">Optional</span>
-          </button>
-          <div id="transferNoteBox" class="tf-note-box" hidden>
-            <textarea id="transferNote" class="form-control" rows="3" maxlength="300" data-i18n="transfer_note_placeholder" placeholder="Anything that will help them support this mentee…" oninput="onTransferNoteInput()"></textarea>
-            <div class="tf-note-foot">
-              <span data-i18n="transfer_note_hint">Only the new mentor sees this.</span>
-              <span id="transferNoteCount">0/300</span>
-            </div>
-          </div>
+      <!-- Step 2: optional hand-over note (shown after the mentor is picked and Transfer is tapped) -->
+      <div id="transferNoteStep" class="tf-scroll tf-note-step" hidden>
+        <div id="transferPickedMentor" class="tf-picked"></div>
+        <button type="button" class="tf-change-link" onclick="backToTransferPick()" data-i18n="transfer_change_mentor">Change mentor</button>
+        <label class="tf-note-label" for="transferNote">
+          <span data-i18n="transfer_note_toggle">Add a note for the new mentor</span>
+          <span class="tf-note-opt" data-i18n="transfer_optional">Optional</span>
+        </label>
+        <textarea id="transferNote" class="form-control" rows="4" maxlength="300" data-i18n="transfer_note_placeholder" placeholder="Anything that will help them support this mentee…" oninput="onTransferNoteInput()"></textarea>
+        <div class="tf-note-foot">
+          <span data-i18n="transfer_note_hint">Only the new mentor sees this.</span>
+          <span id="transferNoteCount">0/300</span>
         </div>
       </div>
 
       <div class="hb-actions tf-actions">
         <button type="button" class="btn btn-outline" onclick="closeTransferModal()" data-i18n="btn_cancel">Cancel</button>
-        <button type="button" id="transferConfirmBtn" class="btn btn-primary" onclick="confirmTransfer()" disabled>Transfer</button>
+        <button type="button" id="transferConfirmBtn" class="btn btn-primary" onclick="onTransferPrimary()" disabled>Transfer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: Confirm Transfer ───────────────────────────── -->
+  <div id="transferConfirmModal" class="modal-overlay" onclick="if(event.target===this)closeTransferConfirm()">
+    <div class="modal-sheet tf-confirm-sheet" role="alertdialog" aria-modal="true" aria-labelledby="transferConfirmTitle" aria-describedby="transferConfirmBody">
+      <div class="modal-handle"></div>
+      <div class="hb-confirm">
+        <div class="hb-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v14"/><path d="M3 7l4-4 4 4"/><path d="M17 21V7"/><path d="M21 17l-4 4-4-4"/></svg>
+        </div>
+        <div id="transferConfirmTitle" class="modal-title" style="text-align:center" data-i18n="transfer_confirm_title">Are you sure you want to transfer this mentee?</div>
+        <p id="transferConfirmBody" class="hb-text"></p>
+        <div class="hb-actions">
+          <button type="button" id="transferConfirmNo" class="btn btn-outline" onclick="closeTransferConfirm()" data-i18n="btn_cancel">Cancel</button>
+          <button type="button" id="transferConfirmYes" class="btn btn-primary" onclick="confirmTransfer()" data-i18n="transfer_confirm_yes">Yes, transfer</button>
+        </div>
       </div>
     </div>
   </div>
