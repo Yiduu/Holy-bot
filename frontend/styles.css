@@ -12768,10 +12768,10 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-  border: 1px solid var(--border-dim);
-  border-radius: 20px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 26px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   transition: height 0.32s ease, opacity 0.22s ease, margin-top 0.32s ease,
               padding 0.32s ease, border-color 0.2s ease, filter 0.2s ease;
 }
@@ -12861,51 +12861,77 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
   color: var(--gold-light);
 }
 
-.req-quote-label { margin-bottom: -6px; font-size: var(--fs-xs); font-weight: 700; color: var(--text3); }
-.req-quote {
-  margin: 0;
-  padding: 11px 14px;
-  border-left: 3px solid var(--gold);
-  border-radius: 4px 14px 14px 4px;
-  background: rgba(201, 168, 76, 0.06);
-  color: var(--text2);
-  font-size: var(--fs-sm);
+/* Mentee note / referral note: same info row as the mentor profile cards
+   (gold icon tile + small gold label + plain text). No quote block, no quote bar. */
+.req-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.req-note-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: rgba(201, 168, 76, 0.13);
+  color: var(--gold-light);
+  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.22);
+}
+.req-note-icon svg { width: 18px; height: 18px; }
+.req-note-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 1px; }
+.req-note-label {
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+}
+.req-note-text {
+  font-size: var(--fs-md);
+  font-weight: 500;
   line-height: 1.55;
+  color: var(--text);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
-.req-actions { display: flex; gap: 10px; margin-top: 2px; }
+/* Buttons = the big pill buttons used on the mentor profile (Accept gold, Reject red outline) */
+.req-actions { display: flex; gap: 10px; margin-top: 4px; }
 .req-btn {
   flex: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 48px;
-  padding: 0 14px;
-  border-radius: 16px;
-  border: 1px solid transparent;
+  min-height: 52px;
+  padding: 0 16px;
+  border-radius: 999px;
   font-family: var(--font-body);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-md);
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: opacity 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 .req-btn svg { width: 18px; height: 18px; flex: none; }
 .req-btn-accept {
-  flex: 1.4;
-  background: linear-gradient(135deg, var(--gold-light), var(--gold) 65%, #A87C2A);
-  color: #20180a;
-  box-shadow: 0 8px 20px rgba(201, 168, 76, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  flex: 1.3;
+  box-shadow: 0 8px 22px rgba(201, 168, 76, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
 .req-btn-decline {
-  background: rgba(224, 92, 92, 0.08);
-  border-color: rgba(224, 92, 92, 0.38);
+  background: transparent;
+  border: 1px solid rgba(224, 92, 92, 0.55);
   color: var(--danger);
 }
-.req-btn:active { opacity: 0.8; }
+.req-btn:active { opacity: 0.8; transform: none; }
 .req-btn.is-loading { pointer-events: none; opacity: 0.75; }
 .req-btn.is-loading svg {
   border: 2px solid currentColor;
@@ -12942,7 +12968,15 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
 .req-decline-icon { background: rgba(224, 92, 92, 0.12); color: var(--danger); border-color: rgba(224, 92, 92, 0.35); }
 #requestDeclineModal { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0, 0, 0, 0.72); }
 
-[data-theme="light"] .req-card { background: #fff; box-shadow: 0 4px 16px rgba(60, 44, 10, 0.08); }
+[data-theme="light"] .req-card {
+  background: linear-gradient(160deg, #fff, #f6f3ea);
+  border-color: rgba(150, 120, 40, 0.2);
+  box-shadow: 0 8px 20px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff;
+}
+[data-theme="light"] .req-card-referral { border-color: rgba(150, 120, 40, 0.35); }
+[data-theme="light"] .req-note { background: rgba(255, 255, 255, 0.7); border-color: rgba(150, 120, 40, 0.2); }
+[data-theme="light"] .req-note-icon { background: rgba(201, 168, 76, 0.16); color: #7A5812; box-shadow: inset 0 0 0 1px rgba(150, 120, 40, 0.25); }
+[data-theme="light"] .req-note-label { color: #7A5812; }
 [data-theme="light"] .req-tab.active,
 [data-theme="light"] .req-ribbon,
 [data-theme="light"] .req-chip-topic { color: #7A5812; }

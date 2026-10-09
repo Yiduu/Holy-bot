@@ -1,0 +1,236 @@
+From 910aeee2418aa5e645a0fc89325e58b77ae82a69 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 9 Oct 2026 20:50:29 +0300
+Subject: [PATCH] Restyle Requests page to match profile pages; Accept before
+ Reject; plain mentee note
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XcPSMfd6PZqnGVy6tWR87V
+---
+ frontend/app.js     | 24 ++++++++++---
+ frontend/locales.js |  2 ++
+ frontend/styles.css | 88 +++++++++++++++++++++++++++++++--------------
+ 3 files changed, 82 insertions(+), 32 deletions(-)
+
+diff --git a/frontend/app.js b/frontend/app.js
+index 1911169..fdb8059 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -4303,7 +4303,8 @@ let _declineTarget = null;
+ 
+ const REQ_ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+ const REQ_ICON_X = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+-const REQ_ICON_SWAP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v14"/><path d="m3 7 4-4 4 4"/><path d="M17 21V7"/><path d="m21 17-4 4-4-4"/></svg>';
++const REQ_ICON_NOTE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
++const REQ_ICON_SWAP ='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3v14"/><path d="m3 7 4-4 4 4"/><path d="M17 21V7"/><path d="m21 17-4 4-4-4"/></svg>';
+ 
+ function reqPersonName(u) {
+   return u?.user_settings?.display_name || u?.anonymous_id || 'Anonymous';
+@@ -4318,6 +4319,19 @@ function reqChips(u, topic) {
+   return chips.length ? `<div class="req-chips">${chips.join('')}</div>` : '';
+ }
+ 
++// Mentee note / referral note: plain text in a profile-style info row (icon tile + label),
++// no quotation block, no quote bar.
++function reqNoteHTML(label, text) {
++  return `
++      <div class="req-note">
++        <span class="req-note-icon" aria-hidden="true">${REQ_ICON_NOTE}</span>
++        <div class="req-note-body">
++          <div class="req-note-label">${escapeHtml(label)}</div>
++          <div class="req-note-text">${escapeHtml(text)}</div>
++        </div>
++      </div>`;
++}
++
+ function renderRequestCard(r) {
+   const name = reqPersonName(r.user);
+   const topic = topicLabel(r.topic) || '';
+@@ -4333,7 +4347,7 @@ function renderRequestCard(r) {
+         <span class="req-pill">${escapeHtml(t('req_new'))}</span>
+       </div>
+       ${reqChips(r.user, topic)}
+-      ${msg ? `<blockquote class="req-quote">${escapeHtml(msg)}</blockquote>` : ''}
++      ${msg ? reqNoteHTML(t('req_message_label'), msg) : ''}
+       ${renderRequestActions('request', r.id)}
+     </article>`;
+ }
+@@ -4353,7 +4367,7 @@ function renderReferralCard(r) {
+         </div>
+       </div>
+       ${reqChips(r.mentee, '')}
+-      ${note ? `<div class="req-quote-label">${escapeHtml(t('req_note_from', { name: from }))}</div><blockquote class="req-quote">${escapeHtml(note)}</blockquote>` : ''}
++      ${note ? reqNoteHTML(t('req_note_from', { name: from }), note) : ''}
+       ${renderRequestActions('referral', r.id)}
+     </article>`;
+ }
+@@ -4361,8 +4375,8 @@ function renderReferralCard(r) {
+ function renderRequestActions(kind, id) {
+   return `
+       <div class="req-actions">
+-        <button type="button" class="req-btn req-btn-decline" onclick="askRequestDecline('${kind}', '${id}')">${REQ_ICON_X}<span>${escapeHtml(t('btn_reject'))}</span></button>
+-        <button type="button" class="req-btn req-btn-accept" onclick="answerRequest('${kind}', '${id}', 'accepted', this)">${REQ_ICON_CHECK}<span>${escapeHtml(t('btn_accept'))}</span></button>
++        <button type="button" class="btn btn-primary req-btn req-btn-accept" onclick="answerRequest('${kind}', '${id}', 'accepted', this)">${REQ_ICON_CHECK}<span>${escapeHtml(t('btn_accept'))}</span></button>
++        <button type="button" class="btn btn-danger req-btn req-btn-decline" onclick="askRequestDecline('${kind}', '${id}')">${REQ_ICON_X}<span>${escapeHtml(t('btn_reject'))}</span></button>
+       </div>`;
+ }
+ 
+diff --git a/frontend/locales.js b/frontend/locales.js
+index e605ece..4975c3f 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -421,6 +421,7 @@ const I18N = {
+     "req_new": "New",
+     "req_referred_by": "Referred by {name}",
+     "req_note_from": "Note from {name}",
++    "req_message_label": "Message",
+     "req_empty_referred": "No referred mentees",
+     "req_empty_referred_sub": "When another mentor refers a mentee to you, they will appear here.",
+     "req_empty_mentee_sub": "New mentorship requests will appear here.",
+@@ -781,6 +782,7 @@ const I18N = {
+     "req_new": "አዲስ",
+     "req_referred_by": "በ{name} የተላከ",
+     "req_note_from": "ከ{name} የተላከ ማስታወሻ",
++    "req_message_label": "መልእክት",
+     "req_empty_referred": "የተላኩ ተመካሪዎች የሉም",
+     "req_empty_referred_sub": "ሌላ አማካሪ ተመካሪ ሲልክልዎ እዚህ ይታያል።",
+     "req_empty_mentee_sub": "አዲስ የምክር ጥያቄዎች እዚህ ይታያሉ።",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 8ed13a2..a9865a4 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -12768,10 +12768,10 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+   flex-direction: column;
+   gap: 12px;
+   padding: 16px;
+-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+-  border: 1px solid var(--border-dim);
+-  border-radius: 20px;
+-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
++  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
++  border: 1px solid rgba(255, 255, 255, 0.07);
++  border-radius: 26px;
++  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+   transition: height 0.32s ease, opacity 0.22s ease, margin-top 0.32s ease,
+               padding 0.32s ease, border-color 0.2s ease, filter 0.2s ease;
+ }
+@@ -12861,51 +12861,77 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+   color: var(--gold-light);
+ }
+ 
+-.req-quote-label { margin-bottom: -6px; font-size: var(--fs-xs); font-weight: 700; color: var(--text3); }
+-.req-quote {
+-  margin: 0;
+-  padding: 11px 14px;
+-  border-left: 3px solid var(--gold);
+-  border-radius: 4px 14px 14px 4px;
+-  background: rgba(201, 168, 76, 0.06);
+-  color: var(--text2);
+-  font-size: var(--fs-sm);
++/* Mentee note / referral note: same info row as the mentor profile cards
++   (gold icon tile + small gold label + plain text). No quote block, no quote bar. */
++.req-note {
++  display: flex;
++  align-items: flex-start;
++  gap: 12px;
++  padding: 12px 14px;
++  border: 1px solid rgba(255, 255, 255, 0.07);
++  border-radius: 20px;
++  background: rgba(255, 255, 255, 0.03);
++}
++.req-note-icon {
++  flex: none;
++  width: 38px;
++  height: 38px;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  border-radius: 13px;
++  background: rgba(201, 168, 76, 0.13);
++  color: var(--gold-light);
++  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.22);
++}
++.req-note-icon svg { width: 18px; height: 18px; }
++.req-note-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 1px; }
++.req-note-label {
++  font-size: var(--fs-2xs);
++  font-weight: 700;
++  letter-spacing: 0.16em;
++  text-transform: uppercase;
++  color: var(--gold-light);
++}
++.req-note-text {
++  font-size: var(--fs-md);
++  font-weight: 500;
+   line-height: 1.55;
++  color: var(--text);
+   overflow-wrap: anywhere;
+   white-space: pre-wrap;
+ }
+ 
+-.req-actions { display: flex; gap: 10px; margin-top: 2px; }
++/* Buttons = the big pill buttons used on the mentor profile (Accept gold, Reject red outline) */
++.req-actions { display: flex; gap: 10px; margin-top: 4px; }
+ .req-btn {
+   flex: 1;
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   gap: 8px;
+-  min-height: 48px;
+-  padding: 0 14px;
+-  border-radius: 16px;
+-  border: 1px solid transparent;
++  min-height: 52px;
++  padding: 0 16px;
++  border-radius: 999px;
+   font-family: var(--font-body);
+-  font-size: var(--fs-sm);
++  font-size: var(--fs-md);
+   font-weight: 700;
++  white-space: nowrap;
+   cursor: pointer;
+   -webkit-tap-highlight-color: transparent;
+   transition: opacity 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+ }
+ .req-btn svg { width: 18px; height: 18px; flex: none; }
+ .req-btn-accept {
+-  flex: 1.4;
+-  background: linear-gradient(135deg, var(--gold-light), var(--gold) 65%, #A87C2A);
+-  color: #20180a;
+-  box-shadow: 0 8px 20px rgba(201, 168, 76, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.38);
++  flex: 1.3;
++  box-shadow: 0 8px 22px rgba(201, 168, 76, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+ }
+ .req-btn-decline {
+-  background: rgba(224, 92, 92, 0.08);
+-  border-color: rgba(224, 92, 92, 0.38);
++  background: transparent;
++  border: 1px solid rgba(224, 92, 92, 0.55);
+   color: var(--danger);
+ }
+-.req-btn:active { opacity: 0.8; }
++.req-btn:active { opacity: 0.8; transform: none; }
+ .req-btn.is-loading { pointer-events: none; opacity: 0.75; }
+ .req-btn.is-loading svg {
+   border: 2px solid currentColor;
+@@ -12942,7 +12968,15 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+ .req-decline-icon { background: rgba(224, 92, 92, 0.12); color: var(--danger); border-color: rgba(224, 92, 92, 0.35); }
+ #requestDeclineModal { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0, 0, 0, 0.72); }
+ 
+-[data-theme="light"] .req-card { background: #fff; box-shadow: 0 4px 16px rgba(60, 44, 10, 0.08); }
++[data-theme="light"] .req-card {
++  background: linear-gradient(160deg, #fff, #f6f3ea);
++  border-color: rgba(150, 120, 40, 0.2);
++  box-shadow: 0 8px 20px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff;
++}
++[data-theme="light"] .req-card-referral { border-color: rgba(150, 120, 40, 0.35); }
++[data-theme="light"] .req-note { background: rgba(255, 255, 255, 0.7); border-color: rgba(150, 120, 40, 0.2); }
++[data-theme="light"] .req-note-icon { background: rgba(201, 168, 76, 0.16); color: #7A5812; box-shadow: inset 0 0 0 1px rgba(150, 120, 40, 0.25); }
++[data-theme="light"] .req-note-label { color: #7A5812; }
+ [data-theme="light"] .req-tab.active,
+ [data-theme="light"] .req-ribbon,
+ [data-theme="light"] .req-chip-topic { color: #7A5812; }
+-- 
+2.43.0
+
