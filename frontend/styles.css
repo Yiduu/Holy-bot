@@ -10747,11 +10747,28 @@ input:focus, textarea:focus, select:focus {
 .profile-pills .chip { color: var(--gold-light); cursor: default; }
 .profile-pill:active { transform: scale(0.96); }
 .profile-pill svg { color: var(--gold-light); flex-shrink: 0; }
+/* Edit Profile is the page's main action, so it is the gold pill (same as the active
+   tab and the Accept / Request buttons) instead of another glass chip. */
+.profile-pills .profile-edit-btn {
+  height: 44px;
+  padding: 0 22px;
+  color: #1a1300;
+  background: linear-gradient(180deg, #EBCD72, #C9A84C);
+  border-color: rgba(255, 233, 160, 0.55);
+  box-shadow: 0 8px 22px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.profile-pills .profile-edit-btn svg { color: #1a1300; }
 [data-theme="light"] .profile-pills .chip, [data-theme="light"] .profile-pill {
   background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.24); color: var(--text);
   box-shadow: 0 6px 16px rgba(30, 25, 15, 0.14);
 }
 [data-theme="light"] .profile-pills .chip { color: #6B4E0F; }
+[data-theme="light"] .profile-pills .profile-edit-btn {
+  color: #1a1300;
+  background: linear-gradient(180deg, #EBCD72, #C9A84C);
+  border-color: rgba(150, 120, 40, 0.45);
+  box-shadow: 0 8px 20px rgba(150, 120, 40, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
 
 /* segmented switch */
 .profile-tabs {
@@ -12713,9 +12730,16 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
 /* The two tabs reuse the Live page's Private / Group switch (.profile-tabs / .profile-tab):
    same pill track, same gold active pill, same icon + label. Only what that switch
    doesn't have is defined here: a shrinking label and the count badge. */
-.req-tabs .profile-tab { min-width: 0; padding: 0 10px; }
-.req-tabs .profile-tab svg { flex: none; }
-.req-tab-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.req-tabs .profile-tab {
+  min-width: 0;
+  height: auto;            /* grows to two lines instead of cutting the label off */
+  min-height: 46px;
+  padding: 5px 10px;
+  gap: 6px;
+  font-size: var(--fs-md);
+}
+.req-tabs .profile-tab svg { flex: none; width: 16px; height: 16px; }
+.req-tab-label { min-width: 0; text-align: center; line-height: 1.15; white-space: normal; overflow-wrap: break-word; }
 .req-tab-count {
   flex: none;
   min-width: 20px;
