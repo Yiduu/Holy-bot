@@ -13080,3 +13080,46 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
   border-color: rgba(150, 120, 40, 0.2);
   box-shadow: 0 6px 16px rgba(30, 25, 15, 0.10), inset 0 1px 0 #fff;
 }
+
+/* ═══ Mentor profile page — nothing cut off, stat tiles in the card style ═══
+   The name no longer ends in "…", the Message / Request buttons wrap instead of
+   being squeezed or pushed off the edge (long labels, Amharic), and the three stat
+   tiles use the same soft card as the rest of the page. ═══ */
+#page-mentor-profile .mp-hero .profile-hero-name {
+  max-width: 100%;
+  padding: 0 8px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.mp-actions { flex-wrap: wrap; }
+.mp-actions .btn,
+.mp-actions .btn-mentor-request {
+  flex: 1 1 150px;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  min-height: 52px;
+  padding: 8px 16px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.mp-stats .stat-card {
+  padding: 16px 10px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.mp-stats .stat-label { line-height: 1.25; overflow-wrap: anywhere; }
+[data-theme="light"] .mp-stats .stat-card {
+  background: linear-gradient(160deg, #fff, #f6f3ea);
+  border-color: rgba(150, 120, 40, 0.2);
+  box-shadow: 0 8px 20px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff;
+}
