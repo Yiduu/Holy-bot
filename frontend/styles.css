@@ -13882,3 +13882,18 @@ textarea.form-control { resize: none; }
 [data-theme="light"] #menteeSortDropdown .dropdown-arrow { color: #7A5812; }
 [data-theme="light"] .mentee-note textarea { background: rgba(255, 255, 255, 0.9); border-color: rgba(150, 120, 40, 0.25); box-shadow: 0 0 0 0 transparent, inset 0 1px 3px rgba(30, 25, 15, 0.08); }
 [data-theme="light"] .mentee-note textarea:focus { border-color: #A87C2A; box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
+
+
+/* ── End mentorship: reason sheet (mentor) and reason note (mentee rating popup) ── */
+#endReasonModal .er-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+#endReasonModal .er-chip { min-height: 34px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--border-dim);
+  background: var(--bg3); color: var(--text2); font: 600 var(--fs-xs) var(--font-body); cursor: pointer; }
+#endReasonModal .er-chip:active { border-color: var(--gold); color: var(--text); }
+#endReasonModal .er-label { display: block; margin-bottom: 6px; font-size: var(--fs-xs); font-weight: 700; color: var(--text2); }
+#endReasonModal textarea { width: 100%; box-sizing: border-box; resize: none; min-height: 96px; }
+#endReasonModal .er-foot { display: flex; justify-content: space-between; gap: 8px; margin: 6px 0 14px; font-size: var(--fs-2xs); color: var(--text3); }
+#endReasonModal .btn:disabled { opacity: .5; pointer-events: none; }
+.rating-end-reason { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 12px; padding: 10px 12px; text-align: left;
+  border-radius: 14px; background: var(--bg3); border: 1px solid var(--border-dim); }
+.rating-end-reason b { font-size: var(--fs-2xs); letter-spacing: .04em; color: var(--gold); }
+.rating-end-reason span { font-size: var(--fs-sm); color: var(--text); line-height: 1.4; overflow-wrap: anywhere; }

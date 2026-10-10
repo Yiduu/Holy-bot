@@ -1,0 +1,378 @@
+From 19b6e1bbcc6f79c3856b5b523ded9c40d30b84cb Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sat, 10 Oct 2026 22:07:26 +0300
+Subject: [PATCH] Amharic goal page text; mentor must give a reason when ending
+ a mentorship
+
+The reason is saved to end_reason, sent to the mentee in a Telegram card and
+shown in their in-app rating popup.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01UWoSbgdRZk9zss89jT8dr3
+---
+ bot.js              | 13 ++++++++
+ frontend/app.js     | 81 +++++++++++++++++++++++++++++++++++++--------
+ frontend/goals.js   |  9 +++++
+ frontend/index.html | 22 ++++++++++++
+ frontend/locales.js | 20 +++++++++++
+ frontend/styles.css | 15 +++++++++
+ local/am.json       |  1 +
+ local/en.json       |  1 +
+ routes/mentors.js   | 14 ++++++--
+ routes/users.js     | 11 +++++-
+ 10 files changed, 170 insertions(+), 17 deletions(-)
+
+diff --git a/bot.js b/bot.js
+index 56b8381..9aefc40 100644
+--- a/bot.js
++++ b/bot.js
+@@ -1155,6 +1155,18 @@ async function endMentorship(chatId, partnerId, initiatorRole, opts = {}) {
+   for (const row of mt || []) await notifyWaitingList(row.topic_id);
+ }
+ 
++// Tell a mentee their mentor ended the mentorship, and why. Used by the mini
++// app's mentor flow, which has no rating prompt of its own to send.
++async function notifyMenteeMentorshipEnded(menteeId, mentorId, reason) {
++  const [lang, { data: mentor }] = await Promise.all([
++    getUserLang(menteeId),
++    supabase.from('users').select('anonymous_id, public_alias').eq('telegram_id', mentorId).single(),
++  ]);
++  const mentorName = mentor?.public_alias || mentor?.anonymous_id || (lang === 'am' ? 'አማካሪዎ' : 'Your mentor');
++  const c = endedCard(lang, tSync(lang, 'mentorship_ended_by_mentor', { mentor: mentorName }));
++  await sendCard(menteeId, { ...c, fields: [['', tSync(lang, 'mentorship_end_reason_label'), reason]] });
++}
++
+ // ─── Amharic Translation ──────────────────────────────────────────────────────
+ 
+ async function getAmharicVerse(verseText) {
+@@ -3667,6 +3679,7 @@ module.exports = {
+   notifyTaskDone,
+   runGoalMaintenance,
+   endMentorship,
++  notifyMenteeMentorshipEnded,
+   safeSend,
+   getUserLang,
+   rejectOtherPendingRequestsForUser
+diff --git a/frontend/app.js b/frontend/app.js
+index 725b780..83be890 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1281,7 +1281,7 @@ async function checkPendingRating() {
+   try {
+     const pending = await apiFetch('/api/users/pending-rating');
+     if (pending && pending.mentor_id) {
+-      openRatingModal(pending.mentor_id, pending.display_name, pending.assignment_id);
++      openRatingModal(pending.mentor_id, pending.display_name, pending.assignment_id, pending.end_reason);
+     }
+   } catch (e) { /* silent — non-critical */ }
+ }
+@@ -1306,7 +1306,7 @@ function renderStars(rating, count, size = 11) {
+   return `<div class="rating-row"><span class="stars">${svgs}</span><span class="rating-num">${r.toFixed(1)}</span><span class="rating-count">(${count})</span></div>`;
+ }
+ 
+-function openRatingModal(mentorId, mentorName, assignmentId) {
++function openRatingModal(mentorId, mentorName, assignmentId, endReason) {
+   ratingModalOpen = true;
+   let selected = 0;
+   const overlay = document.createElement('div');
+@@ -1324,6 +1324,7 @@ function openRatingModal(mentorId, mentorName, assignmentId) {
+       </div>
+       <div class="rating-modal-title">${t('rate_mentor_title') || 'Rate your mentor'}</div>
+       <div class="rating-modal-sub">${(t('rate_mentor_sub') || 'Your mentorship with {name} just ended. Tap a star to rate your experience.').replace('{name}', escapeHtml(mentorName))}</div>
++      ${endReason ? `<div class="rating-end-reason"><b>${escapeHtml(t('end_reason_from_mentor') || 'Why it ended')}</b><span>${escapeHtml(endReason)}</span></div>` : ''}
+       <div class="big-stars" id="ratingBigStars"></div>
+       <div class="card-actions" style="display:flex;gap:8px;margin-top:4px;">
+         <button class="btn btn-outline btn-sm flex-1" id="ratingSkipBtn">${t('btn_skip') || 'Skip'}</button>
+@@ -8503,19 +8504,73 @@ async function confirmTransfer() {
+   }
+ }
+ 
++// ─── Mentor ends a mentorship: a written reason is required ──────
++const END_REASON_MIN = 3, END_REASON_MAX = 300;
++let _endReasonAssignId = null, _endReasonBusy = false;
++
++function openEndReason(assignId) {
++  _endReasonAssignId = assignId;
++  _endReasonBusy = false;
++  document.querySelectorAll('#endReasonChips [data-chip]').forEach(b => { b.textContent = t(b.dataset.chip); });
++  const ta = $('endReasonText');
++  if (ta) ta.value = '';
++  onEndReasonInput();
++  $('endReasonModal')?.classList.add('open');
++}
++
++function closeEndReason() {
++  if (_endReasonBusy) return;
++  $('endReasonModal')?.classList.remove('open');
++  _endReasonAssignId = null;
++}
++
++function onEndReasonInput() {
++  const ta = $('endReasonText');
++  const len = (ta?.value || '').trim().length;
++  const count = $('endReasonCount');
++  if (count) count.textContent = `${(ta?.value || '').length}/${END_REASON_MAX}`;
++  const yes = $('endReasonYes');
++  if (yes) yes.disabled = _endReasonBusy || len < END_REASON_MIN;
++}
++
++function pickEndReasonChip(btn) {
++  const ta = $('endReasonText');
++  if (!ta) return;
++  haptic('selection');
++  ta.value = btn.textContent.trim();
++  onEndReasonInput();
++  ta.focus();
++}
++
++async function confirmEndReason() {
++  if (_endReasonBusy || !_endReasonAssignId) return;
++  const reason = ($('endReasonText')?.value || '').trim();
++  if (reason.length < END_REASON_MIN) { haptic('error'); $('endReasonText')?.focus(); return; }
++  _endReasonBusy = true;
++  onEndReasonInput();
++  haptic('medium');
++  try {
++    await apiFetch(`/api/mentors/end-mentorship/${_endReasonAssignId}`, { method: 'DELETE', body: { reason } });
++    _endReasonBusy = false;
++    closeEndReason();
++    haptic('success');
++    showToast(t('mentorship_ended'), 'success');
++    // Refresh the badge — messages from this ended pairing no longer count.
++    updateMessageBadge();
++    loadMyMentees();
++  } catch (e) {
++    _endReasonBusy = false;
++    onEndReasonInput();
++    haptic('error');
++    showToast(e.message, 'error');
++  }
++}
++
+ async function endMentorship(assignId, skipConfirm = false) {
+   if (assignId && typeof assignId === 'string') {
+-    // Mentor Flow (from My Mentees list)
+-    if (!confirm('End this mentorship assignment?')) return;
+-    haptic('medium');
+-    try {
+-      await apiFetch(`/api/mentors/end-mentorship/${assignId}`, { method: 'DELETE' });
+-      haptic('success');
+-      showToast(t('mentorship_ended'), 'success');
+-      // Refresh the badge — messages from this ended pairing no longer count.
+-      updateMessageBadge();
+-      loadMyMentees();
+-    } catch (e) { haptic('error'); showToast(e.message, 'error'); }
++    // Mentor Flow (from My Mentees list): ask for the reason first
++    openEndReason(assignId);
++    return;
+   } else {
+     // Mentee Flow (from Mentors Page)
+     if (!skipConfirm && !confirm(t('confirm_end_mentorship'))) return;
+diff --git a/frontend/goals.js b/frontend/goals.js
+index 6a13b21..0410c43 100644
+--- a/frontend/goals.js
++++ b/frontend/goals.js
+@@ -43,6 +43,15 @@
+       new_goal: 'አዲስ ግብ', type_one: 'ነጠላ ተግባር', type_prog: 'ደረጃ በደረጃ የሚከናወን', type_chal: 'ቻሌንጅ',
+       type_one_d: 'በተወሰነ ቀን ተከናውኖ የሚጠናቀቅ አንድ ተግባር', type_prog_d: 'በተወሰነ ድግግሞሽ ደረጃ በደረጃ የሚከናወን ግብ',
+       type_chal_d: 'ከተወሰነ መጀመሪያ እስከ መጨረሻ ቀን በየዕለቱ የሚከናወን ልምምድ',
++      pick_title: 'ምን ዓይነት ግብ ነው?', pick_sub: 'አንዱን ይምረጡ። ዝርዝሩን በሚቀጥለው ገጽ ይሞላሉ።',
++      how_title: 'እንዴት ይሠራል',
++      one_hero: 'አንድ ግልጽ ተግባር፣ በአንድ ቀን የሚጠናቀቅ።',
++      one_h1: 'ተግባሩን ይሰይሙ።', one_h2: 'የሚጠናቀቅበትን ቀን ይምረጡ (ወይም ክፍት ይተዉት)።', one_h3: 'ተመካሪዎ ሲጨርስ ምልክት ያደርጋል።',
++      prog_hero: 'ደረጃ በደረጃ የሚገነባ ልምድ።',
++      prog_h1: 'ምን መደረግ እንዳለበት ይጻፉ።', prog_h2: 'ስንት ጊዜ መከናወን እንዳለበት ይወስኑ።', prog_h3: 'እያንዳንዱ ጊዜ ምልክት ተደርጎበት ይቆጠራል።',
++      chal_hero: 'ከመጀመሪያ ቀን እስከ መጨረሻ ቀን የሚደረግ የየዕለት ልምምድ።',
++      chal_h1: 'ቀናቱን ይምረጡ።', chal_h2: 'ለእያንዳንዱ ቀን ተግባሮችን ያዘጋጁ።', chal_h3: 'ተመካሪዎ በየቀኑ ምልክት ያደርጋል፤ ተከታታይ ቀናትንም ይገነባል።',
++      back: 'ተመለስ',
+       f_title: 'የግቡ ርዕስ', f_due: 'የማጠናቀቂያ ቀን (አማራጭ)', f_deadline: 'የመጨረሻ ቀን (አማራጭ)', f_target: 'የድግግሞሽ ብዛት',
+       f_start: 'የመጀመሪያ ቀን', f_end: 'የማብቂያ ቀን', f_daily: 'የዕለት ተግባራት', f_daily_ph: 'የዕለት ተግባር (ምሳሌ፡ የጠዋት ጸሎት)', f_more: 'ተጨማሪ ተግባር ጨምር',
+       f_reminder: 'የዕለት ማስታወሻ ሰዓት', create: 'ግቡን መዝግብ', cancel: 'ሰርዝ', save: 'አስቀምጥ', edit: 'አስተካክል', del: 'አስወግድ',
+diff --git a/frontend/index.html b/frontend/index.html
+index 7c5c7ae..52ed10e 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -2333,6 +2333,28 @@
+     </div>
+   </div>
+ 
++  <!-- ── Modal: Mentor ends a mentorship (reason is required and goes to the mentee) ── -->
++  <div id="endReasonModal" class="modal-overlay" onclick="if(event.target===this)closeEndReason()">
++    <div class="modal-sheet er-sheet" role="dialog" aria-modal="true" aria-labelledby="endReasonTitle">
++      <div class="modal-handle"></div>
++      <div id="endReasonTitle" class="modal-title" data-i18n="end_reason_title">End this mentorship?</div>
++      <p class="hb-text" data-i18n="end_reason_body">Tell your mentee why. They will see your reason in their notification.</p>
++      <div class="er-chips" id="endReasonChips">
++        <button type="button" class="er-chip" data-chip="end_reason_chip_goals" onclick="pickEndReasonChip(this)"></button>
++        <button type="button" class="er-chip" data-chip="end_reason_chip_fit" onclick="pickEndReasonChip(this)"></button>
++        <button type="button" class="er-chip" data-chip="end_reason_chip_time" onclick="pickEndReasonChip(this)"></button>
++        <button type="button" class="er-chip" data-chip="end_reason_chip_quiet" onclick="pickEndReasonChip(this)"></button>
++      </div>
++      <label class="er-label" for="endReasonText" data-i18n="end_reason_label">Your reason</label>
++      <textarea id="endReasonText" class="form-control" rows="4" maxlength="300" data-i18n="end_reason_placeholder" placeholder="Write a few kind, clear words for your mentee…" oninput="onEndReasonInput()"></textarea>
++      <div class="er-foot"><span data-i18n="end_reason_hint">Required. At least 3 characters.</span><span id="endReasonCount">0/300</span></div>
++      <div class="hb-actions">
++        <button type="button" class="btn btn-outline" onclick="closeEndReason()" data-i18n="btn_cancel">Cancel</button>
++        <button type="button" id="endReasonYes" class="btn btn-danger" onclick="confirmEndReason()" disabled data-i18n="btn_end">End Mentorship</button>
++      </div>
++    </div>
++  </div>
++
+   <!-- ── Modal: Decline a request / referral ───────────────── -->
+   <div id="requestDeclineModal" class="modal-overlay" onclick="if(event.target===this)closeRequestDecline()">
+     <div class="modal-sheet tf-confirm-sheet" role="alertdialog" aria-modal="true" aria-labelledby="requestDeclineTitle" aria-describedby="requestDeclineBody">
+diff --git a/frontend/locales.js b/frontend/locales.js
+index f52bf80..7c1fcdc 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -50,6 +50,16 @@ const I18N = {
+     "transfer_match_one": "{n} of {total} topics match",
+     "transfer_note_toggle": "Add a note for the new mentor",
+     "transfer_optional": "Optional",
++    "end_reason_title": "End this mentorship?",
++    "end_reason_body": "Tell your mentee why. They will see your reason in their notification.",
++    "end_reason_label": "Your reason",
++    "end_reason_placeholder": "Write a few kind, clear words for your mentee…",
++    "end_reason_hint": "Required. At least 3 characters.",
++    "end_reason_chip_goals": "We reached your goals",
++    "end_reason_chip_fit": "We are not a good fit",
++    "end_reason_chip_time": "I no longer have the time",
++    "end_reason_chip_quiet": "We have lost contact",
++    "end_reason_from_mentor": "Why it ended",
+     "transfer_note_placeholder": "Anything that will help them support this mentee…",
+     "transfer_note_hint": "Only the new mentor sees this.",
+     "transfer_to": "Transferring to",
+@@ -853,6 +863,16 @@ const I18N = {
+     "transfer_match_one": "ከ{total} ርዕስ በ{n} ይዛመዳል",
+     "transfer_note_toggle": "ለአዲሱ አማካሪ ማስታወሻ ጨምር",
+     "transfer_optional": "አማራጭ",
++    "end_reason_title": "ይህን አማካሪነት ማቋረጥ ይፈልጋሉ?",
++    "end_reason_body": "ለተመካሪዎ ምክንያቱን ይንገሩት። ምክንያትዎን በማሳወቂያው ላይ ያያል።",
++    "end_reason_label": "ምክንያትዎ",
++    "end_reason_placeholder": "ለተመካሪዎ ጥቂት ደግና ግልጽ ቃላትን ይጻፉ…",
++    "end_reason_hint": "ግዴታ ነው። ቢያንስ 3 ፊደላት።",
++    "end_reason_chip_goals": "ግቦችዎ ላይ ደርሰናል",
++    "end_reason_chip_fit": "እርስ በርስ አንመጥንም",
++    "end_reason_chip_time": "ጊዜ የለኝም",
++    "end_reason_chip_quiet": "ግንኙነታችን ተቋርጧል",
++    "end_reason_from_mentor": "ለምን እንደተቋረጠ",
+     "transfer_note_placeholder": "ተመካሪውን ለመርዳት የሚጠቅም ማንኛውም መረጃ…",
+     "transfer_note_hint": "አዲሱ አማካሪ ብቻ ያየዋል።",
+     "transfer_to": "የሚተላለፈው ወደ",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index a5b782e..be77bc8 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13882,3 +13882,18 @@ textarea.form-control { resize: none; }
+ [data-theme="light"] #menteeSortDropdown .dropdown-arrow { color: #7A5812; }
+ [data-theme="light"] .mentee-note textarea { background: rgba(255, 255, 255, 0.9); border-color: rgba(150, 120, 40, 0.25); box-shadow: 0 0 0 0 transparent, inset 0 1px 3px rgba(30, 25, 15, 0.08); }
+ [data-theme="light"] .mentee-note textarea:focus { border-color: #A87C2A; box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++
++
++/* ── End mentorship: reason sheet (mentor) and reason note (mentee rating popup) ── */
++#endReasonModal .er-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
++#endReasonModal .er-chip { min-height: 34px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--border-dim);
++  background: var(--bg3); color: var(--text2); font: 600 var(--fs-xs) var(--font-body); cursor: pointer; }
++#endReasonModal .er-chip:active { border-color: var(--gold); color: var(--text); }
++#endReasonModal .er-label { display: block; margin-bottom: 6px; font-size: var(--fs-xs); font-weight: 700; color: var(--text2); }
++#endReasonModal textarea { width: 100%; box-sizing: border-box; resize: none; min-height: 96px; }
++#endReasonModal .er-foot { display: flex; justify-content: space-between; gap: 8px; margin: 6px 0 14px; font-size: var(--fs-2xs); color: var(--text3); }
++#endReasonModal .btn:disabled { opacity: .5; pointer-events: none; }
++.rating-end-reason { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 12px; padding: 10px 12px; text-align: left;
++  border-radius: 14px; background: var(--bg3); border: 1px solid var(--border-dim); }
++.rating-end-reason b { font-size: var(--fs-2xs); letter-spacing: .04em; color: var(--gold); }
++.rating-end-reason span { font-size: var(--fs-sm); color: var(--text); line-height: 1.4; overflow-wrap: anywhere; }
+diff --git a/local/am.json b/local/am.json
+index a63f53c..8f34ecc 100644
+--- a/local/am.json
++++ b/local/am.json
+@@ -82,6 +82,7 @@
+   "mentor_at_capacity": "የተመካሪ ቁጥርዎ ሞልቷል። አስቀድመው አንዱን ያጠናቁ።",
+   "mentorship_ended": "አማካሪነቱ ተጠናቋል። ለጊዜዎ እናመሰግናለን።",
+   "mentorship_ended_by_mentor": "አማካሪዎ {mentor} የምክር አገልግሎቱን አጠናቀዋል።",
++  "mentorship_end_reason_label": "ምክንያት",
+   "mentorship_ended_by_mentee": "ተመካሪዎ {mentee} የምክር አገልግሎቱን አጠናቀዋል።",
+   "no_active_mentorship": "ንቁ አማካሪነት የለዎትም።",
+   "no_active_partners": "ንቁ ጓደኛ የለዎትም።",
+diff --git a/local/en.json b/local/en.json
+index f1e2c83..01e09e7 100644
+--- a/local/en.json
++++ b/local/en.json
+@@ -82,6 +82,7 @@
+     "mentor_at_capacity": "You are at mentee capacity. Please end an existing mentorship first.",
+     "mentorship_ended": "Mentorship has ended. Thank you for your time.",
+     "mentorship_ended_by_mentor": "Your mentor {mentor} has ended the mentorship.",
++    "mentorship_end_reason_label": "Reason",
+     "mentorship_ended_by_mentee": "Your mentee {mentee} has ended the mentorship.",
+     "no_active_mentorship": "You have no active mentorship to end.",
+     "no_active_partners": "You have no active partners.",
+diff --git a/routes/mentors.js b/routes/mentors.js
+index f69ef44..9b96b6f 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -1310,8 +1310,13 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+   });
+ 
+   // DELETE /api/mentors/end-mentorship/:assignment_id
++  // Body: { reason } - why the mentor is ending it (3-300 chars). The mentee
++  // sees the reason in their Telegram notification and in the app.
++  const END_REASON_MIN = 3, END_REASON_MAX = 300;
+   router.delete('/end-mentorship/:assignment_id', requireAuth, async (req, res) => {
+     const { id: mentor_id } = req.telegramUser;
++    const reason = String(req.body?.reason ?? '').trim().replace(/\s+/g, ' ').slice(0, END_REASON_MAX);
++    if (reason.length < END_REASON_MIN) return res.status(400).json({ error: 'Please tell your mentee why you are ending the mentorship.' });
+     const { data: existing } = await supabase
+       .from('mentorship_assignments')
+       .select('user_id')
+@@ -1321,8 +1326,8 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+       .maybeSingle();
+     let error;
+     if (existing) {
+-      // Also records that the mentor ended it
+-      error = await closeAssignment(supabase, req.params.assignment_id, { endedBy: 'mentor' });
++      // Also records that the mentor ended it, and why
++      error = await closeAssignment(supabase, req.params.assignment_id, { reason, endedBy: 'mentor' });
+     } else {
+       ({ error } = await supabase
+         .from('mentorship_assignments')
+@@ -1332,7 +1337,10 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+     }
+     if (error) return res.status(500).json({ error: error.message });
+     if (existing?.user_id) {
+-      emitToUserRoom(existing.user_id, 'mentorship_ended', { by: 'mentor', assignment_id: req.params.assignment_id });
++      emitToUserRoom(existing.user_id, 'mentorship_ended', { by: 'mentor', assignment_id: req.params.assignment_id, reason });
++      // Telegram notice with the reason. Best-effort: never fails the request.
++      try { await require('../bot').notifyMenteeMentorshipEnded(existing.user_id, mentor_id, reason); }
++      catch (e) { console.error('[mentors] end-mentorship notification failed (non-fatal):', e.message); }
+     }
+     res.json({ success: true });
+   });
+diff --git a/routes/users.js b/routes/users.js
+index d3d985c..81c1973 100644
+--- a/routes/users.js
++++ b/routes/users.js
+@@ -479,11 +479,20 @@ module.exports = function userRoutes(supabase, requireAuth) {
+ 
+     if (existingRating) return res.json(null);
+ 
++    // Why it ended, when the mentor gave a reason. Separate best-effort query so
++    // this route still works before the end_reason migration has been run.
++    let end_reason = null;
++    try {
++      const { data: why } = await supabase.from('mentorship_assignments').select('end_reason, ended_by').eq('id', assignment.id).maybeSingle();
++      if (why?.ended_by === 'mentor' && why.end_reason) end_reason = why.end_reason;
++    } catch (_) { /* optional */ }
++
+     const m = assignment.mentor;
+     res.json({
+       assignment_id: assignment.id,
+       mentor_id: assignment.mentor_id,
+-      display_name: m?.user_settings?.display_name || m?.anonymous_id || 'Your mentor'
++      display_name: m?.user_settings?.display_name || m?.anonymous_id || 'Your mentor',
++      end_reason
+     });
+   });
+ 
+-- 
+2.43.0
+
