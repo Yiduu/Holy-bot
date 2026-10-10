@@ -623,6 +623,34 @@ function replaceOptimisticBubble(container, tempId, msg) {
   return true;
 }
 
+// Placeholder shown in place of the message list while the two people have not
+// written to each other yet. It lives inside #chatMessages so it takes the
+// same space as the list and goes away the moment the first bubble arrives.
+function chatEmptyStateHtml() {
+  const name = window.chatState?.name;
+  const sub = name
+    ? t('chat_empty_sub').replace('{name}', () => escapeHtml(name))
+    : t('chat_empty_sub_plain');
+  return `
+    <div class="chat-empty" id="chatEmpty">
+      <div class="chat-empty-icon">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      </div>
+      <div class="chat-empty-title">${t('chat_empty_title')}</div>
+      <p class="chat-empty-sub">${sub}</p>
+    </div>`;
+}
+
+// Keep the placeholder in step with what is on screen: gone as soon as there is
+// a message, back if the last one is deleted.
+function syncChatEmptyState(container = $('chatMessages')) {
+  if (!container) return;
+  const hasMessages = !!container.querySelector('.message-thread');
+  const empty = container.querySelector(':scope > .chat-empty');
+  if (hasMessages && empty) empty.remove();
+  else if (!hasMessages && !empty && window.chatState?.with) container.insertAdjacentHTML('beforeend', chatEmptyStateHtml());
+}
+
 function addMessageToChat(msg) {
   const container = $('chatMessages');
   if (!container) return;
@@ -637,6 +665,9 @@ function addMessageToChat(msg) {
   // Check if already exists (by ID)
   const existing = container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
   if (existing) return;
+
+  // First message of the conversation: the "start messaging" placeholder makes way.
+  container.querySelector(':scope > .chat-empty')?.remove();
 
   // Only auto-scroll if the user is already at the bottom (or it's their own
   // message). Previously every incoming message yanked the view to the bottom
@@ -1491,7 +1522,7 @@ function connectSocket() {
 
   socket.on('chat_cleared', ({ by_id }) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(by_id)) {
-      loadMessages(window.chatState.with);
+      loadMessages(window.chatState.with, { force: true }).catch(() => { });
     }
   });
 
@@ -1651,6 +1682,7 @@ function connectSocket() {
     // Replies to the deleted message stay in place; their quote just updates.
     refreshReplyQuotesFor(id, null);
     document.querySelector(`#chatMessages .message-thread[data-msg-id="${id}"]`)?.remove();
+    syncChatEmptyState();
   });
 
   // Fired the instant a session actually goes live (first participant/host
@@ -1930,6 +1962,94 @@ if (window.ResizeObserver) {
   const _chatRO = new ResizeObserver(() => syncChatInputHeight());
   const _watch = () => { ['chatInputRow', 'chatMessages'].forEach(id => { const el = $(id); if (el && !el._ro) { el._ro = 1; _chatRO.observe(el); } }); };
   _watch(); setTimeout(_watch, 800); setTimeout(_watch, 2500);
+}
+
+// ─── Every other field: lift it above the keyboard, smoothly ──
+// The chat composer docks itself (above). For any other text field — profile,
+// settings, forms inside sheets, onboarding — we do three things when the
+// keyboard opens:
+//   1. body.kb-open: the floating nav slides away instead of covering the field.
+//   2. --kb-inset: how far the keyboard covers the layout viewport (0 where the
+//      WebView already resizes to sit above it). Sheets and scrolling pages use
+//      it to lift themselves, with a CSS transition.
+//   3. The focused field is scrolled (smooth, once the keyboard has settled)
+//      until it sits fully above the keyboard.
+const _KB_NON_TEXT_INPUTS = /^(checkbox|radio|range|button|submit|reset|file|color|image|hidden)$/i;
+let _kbBase = 0;
+let _kbInset = 0;
+let _kbScrollTimer = 0;
+
+function isKeyboardField(el) {
+  if (!el || !el.tagName) return false;
+  if (el.closest?.('.chat-input-row')) return false;        // the composer has its own dock
+  if (el.tagName === 'TEXTAREA') return !el.readOnly;
+  if (el.tagName === 'INPUT') return !_KB_NON_TEXT_INPUTS.test(el.type || 'text') && !el.readOnly;
+  return !!el.isContentEditable;
+}
+
+function keyboardScrollParent(el) {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) return p;
+  }
+  return document.scrollingElement || document.documentElement;
+}
+
+function scrollFieldAboveKeyboard(el) {
+  if (!el || !el.isConnected || el !== document.activeElement || !isKeyboardField(el)) return;
+  const vv = window.visualViewport;
+  const viewTop = vv ? vv.offsetTop : 0;
+  const viewBottom = viewTop + (vv ? vv.height : window.innerHeight);
+  const r = el.getBoundingClientRect();
+  const GAP = 24;                                           // breathing room above the keyboard
+  let delta = 0;
+  if (r.bottom > viewBottom - GAP) delta = r.bottom - (viewBottom - GAP);
+  else if (r.top < viewTop + 8) delta = r.top - (viewTop + 8);
+  if (Math.abs(delta) < 4) return;
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  keyboardScrollParent(el).scrollBy({ top: delta, behavior: reduce ? 'auto' : 'smooth' });
+}
+
+// Debounced: the keyboard animation fires many viewport resizes; scroll once it
+// has settled, so the page glides to the field instead of chasing it.
+function scheduleFieldAboveKeyboard(el, delay = 140) {
+  clearTimeout(_kbScrollTimer);
+  _kbScrollTimer = setTimeout(() => scrollFieldAboveKeyboard(el), delay);
+}
+
+function updateKeyboardState() {
+  const ae = document.activeElement;
+  const typing = isKeyboardField(ae);
+  const vv = window.visualViewport;
+  const h = vv ? vv.height : window.innerHeight;
+  // The full (keyboard-less) height is only re-measured while no field is
+  // focused, so a keyboard that is already half open can't become the baseline.
+  if (!typing || !_kbBase) _kbBase = Math.max(h, window.innerHeight);
+  const tg = window.Telegram?.WebApp;
+  const tgDiff = tg ? (Number(tg.viewportStableHeight) || 0) - (Number(tg.viewportHeight) || 0) : 0;
+  const covered = typing && vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
+  const open = typing && (_kbBase - h > 120 || tgDiff > 120 || covered > 120);
+
+  const inset = open ? covered : 0;
+  if (inset !== _kbInset) {
+    _kbInset = inset;
+    document.documentElement.style.setProperty('--kb-inset', inset + 'px');
+  }
+  if (document.body.classList.contains('kb-open') !== open) document.body.classList.toggle('kb-open', open);
+  if (open) scheduleFieldAboveKeyboard(ae);
+}
+{
+  let _kbRaf2 = 0;
+  const schedule = () => { if (_kbRaf2) return; _kbRaf2 = requestAnimationFrame(() => { _kbRaf2 = 0; updateKeyboardState(); }); };
+  document.addEventListener('focusin', (e) => {
+    setTimeout(updateKeyboardState, 60);
+    // Keyboard already up (moving between fields): no resize will follow, so scroll now.
+    if (document.body.classList.contains('kb-open') && isKeyboardField(e.target)) scheduleFieldAboveKeyboard(e.target, 80);
+  });
+  document.addEventListener('focusout', () => setTimeout(updateKeyboardState, 120));
+  window.visualViewport?.addEventListener('resize', schedule);
+  window.addEventListener('resize', schedule);
+  try { window.Telegram?.WebApp?.onEvent?.('viewportChanged', schedule); } catch { }
 }
 
 // ─── Onboarding ───────────────────────────────────────────────
@@ -5275,8 +5395,16 @@ async function loadMessages(with_id, opts = {}) {
       .sort().join('|');
     const serverSig = messages.map(m => `${m.id}:${m.edited_at || ''}`).sort().join('|');
 
-    // If earlier messages have been prepended, do not collapse DOM back on non-forced refresh
-    if (!opts.force && sameChat && (domSig === serverSig || (renderedThreads.length > messages.length && domSig.includes(serverSig)))) {
+    // The "start messaging" placeholder must also match: an empty list that
+    // has no placeholder yet (or a placeholder over real bubbles) needs a render.
+    const hasEmptyEl = !!container.querySelector(':scope > .chat-empty');
+    const emptyMatches = hasEmptyEl === (renderedThreads.length === 0);
+
+    // If earlier messages have been prepended, do not collapse DOM back on non-forced refresh.
+    // That shortcut needs a non-empty server list: with zero messages (a cleared
+    // conversation) every signature "includes" the empty string, which used to
+    // keep the old bubbles on screen instead of showing the empty state.
+    if (!opts.force && sameChat && emptyMatches && (domSig === serverSig || (messages.length > 0 && renderedThreads.length > messages.length && domSig.includes(serverSig)))) {
       updateMessageBadge();
       return;
     }
@@ -5294,7 +5422,10 @@ async function loadMessages(with_id, opts = {}) {
 
     try {
       // Flat, chronological list; replies carry a quote of their original.
-      container.innerHTML = getLoadEarlierHtml() + renderThread(messages) + pending;
+      const threadsHtml = renderThread(messages);
+      container.innerHTML = (!threadsHtml && !pending)
+        ? chatEmptyStateHtml()
+        : getLoadEarlierHtml() + threadsHtml + pending;
       hydratePhotoMessages(container);
     } catch (renderError) {
       console.error('[loadMessages] Render error:', renderError);
@@ -5380,7 +5511,18 @@ async function clearChatHistory() {
     await apiFetch(`/api/messages/${window.chatState.with}`, { method: 'DELETE' });
     haptic('success');
     showToast('Chat history cleared', 'success');
-    loadMessages(window.chatState.with);
+    // Show the empty state right away; don't make it wait on a second request.
+    const box = $('chatMessages');
+    if (box) {
+      box.innerHTML = chatEmptyStateHtml();
+      box.dataset.chatWith = String(window.chatState.with);
+      box.scrollTop = 0;
+    }
+    window._chatMessagesMap?.clear();
+    window._chatEarliestDate = null;
+    window._hasEarlierMessages = false;
+    // Then reconcile with the server (e.g. a message that arrived meanwhile).
+    loadMessages(window.chatState.with, { force: true }).catch(() => { });
   } catch (e) { haptic('error'); showToast(e.message, 'error'); }
 }
 
@@ -6383,11 +6525,18 @@ function renderBioDisplay(bio) {
 function enterBioEditMode(event) {
   if (event) event.stopPropagation();
   haptic('selection');
-  $('bioDisplayWrap').classList.add('hidden');
-  $('bioEditWrap').classList.remove('hidden');
+  const box = $('bioDisplayWrap');
   const textarea = $('settingBio');
+  // Open the field at the height the read-only box had (within sensible limits)
+  // and keep it there while typing: a field that resizes on every keystroke
+  // makes the page below it jump.
+  const boxHeight = Math.round(box.getBoundingClientRect().height);
+  textarea.style.height = Math.min(Math.max(boxHeight, 120), 280) + 'px';
+  box.classList.add('hidden');
+  $('bioEditWrap').classList.remove('hidden');
   textarea.focus();
-  textarea.selectionStart = textarea.value.length;
+  const end = textarea.value.length;
+  textarea.setSelectionRange(end, end);
 }
 
 function exitBioEditMode() {

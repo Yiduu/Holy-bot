@@ -1,0 +1,1451 @@
+diff --git a/bot.js b/bot.js
+index 56b8381..3c413f0 100644
+--- a/bot.js
++++ b/bot.js
+@@ -56,6 +56,7 @@ console.log('[Bot] MINI_APP_URL from env =', process.env.MINI_APP_URL);
+ const APP_URL = process.env.MINI_APP_URL || 'https://holy-bot-etvy.onrender.com';
+ console.log('[Bot] APP_URL set to =', APP_URL);
+ const { HTML, esc, card, goldButton, goldCallback, goldKeyboard } = require('./utils/notifyStyle');
++const { gate: notifyGate, invalidate: invalidateNotifyPrefs, getPrefs: getNotifyPrefs, BOOLEAN_FIELDS: BOOLEAN_NOTIFY_FIELDS } = require('./utils/notificationPrefs');
+ 
+ // Set the chat menu button only if explicitly enabled in env (prevents wiping BotFather settings on deploy)
+ if (process.env.AUTO_SET_MENU_BUTTON === 'true') {
+@@ -205,6 +206,16 @@ function sendCard(chatId, content, btn) {
+   return safeSend(chatId, card(content), extra);
+ }
+ 
++// Preference-aware send for user-facing notifications. `userId` is the
++// recipient's telegram_id (settings are keyed on it; `chatId` may differ).
++// Skips the send if the user turned `category` off, and delivers silently
++// during their quiet hours. See utils/notificationPrefs.js.
++async function notifySend(userId, category, chatId, text, extra = {}) {
++  const g = await notifyGate(supabase, userId, category);
++  if (!g.allowed) return null;
++  return safeSend(chatId, text, { ...extra, ...g.extra });
++}
++
+ async function safeSendLoading(chatId, text) {
+   return safeSend(chatId, `⏳ ${text}`);
+ }
+@@ -758,15 +769,19 @@ async function forwardMessage(fromId, toId, text, srcMessageId = null) {
+   ]);
+ 
+   const lang = await getUserLang(toId);
+-  if (recipient?.chat_id) {
++  const gate = await notifyGate(supabase, toId, 'messages');
++  if (recipient?.chat_id && gate.allowed) {
+     const roleLabel = sender?.role === 'mentor' ? tSync(lang, 'role_mentor') : tSync(lang, 'role_mentee');
+-    const msgText = tSync(lang, 'msg_from_partner', { role: roleLabel, nick: mdEscape(sender?.anonymous_id), text: mdEscape(text) });
++    const msgText = gate.prefs.message_preview
++      ? tSync(lang, 'msg_from_partner', { role: roleLabel, nick: mdEscape(sender?.anonymous_id), text: mdEscape(text) })
++      : tSync(lang, 'msg_from_partner_hidden', { role: roleLabel, nick: mdEscape(sender?.anonymous_id) });
+     // Reattach the bottom reply keyboard here too — this notification is
+     // often the first message a recipient sees in a session, and without a
+     // keyboard field on it the client can be left showing no keyboard at
+     // all until the user types /start.
+     const sentCopy = await safeSend(recipient.chat_id, msgText, {
+-      reply_markup: buildPersistentKeyboard(recipient.role || 'user', lang)
++      reply_markup: buildPersistentKeyboard(recipient.role || 'user', lang),
++      ...gate.extra
+     });
+     setState(toId, 'chat_active', fromId);
+ 
+@@ -942,7 +957,8 @@ async function forwardFileMessage(fromId, toId, fileType, meta, caption = '') {
+     supabase.from('users').select('chat_id, role').eq('telegram_id', toId).single()
+   ]);
+ 
+-  if (recipient?.chat_id) {
++  const fileGate = await notifyGate(supabase, toId, 'messages');
++  if (recipient?.chat_id && fileGate.allowed) {
+     const lang = await getUserLang(toId);
+     const roleLabel = sender?.role === 'mentor' ? tSync(lang, 'role_mentor') : tSync(lang, 'role_mentee');
+     // e.g. "🎙️ Your mentee, Lotus, sent you a voice message."
+@@ -958,13 +974,17 @@ async function forwardFileMessage(fromId, toId, fileType, meta, caption = '') {
+     });
+     // Same keyboard reattachment as forwardMessage — see comment there.
+     await safeSend(recipient.chat_id, label, {
+-      reply_markup: buildPersistentKeyboard(recipient.role || 'user', lang)
++      reply_markup: buildPersistentKeyboard(recipient.role || 'user', lang),
++      ...fileGate.extra
+     });
+ 
+     // Forward the actual file using its file_id — Telegram re-serves the
+     // same stored bytes, so this costs no extra bandwidth or storage on our side.
++    // With message previews off the label above is all they get; the file
++    // itself stays in the app.
+     try {
+-      const sendOpts = caption ? { caption } : {};
++      const sendOpts = { ...(caption ? { caption } : {}), ...fileGate.extra };
++      if (!fileGate.prefs.message_preview) throw Object.assign(new Error('preview disabled'), { skip: true });
+       switch (fileType) {
+         case 'voice': await bot.sendVoice(recipient.chat_id, meta.file_id, sendOpts); break;
+         case 'audio': await bot.sendAudio(recipient.chat_id, meta.file_id, sendOpts); break;
+@@ -973,7 +993,7 @@ async function forwardFileMessage(fromId, toId, fileType, meta, caption = '') {
+         case 'document': await bot.sendDocument(recipient.chat_id, meta.file_id, sendOpts); break;
+       }
+     } catch (err) {
+-      console.error(`[forwardFileMessage] Failed to forward ${fileType} to ${toId}:`, err.message);
++      if (!err.skip) console.error(`[forwardFileMessage] Failed to forward ${fileType} to ${toId}:`, err.message);
+     }
+ 
+     setState(toId, 'chat_active', fromId);
+@@ -1272,18 +1292,48 @@ function format12h(hour) {
+   return `${h}:00 ${ampm}`;
+ }
+ 
+-async function showSettings(chatId) {
++// Quiet-hours presets the bot menu cycles through (start hour, end hour).
++const QUIET_PRESETS = [[22, 7], [23, 6], [21, 8], [0, 6], [20, 7]];
++
++// [column, locale key, emoji] — order = order on screen.
++const NOTIF_TOGGLES = [
++  ['notify_messages', 'notif_messages', '💬'],
++  ['message_preview', 'notif_preview', '🔒'],
++  ['notify_sessions', 'notif_sessions', '🎥'],
++  ['notify_daily_verse', 'notif_verse', '📖'],
++  ['notify_streak_reminder', 'notif_streak', '🔥'],
++  ['notify_goals', 'notif_goals', '🎯'],
++  ['notify_nudges', 'notif_nudges', '👋'],
++];
++
++function formatHour(hour) { return `${String(hour).padStart(2, '0')}:00`; }
++
++// Edit the settings message in place when we can (no chat spam on every tap),
++// otherwise send a fresh one.
++async function renderSettingsMessage(chatId, messageId, text, reply_markup) {
++  if (messageId) {
++    try {
++      await bot.editMessageText(text, { chat_id: chatId, message_id: messageId, reply_markup });
++      return;
++    } catch (e) {
++      if (/message is not modified/i.test(e.message || '')) return;
++      // fall through: message too old / deleted — send a new one
++    }
++  }
++  await safeSend(chatId, text, { reply_markup });
++}
++
++async function showSettings(chatId, messageId = null) {
+   const lang = await getUserLang(chatId);
+-  const [{ data: user }, { data: s }] = await Promise.all([
++  const [{ data: user }, prefs] = await Promise.all([
+     supabase.from('users').select('role').eq('telegram_id', chatId).single(),
+-    supabase.from('user_settings').select('*').eq('telegram_id', chatId).single()
++    getNotifyPrefs(supabase, chatId)
+   ]);
+ 
+   const kb = {
+     inline_keyboard: [
+-      [{ text: `${tSync(lang, 'settings_verse_notif')}: ${s?.notify_daily_verse ? tSync(lang, 'on') : tSync(lang, 'off')}`, callback_data: 'settings_toggle_notify_daily_verse' }],
+-      [{ text: `${tSync(lang, 'settings_msg_notif')}: ${s?.notify_messages ? tSync(lang, 'on') : tSync(lang, 'off')}`, callback_data: 'settings_toggle_notify_messages' }],
+-      [{ text: `${tSync(lang, 'settings_verse_time')}: ${format12h(s?.verse_time ?? 0)}`, callback_data: 'settings_time' }],
++      [{ text: tSync(lang, 'settings_notifications'), callback_data: 'settings_notifications' }],
++      [{ text: `${tSync(lang, 'settings_verse_time')}: ${format12h(prefs.verse_time ?? 7)}`, callback_data: 'settings_time' }],
+       [{ text: `${tSync(lang, 'settings_language')}: ${lang === 'en' ? 'EN' : 'አማ'}`, callback_data: 'settings_lang' }],
+       [{ text: `${tSync(lang, 'settings_my_topics')}`, callback_data: 'settings_topics' }]
+     ]
+@@ -1293,23 +1343,59 @@ async function showSettings(chatId) {
+     kb.inline_keyboard.push([{ text: `${tSync(lang, 'settings_expertise_topics')}`, callback_data: 'menu_mentor_topics' }]);
+   }
+ 
+-  await safeSend(chatId, tSync(lang, 'settings_title'), { reply_markup: kb });
++  await renderSettingsMessage(chatId, messageId, tSync(lang, 'settings_title'), kb);
+ }
+ 
+-async function toggleSetting(chatId, field) {
+-  const { data: s } = await supabase.from('user_settings').select('*').eq('telegram_id', chatId).single();
++async function showNotificationSettings(chatId, messageId = null) {
++  const lang = await getUserLang(chatId);
++  const p = await getNotifyPrefs(supabase, chatId);
++  const state = v => (v ? tSync(lang, 'on') : tSync(lang, 'off'));
++
++  const rows = NOTIF_TOGGLES.map(([col, key, icon]) => ([
++    { text: `${icon} ${tSync(lang, key)}: ${state(p[col])}`, callback_data: `settings_toggle_${col}` }
++  ]));
+ 
+-  // Default to true if settings are missing
+-  const currentValue = s ? s[field] : true;
+-  const newValue = !currentValue;
++  rows.push([{ text: `🌙 ${tSync(lang, 'notif_quiet')}: ${state(p.quiet_hours_enabled)}`, callback_data: 'settings_toggle_quiet_hours_enabled' }]);
++  if (p.quiet_hours_enabled) {
++    rows.push([{
++      text: `🕒 ${formatHour(p.quiet_start)} – ${formatHour(p.quiet_end)}  ›`,
++      callback_data: 'settings_quiet_window'
++    }]);
++  }
++  rows.push([{ text: tSync(lang, 'btn_back'), callback_data: 'settings_back' }]);
++
++  const intro = tSync(lang, 'notif_title') + '\n\n' + tSync(lang, p.quiet_hours_enabled ? 'notif_quiet_hint_on' : 'notif_hint');
++  await renderSettingsMessage(chatId, messageId, intro, { inline_keyboard: rows });
++}
+ 
++// Only these columns may be flipped from a callback button.
++const TOGGLEABLE_FIELDS = new Set([...BOOLEAN_NOTIFY_FIELDS]);
++
++async function saveNotifySetting(chatId, patch) {
++  const { data: s } = await supabase.from('user_settings').select('telegram_id').eq('telegram_id', chatId).maybeSingle();
+   if (!s) {
+     const lang = await getUserLang(chatId);
+-    await supabase.from('user_settings').insert({ telegram_id: chatId, language: lang, [field]: newValue });
++    await supabase.from('user_settings').insert({ telegram_id: chatId, language: lang, ...patch });
+   } else {
+-    await supabase.from('user_settings').update({ [field]: newValue }).eq('telegram_id', chatId);
++    await supabase.from('user_settings').update({ ...patch, updated_at: new Date().toISOString() }).eq('telegram_id', chatId);
+   }
+-  await showSettings(chatId);
++  invalidateNotifyPrefs(chatId);
++}
++
++async function toggleSetting(chatId, field, messageId = null) {
++  if (!TOGGLEABLE_FIELDS.has(field)) return; // ignore anything that isn't a known on/off preference
++  const p = await getNotifyPrefs(supabase, chatId);
++  // Missing settings row => the real default (usually ON), not "off".
++  await saveNotifySetting(chatId, { [field]: !p[field] });
++  await showNotificationSettings(chatId, messageId);
++}
++
++async function cycleQuietWindow(chatId, messageId = null) {
++  const p = await getNotifyPrefs(supabase, chatId);
++  const idx = QUIET_PRESETS.findIndex(([a, b]) => a === p.quiet_start && b === p.quiet_end);
++  const [quiet_start, quiet_end] = QUIET_PRESETS[(idx + 1) % QUIET_PRESETS.length];
++  await saveNotifySetting(chatId, { quiet_start, quiet_end });
++  await showNotificationSettings(chatId, messageId);
+ }
+ 
+ // ─── Mentorship Helpers ───────────────────────────────────────────────────────
+@@ -1631,7 +1717,7 @@ async function notifySessionInvite(chatId, sessionInfo) {
+     ],
+     footer: am ? 'ቀጠሮዎን ያክብሩ 🙏' : 'See you there 🙏',
+   });
+-  await safeSend(chatId, text, {
++  await notifySend(chatId, 'sessions', chatId, text, {
+     ...HTML,
+     reply_markup: goldKeyboard(tSync(lang, 'btn_join_session'), `${APP_URL}?start=session_${sessionInfo.session_id}`)
+   });
+@@ -1649,7 +1735,7 @@ async function notifySessionReminder(chatId, sessionInfo) {
+     fields: [['🎯', am ? 'ርዕስ' : 'Title', sessionInfo.title]],
+     footer: am ? 'ዝግጁ ይሁኑ፤ ይጠብቁዎታል 🙏' : 'Get ready, everyone is waiting for you 🙏',
+   });
+-  await safeSend(chatId, text, {
++  await notifySend(chatId, 'sessions', chatId, text, {
+     ...HTML,
+     reply_markup: goldKeyboard(tSync(lang, 'btn_join_session'), `${APP_URL}?start=session_${sessionInfo.session_id}`)
+   });
+@@ -1668,7 +1754,7 @@ async function notifySessionWaiting(chatId, sessionInfo) {
+     fields: [['🎯', am ? 'ርዕስ' : 'Title', sessionInfo.title]],
+     footer: am ? 'አሁን ይቀላቀሉ 🙏' : 'Hop in whenever you are ready 🙏',
+   });
+-  await safeSend(chatId, text, {
++  await notifySend(chatId, 'sessions', chatId, text, {
+     ...HTML,
+     reply_markup: goldKeyboard(tSync(lang, 'btn_join_session'), `${APP_URL}?start=session_${sessionInfo.session_id}`)
+   });
+@@ -1684,7 +1770,7 @@ async function notifySessionStarted(chatId, sessionInfo) {
+     body: am ? 'የቀጥታ ውይይቱ አሁን ተጀምሯል። እባክዎ አሁን ይቀላቀሉ።' : 'Your live session has just started. Please join now.',
+     fields: [['🎯', am ? 'ርዕስ' : 'Title', sessionInfo.title]],
+   });
+-  await safeSend(chatId, text, {
++  await notifySend(chatId, 'sessions', chatId, text, {
+     ...HTML,
+     reply_markup: goldKeyboard(tSync(lang, 'btn_join_session'), `${APP_URL}?start=session_${sessionInfo.session_id}`)
+   });
+@@ -1825,7 +1911,7 @@ async function notifyMentorshipRejected(userId, mentorName) {
+ 
+ // Text + "Open Chat" button for a chat notification. Shared by the first send
+ // and by later edits so an edited notification looks identical (plus a tag).
+-function buildMessageNotification(lang, senderName, content, fromId, { edited = false } = {}) {
++function buildMessageNotification(lang, senderName, content, fromId, { edited = false, preview = true } = {}) {
+   const am = lang === 'am';
+   let reply_markup;
+   if (fromId) {
+@@ -1837,20 +1923,24 @@ function buildMessageNotification(lang, senderName, content, fromId, { edited =
+   const text = card({
+     icon: '💬',
+     title: `${head}${tag}`,
+-    quote: String(content ?? '').slice(0, 3500),
++    // message_preview off => lock-screen safe: say that something arrived, not what.
++    quote: preview ? String(content ?? '').slice(0, 3500) : '',
++    body: preview ? undefined : (am ? '🔒 መልእክቱን ለማንበብ መተግበሪያውን ይክፈቱ።' : '🔒 Open the app to read it.'),
+   });
+   return { text, reply_markup };
+ }
+ 
+ async function notifyMessage(recipientId, senderName, messageContent, fromId = null, messageId = null) {
++  const g = await notifyGate(supabase, recipientId, 'messages');
++  if (!g.allowed) return null; // user muted message notifications; the message is still in the app
+   const lang = await getUserLang(recipientId);
+-  const { text, reply_markup } = buildMessageNotification(lang, senderName, messageContent, fromId);
++  const { text, reply_markup } = buildMessageNotification(lang, senderName, messageContent, fromId, { preview: g.prefs.message_preview });
+ 
+   // Sent as HTML with every user-supplied string escaped by card(). The
+   // anonymous handles ("Warrior_9XkL2") and raw chat text used to break
+   // Markdown ("can't parse entities") and safeSend swallowed the error, so
+   // offline recipients silently got no notification.
+-  const sent = await safeSend(recipientId, text, { ...HTML, reply_markup });
++  const sent = await safeSend(recipientId, text, { ...HTML, reply_markup, ...g.extra });
+ 
+   // Remember the Telegram message so app-side edits/deletes can follow it.
+   if (sent && messageId) {
+@@ -1872,8 +1962,12 @@ async function notifyMessage(recipientId, senderName, messageContent, fromId = n
+ // button. `tgType` is how Telegram stored the file (voice/audio/video/photo/
+ // document) and decides which send method accepts the file_id.
+ async function notifyFileMessage(recipientId, senderName, fileType, tgType, fileId, caption, fromId = null, messageId = null) {
++  const g = await notifyGate(supabase, recipientId, 'messages');
++  if (!g.allowed) return null;
+   const lang = await getUserLang(recipientId);
+   const icons = { voice: '🎙️', audio: '🎵', video: '🎬', photo: '🖼️', document: '📎' };
++  // Previews off: never push the file / caption itself to the lock screen.
++  if (!g.prefs.message_preview) return notifyMessage(recipientId, senderName, icons[fileType] || '📎', fromId, messageId);
+   const { reply_markup } = buildMessageNotification(lang, senderName, '', fromId);
+   // Telegram caps media captions at 1024 characters (counted after parsing),
+   // so trim the quoted text, never the finished HTML (that could cut a tag).
+@@ -1882,7 +1976,7 @@ async function notifyFileMessage(recipientId, senderName, fileType, tgType, file
+     title: lang === 'am' ? `አዲስ መልእክት ከ ${senderName}` : `New message from ${senderName}`,
+     quote: caption ? String(caption).slice(0, 700) : '',
+   });
+-  const opts = { caption: text, parse_mode: 'HTML', reply_markup };
++  const opts = { caption: text, parse_mode: 'HTML', reply_markup, ...g.extra };
+ 
+   let sent;
+   try {
+@@ -1936,7 +2030,8 @@ async function syncNotificationEdit(messageId, senderName, newContent, fromId) {
+       return;
+     }
+ 
+-    const { text, reply_markup } = buildMessageNotification(lang, senderName, newContent, fromId, { edited: true });
++    const prefs = await require('./utils/notificationPrefs').getPrefs(supabase, n.chat_id);
++    const { text, reply_markup } = buildMessageNotification(lang, senderName, newContent, fromId, { edited: true, preview: prefs.message_preview });
+     // Omitting reply_markup would strip the "Open Chat" button, so resend it.
+     await bot.editMessageText(text, { chat_id: n.chat_id, message_id: n.tg_message_id, parse_mode: 'HTML', reply_markup });
+   } catch (e) {
+@@ -2019,7 +2114,7 @@ async function notifyNewGoal(menteeId, goal, mentorName) {
+     footer: am ? 'ትንንሽ እርምጃዎች ታላቅ ለውጥ ያመጣሉ 🌱' : 'Small steps lead to big change 🌱',
+   });
+ 
+-  await safeSend(chatId, text, {
++  await notifySend(menteeId, 'goals', chatId, text, {
+     ...HTML,
+     reply_markup: goldKeyboard(am ? 'ግቤን ክፈት' : 'Open My Goal', `${APP_URL}?start=goal_${goal.id}`)
+   });
+@@ -2049,7 +2144,7 @@ async function notifyGoalDueReminder(menteeId, goal) {
+ 
+   const text = card({ icon, title, body, quote: goal.title, footer: am ? 'እርስዎ ይችላሉ 💪' : 'You can do it 💪' });
+ 
+-  await safeSend(chatId, text, {
++  await notifySend(menteeId, 'goals', chatId, text, {
+     ...HTML,
+     reply_markup: { inline_keyboard: [
+       [goldCallback(tSync(lang, 'btn_mark_goal_done'), `goal_done_${goal.id}`)],
+@@ -2071,7 +2166,7 @@ async function notifyGoalMissed(menteeId, goal) {
+       : "That's okay, it happens to everyone. If you'd still like to work on it, ask your mentor to set a new due date.",
+     quote: goal.title,
+   });
+-  await safeSend(chatId, text, {
++  await notifySend(menteeId, 'goals', chatId, text, {
+     ...HTML,
+     reply_markup: goldKeyboard(tSync(lang, 'btn_open_app'), `${APP_URL}?start=goal_${goal.id}`)
+   });
+@@ -2111,7 +2206,7 @@ async function notifyTaskDone(mentorId, menteeId, goal, task, stats) {
+     ],
+     footer: am ? 'አንድ የማበረታቻ ቃል ብዙ ይጨምራል 💛' : 'A word of encouragement goes a long way 💛',
+   });
+-  await safeSend(chatId, text, {
++  await notifySend(mentorId, 'goals', chatId, text, {
+     ...HTML,
+     reply_markup: goldKeyboard(tSync(lang, 'btn_open_app'), APP_URL)
+   });
+@@ -2134,7 +2229,7 @@ async function notifyGoalMissedDays(menteeId, goal, dates) {
+     fields: [['📅', am ? 'ያልተጠናቀቀ' : 'Missed', days]],
+     footer: am ? 'ዛሬ አዲስ ጅምር ነው 🌱' : 'Today is a fresh start 🌱',
+   });
+-  await safeSend(chatId, text, {
++  await notifySend(menteeId, 'goals', chatId, text, {
+     ...HTML,
+     reply_markup: goldKeyboard(am ? 'ዛሬ ይቀጥሉ' : 'Continue Today', `${APP_URL}?start=goal_${goal.id}`)
+   });
+@@ -2154,7 +2249,7 @@ async function notifyMentorMissedRun(mentorId, goal, run) {
+       : `${handle} has missed ${run} days in a row. A short, kind message can help them get back on track.`,
+     quote: goal.title,
+   });
+-  await safeSend(chatId, text, {
++  await notifySend(mentorId, 'goals', chatId, text, {
+     ...HTML,
+     reply_markup: goldKeyboard(am ? 'መልእክት ይላኩ' : 'Send a Message', `${APP_URL}?start=chat_${goal.mentee_id}`)
+   });
+@@ -2178,7 +2273,7 @@ async function notifyDailyReminder(menteeId, goal, tasks) {
+     `goal_done_${t.id}`
+   )]);
+   buttons.push([goldButton(tSync(lang, 'btn_open_app'), `${APP_URL}?start=goal_${goal.id}`)]);
+-  await safeSend(chatId, text, { ...HTML, reply_markup: { inline_keyboard: buttons } });
++  await notifySend(menteeId, 'goals', chatId, text, { ...HTML, reply_markup: { inline_keyboard: buttons } });
+ }
+ 
+ // ─── Message Handler ──────────────────────────────────────────────────────────
+@@ -2655,6 +2750,7 @@ bot.on('message', async (msg) => {
+       }
+ 
+       await supabase.from('user_settings').update({ verse_time: hour }).eq('telegram_id', chatId);
++      invalidateNotifyPrefs(chatId);
+       await safeSend(chatId, await t(chatId, 'verse_time_set', { hour: format12h(hour) }));
+       clearState(chatId); return showMainMenu(chatId);
+     }
+@@ -3053,7 +3149,10 @@ bot.on('callback_query', async (query) => {
+     }
+   }
+ 
+-  else if (data.startsWith('settings_toggle_')) await toggleSetting(chatId, data.replace('settings_toggle_', ''));
++  else if (data === 'settings_notifications') await showNotificationSettings(chatId, query.message.message_id);
++  else if (data === 'settings_back') await showSettings(chatId, query.message.message_id);
++  else if (data === 'settings_quiet_window') await cycleQuietWindow(chatId, query.message.message_id);
++  else if (data.startsWith('settings_toggle_')) await toggleSetting(chatId, data.replace('settings_toggle_', ''), query.message.message_id);
+   else if (data === 'settings_time') { setState(chatId, 'set_verse_time'); await showCancelKeyboard(chatId, tSync(lang, 'enter_verse_hour')); }
+   else if (data === 'settings_lang') {
+     await bot.editMessageText(tSync(lang, 'choose_language'), {
+@@ -3261,7 +3360,7 @@ setInterval(async () => {
+         if (amVerse) text += `\n\n<b>${esc(tSync('am', 'amharic_translation'))}:</b>\n<blockquote>${esc(amVerse)}</blockquote>`;
+       }
+       text += `\n\n<i>${lang === 'am' ? 'ዛሬ ቃሉ ብርሃን ይሁንልዎ ✨' : 'May the Word light your day ✨'}</i>`;
+-      await safeSend(u.telegram_id, text, { ...HTML, reply_markup: goldKeyboard(tSync(lang, 'btn_open_app'), APP_URL) });
++      await notifySend(u.telegram_id, 'verse', u.telegram_id, text, { ...HTML, reply_markup: goldKeyboard(tSync(lang, 'btn_open_app'), APP_URL) });
+     }
+   }
+ }, 60 * 1000);
+@@ -3319,7 +3418,7 @@ setInterval(async () => {
+     const lang = settings?.language || 'en';
+     const chatId = chatIdMap.get(String(s.telegram_id)) || s.telegram_id;
+     const key = (s.freezes_available || 0) > 0 ? 'streak_reminder_with_freeze' : 'streak_reminder';
+-    const ok = await safeSend(chatId, card({
++    const ok = await notifySend(s.telegram_id, 'streak', chatId, card({
+       icon: '🔥',
+       title: lang === 'am' ? `የ${s.current_streak} ቀናት ጉዞዎን ይጠብቁ` : `Protect Your ${s.current_streak}-Day Streak`,
+       body: tSync(lang, key, { streak: s.current_streak }),
+@@ -3416,7 +3515,7 @@ setInterval(async () => {
+       2: am ? 'አማካሪዎ ይጠብቅዎታል' : 'Your Mentor Is Thinking of You',
+       3: am ? 'አሁንም ከእኛ ጋር ነዎት?' : 'Are You Still With Us?',
+     }[targetTier];
+-    const ok = await safeSend(chatId, card({
++    const ok = await notifySend(a.user_id, 'nudges', chatId, card({
+       icon: toneIcon,
+       title: toneTitle,
+       body: tSync(lang, target.key, { name, mentor: mentorName }),
+@@ -3481,7 +3580,7 @@ setInterval(async () => {
+     const lang = settings?.language || 'en';
+     const name = settings?.display_name || u.anonymous_id;
+     const chatId = u.chat_id || u.telegram_id;
+-    const ok = await safeSend(chatId, card({
++    const ok = await notifySend(u.telegram_id, 'nudges', chatId, card({
+       icon: '🤝',
+       title: lang === 'am' ? 'አማካሪ እየጠበቀዎት ነው' : 'A Mentor Is Ready for You',
+       body: tSync(lang, 'unmatched_mentor_reminder', { name }),
+diff --git a/frontend/app.js b/frontend/app.js
+index fd29553..8c1285b 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -6006,10 +6006,7 @@ async function loadSettings() {
+   try {
+     const s = await apiFetch('/api/users/settings');
+     $('settingDisplayName').value = s.display_name || '';
+-    $('toggleMessages').checked = s.notify_messages !== false;
+-    $('toggleSessions').checked = s.notify_sessions !== false;
+-    $('toggleVerse').checked = s.notify_daily_verse !== false;
+-    $('toggleStreak').checked = s.notify_streak_reminder !== false;
++    applyNotificationPrefs(s);
+ 
+     if (currentUser?.role === 'mentor') {
+       $('settingsNavMentor')?.classList.remove('hidden');
+@@ -6402,10 +6399,7 @@ async function saveSettings() {
+   clearFieldError('settingDisplayName');
+   const body = {
+     display_name: $('settingDisplayName').value,
+-    notify_messages: $('toggleMessages').checked,
+-    notify_sessions: $('toggleSessions').checked,
+-    notify_daily_verse: $('toggleVerse').checked,
+-    notify_streak_reminder: $('toggleStreak').checked,
++    ...collectNotificationPrefs(),
+     bio: $('settingBio')?.value,
+     specialization: $('settingSpecialization')?.value,
+     max_mentees: parseInt($('settingMaxMentees')?.value) || 5,
+@@ -6465,7 +6459,8 @@ function closeNotificationsModal() {
+ }
+ 
+ async function saveNotificationsFromModal() {
+-  const ok = await saveSettings();
++  // Pending auto-save? flush it so closing the sheet never loses a change.
++  const ok = notifSaveTimer ? await saveNotificationPrefs() : true;
+   if (ok) closeNotificationsModal();
+ }
+ 
+@@ -6535,10 +6530,162 @@ async function toggleAcceptingRequests() {
+   }
+ }
+ 
++// ─── Notification preferences ──────────────────────────────────
++// One config drives the sheet, the load/save code and the API payload, so a
++// new category is a single line here (plus its column in user_settings).
++const NOTIFICATION_PREFS = [
++  { key: 'notify_messages',        id: 'toggleMessages', label: 'New Messages',       hint: 'notif_hint_messages' },
++  { key: 'message_preview',        id: 'togglePreview',  label: 'notif_preview',      hint: 'notif_hint_preview' },
++  { key: 'notify_sessions',        id: 'toggleSessions', label: 'Session Reminders',  hint: 'notif_hint_sessions' },
++  { key: 'notify_daily_verse',     id: 'toggleVerse',    label: 'Daily Bible Verse',  hint: 'notif_hint_verse' },
++  { key: 'notify_streak_reminder', id: 'toggleStreak',   label: 'Streak Reminders',   hint: 'notif_hint_streak' },
++  { key: 'notify_goals',           id: 'toggleGoals',    label: 'notif_goals',        hint: 'notif_hint_goals' },
++  { key: 'notify_nudges',          id: 'toggleNudges',   label: 'notif_nudges',       hint: 'notif_hint_nudges' },
++];
++const QUIET_TOGGLE = { key: 'quiet_hours_enabled', id: 'toggleQuietHours', label: 'notif_quiet', hint: 'notif_hint_quiet' };
++
++let notifRowsRendered = false;
++let notifSaveTimer = null;
++let notifLastSaved = {};   // last values the server confirmed, used to roll back on failure
++
++// Brand switch: the app's gold pill (same look as .toggle), driven by a real checkbox.
++function brandSwitchHtml(id, checked) {
++  return `<span class="brand-switch"><input class="brand-switch-input" id="${id}" type="checkbox" ${checked ? 'checked' : ''} onchange="toggleNotif('${id}')" /><span class="brand-switch-track" aria-hidden="true"></span></span>`;
++}
++
++// Gold-tile icons, same family as the Profile page rows.
++const NOTIF_ICONS = {
++  notify_messages: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
++  message_preview: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
++  notify_sessions: '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
++  notify_daily_verse: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
++  notify_streak_reminder: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
++  notify_goals: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
++  notify_nudges: '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
++  quiet_hours_enabled: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
++};
++
++// One row = one brand card (same shell as the Profile menu rows). The whole
++// row is a <label>, so tapping anywhere on it flips the switch.
++function notifRowHtml(p) {
++  return `<label class="profile-menu-item notif-item notif-row" for="${p.id}" data-notif-key="${p.key}">
++    <span class="profile-menu-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${NOTIF_ICONS[p.key] || ''}</svg></span>
++    <span class="notif-row-text"><span class="profile-menu-label" data-notif-label="${p.label}">${escapeHtml(t(p.label))}</span>
++      <small class="text-xs text-dim notif-row-hint" data-notif-hint="${p.hint}">${escapeHtml(t(p.hint))}</small></span>
++    ${brandSwitchHtml(p.id, true)}</label>`;
++}
++
++function renderNotificationRows() {
++  const rows = $('notifRows');
++  if (!rows || notifRowsRendered) return;
++  rows.innerHTML = NOTIFICATION_PREFS.map(notifRowHtml).join('');
++  const q = $('quietHoursToggleRow');
++  if (q) q.innerHTML = notifRowHtml(QUIET_TOGGLE);
++
++  for (const which of ['quietStart', 'quietEnd']) {
++    const menu = $(which + 'Menu');
++    if (menu) menu.innerHTML = Array.from({ length: 24 }, (_, h) =>
++      `<button type="button" class="dropdown-item" data-value="${h}" onclick="selectQuietHour('${which}', ${h})">${formatQuietHour(h)}</button>`).join('');
++  }
++  notifRowsRendered = true;
++}
++
++// Re-translate the dynamic rows (called after a language switch too).
++function retranslateNotificationRows() {
++  document.querySelectorAll('[data-notif-label]').forEach(el => { el.textContent = t(el.dataset.notifLabel); });
++  document.querySelectorAll('[data-notif-hint]').forEach(el => { el.textContent = t(el.dataset.notifHint); });
++}
++
++function formatQuietHour(h) { return `${h % 12 || 12}:00 ${h < 12 ? 'AM' : 'PM'}`; }
++
++// Same pattern as selectMenteeSex(): hidden input holds the value, the button
++// shows the label, the chosen item is highlighted.
++function setQuietHour(which, h) {
++  const input = $(which + 'Select'), label = $(which + 'Label');
++  if (input) input.value = String(h);
++  if (label) label.textContent = formatQuietHour(h);
++  $(which + 'Menu')?.querySelectorAll('.dropdown-item').forEach(i => i.classList.toggle('selected', Number(i.dataset.value) === h));
++}
++
++function selectQuietHour(which, h) {
++  setQuietHour(which, h);
++  onQuietHoursChange();
++}
++
++function deviceTimezone() {
++  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { return null; }
++}
++
++function updateQuietHoursUi() {
++  const on = $(QUIET_TOGGLE.id)?.checked;
++  $('quietHoursPicker')?.classList.toggle('hidden', !on);
++  const tz = notifLastSaved.timezone || deviceTimezone();
++  if ($('quietHoursTzHint')) $('quietHoursTzHint').textContent = t('notif_quiet_tz', { tz: tz || '' });
++}
++
++function applyNotificationPrefs(s) {
++  renderNotificationRows();
++  retranslateNotificationRows();
++  for (const p of [...NOTIFICATION_PREFS, QUIET_TOGGLE]) {
++    const el = $(p.id);
++    if (el) el.checked = p.key === 'quiet_hours_enabled' ? s.quiet_hours_enabled === true : s[p.key] !== false;
++  }
++  setQuietHour('quietStart', Number.isInteger(s.quiet_start) ? s.quiet_start : 22);
++  setQuietHour('quietEnd', Number.isInteger(s.quiet_end) ? s.quiet_end : 7);
++  notifLastSaved = { ...s };
++  updateQuietHoursUi();
++}
++
++function collectNotificationPrefs() {
++  if (!notifRowsRendered) return {};
++  const out = {};
++  for (const p of [...NOTIFICATION_PREFS, QUIET_TOGGLE]) {
++    const el = $(p.id);
++    if (el) out[p.key] = el.checked;
++  }
++  const qs = parseInt($('quietStartSelect')?.value, 10), qe = parseInt($('quietEndSelect')?.value, 10);
++  if (Number.isInteger(qs)) out.quiet_start = qs;
++  if (Number.isInteger(qe)) out.quiet_end = qe;
++  const tz = deviceTimezone();
++  if (out.quiet_hours_enabled && tz) out.timezone = tz; // quiet hours follow the phone's clock
++  return out;
++}
++
+ function toggleNotif(id) {
+   haptic('light');
+-  // The neo-toggle checkbox already flips its own .checked state natively;
+-  // saveSettings() reads it directly when the user hits Save.
++  if (id === QUIET_TOGGLE.id) updateQuietHoursUi();
++  scheduleNotificationSave();
++}
++
++function onQuietHoursChange() {
++  haptic('selection');
++  scheduleNotificationSave();
++}
++
++// Auto-save: toggles persist ~600ms after the last tap (one request for a burst
++// of taps). Previously nothing was saved until the user found and pressed Done.
++function scheduleNotificationSave() {
++  clearTimeout(notifSaveTimer);
++  notifSaveTimer = setTimeout(saveNotificationPrefs, 600);
++}
++
++async function saveNotificationPrefs() {
++  clearTimeout(notifSaveTimer);
++  notifSaveTimer = null;
++  const body = collectNotificationPrefs();
++  if (!Object.keys(body).length) return true;
++  try {
++    const updated = await apiFetch('/api/users/settings', { method: 'PATCH', body });
++    notifLastSaved = { ...notifLastSaved, ...body, ...(updated || {}) };
++    if (currentUser) currentUser.user_settings = { ...(currentUser.user_settings || {}), ...(updated || {}) };
++    showToast(t('notif_saved'), 'success');
++    return true;
++  } catch (e) {
++    haptic('error');
++    applyNotificationPrefs(notifLastSaved); // roll the switches back to what the server has
++    showToast(t('notif_save_failed'), 'error');
++    return false;
++  }
+ }
+ 
+ function selectMenteeSex(value, labelText) {
+@@ -7087,6 +7234,7 @@ function topicTextMatches(tp, q) {
+ }
+ 
+ function applyLanguage() {
++  retranslateNotificationRows();
+   document.querySelectorAll('[data-i18n]').forEach(el => {
+     const key = el.getAttribute('data-i18n');
+     const translated = t(key);
+diff --git a/frontend/index.html b/frontend/index.html
+index 7864efc..ecf443e 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -1872,169 +1872,37 @@
+       <div class="modal-title" data-i18n="Notifications">Notifications</div>
+       <p class="text-xs text-dim mb-16" data-i18n="notifications_modal_subtitle">Customize which alerts and reminders you receive.</p>
+ 
+-      <div class="card mb-16">
+-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="New Messages">New Messages</span>
+-          <div class="neo-toggle-container">
+-            <input class="neo-toggle-input" id="toggleMessages" type="checkbox" checked
+-              onchange="toggleNotif('toggleMessages')" />
+-            <label class="neo-toggle" for="toggleMessages">
+-              <div class="neo-track">
+-                <div class="neo-background-layer"></div>
+-                <div class="neo-grid-layer"></div>
+-                <div class="neo-spectrum-analyzer">
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                </div>
+-                <div class="neo-track-highlight"></div>
+-              </div>
+-              <div class="neo-thumb">
+-                <div class="neo-thumb-ring"></div>
+-                <div class="neo-thumb-core">
+-                  <div class="neo-thumb-icon">
+-                    <div class="neo-thumb-wave"></div>
+-                    <div class="neo-thumb-pulse"></div>
+-                  </div>
+-                </div>
+-              </div>
+-              <div class="neo-gesture-area"></div>
+-              <div class="neo-interaction-feedback">
+-                <div class="neo-ripple"></div>
+-                <div class="neo-progress-arc"></div>
+-              </div>
+-              <div class="neo-status">
+-                <div class="neo-status-indicator">
+-                  <div class="neo-status-dot"></div>
+-                  <div class="neo-status-text"></div>
+-                </div>
+-              </div>
+-            </label>
+-          </div>
+-        </div>
+-        <div class="divider"></div>
+-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="Session Reminders">Session Reminders</span>
+-          <div class="neo-toggle-container">
+-            <input class="neo-toggle-input" id="toggleSessions" type="checkbox" checked
+-              onchange="toggleNotif('toggleSessions')" />
+-            <label class="neo-toggle" for="toggleSessions">
+-              <div class="neo-track">
+-                <div class="neo-background-layer"></div>
+-                <div class="neo-grid-layer"></div>
+-                <div class="neo-spectrum-analyzer">
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                </div>
+-                <div class="neo-track-highlight"></div>
+-              </div>
+-              <div class="neo-thumb">
+-                <div class="neo-thumb-ring"></div>
+-                <div class="neo-thumb-core">
+-                  <div class="neo-thumb-icon">
+-                    <div class="neo-thumb-wave"></div>
+-                    <div class="neo-thumb-pulse"></div>
+-                  </div>
+-                </div>
+-              </div>
+-              <div class="neo-gesture-area"></div>
+-              <div class="neo-interaction-feedback">
+-                <div class="neo-ripple"></div>
+-                <div class="neo-progress-arc"></div>
+-              </div>
+-              <div class="neo-status">
+-                <div class="neo-status-indicator">
+-                  <div class="neo-status-dot"></div>
+-                  <div class="neo-status-text"></div>
+-                </div>
+-              </div>
+-            </label>
+-          </div>
+-        </div>
+-        <div class="divider"></div>
+-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="Daily Bible Verse">Daily Bible Verse</span>
+-          <div class="neo-toggle-container">
+-            <input class="neo-toggle-input" id="toggleVerse" type="checkbox" checked
+-              onchange="toggleNotif('toggleVerse')" />
+-            <label class="neo-toggle" for="toggleVerse">
+-              <div class="neo-track">
+-                <div class="neo-background-layer"></div>
+-                <div class="neo-grid-layer"></div>
+-                <div class="neo-spectrum-analyzer">
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                </div>
+-                <div class="neo-track-highlight"></div>
+-              </div>
+-              <div class="neo-thumb">
+-                <div class="neo-thumb-ring"></div>
+-                <div class="neo-thumb-core">
+-                  <div class="neo-thumb-icon">
+-                    <div class="neo-thumb-wave"></div>
+-                    <div class="neo-thumb-pulse"></div>
+-                  </div>
+-                </div>
+-              </div>
+-              <div class="neo-gesture-area"></div>
+-              <div class="neo-interaction-feedback">
+-                <div class="neo-ripple"></div>
+-                <div class="neo-progress-arc"></div>
+-              </div>
+-              <div class="neo-status">
+-                <div class="neo-status-indicator">
+-                  <div class="neo-status-dot"></div>
+-                  <div class="neo-status-text"></div>
+-                </div>
+-              </div>
+-            </label>
+-          </div>
+-        </div>
+-        <div class="divider"></div>
+-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="Streak Reminders">Streak Reminders</span>
+-          <div class="neo-toggle-container">
+-            <input class="neo-toggle-input" id="toggleStreak" type="checkbox" checked
+-              onchange="toggleNotif('toggleStreak')" />
+-            <label class="neo-toggle" for="toggleStreak">
+-              <div class="neo-track">
+-                <div class="neo-background-layer"></div>
+-                <div class="neo-grid-layer"></div>
+-                <div class="neo-spectrum-analyzer">
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                </div>
+-                <div class="neo-track-highlight"></div>
+-              </div>
+-              <div class="neo-thumb">
+-                <div class="neo-thumb-ring"></div>
+-                <div class="neo-thumb-core">
+-                  <div class="neo-thumb-icon">
+-                    <div class="neo-thumb-wave"></div>
+-                    <div class="neo-thumb-pulse"></div>
+-                  </div>
+-                </div>
++      <!-- Rows are rendered by renderNotificationRows() in app.js from NOTIFICATION_PREFS -->
++      <div class="notif-list" id="notifRows"></div>
++
++      <div class="notif-list" id="quietHoursCard">
++        <div id="quietHoursToggleRow"></div>
++        <div id="quietHoursPicker" class="notif-quiet-picker hidden">
++          <div class="notif-quiet-selects">
++            <div class="form-group notif-quiet-field">
++              <label class="form-label" data-i18n="notif_quiet_from">From</label>
++              <div class="premium-dropdown form-dropdown notif-dropup" data-dropdown id="quietStartDropdown">
++                <button type="button" class="premium-dropdown-btn" data-dropdown-toggle>
++                  <span class="dropdown-label" id="quietStartLabel"></span>
++                  <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
++                </button>
++                <div class="premium-dropdown-menu" data-dropdown-menu id="quietStartMenu"></div>
++                <input type="hidden" id="quietStartSelect" value="" />
+               </div>
+-              <div class="neo-gesture-area"></div>
+-              <div class="neo-interaction-feedback">
+-                <div class="neo-ripple"></div>
+-                <div class="neo-progress-arc"></div>
+-              </div>
+-              <div class="neo-status">
+-                <div class="neo-status-indicator">
+-                  <div class="neo-status-dot"></div>
+-                  <div class="neo-status-text"></div>
+-                </div>
++            </div>
++            <div class="form-group notif-quiet-field">
++              <label class="form-label" data-i18n="notif_quiet_until">Until</label>
++              <div class="premium-dropdown form-dropdown notif-dropup" data-dropdown id="quietEndDropdown">
++                <button type="button" class="premium-dropdown-btn" data-dropdown-toggle>
++                  <span class="dropdown-label" id="quietEndLabel"></span>
++                  <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
++                </button>
++                <div class="premium-dropdown-menu" data-dropdown-menu id="quietEndMenu"></div>
++                <input type="hidden" id="quietEndSelect" value="" />
+               </div>
+-            </label>
+-          </div>
++            </div>
++            </div>
++          <p class="text-xs text-dim mt-8" id="quietHoursTzHint"></p>
+         </div>
+       </div>
+ 
+diff --git a/frontend/locales.js b/frontend/locales.js
+index ef9f245..84a64cc 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -510,6 +510,23 @@ const I18N = {
+     "Notifications": "Notifications",
+     "Mentor Profile": "Mentor Profile",
+     "notifications_modal_subtitle": "Customize which alerts and reminders you receive.",
++    "notif_preview": "Message preview",
++    "notif_goals": "Goals",
++    "notif_nudges": "Check-in reminders",
++    "notif_quiet": "Quiet hours",
++    "notif_hint_messages": "Alerts in Telegram when someone writes to you",
++    "notif_hint_preview": "Off: Telegram says \"new message\" without showing the text",
++    "notif_hint_sessions": "Invites, starting-soon and live-session alerts",
++    "notif_hint_verse": "One verse a day at your chosen time",
++    "notif_hint_streak": "An evening nudge before your streak ends",
++    "notif_hint_goals": "New goals, due dates and daily task reminders",
++    "notif_hint_nudges": "Gentle \"we miss you\" messages after a few quiet days",
++    "notif_hint_quiet": "Still delivered, just silently (no sound or vibration)",
++    "notif_quiet_from": "From",
++    "notif_quiet_until": "Until",
++    "notif_quiet_tz": "Uses your device time zone ({tz})",
++    "notif_saved": "Notification settings saved",
++    "notif_save_failed": "Couldn't save. Please try again.",
+     "mentor_profile_modal_subtitle": "Configure your mentorship details, availability, and focus areas.",
+     "Bio": "Bio",
+     "Specialization": "Specialization",
+@@ -1268,6 +1285,23 @@ const I18N = {
+     "Notifications": "ማሳወቂያዎች",
+     "Mentor Profile": "የአማካሪ መገለጫ",
+     "notifications_modal_subtitle": "የሚደርሱዎትን ማሳወቂያዎች እና ማስታወሻዎች ያስተካክሉ።",
++    "notif_preview": "የመልዕክት ቅድመ-እይታ",
++    "notif_goals": "ግቦች",
++    "notif_nudges": "የሁኔታ ጠያቂ መልዕክቶች",
++    "notif_quiet": "የጸጥታ ሰዓት",
++    "notif_hint_messages": "አንድ ሰው ሲጽፍልዎ በቴሌግራም ያሳውቅዎታል",
++    "notif_hint_preview": "ሲጠፋ፦ ቴሌግራም ጽሑፉን ሳያሳይ «አዲስ መልዕክት» ብቻ ይላል",
++    "notif_hint_sessions": "ግብዣዎች፣ ሊጀምር ነው እና የቀጥታ ስብሰባ ማሳወቂያዎች",
++    "notif_hint_verse": "በመረጡት ሰዓት በቀን አንድ ጥቅስ",
++    "notif_hint_streak": "ጉዞዎ ከመቋረጡ በፊት የምሽት ማስታወሻ",
++    "notif_hint_goals": "አዳዲስ ግቦች፣ ቀነ-ገደቦች እና የዕለት ተግባር አስታዋሾች",
++    "notif_hint_nudges": "ጥቂት ቀናት ዝም ካሉ በኋላ የሚላኩ ለስላሳ መልዕክቶች",
++    "notif_hint_quiet": "አሁንም ይደርስዎታል፤ ግን ያለ ድምፅና ንዝረት",
++    "notif_quiet_from": "ከ",
++    "notif_quiet_until": "እስከ",
++    "notif_quiet_tz": "የስልክዎን ሰዓት ሰቅ ይጠቀማል ({tz})",
++    "notif_saved": "የማሳወቂያ ማስተካከያዎች ተቀምጠዋል",
++    "notif_save_failed": "መቀመጥ አልቻለም። እባክዎ እንደገና ይሞክሩ።",
+     "mentor_profile_modal_subtitle": "የአማካሪነት ዝርዝሮችዎን፣ ዝግጁነትዎን እና ርዕሶቻችሁን አስተካክሉ።",
+     "Bio": "ስለ እኔ",
+     "Specialization": "ልዩ መስክ",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 0048d01..3a31176 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13123,3 +13123,48 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+   border-color: rgba(150, 120, 40, 0.2);
+   box-shadow: 0 8px 20px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff;
+ }
++
++
++/* ── Notification preferences sheet ─────────────────────────────
++   Rows reuse the Profile page card shell (.profile-menu-item + gold icon tile);
++   the switch is the app's gold pill (same look as .toggle), not the neo toggle. */
++.notifications-sheet { max-height: 88vh; }
++.notif-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
++.notif-item { cursor: pointer; -webkit-tap-highlight-color: transparent; }
++.notif-row-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
++.notif-row-hint { line-height: 1.35; font-weight: 500; }
++/* tile is gold when the category is on, muted when off */
++.notif-item .profile-menu-icon { transition: background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease; }
++.notif-item:not(:has(input:checked)) .profile-menu-icon { opacity: 0.55; }
++.notif-item:has(input:checked) .profile-menu-icon {
++  background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%);
++  color: #2a1e05;
++  box-shadow: 0 6px 16px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5);
++}
++
++.brand-switch { position: relative; display: inline-block; flex-shrink: 0; width: 46px; height: 26px; }
++.brand-switch-input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 1; }
++.brand-switch-track {
++  position: absolute; inset: 0; border-radius: 13px;
++  background: var(--bg3); border: 1px solid var(--border-dim);
++  transition: background var(--transition), border-color var(--transition), box-shadow var(--transition);
++}
++.brand-switch-track::after {
++  content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
++  background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
++  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
++}
++.brand-switch-input:checked + .brand-switch-track { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 10px rgba(201, 168, 76, .25); }
++.brand-switch-input:checked + .brand-switch-track::after { transform: translateX(20px); }
++.brand-switch-input:focus-visible + .brand-switch-track { outline: 2px solid var(--gold-light, var(--gold)); outline-offset: 2px; }
++
++/* quiet-hours picker: an inset panel under its row */
++.notif-quiet-picker {
++  padding: 14px 16px 6px; border-radius: 22px;
++  background: var(--bg3); border: 1px solid var(--border-dim);
++}
++.notif-quiet-selects { display: flex; gap: 12px; }
++.notif-quiet-field { flex: 1; min-width: 0; margin-bottom: 8px; }
++/* open upward: the picker sits at the bottom of the sheet */
++.notif-dropup .premium-dropdown-menu { top: auto; bottom: calc(100% + 6px); transform-origin: bottom left; transform: translateY(8px) scale(0.96); }
++.notif-dropup[data-open] .premium-dropdown-menu { transform: translateY(0) scale(1); }
+diff --git a/local/am.json b/local/am.json
+index a63f53c..b70c500 100644
+--- a/local/am.json
++++ b/local/am.json
+@@ -125,10 +125,23 @@
+   "settings_verse_time": "የጥቅስ ሰዓት",
+   "settings_language": "ቋንቋ",
+   "settings_my_topics": "ርዕሶቼ",
++  "settings_notifications": "🔔 ማሳወቂያዎች",
++  "notif_title": "🔔 ማሳወቂያዎች",
++  "notif_hint": "ለማብራት ወይም ለማጥፋት አንዱን ይጫኑ።",
++  "notif_quiet_hint_on": "ለማብራት ወይም ለማጥፋት አንዱን ይጫኑ።\n\n🌙 በጸጥታ ሰዓት ሁሉንም ማሳወቂያ ያገኛሉ፤ ግን ያለ ድምፅና ንዝረት።",
++  "notif_messages": "መልዕክቶች",
++  "notif_preview": "የመልዕክት ቅድመ-እይታ",
++  "notif_sessions": "የቀጥታ ስብሰባዎች",
++  "notif_verse": "የዕለቱ ጥቅስ",
++  "notif_streak": "የጉዞ አስታዋሽ",
++  "notif_goals": "ግቦች",
++  "notif_nudges": "የሁኔታ ጠያቂ መልዕክቶች",
++  "notif_quiet": "የጸጥታ ሰዓት",
++  "msg_from_partner_hidden": "🔒 ከ{role} [{nick}] አዲስ መልዕክት ደርሷል። ለማንበብ መተግበሪያውን ይክፈቱ።",
+   "settings_expertise_topics": "የምክር አገልግሎት የሚሰጡበት ርዕሶች",
+-  "enter_verse_hour": "የዕለቱ ጥቅስ የሚደርስበትን ሰዓት ያስገቡ (0–23 UTC):",
++  "enter_verse_hour": "የዕለቱ ጥቅስ የሚደርስበትን ሰዓት ያስገቡ (0–23 የኢትዮጵያ ሰዓት):",
+   "invalid_hour": "እባክዎ ከ0 እስከ 23 ያለ ሰዓት ያስገቡ።",
+-  "verse_time_set": "የጥቅስ ሰዓት {hour}:00 UTC ሆኗል።",
++  "verse_time_set": "የጥቅስ ሰዓት {hour}:00 ሆኗል።",
+   "choose_language": "ቋንቋ ይምረጡ:",
+   "select_session_type": "የስብሰባ ዓይነት ይምረጡ:",
+   "session_private": "1-ለ-1 (ግላዊ)",
+diff --git a/local/en.json b/local/en.json
+index f1e2c83..eceb357 100644
+--- a/local/en.json
++++ b/local/en.json
+@@ -125,10 +125,23 @@
+     "settings_verse_time": "Verse Time",
+     "settings_language": "Language",
+     "settings_my_topics": "My Topics",
++    "settings_notifications": "🔔 Notifications",
++    "notif_title": "🔔 Notifications",
++    "notif_hint": "Tap an item to turn it on or off.",
++    "notif_quiet_hint_on": "Tap an item to turn it on or off.\n\n🌙 During quiet hours you still receive everything, just silently (no sound or vibration).",
++    "notif_messages": "Messages",
++    "notif_preview": "Message preview",
++    "notif_sessions": "Live sessions",
++    "notif_verse": "Daily verse",
++    "notif_streak": "Streak reminders",
++    "notif_goals": "Goals",
++    "notif_nudges": "Check-ins",
++    "notif_quiet": "Quiet hours",
++    "msg_from_partner_hidden": "🔒 New message from your {role} [{nick}]. Open the app to read it.",
+     "settings_expertise_topics": "Topics to Mentor",
+-    "enter_verse_hour": "Enter the hour to receive your daily verse (0–23, UTC):",
++    "enter_verse_hour": "Enter the hour to receive your daily verse (0–23, Ethiopia time):",
+     "invalid_hour": "Please enter a valid hour between 0 and 23.",
+-    "verse_time_set": "Verse time set to {hour}:00 UTC.",
++    "verse_time_set": "Verse time set to {hour}:00.",
+     "choose_language": "Choose your language:",
+     "select_session_type": "What kind of session would you like?",
+     "session_private": "1-on-1 (Private)",
+diff --git a/migrations/20261010_notification_preferences.sql b/migrations/20261010_notification_preferences.sql
+new file mode 100644
+index 0000000..d6ad618
+--- /dev/null
++++ b/migrations/20261010_notification_preferences.sql
+@@ -0,0 +1,29 @@
++BEGIN;
++
++-- Notification preferences v2.
++--
++-- notify_messages / notify_sessions already existed but were never enforced.
++-- This adds the missing categories plus privacy + quiet-hours controls.
++--
++--   notify_goals          goal assigned / due / missed / daily task reminders
++--   notify_nudges         "we miss you" inactivity reminders from the scheduler
++--   message_preview       false => Telegram shows "New message" without the text
++--                         (useful on a lock screen for a sensitive counseling app)
++--   quiet_hours_*         inside the window notifications are delivered SILENTLY
++--                         (no sound / vibration); they are never dropped.
++--                         Hours are 0-23 in user_settings.timezone.
++ALTER TABLE user_settings
++  ADD COLUMN IF NOT EXISTS notify_streak_reminder BOOLEAN NOT NULL DEFAULT true,
++  ADD COLUMN IF NOT EXISTS notify_goals          BOOLEAN NOT NULL DEFAULT true,
++  ADD COLUMN IF NOT EXISTS notify_nudges         BOOLEAN NOT NULL DEFAULT true,
++  ADD COLUMN IF NOT EXISTS message_preview       BOOLEAN NOT NULL DEFAULT true,
++  ADD COLUMN IF NOT EXISTS quiet_hours_enabled   BOOLEAN NOT NULL DEFAULT false,
++  ADD COLUMN IF NOT EXISTS quiet_start           SMALLINT NOT NULL DEFAULT 22,
++  ADD COLUMN IF NOT EXISTS quiet_end             SMALLINT NOT NULL DEFAULT 7;
++
++ALTER TABLE user_settings
++  DROP CONSTRAINT IF EXISTS user_settings_quiet_hours_range,
++  ADD CONSTRAINT user_settings_quiet_hours_range
++    CHECK (quiet_start BETWEEN 0 AND 23 AND quiet_end BETWEEN 0 AND 23);
++
++COMMIT;
+diff --git a/package.json b/package.json
+index a3d35b8..297d2b6 100644
+--- a/package.json
++++ b/package.json
+@@ -6,7 +6,7 @@
+     "scripts": {
+         "start": "node server.js",
+         "dev": "nodemon server.js",
+-        "test": "node tests/sessions.lifecycle.test.js && node tests/session-room.client.test.js && node tests/waitlist.test.js && node tests/mentors-page.test.js && node tests/chat-attachments.test.js && node tests/chat-recorder.test.js && node tests/voice-transcode.test.js && node tests/app-height.test.js && node tests/chat-floating-date.test.js && node tests/goals.rules.test.js && node tests/goals-ui.test.js"
++        "test": "node tests/sessions.lifecycle.test.js && node tests/session-room.client.test.js && node tests/waitlist.test.js && node tests/mentors-page.test.js && node tests/chat-attachments.test.js && node tests/chat-recorder.test.js && node tests/voice-transcode.test.js && node tests/app-height.test.js && node tests/chat-floating-date.test.js && node tests/goals.rules.test.js && node tests/goals-ui.test.js && node tests/notification-prefs.test.js && node tests/notification-settings-ui.test.js"
+     },
+     "engines": {
+         "node": ">=18.0.0"
+diff --git a/routes/users.js b/routes/users.js
+index 786bd20..2ef7c2f 100644
+--- a/routes/users.js
++++ b/routes/users.js
+@@ -2,6 +2,7 @@
+ 
+ const express = require('express');
+ const { closeAssignment, recordMentorRating, notifyMentorWaitlist } = require('../utils');
++const { sanitizeUpdates: sanitizeNotificationUpdates, invalidate: invalidateNotificationPrefs } = require('../utils/notificationPrefs');
+ 
+ // ─── Stats cache (1 hour TTL) ─────────────────────────────────────────────────
+ let statsCache = null;
+@@ -60,12 +61,16 @@ module.exports = function userRoutes(supabase, requireAuth) {
+   // PATCH /api/users/settings
+   router.patch('/settings', requireAuth, async (req, res) => {
+     const { id } = req.telegramUser;
+-    const allowed = ['display_name', 'notify_messages', 'notify_sessions', 'notify_daily_verse',
+-      'notify_streak_reminder', 'availability_start', 'availability_end', 'max_mentees', 'bio', 'specialization'];
++    const allowed = ['display_name', 'availability_start', 'availability_end', 'max_mentees', 'bio', 'specialization'];
+     const updates = {};
+     for (const key of allowed) {
+       if (req.body[key] !== undefined) updates[key] = req.body[key];
+     }
++    // Notification preferences are validated (booleans, 0-23 hours, real
++    // timezone) instead of being copied through blindly.
++    const prefs = sanitizeNotificationUpdates(req.body);
++    if (prefs.error) return res.status(400).json({ error: prefs.error });
++    Object.assign(updates, prefs.updates);
+     updates.updated_at = new Date().toISOString();
+ 
+     // Check display_name uniqueness if updated
+@@ -125,6 +130,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
+     const results = await Promise.all(promises);
+     const settingsResult = results[0];
+     if (settingsResult.error) return res.status(500).json({ error: settingsResult.error.message });
++    invalidateNotificationPrefs(id); // next notification sees the new choices immediately
+ 
+     // A higher mentee limit, or requests switched back on, can free a spot:
+     // tell anyone waiting for this mentor (it checks the free spots itself).
+diff --git a/tests/notification-prefs.test.js b/tests/notification-prefs.test.js
+new file mode 100644
+index 0000000..a163bf7
+--- /dev/null
++++ b/tests/notification-prefs.test.js
+@@ -0,0 +1,111 @@
++// Run: node tests/notification-prefs.test.js   (no network, no Supabase needed)
++// Covers utils/notificationPrefs.js: defaults, quiet hours (incl. across
++// midnight + time zones), the gate every notifier uses, and PATCH validation.
++const assert = require('assert');
++const P = require('../utils/notificationPrefs');
++const ok = n => console.log('  ✓', n);
++
++// ── normalize: missing row / null columns fall back to defaults ───────────────
++{
++  const d = P.normalize(null);
++  assert.strictEqual(d.notify_messages, true);
++  assert.strictEqual(d.message_preview, true);
++  assert.strictEqual(d.quiet_hours_enabled, false);
++  assert.strictEqual(d.timezone, 'Africa/Addis_Ababa');
++  const partial = P.normalize({ notify_messages: false, notify_goals: null, timezone: 'UTC' });
++  assert.strictEqual(partial.notify_messages, false);
++  assert.strictEqual(partial.notify_goals, true, 'null column => default');
++  assert.strictEqual(partial.timezone, 'Africa/Addis_Ababa', "column default 'UTC' means never chosen");
++  ok('normalize: defaults for missing row, null columns and untouched timezone');
++}
++
++// ── quiet hours ───────────────────────────────────────────────────────────────
++{
++  const base = { quiet_hours_enabled: true, quiet_start: 22, quiet_end: 7, timezone: 'Africa/Addis_Ababa' };
++  // Addis is UTC+3: 20:00Z = 23:00 local, 05:00Z = 08:00 local
++  assert.strictEqual(P.isQuietNow(base, new Date('2026-10-09T20:00:00Z')), true, '23:00 local is quiet');
++  assert.strictEqual(P.isQuietNow(base, new Date('2026-10-09T02:00:00Z')), true, '05:00 local is quiet (crosses midnight)');
++  assert.strictEqual(P.isQuietNow(base, new Date('2026-10-09T05:00:00Z')), false, '08:00 local is not quiet');
++  assert.strictEqual(P.isQuietNow(base, new Date('2026-10-09T04:00:00Z')), false, '07:00 local: end hour is exclusive');
++  assert.strictEqual(P.isQuietNow(base, new Date('2026-10-09T19:00:00Z')), true, '22:00 local: start hour is inclusive');
++  assert.strictEqual(P.isQuietNow({ ...base, quiet_hours_enabled: false }, new Date('2026-10-09T20:00:00Z')), false);
++  assert.strictEqual(P.isQuietNow({ ...base, quiet_start: 8, quiet_end: 8 }, new Date('2026-10-09T05:00:00Z')), false, 'start == end means off');
++  // same-day window, other time zone
++  const ny = { quiet_hours_enabled: true, quiet_start: 13, quiet_end: 15, timezone: 'America/New_York' };
++  assert.strictEqual(P.isQuietNow(ny, new Date('2026-10-09T18:30:00Z')), true, '14:30 New York (EDT)');
++  assert.strictEqual(P.isQuietNow(ny, new Date('2026-10-09T20:00:00Z')), false, '16:00 New York');
++  ok('isQuietNow: overnight window, boundaries, disabled, start==end, other zones');
++}
++
++// ── gate ──────────────────────────────────────────────────────────────────────
++function fakeSupabase(rows, counter = { n: 0 }) {
++  return {
++    counter,
++    from() {
++      const q = { select() { return q; }, eq() { return q; },
++        maybeSingle: async () => { counter.n++; return { data: rows.shift ? rows[0] : rows, error: null }; } };
++      return q;
++    },
++  };
++}
++(async () => {
++  {
++    const sb = fakeSupabase({ notify_messages: false });
++    const g = await P.gate(sb, 1001, 'messages');
++    assert.strictEqual(g.allowed, false);
++    P.invalidate(1001);
++    const g2 = await P.gate(fakeSupabase({ notify_messages: false }), 1001, 'messages', { force: true });
++    assert.strictEqual(g2.allowed, true, 'force overrides a muted category');
++    ok('gate: muted category blocks the send (and force bypasses it)');
++  }
++  {
++    P.invalidate(1002);
++    const sb = fakeSupabase({ quiet_hours_enabled: true, quiet_start: 22, quiet_end: 7, timezone: 'Africa/Addis_Ababa' });
++    const g = await P.gate(sb, 1002, 'sessions', { now: new Date('2026-10-09T20:00:00Z') });
++    assert.strictEqual(g.allowed, true, 'quiet hours never drop a notification');
++    assert.strictEqual(g.silent, true);
++    assert.deepStrictEqual(g.extra, { disable_notification: true });
++    const day = await P.gate(sb, 1002, 'sessions', { now: new Date('2026-10-09T09:00:00Z') });
++    assert.deepStrictEqual(day.extra, {}, 'daytime sends normally');
++    ok('gate: quiet hours deliver silently, daytime unchanged');
++  }
++  {
++    P.invalidate(1003);
++    const sb = fakeSupabase(null);
++    const g = await P.gate(sb, 1003, 'goals');
++    assert.strictEqual(g.allowed, true, 'no settings row => defaults (on)');
++    assert.strictEqual(g.prefs.message_preview, true);
++    ok('gate: user with no settings row keeps getting notifications');
++  }
++  {
++    P.invalidate(1004);
++    const sb = fakeSupabase({});
++    await P.gate(sb, 1004, 'verse'); await P.gate(sb, 1004, 'streak'); await P.gate(sb, 1004, 'nudges');
++    assert.strictEqual(sb.counter.n, 1, 'three notifications, one DB read');
++    P.invalidate(1004);
++    await P.gate(sb, 1004, 'verse');
++    assert.strictEqual(sb.counter.n, 2, 'invalidate forces a fresh read after settings change');
++    ok('getPrefs: cached, and invalidated on save');
++  }
++  {
++    const failing = { from() { throw new Error('db down'); } };
++    P.invalidate(1005);
++    const g = await P.gate(failing, 1005, 'messages');
++    assert.strictEqual(g.allowed, true, 'a failed settings lookup must not swallow a notification');
++    ok('gate: DB failure fails open');
++  }
++  assert.rejects(() => P.gate(fakeSupabase({}), 1, 'bogus'), /Unknown notification category/);
++  ok('gate: unknown category is a programming error');
++
++  // ── sanitizeUpdates ─────────────────────────────────────────────────────────
++  {
++    const good = P.sanitizeUpdates({ notify_goals: false, message_preview: false, quiet_hours_enabled: true, quiet_start: 23, quiet_end: 6, timezone: 'Africa/Addis_Ababa', display_name: 'ignored' });
++    assert.deepStrictEqual(good.updates, { notify_goals: false, message_preview: false, quiet_hours_enabled: true, quiet_start: 23, quiet_end: 6, timezone: 'Africa/Addis_Ababa' });
++    for (const bad of [{ notify_goals: 'yes' }, { quiet_start: 24 }, { quiet_end: -1 }, { quiet_start: null }, { quiet_start: '5' }, { quiet_start: 1.5 }, { timezone: 'Mars/Olympus' }]) {
++      assert.ok(P.sanitizeUpdates(bad).error, `rejects ${JSON.stringify(bad)}`);
++    }
++    assert.deepStrictEqual(P.sanitizeUpdates({}).updates, {});
++    ok('sanitizeUpdates: accepts valid prefs, rejects bad types / hours / timezones, ignores unrelated keys');
++  }
++  console.log('notification-prefs: all passed');
++})().catch(e => { console.error(e); process.exit(1); });
+diff --git a/tests/notification-settings-ui.test.js b/tests/notification-settings-ui.test.js
+new file mode 100644
+index 0000000..2af4ec0
+--- /dev/null
++++ b/tests/notification-settings-ui.test.js
+@@ -0,0 +1,70 @@
++// Run: node tests/notification-settings-ui.test.js   (needs devDependency jsdom)
++// Mini App notifications sheet: rendering from a legacy settings row, quiet-hours
++// picker, auto-save payload, rollback on failure, Amharic strings.
++const fs=require('fs');const {JSDOM}=require('jsdom');
++const app=fs.readFileSync('frontend/app.js','utf8');
++const html=fs.readFileSync('frontend/index.html','utf8');
++const loc=fs.readFileSync('frontend/locales.js','utf8');
++const dom=new JSDOM(html);const document=dom.window.document;
++const grab=(name,kw='function ')=>{const i=app.indexOf(kw+name);if(i<0)throw new Error('missing '+name);let d=0,j=app.indexOf('{',i);for(let k=j;k<app.length;k++){if(app[k]==='{')d++;if(app[k]==='}'&&--d===0)return app.slice(i,k+1);}};
++const constBlock=(name)=>{const i=app.indexOf('const '+name);let j=app.indexOf('\n];',i);if(app.slice(i,i+80).includes('= {'))j=app.indexOf('\n};',i);return app.slice(i,j+3);};
++const I18N=new Function(loc+';return typeof I18N!=="undefined"?I18N:null')();
++const calls=[];
++const code=`
++let currentLanguage='en', currentUser={}, escapeHtml=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
++const $=id=>document.getElementById(id);
++const haptic=()=>{}; const toasts=[]; const showToast=(m,t)=>toasts.push([m,t]);
++function t(key,r={}){const d=I18N[currentLanguage]||I18N.en;let s=d[key]||key;for(const[k,v]of Object.entries(r))s=s.replace(new RegExp('\\\\{'+k+'\\\\}','g'),v);return s;}
++let failNext=false;
++const apiFetch=async(url,o)=>{apiCalls.push([url,o]); if(failNext) throw new Error('boom'); return o.body;};
++${constBlock('NOTIFICATION_PREFS')}
++${constBlock('NOTIF_ICONS')}
++const QUIET_TOGGLE = { key: 'quiet_hours_enabled', id: 'toggleQuietHours', label: 'notif_quiet', hint: 'notif_hint_quiet' };
++let notifRowsRendered=false, notifSaveTimer=null, notifLastSaved={};
++${['formatQuietHour','setQuietHour','selectQuietHour','brandSwitchHtml','notifRowHtml','renderNotificationRows','retranslateNotificationRows','deviceTimezone','updateQuietHoursUi','applyNotificationPrefs','collectNotificationPrefs','toggleNotif','onQuietHoursChange','scheduleNotificationSave','saveNotificationPrefs'].map(n=>(n==='saveNotificationPrefs'?'async ':'')+grab(n)).join('\n')}
++return {applyNotificationPrefs,collectNotificationPrefs,saveNotificationPrefs,toggleNotif,toasts,setFail:v=>failNext=v,setLang:l=>currentLanguage=l,retranslateNotificationRows,getState:()=>({notifLastSaved})};
++`;
++const apiCalls=[];
++const api=new Function('document','I18N','apiCalls',code)(document,I18N,apiCalls);
++const assert=require('assert');
++// server returned a legacy row: no new columns at all
++api.applyNotificationPrefs({notify_messages:true,notify_sessions:false,notify_daily_verse:true,notify_streak_reminder:true});
++assert.equal(document.querySelectorAll('#notifRows .notif-row').length,7,'7 category rows');
++assert.ok([...document.querySelectorAll('.notif-row')].every(r=>r.tagName==='LABEL'&&r.querySelector('.profile-menu-icon svg path, .profile-menu-icon svg circle, .profile-menu-icon svg polygon')&&r.querySelector('.brand-switch-input')),'every row is a brand card with icon + switch');
++assert.equal(document.querySelectorAll('#notifRows .neo-toggle-container').length,0,'old neo toggles are gone from this sheet');
++assert.equal(document.getElementById('toggleSessions').checked,false);
++assert.equal(document.getElementById('togglePreview').checked,true,'missing column => default on');
++assert.equal(document.getElementById('toggleQuietHours').checked,false,'quiet off by default');
++assert.ok(document.getElementById('quietHoursPicker').classList.contains('hidden'));
++assert.equal(document.getElementById('quietStartSelect').value,'22');assert.equal(document.getElementById('quietEndSelect').value,'7');
++assert.equal(document.querySelectorAll('#quietStartMenu .dropdown-item').length,24);
++assert.equal(document.getElementById('quietStartLabel').textContent,'10:00 PM');assert.equal(document.getElementById('quietEndLabel').textContent,'7:00 AM');
++assert.ok(document.querySelector('#quietStartMenu .dropdown-item.selected'));
++console.log('  ✓ renders 7 rows + quiet hours from a legacy settings row, with sane defaults');
++// turn quiet hours on
++const q=document.getElementById('toggleQuietHours');q.checked=true;api.toggleNotif('toggleQuietHours');
++assert.ok(!document.getElementById('quietHoursPicker').classList.contains('hidden'));
++const body=api.collectNotificationPrefs();
++assert.equal(body.quiet_hours_enabled,true);assert.equal(body.quiet_start,22);assert.ok(typeof body.timezone==='string');
++assert.equal(Object.keys(body).length,7+1+2+1);
++console.log('  ✓ enabling quiet hours reveals the picker and adds hours + device timezone to the payload');
++(async()=>{
++  assert.equal(await api.saveNotificationPrefs(),true);
++  assert.equal(apiCalls.at(-1)[0],'/api/users/settings');assert.equal(apiCalls.at(-1)[1].method,'PATCH');
++  assert.equal(api.toasts.at(-1)[1],'success');
++  console.log('  ✓ save PATCHes /api/users/settings and confirms');
++  // failure rolls back
++  document.getElementById('toggleGoals').checked=false;api.setFail(true);
++  assert.equal(await api.saveNotificationPrefs(),false);
++  assert.equal(document.getElementById('toggleGoals').checked,true,'switch rolled back');
++  assert.equal(api.toasts.at(-1)[1],'error');
++  console.log('  ✓ failed save rolls the switch back and shows an error');
++  api.setLang('am');api.retranslateNotificationRows();
++  assert.ok(/[\u1200-\u137F]/.test(document.querySelector('[data-notif-key="notify_goals"] [data-notif-label]').textContent));
++  console.log('  ✓ rows switch to Amharic');
++  // every i18n key referenced exists in both languages
++  const keys=[...app.match(/hint: '([a-z_]+)'/g),...app.match(/label: 'notif_[a-z]+'/g)].map(x=>x.replace(/.*'(.+)'/,'$1')).filter(k=>/^notif_/.test(k));
++  for(const k of [...keys,'notif_saved','notif_save_failed','notif_quiet_tz','notif_quiet_from','notif_quiet_until']) for(const l of ['en','am']) assert.ok(I18N[l][k],`${l}.${k}`);
++  console.log('  ✓ all notification strings exist in English and Amharic');
++  console.log('notification-settings-ui: all passed');
++})().catch(e=>{console.error(e);process.exit(1)});
+diff --git a/utils/notificationPrefs.js b/utils/notificationPrefs.js
+new file mode 100644
+index 0000000..21a512c
+--- /dev/null
++++ b/utils/notificationPrefs.js
+@@ -0,0 +1,147 @@
++// Single source of truth for per-user notification preferences.
++//
++// Before this module, `notify_messages` and `notify_sessions` were stored and
++// shown in the UI but never checked anywhere, so those toggles did nothing.
++// Every Telegram notification now goes through `gate()`.
++//
++//   const g = await gate(supabase, chatId, 'messages');
++//   if (!g.allowed) return;                       // user turned this category off
++//   await safeSend(chatId, text, { ...g.extra });  // extra.disable_notification during quiet hours
++//
++// Design rules:
++//  * Quiet hours never DROP a notification, they deliver it silently (no
++//    sound / vibration). Someone in a counseling conversation must not lose a
++//    message because it arrived at 11pm.
++//  * Missing settings row / missing column (migration not yet run) => defaults,
++//    so a user who never opened Settings keeps getting what they always got.
++
++const DEFAULT_TZ = 'Africa/Addis_Ababa';
++
++// category -> column that stores its on/off flag
++const CATEGORY_COLUMN = {
++  messages: 'notify_messages',
++  sessions: 'notify_sessions',
++  verse: 'notify_daily_verse',
++  streak: 'notify_streak_reminder',
++  goals: 'notify_goals',
++  nudges: 'notify_nudges',
++};
++
++const DEFAULTS = Object.freeze({
++  notify_messages: true,
++  notify_sessions: true,
++  notify_daily_verse: true,
++  notify_streak_reminder: true,
++  notify_goals: true,
++  notify_nudges: true,
++  message_preview: true,
++  quiet_hours_enabled: false,
++  quiet_start: 22,
++  quiet_end: 7,
++  verse_time: 7,
++  timezone: DEFAULT_TZ,
++});
++
++// Columns the settings API may write (booleans / hours / timezone).
++const BOOLEAN_FIELDS = [
++  'notify_messages', 'notify_sessions', 'notify_daily_verse', 'notify_streak_reminder',
++  'notify_goals', 'notify_nudges', 'message_preview', 'quiet_hours_enabled',
++];
++const HOUR_FIELDS = ['quiet_start', 'quiet_end'];
++
++function isValidTimezone(tz) {
++  if (typeof tz !== 'string' || !tz || tz.length > 64) return false;
++  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; }
++}
++
++// Merge a stored row over the defaults. `null` / `undefined` => default.
++function normalize(row) {
++  const out = { ...DEFAULTS };
++  if (!row) return out;
++  for (const k of Object.keys(DEFAULTS)) {
++    if (row[k] !== undefined && row[k] !== null) out[k] = row[k];
++  }
++  // 'UTC' is the column default and means "never chosen" — fall back to Ethiopia.
++  if (!isValidTimezone(out.timezone) || out.timezone === 'UTC') out.timezone = DEFAULT_TZ;
++  return out;
++}
++
++// Hour (0-23) of `date` in `tz`.
++function hourInZone(date, tz) {
++  const h = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' })
++    .formatToParts(date).find(p => p.type === 'hour');
++  return Number(h?.value ?? 0) % 24;
++}
++
++// True when `date` falls inside the user's quiet window. Handles windows that
++// cross midnight (22 -> 7). start === end means "off".
++function isQuietNow(prefs, date = new Date()) {
++  if (!prefs.quiet_hours_enabled) return false;
++  const start = Number(prefs.quiet_start), end = Number(prefs.quiet_end);
++  if (start === end) return false;
++  const h = hourInZone(date, prefs.timezone);
++  return start < end ? (h >= start && h < end) : (h >= start || h < end);
++}
++
++// Validate + coerce a PATCH body down to the notification columns we accept.
++// Returns { updates, error }.
++function sanitizeUpdates(body = {}) {
++  const updates = {};
++  for (const k of BOOLEAN_FIELDS) {
++    if (body[k] === undefined) continue;
++    if (typeof body[k] !== 'boolean') return { error: `${k} must be true or false` };
++    updates[k] = body[k];
++  }
++  for (const k of HOUR_FIELDS) {
++    if (body[k] === undefined) continue;
++    const n = body[k];
++    if (!Number.isInteger(n) || n < 0 || n > 23) return { error: `${k} must be a whole hour between 0 and 23` };
++    updates[k] = n;
++  }
++  if (body.timezone !== undefined) {
++    if (!isValidTimezone(body.timezone)) return { error: 'Unknown timezone' };
++    updates.timezone = body.timezone;
++  }
++  return { updates };
++}
++
++// ── Small TTL cache: a chat can fire several notifications per second and each
++// one used to cost a DB round-trip. 30s staleness is fine; saving settings
++// invalidates immediately.
++const CACHE_TTL_MS = 30 * 1000;
++const cache = new Map(); // String(id) -> { at, prefs }
++
++function invalidate(id) { cache.delete(String(id)); }
++
++async function getPrefs(supabase, id) {
++  const key = String(id);
++  const hit = cache.get(key);
++  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.prefs;
++  let prefs;
++  try {
++    const { data, error } = await supabase.from('user_settings').select('*').eq('telegram_id', id).maybeSingle();
++    prefs = normalize(error ? null : data);
++  } catch {
++    prefs = normalize(null); // never let a settings lookup block a notification
++  }
++  cache.set(key, { at: Date.now(), prefs });
++  if (cache.size > 5000) cache.delete(cache.keys().next().value); // crude bound
++  return prefs;
++}
++
++// The one call every notifier makes.
++//   -> { allowed, silent, prefs, extra }
++async function gate(supabase, id, category, { now = new Date(), force = false } = {}) {
++  const col = CATEGORY_COLUMN[category];
++  if (!col) throw new Error(`Unknown notification category: ${category}`);
++  const prefs = await getPrefs(supabase, id);
++  const allowed = force || prefs[col] !== false;
++  const silent = allowed && isQuietNow(prefs, now);
++  return { allowed, silent, prefs, extra: silent ? { disable_notification: true } : {} };
++}
++
++module.exports = {
++  CATEGORY_COLUMN, DEFAULTS, DEFAULT_TZ, BOOLEAN_FIELDS, HOUR_FIELDS,
++  normalize, isValidTimezone, isQuietNow, hourInZone, sanitizeUpdates,
++  getPrefs, invalidate, gate,
++};
