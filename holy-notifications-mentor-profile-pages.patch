@@ -1,0 +1,653 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index cf15f5f..9518693 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -6630,6 +6630,7 @@ async function saveNotificationsFromModal() {
+ function openMentorProfileModal() {
+   haptic('light');
+   $('mentorProfileModal')?.classList.add('open');
++  renderMentorTopicPills();
+ }
+ 
+ function closeMentorProfileModal() {
+@@ -6704,12 +6705,34 @@ function selectMenteeSex(value, labelText) {
+   if (input) input.value = value;
+   const label = $('settingMenteeSexLabel');
+   if (label) label.textContent = labelText;
+-  const menu = $('settingMenteeSexDropdown')?.querySelector('.premium-dropdown-menu');
+-  if (menu) {
+-    menu.querySelectorAll('.dropdown-item').forEach(item => {
+-      item.classList.toggle('selected', item.dataset.value === value);
+-    });
+-  }
++  $('settingMenteeSexDropdown')?.querySelectorAll('.ps-seg-btn').forEach(btn => {
++    const on = btn.dataset.value === value;
++    btn.classList.toggle('active', on);
++    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
++  });
++}
++
++// +/- buttons next to the Max Mentees number field.
++function stepMaxMentees(delta) {
++  haptic('selection');
++  const el = $('settingMaxMentees');
++  if (!el) return;
++  const next = Math.min(20, Math.max(1, (parseInt(el.value) || 5) + delta));
++  el.value = next;
++}
++
++// Selected "Topics to Mentor" shown as gold tag pills on the Mentor Profile.
++async function renderMentorTopicPills() {
++  const box = $('mentorTopicPills');
++  if (!box) return;
++  try {
++    const [all, mine] = await Promise.all([apiFetch('/api/topics'), apiFetch('/api/topics/my-expertise')]);
++    const ids = new Set((mine || []).map(x => x.topic_id));
++    const names = (all || []).filter(x => ids.has(x.id)).map(topicLabel);
++    box.innerHTML = names.length
++      ? names.map(n => `<span class="ps-tag">${escapeHtml(n)}</span>`).join('')
++      : `<span class="ps-empty">${escapeHtml(t('mentor_no_topics') || 'No topics selected yet')}</span>`;
++  } catch (_) { /* keep whatever is shown */ }
+ }
+ 
+ // ─── Mentor Application ───────────────────────────────────────
+@@ -8569,6 +8592,7 @@ async function saveTopics() {
+     haptic('success');
+     showToast(t('topics_updated') || 'Topics updated successfully', 'success');
+     closeTopicModal();
++    if (window.isTopicModalExpertise) renderMentorTopicPills();
+   } catch (e) { showToast(e.message, 'error'); }
+ }
+ 
+diff --git a/frontend/index.html b/frontend/index.html
+index b53557f..a2423e4 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -15,7 +15,7 @@
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
+   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
+-  <link rel="stylesheet" href="styles.css?v=2.7" />
++  <link rel="stylesheet" href="styles.css?v=2.8" />
+   <link rel="stylesheet" href="goals.css?v=1.3" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+@@ -1912,295 +1912,115 @@
+   </div>
+ 
+   <!-- ── Modal: Notifications ─────────────────────────────────── -->
+-  <div id="notificationsModal" class="modal-overlay" onclick="if(event.target===this)closeNotificationsModal()">
+-    <div class="modal-sheet notifications-sheet">
+-      <div class="modal-handle"></div>
+-      <div class="modal-title" data-i18n="Notifications">Notifications</div>
+-      <p class="text-xs text-dim mb-16" data-i18n="notifications_modal_subtitle">Customize which alerts and reminders you receive.</p>
+-
+-      <div class="card mb-16">
+-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="New Messages">New Messages</span>
+-          <div class="neo-toggle-container">
+-            <input class="neo-toggle-input" id="toggleMessages" type="checkbox" checked
+-              onchange="toggleNotif('toggleMessages')" />
+-            <label class="neo-toggle" for="toggleMessages">
+-              <div class="neo-track">
+-                <div class="neo-background-layer"></div>
+-                <div class="neo-grid-layer"></div>
+-                <div class="neo-spectrum-analyzer">
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                </div>
+-                <div class="neo-track-highlight"></div>
+-              </div>
+-              <div class="neo-thumb">
+-                <div class="neo-thumb-ring"></div>
+-                <div class="neo-thumb-core">
+-                  <div class="neo-thumb-icon">
+-                    <div class="neo-thumb-wave"></div>
+-                    <div class="neo-thumb-pulse"></div>
+-                  </div>
+-                </div>
+-              </div>
+-              <div class="neo-gesture-area"></div>
+-              <div class="neo-interaction-feedback">
+-                <div class="neo-ripple"></div>
+-                <div class="neo-progress-arc"></div>
+-              </div>
+-              <div class="neo-status">
+-                <div class="neo-status-indicator">
+-                  <div class="neo-status-dot"></div>
+-                  <div class="neo-status-text"></div>
+-                </div>
+-              </div>
+-            </label>
+-          </div>
+-        </div>
+-        <div class="divider"></div>
+-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="Session Reminders">Session Reminders</span>
+-          <div class="neo-toggle-container">
+-            <input class="neo-toggle-input" id="toggleSessions" type="checkbox" checked
+-              onchange="toggleNotif('toggleSessions')" />
+-            <label class="neo-toggle" for="toggleSessions">
+-              <div class="neo-track">
+-                <div class="neo-background-layer"></div>
+-                <div class="neo-grid-layer"></div>
+-                <div class="neo-spectrum-analyzer">
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                </div>
+-                <div class="neo-track-highlight"></div>
+-              </div>
+-              <div class="neo-thumb">
+-                <div class="neo-thumb-ring"></div>
+-                <div class="neo-thumb-core">
+-                  <div class="neo-thumb-icon">
+-                    <div class="neo-thumb-wave"></div>
+-                    <div class="neo-thumb-pulse"></div>
+-                  </div>
+-                </div>
+-              </div>
+-              <div class="neo-gesture-area"></div>
+-              <div class="neo-interaction-feedback">
+-                <div class="neo-ripple"></div>
+-                <div class="neo-progress-arc"></div>
+-              </div>
+-              <div class="neo-status">
+-                <div class="neo-status-indicator">
+-                  <div class="neo-status-dot"></div>
+-                  <div class="neo-status-text"></div>
+-                </div>
+-              </div>
+-            </label>
+-          </div>
+-        </div>
+-        <div class="divider"></div>
+-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="Daily Bible Verse">Daily Bible Verse</span>
+-          <div class="neo-toggle-container">
+-            <input class="neo-toggle-input" id="toggleVerse" type="checkbox" checked
+-              onchange="toggleNotif('toggleVerse')" />
+-            <label class="neo-toggle" for="toggleVerse">
+-              <div class="neo-track">
+-                <div class="neo-background-layer"></div>
+-                <div class="neo-grid-layer"></div>
+-                <div class="neo-spectrum-analyzer">
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                </div>
+-                <div class="neo-track-highlight"></div>
+-              </div>
+-              <div class="neo-thumb">
+-                <div class="neo-thumb-ring"></div>
+-                <div class="neo-thumb-core">
+-                  <div class="neo-thumb-icon">
+-                    <div class="neo-thumb-wave"></div>
+-                    <div class="neo-thumb-pulse"></div>
+-                  </div>
+-                </div>
+-              </div>
+-              <div class="neo-gesture-area"></div>
+-              <div class="neo-interaction-feedback">
+-                <div class="neo-ripple"></div>
+-                <div class="neo-progress-arc"></div>
+-              </div>
+-              <div class="neo-status">
+-                <div class="neo-status-indicator">
+-                  <div class="neo-status-dot"></div>
+-                  <div class="neo-status-text"></div>
+-                </div>
+-              </div>
+-            </label>
+-          </div>
+-        </div>
+-        <div class="divider"></div>
+-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="Streak Reminders">Streak Reminders</span>
+-          <div class="neo-toggle-container">
+-            <input class="neo-toggle-input" id="toggleStreak" type="checkbox" checked
+-              onchange="toggleNotif('toggleStreak')" />
+-            <label class="neo-toggle" for="toggleStreak">
+-              <div class="neo-track">
+-                <div class="neo-background-layer"></div>
+-                <div class="neo-grid-layer"></div>
+-                <div class="neo-spectrum-analyzer">
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                  <div class="neo-spectrum-bar"></div>
+-                </div>
+-                <div class="neo-track-highlight"></div>
+-              </div>
+-              <div class="neo-thumb">
+-                <div class="neo-thumb-ring"></div>
+-                <div class="neo-thumb-core">
+-                  <div class="neo-thumb-icon">
+-                    <div class="neo-thumb-wave"></div>
+-                    <div class="neo-thumb-pulse"></div>
+-                  </div>
+-                </div>
+-              </div>
+-              <div class="neo-gesture-area"></div>
+-              <div class="neo-interaction-feedback">
+-                <div class="neo-ripple"></div>
+-                <div class="neo-progress-arc"></div>
+-              </div>
+-              <div class="neo-status">
+-                <div class="neo-status-indicator">
+-                  <div class="neo-status-dot"></div>
+-                  <div class="neo-status-text"></div>
+-                </div>
+-              </div>
+-            </label>
+-          </div>
+-        </div>
++  <!-- Page-style sheet (same look as Profile / Mentors): fixed header + footer, only the middle scrolls,
++       so the on-screen keyboard can never cover content. Element IDs are unchanged (saveSettings reads them). -->
++  <div id="notificationsModal" class="modal-overlay ps-overlay" onclick="if(event.target===this)closeNotificationsModal()">
++    <div class="modal-sheet notifications-sheet page-sheet" role="dialog" aria-modal="true" aria-labelledby="notifTitle">
++      <div class="ps-head">
++        <button type="button" class="ps-back" onclick="closeNotificationsModal()" aria-label="Back"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
++        <h2 class="ps-title" id="notifTitle" data-i18n="Notifications">Notifications</h2>
++      </div>
++      <p class="ps-sub" data-i18n="notifications_modal_subtitle">Customize which alerts and reminders you receive.</p>
++      <div class="ps-body">
++        <div class="ps-card ps-row ps-gold">
++          <span class="ps-tile"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
++          <span class="ps-row-text"><span class="ps-row-title" data-i18n="New Messages">New Messages</span><span class="ps-row-sub" data-i18n="notif_sub_messages">Replies from your mentor or mentees</span></span>
++          <span class="ps-switch"><input class="ps-switch-input" id="toggleMessages" type="checkbox" checked onchange="toggleNotif('toggleMessages')" /><label class="ps-switch-track" for="toggleMessages" aria-label="New Messages"><span class="ps-switch-knob"></span></label></span>
++        </div>
++        <div class="ps-card ps-row">
++          <span class="ps-tile"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18v16H3z M16 3v4 M8 3v4 M3 11h18"/></svg></span>
++          <span class="ps-row-text"><span class="ps-row-title" data-i18n="Session Reminders">Session Reminders</span><span class="ps-row-sub" data-i18n="notif_sub_sessions">Before each scheduled session</span></span>
++          <span class="ps-switch"><input class="ps-switch-input" id="toggleSessions" type="checkbox" checked onchange="toggleNotif('toggleSessions')" /><label class="ps-switch-track" for="toggleSessions" aria-label="Session Reminders"><span class="ps-switch-knob"></span></label></span>
++        </div>
++        <div class="ps-card ps-row">
++          <span class="ps-tile"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/></svg></span>
++          <span class="ps-row-text"><span class="ps-row-title" data-i18n="Daily Bible Verse">Daily Bible Verse</span><span class="ps-row-sub" data-i18n="notif_sub_verse">One verse each morning</span></span>
++          <span class="ps-switch"><input class="ps-switch-input" id="toggleVerse" type="checkbox" checked onchange="toggleNotif('toggleVerse')" /><label class="ps-switch-track" for="toggleVerse" aria-label="Daily Bible Verse"><span class="ps-switch-knob"></span></label></span>
++        </div>
++        <div class="ps-card ps-row">
++          <span class="ps-tile"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-4 3-7 1 1 2 2 3 2 0-3 0-5 0-7z"/></svg></span>
++          <span class="ps-row-text"><span class="ps-row-title" data-i18n="Streak Reminders">Streak Reminders</span><span class="ps-row-sub" data-i18n="notif_sub_streak">Keep your daily streak alive</span></span>
++          <span class="ps-switch"><input class="ps-switch-input" id="toggleStreak" type="checkbox" checked onchange="toggleNotif('toggleStreak')" /><label class="ps-switch-track" for="toggleStreak" aria-label="Streak Reminders"><span class="ps-switch-knob"></span></label></span>
++        </div>
++      </div>
++      <div class="ps-foot">
++        <button type="button" class="btn btn-primary btn-full" onclick="saveNotificationsFromModal()" data-i18n="btn_done">Done</button>
+       </div>
+-
+-      <button type="button" class="btn btn-primary btn-full" onclick="saveNotificationsFromModal()"
+-        data-i18n="btn_done">Done</button>
+     </div>
+   </div>
+ 
+   <!-- ── Modal: Mentor Profile ─────────────────────────────────── -->
+-  <div id="mentorProfileModal" class="modal-overlay" onclick="if(event.target===this)closeMentorProfileModal()">
+-    <div class="modal-sheet mentor-profile-sheet">
+-      <div class="modal-handle"></div>
+-      <div class="modal-title" data-i18n="Mentor Profile">Mentor Profile</div>
+-      <p class="text-xs text-dim mb-16" data-i18n="mentor_profile_modal_subtitle">Configure your mentorship details, availability, and focus areas.</p>
++  <div id="mentorProfileModal" class="modal-overlay ps-overlay" onclick="if(event.target===this)closeMentorProfileModal()">
++    <div class="modal-sheet mentor-profile-sheet page-sheet" role="dialog" aria-modal="true" aria-labelledby="mentorProfileTitle">
++      <div class="ps-head">
++        <button type="button" class="ps-back" onclick="closeMentorProfileModal()" aria-label="Back"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
++        <div>
++          <h2 class="ps-title" id="mentorProfileTitle" data-i18n="Mentor Profile">Mentor Profile</h2>
++        </div>
++      </div>
++      <p class="ps-sub" data-i18n="mentor_profile_modal_subtitle">Configure your mentorship details, availability, and focus areas.</p>
++      <div class="ps-body">
++        <div class="ps-card">
++          <label class="ps-label" data-i18n="Bio">Bio</label>
++          <div id="bioDisplayWrap" class="bio-box" onclick="enterBioEditMode()">
++            <p id="bioDisplayText" class="bio-box-text"></p>
++            <button type="button" class="bio-edit-btn" onclick="enterBioEditMode(event)" aria-label="Edit bio">
++              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
++                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++                <path d="M12 20h9" />
++                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
++              </svg>
++            </button>
++          </div>
+ 
+-      <div class="form-group">
+-        <label class="form-label" data-i18n="Bio">Bio</label>
+-        <div id="bioDisplayWrap" class="bio-box" onclick="enterBioEditMode()">
+-          <p id="bioDisplayText" class="bio-box-text"></p>
+-          <button type="button" class="bio-edit-btn" onclick="enterBioEditMode(event)" aria-label="Edit bio">
+-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+-              <path d="M12 20h9" />
+-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+-            </svg>
+-          </button>
++          <div id="bioEditWrap" class="hidden">
++            <textarea id="settingBio" class="form-control" rows="4"
++              placeholder="Share a bit about your recovery journey…"></textarea>
++            <button type="button" class="btn btn-ghost btn-sm mt-8" onclick="exitBioEditMode()"
++              aria-label="Done editing bio" data-i18n="btn_done">Done</button>
++          </div>
+         </div>
+ 
+-        <div id="bioEditWrap" class="hidden">
+-          <textarea id="settingBio" class="form-control" rows="4"
+-            placeholder="Share a bit about your recovery journey…"></textarea>
+-          <button type="button" class="btn btn-ghost btn-sm mt-8" onclick="exitBioEditMode()"
+-            aria-label="Done editing bio" data-i18n="btn_done">Done</button>
++        <div class="ps-card">
++          <label class="ps-label" for="settingSpecialization" data-i18n="Specialization">Specialization</label>
++          <input id="settingSpecialization" class="input" type="text" autocomplete="off" enterkeyhint="done"
++            placeholder="e.g. Young adults, Married men…" />
+         </div>
+-      </div>
+ 
+-      <div class="form-group">
+-        <label class="form-label" data-i18n="Specialization">Specialization</label>
+-        <input id="settingSpecialization" class="input" type="text" autocomplete="off"
+-          placeholder="e.g. Young adults, Married men…" />
+-      </div>
+-
+-      <div class="form-group">
+-        <label class="form-label" data-i18n="Mentees I Mentor">Mentees I Mentor</label>
+-        <div class="premium-dropdown form-dropdown" data-dropdown id="settingMenteeSexDropdown">
+-          <button type="button" class="premium-dropdown-btn" data-dropdown-toggle>
+-            <span class="dropdown-label" id="settingMenteeSexLabel" data-i18n="Both">Both</span>
+-            <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+-              <polyline points="6 9 12 15 18 9"/>
+-            </svg>
+-          </button>
+-          <div class="premium-dropdown-menu" data-dropdown-menu>
+-            <button type="button" class="dropdown-item selected" data-value="prefer_not" onclick="selectMenteeSex('prefer_not', t('Both') || 'Both')" data-i18n="Both">Both</button>
+-            <button type="button" class="dropdown-item" data-value="M" onclick="selectMenteeSex('M', t('Male only') || 'Male only')" data-i18n="Male only">Male only</button>
+-            <button type="button" class="dropdown-item" data-value="F" onclick="selectMenteeSex('F', t('Female only') || 'Female only')" data-i18n="Female only">Female only</button>
++        <div class="ps-card">
++          <span class="ps-label" data-i18n="Mentees I Mentor">Mentees I Mentor</span>
++          <div class="ps-seg" id="settingMenteeSexDropdown" role="group" aria-label="Mentees I Mentor">
++            <button type="button" class="ps-seg-btn active" data-value="prefer_not" onclick="selectMenteeSex('prefer_not', t('Both') || 'Both')" data-i18n="Both">Both</button>
++            <button type="button" class="ps-seg-btn" data-value="M" onclick="selectMenteeSex('M', t('Male only') || 'Male only')" data-i18n="Male only">Male only</button>
++            <button type="button" class="ps-seg-btn" data-value="F" onclick="selectMenteeSex('F', t('Female only') || 'Female only')" data-i18n="Female only">Female only</button>
+           </div>
+           <input type="hidden" id="settingMenteeSex" value="prefer_not" />
+         </div>
+-      </div>
+ 
+-      <div class="form-group">
+-        <label class="form-label" data-i18n="Max Mentees">Max Mentees</label>
+-        <input id="settingMaxMentees" class="input" type="number" min="1" max="20" value="5" />
+-      </div>
+-
+-      <div class="divider"></div>
+-
+-      <div class="toggle-wrap toggle-wrap--neo mb-16">
+-        <span data-i18n="Accept New Requests">Accept New Requests</span>
+-        <div class="neo-toggle-container">
+-          <input class="neo-toggle-input" id="toggleAcceptingRequests" type="checkbox" checked
+-            onchange="toggleAcceptingRequests()" />
+-          <label class="neo-toggle" for="toggleAcceptingRequests">
+-            <div class="neo-track">
+-              <div class="neo-background-layer"></div>
+-              <div class="neo-grid-layer"></div>
+-              <div class="neo-spectrum-analyzer">
+-                <div class="neo-spectrum-bar"></div>
+-                <div class="neo-spectrum-bar"></div>
+-                <div class="neo-spectrum-bar"></div>
+-                <div class="neo-spectrum-bar"></div>
+-                <div class="neo-spectrum-bar"></div>
+-              </div>
+-              <div class="neo-track-highlight"></div>
+-            </div>
+-            <div class="neo-thumb">
+-              <div class="neo-thumb-ring"></div>
+-              <div class="neo-thumb-core">
+-                <div class="neo-thumb-icon">
+-                  <div class="neo-thumb-wave"></div>
+-                  <div class="neo-thumb-pulse"></div>
+-                </div>
+-              </div>
+-            </div>
+-            <div class="neo-gesture-area"></div>
+-            <div class="neo-interaction-feedback">
+-              <div class="neo-ripple"></div>
+-              <div class="neo-progress-arc"></div>
+-            </div>
+-            <div class="neo-status">
+-              <div class="neo-status-indicator">
+-                <div class="neo-status-dot"></div>
+-                <div class="neo-status-text"></div>
+-              </div>
+-            </div>
+-          </label>
++        <div class="ps-card ps-row ps-row--tight">
++          <label class="ps-row-title" for="settingMaxMentees" data-i18n="Max Mentees">Max Mentees</label>
++          <span class="ps-stepper">
++            <button type="button" class="ps-step" onclick="stepMaxMentees(-1)" aria-label="Fewer">−</button>
++            <input id="settingMaxMentees" class="ps-num" type="number" inputmode="numeric" min="1" max="20" value="5" />
++            <button type="button" class="ps-step" onclick="stepMaxMentees(1)" aria-label="More">+</button>
++          </span>
+         </div>
+-      </div>
+ 
+-      <button type="button" class="btn btn-outline btn-full mb-16" onclick="openTopicModal(true)"
+-        data-i18n="settings_expertise_topics">
+-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px">
+-          <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+-          <line x1="7" y1="7" x2="7.01" y2="7" />
+-        </svg>
+-        Topics to Mentor
+-      </button>
++        <div class="ps-card ps-row">
++          <span class="ps-tile"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M19 8v6 M22 11h-6"/></svg></span>
++          <span class="ps-row-text"><span class="ps-row-title" data-i18n="Accept New Requests">Accept New Requests</span></span>
++          <span class="ps-switch"><input class="ps-switch-input" id="toggleAcceptingRequests" type="checkbox" checked onchange="toggleAcceptingRequests()" /><label class="ps-switch-track" for="toggleAcceptingRequests" aria-label="Accept New Requests"><span class="ps-switch-knob"></span></label></span>
++        </div>
+ 
+-      <button type="button" class="btn btn-primary btn-full" onclick="saveMentorProfileFromModal()"
+-        data-i18n="Save Changes">Save Changes</button>
++        <div class="ps-card">
++          <span class="ps-label" data-i18n="settings_expertise_topics_label">Topics to Mentor</span>
++          <div class="ps-tags" id="mentorTopicPills"></div>
++          <button type="button" class="btn btn-outline btn-full" onclick="openTopicModal(true)"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/></svg><span data-i18n="mentor_edit_topics">Edit topics</span></button>
++        </div>
++      </div>
++      <div class="ps-foot">
++        <button type="button" class="btn btn-primary btn-full" onclick="saveMentorProfileFromModal()" data-i18n="Save Changes">Save Changes</button>
++      </div>
+     </div>
+   </div>
+ 
+@@ -2551,7 +2371,7 @@
+   </div>
+ 
+   <script src="locales.js?v=1.8"></script>
+-  <script src="app.js?v=3.2"></script>
++  <script src="app.js?v=3.3"></script>
+   <script src="goals.js?v=1.3"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="session-room.js?v=1.4"></script>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 03367ef..2b2de17 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -521,6 +521,13 @@ const I18N = {
+     "Mentor Profile": "Mentor Profile",
+     "notifications_modal_subtitle": "Customize which alerts and reminders you receive.",
+     "mentor_profile_modal_subtitle": "Configure your mentorship details, availability, and focus areas.",
++    "notif_sub_messages": "Replies from your mentor or mentees",
++    "notif_sub_sessions": "Before each scheduled session",
++    "notif_sub_verse": "One verse each morning",
++    "notif_sub_streak": "Keep your daily streak alive",
++    "settings_expertise_topics_label": "Topics to Mentor",
++    "mentor_edit_topics": "Edit topics",
++    "mentor_no_topics": "No topics selected yet",
+     "Bio": "Bio",
+     "Specialization": "Specialization",
+     "Mentees I Mentor": "Mentees I Mentor",
+@@ -1289,6 +1296,13 @@ const I18N = {
+     "Mentor Profile": "የአማካሪ መገለጫ",
+     "notifications_modal_subtitle": "የሚደርሱዎትን ማሳወቂያዎች እና ማስታወሻዎች ያስተካክሉ።",
+     "mentor_profile_modal_subtitle": "የአማካሪነት ዝርዝሮችዎን፣ ዝግጁነትዎን እና ርዕሶቻችሁን አስተካክሉ።",
++    "notif_sub_messages": "ከአማካሪዎ ወይም ከተማሪዎችዎ የሚመጡ መልሶች",
++    "notif_sub_sessions": "ከእያንዳንዱ የታቀደ ክፍለ ጊዜ በፊት",
++    "notif_sub_verse": "በየማለዳው አንድ ጥቅስ",
++    "notif_sub_streak": "የዕለት ቅብብሎሽዎን ይጠብቁ",
++    "settings_expertise_topics_label": "ለማማከር ርዕሶች",
++    "mentor_edit_topics": "ርዕሶችን አርትዕ",
++    "mentor_no_topics": "ገና ምንም ርዕስ አልተመረጠም",
+     "Bio": "ስለ እኔ",
+     "Specialization": "ልዩ መስክ",
+     "Mentees I Mentor": "የማማክራቸው ተመካሪዎች",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 62d6cc5..c33a74f 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13444,3 +13444,145 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+ [data-theme="light"] .journal-icon-btn { background: #fff; border-color: rgba(150, 120, 40, 0.25); }
+ [data-theme="light"] .journal-icon-btn.danger { background: rgba(224, 92, 92, 0.08); border-color: rgba(224, 92, 92, 0.35); }
+ [data-theme="light"] .journal-sheet .modal-title { color: #7A5812; }
++
++
++/* ═══ Notifications + Mentor Profile: page-style sheets ═══════════════════
++   Same look as the Profile / Mentors pages (gold glow, 26px gradient cards,
++   gold icon tiles, pill buttons + pill segmented control).
++   Layout = fixed header + scrolling middle + fixed footer, so the keyboard can
++   never cover the field you are typing in or the Save button.
++   Performance: no backdrop blur on the overlay, the switch animates only
++   transform/background, the old 20-layer "neo" toggle is not used here. ═══ */
++.ps-overlay {
++  backdrop-filter: none;
++  -webkit-backdrop-filter: none;
++  background: rgba(0, 0, 0, 0.62);
++  /* Where the keyboard overlays the page instead of resizing it (iOS Safari),
++     lift the sheet by the covered amount (--kb-inset is set in app.js). */
++  padding-bottom: var(--kb-inset, 0px);
++}
++.modal-sheet.page-sheet {
++  display: flex;
++  flex-direction: column;
++  height: min(92vh, calc(var(--app-height) - var(--kb-inset, 0px) - 12px));
++  max-height: none;
++  padding: 0;
++  overflow: hidden;
++  border: 1px solid var(--border-dim);
++  border-bottom: 0;
++  border-radius: 30px 30px 0 0;
++  background:
++    radial-gradient(120% 360px at 50% 0%, rgba(201, 168, 76, 0.24) 0%, rgba(168, 124, 42, 0.09) 45%, transparent 78%) no-repeat,
++    var(--bg);
++}
++[data-theme="light"] .modal-sheet.page-sheet {
++  background:
++    radial-gradient(120% 360px at 50% 0%, rgba(201, 168, 76, 0.30) 0%, rgba(201, 168, 76, 0.09) 45%, transparent 78%) no-repeat,
++    var(--bg);
++}
++.ps-head { flex: none; display: flex; align-items: center; gap: 12px; padding: 18px 16px 6px; }
++.ps-back {
++  width: 44px; height: 44px; flex: none;
++  display: flex; align-items: center; justify-content: center;
++  border-radius: 50%;
++  border: 1px solid rgba(255, 255, 255, 0.10);
++  background: rgba(255, 255, 255, 0.06);
++  color: var(--text);
++  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
++}
++.ps-back:active { transform: scale(0.94); }
++.ps-title { margin: 0; font-family: var(--font-display); font-size: var(--fs-xl); letter-spacing: 0.02em; color: var(--text); }
++.ps-sub { flex: none; margin: 6px 22px 12px; font-size: var(--fs-sm); line-height: 1.5; color: var(--text2); }
++.ps-body {
++  flex: 1; min-height: 0;
++  display: flex; flex-direction: column; gap: 12px;
++  padding: 6px 16px 20px;
++  overflow-y: auto;
++  overscroll-behavior: contain;
++  -webkit-overflow-scrolling: touch;
++  scroll-padding-bottom: 24px;
++}
++.ps-foot {
++  flex: none;
++  padding: 12px 16px calc(14px + var(--nav-h) + var(--safe-bottom));   /* clears the bottom nav */
++  background: var(--bg);
++  border-top: 1px solid var(--border-dim);
++}
++/* Keyboard open: the nav is hidden by the keyboard logic, so don't leave a gap. */
++body.kb-open:has(.ps-overlay.open) .bottom-nav { display: none; }
++body.kb-open .ps-foot { padding-bottom: calc(12px + var(--safe-bottom)); }
++
++.ps-card {
++  flex: none;
++  padding: 16px 18px;
++  border: 1px solid rgba(255, 255, 255, 0.07);
++  border-radius: 26px;
++  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
++  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
++}
++.ps-card.ps-gold {
++  border-color: rgba(201, 168, 76, 0.35);
++  background: radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.22) 0%, rgba(201, 168, 76, 0.06) 55%, transparent 100%), #17140c;
++  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38), 0 0 26px rgba(201, 168, 76, 0.12), inset 0 1px 0 rgba(255, 233, 160, 0.12);
++}
++[data-theme="light"] .ps-card { background: linear-gradient(160deg, #fff, #f6f3ea); border-color: rgba(150, 120, 40, 0.2); box-shadow: 0 8px 20px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff; }
++[data-theme="light"] .ps-card.ps-gold { background: radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.28), rgba(201, 168, 76, 0.08) 60%, #fffaf0); border-color: rgba(150, 120, 40, 0.35); }
++[data-theme="light"] .ps-back { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); box-shadow: 0 6px 16px rgba(30, 25, 15, 0.12); }
++
++.ps-row { display: flex; align-items: center; gap: 16px; min-height: 74px; padding: 14px 14px 14px 18px; }
++.ps-row--tight { justify-content: space-between; min-height: 0; padding: 12px 14px 12px 18px; }
++.ps-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
++.ps-row-title { font-size: var(--fs-base); font-weight: 700; color: var(--text); }
++.ps-row-sub { font-size: var(--fs-xs); color: var(--text2); }
++.ps-tile {
++  width: 48px; height: 48px; flex: none;
++  display: flex; align-items: center; justify-content: center;
++  border-radius: 16px;
++  background: rgba(201, 168, 76, 0.13);
++  color: var(--gold-light);
++  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.22);
++}
++.ps-gold .ps-tile { background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%); color: #2a1e05; box-shadow: 0 6px 16px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
++[data-theme="light"] .ps-tile { background: rgba(201, 168, 76, 0.16); color: #7A5812; box-shadow: inset 0 0 0 1px rgba(150, 120, 40, 0.25); }
++[data-theme="light"] .ps-gold .ps-tile { color: #2a1e05; }
++.ps-label { display: block; margin-bottom: 10px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-light); }
++[data-theme="light"] .ps-label { color: #7A5812; }
++
++/* fields: 16px stops iOS zooming in on focus; no scale-on-focus (it made the card jump) */
++.ps-card .input, .ps-card .form-control { font-size: 16px; line-height: 1.45; }
++.ps-card .input:focus { transform: none; }
++.ps-card textarea.form-control { resize: none; }
++.ps-card .bio-box:hover { transform: none; }
++
++/* pill segmented control (same as Browse | Saved) */
++.ps-seg { display: flex; gap: 4px; padding: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.25); }
++.ps-seg-btn { flex: 1; min-width: 0; height: 40px; padding: 0 8px; border-radius: 999px; font-size: var(--fs-md); font-weight: 600; color: var(--text2); white-space: nowrap; transition: background 0.2s, color 0.2s; }
++.ps-seg-btn.active { color: #1a1300; background: linear-gradient(180deg, #EBCD72, #C9A84C); box-shadow: 0 8px 20px rgba(201, 168, 76, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
++[data-theme="light"] .ps-seg { background: rgba(255, 255, 255, 0.7); border-color: rgba(150, 120, 40, 0.2); box-shadow: inset 0 2px 6px rgba(30, 25, 15, 0.08); }
++
++/* stepper */
++.ps-stepper { display: flex; align-items: center; gap: 10px; }
++.ps-step { width: 44px; height: 44px; border-radius: 50%; font-size: 22px; font-weight: 700; line-height: 1; color: var(--text); border: 1px solid rgba(255, 255, 255, 0.10); background: rgba(255, 255, 255, 0.06); }
++.ps-step:active { transform: scale(0.94); }
++[data-theme="light"] .ps-step { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); }
++.ps-card .ps-num { width: 48px; padding: 0; text-align: center; font-size: 18px; font-weight: 700; background: transparent; box-shadow: none; -moz-appearance: textfield; appearance: textfield; }
++.ps-num::-webkit-outer-spin-button, .ps-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
++
++/* switch: transform/background only */
++.ps-switch { position: relative; flex: none; }
++.ps-switch-input { position: absolute; opacity: 0; width: 0; height: 0; }
++.ps-switch-track { position: relative; display: block; width: 52px; height: 30px; box-sizing: border-box; border-radius: 999px; background: var(--bg3); border: 1px solid var(--border-dim); transition: background 0.2s; cursor: pointer; }
++.ps-switch-track::before { content: ''; position: absolute; inset: -9px -4px; }      /* 48px touch target */
++.ps-switch-knob { position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4); transition: transform 0.2s var(--ease-premium); will-change: transform; }
++.ps-switch-input:checked + .ps-switch-track { background: var(--gold); border-color: var(--gold); }
++.ps-switch-input:checked + .ps-switch-track .ps-switch-knob { transform: translateX(22px); }
++.ps-switch-input:focus-visible + .ps-switch-track { outline: 2px solid var(--gold-light); outline-offset: 2px; }
++
++/* topics */
++.ps-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
++.ps-tag { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 20px; background: var(--gold-dim); border: 1px solid var(--gold); color: var(--gold-light); font-size: var(--fs-xs); font-weight: 700; }
++.ps-empty { font-size: var(--fs-sm); color: var(--text3); }
++[data-theme="light"] .ps-tag { color: #7A5812; }
++.ps-card .btn-outline { gap: 8px; }
++
++@media (prefers-reduced-motion: reduce) { .ps-switch-knob, .ps-switch-track, .ps-seg-btn { transition: none; } }

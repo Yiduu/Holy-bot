@@ -6630,6 +6630,7 @@ async function saveNotificationsFromModal() {
 function openMentorProfileModal() {
   haptic('light');
   $('mentorProfileModal')?.classList.add('open');
+  renderMentorTopicPills();
 }
 
 function closeMentorProfileModal() {
@@ -6704,12 +6705,34 @@ function selectMenteeSex(value, labelText) {
   if (input) input.value = value;
   const label = $('settingMenteeSexLabel');
   if (label) label.textContent = labelText;
-  const menu = $('settingMenteeSexDropdown')?.querySelector('.premium-dropdown-menu');
-  if (menu) {
-    menu.querySelectorAll('.dropdown-item').forEach(item => {
-      item.classList.toggle('selected', item.dataset.value === value);
-    });
-  }
+  $('settingMenteeSexDropdown')?.querySelectorAll('.ps-seg-btn').forEach(btn => {
+    const on = btn.dataset.value === value;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+// +/- buttons next to the Max Mentees number field.
+function stepMaxMentees(delta) {
+  haptic('selection');
+  const el = $('settingMaxMentees');
+  if (!el) return;
+  const next = Math.min(20, Math.max(1, (parseInt(el.value) || 5) + delta));
+  el.value = next;
+}
+
+// Selected "Topics to Mentor" shown as gold tag pills on the Mentor Profile.
+async function renderMentorTopicPills() {
+  const box = $('mentorTopicPills');
+  if (!box) return;
+  try {
+    const [all, mine] = await Promise.all([apiFetch('/api/topics'), apiFetch('/api/topics/my-expertise')]);
+    const ids = new Set((mine || []).map(x => x.topic_id));
+    const names = (all || []).filter(x => ids.has(x.id)).map(topicLabel);
+    box.innerHTML = names.length
+      ? names.map(n => `<span class="ps-tag">${escapeHtml(n)}</span>`).join('')
+      : `<span class="ps-empty">${escapeHtml(t('mentor_no_topics') || 'No topics selected yet')}</span>`;
+  } catch (_) { /* keep whatever is shown */ }
 }
 
 // ─── Mentor Application ───────────────────────────────────────
@@ -8569,6 +8592,7 @@ async function saveTopics() {
     haptic('success');
     showToast(t('topics_updated') || 'Topics updated successfully', 'success');
     closeTopicModal();
+    if (window.isTopicModalExpertise) renderMentorTopicPills();
   } catch (e) { showToast(e.message, 'error'); }
 }
 

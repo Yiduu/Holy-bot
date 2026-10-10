@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
-  <link rel="stylesheet" href="styles.css?v=2.7" />
+  <link rel="stylesheet" href="styles.css?v=2.8" />
   <link rel="stylesheet" href="goals.css?v=1.3" />
   <link rel="stylesheet" href="chat-media.css?v=1.0" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -1912,295 +1912,115 @@
   </div>
 
   <!-- ── Modal: Notifications ─────────────────────────────────── -->
-  <div id="notificationsModal" class="modal-overlay" onclick="if(event.target===this)closeNotificationsModal()">
-    <div class="modal-sheet notifications-sheet">
-      <div class="modal-handle"></div>
-      <div class="modal-title" data-i18n="Notifications">Notifications</div>
-      <p class="text-xs text-dim mb-16" data-i18n="notifications_modal_subtitle">Customize which alerts and reminders you receive.</p>
-
-      <div class="card mb-16">
-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="New Messages">New Messages</span>
-          <div class="neo-toggle-container">
-            <input class="neo-toggle-input" id="toggleMessages" type="checkbox" checked
-              onchange="toggleNotif('toggleMessages')" />
-            <label class="neo-toggle" for="toggleMessages">
-              <div class="neo-track">
-                <div class="neo-background-layer"></div>
-                <div class="neo-grid-layer"></div>
-                <div class="neo-spectrum-analyzer">
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                </div>
-                <div class="neo-track-highlight"></div>
-              </div>
-              <div class="neo-thumb">
-                <div class="neo-thumb-ring"></div>
-                <div class="neo-thumb-core">
-                  <div class="neo-thumb-icon">
-                    <div class="neo-thumb-wave"></div>
-                    <div class="neo-thumb-pulse"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="neo-gesture-area"></div>
-              <div class="neo-interaction-feedback">
-                <div class="neo-ripple"></div>
-                <div class="neo-progress-arc"></div>
-              </div>
-              <div class="neo-status">
-                <div class="neo-status-indicator">
-                  <div class="neo-status-dot"></div>
-                  <div class="neo-status-text"></div>
-                </div>
-              </div>
-            </label>
-          </div>
+  <!-- Page-style sheet (same look as Profile / Mentors): fixed header + footer, only the middle scrolls,
+       so the on-screen keyboard can never cover content. Element IDs are unchanged (saveSettings reads them). -->
+  <div id="notificationsModal" class="modal-overlay ps-overlay" onclick="if(event.target===this)closeNotificationsModal()">
+    <div class="modal-sheet notifications-sheet page-sheet" role="dialog" aria-modal="true" aria-labelledby="notifTitle">
+      <div class="ps-head">
+        <button type="button" class="ps-back" onclick="closeNotificationsModal()" aria-label="Back"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <h2 class="ps-title" id="notifTitle" data-i18n="Notifications">Notifications</h2>
+      </div>
+      <p class="ps-sub" data-i18n="notifications_modal_subtitle">Customize which alerts and reminders you receive.</p>
+      <div class="ps-body">
+        <div class="ps-card ps-row ps-gold">
+          <span class="ps-tile"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <span class="ps-row-text"><span class="ps-row-title" data-i18n="New Messages">New Messages</span><span class="ps-row-sub" data-i18n="notif_sub_messages">Replies from your mentor or mentees</span></span>
+          <span class="ps-switch"><input class="ps-switch-input" id="toggleMessages" type="checkbox" checked onchange="toggleNotif('toggleMessages')" /><label class="ps-switch-track" for="toggleMessages" aria-label="New Messages"><span class="ps-switch-knob"></span></label></span>
         </div>
-        <div class="divider"></div>
-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="Session Reminders">Session Reminders</span>
-          <div class="neo-toggle-container">
-            <input class="neo-toggle-input" id="toggleSessions" type="checkbox" checked
-              onchange="toggleNotif('toggleSessions')" />
-            <label class="neo-toggle" for="toggleSessions">
-              <div class="neo-track">
-                <div class="neo-background-layer"></div>
-                <div class="neo-grid-layer"></div>
-                <div class="neo-spectrum-analyzer">
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                </div>
-                <div class="neo-track-highlight"></div>
-              </div>
-              <div class="neo-thumb">
-                <div class="neo-thumb-ring"></div>
-                <div class="neo-thumb-core">
-                  <div class="neo-thumb-icon">
-                    <div class="neo-thumb-wave"></div>
-                    <div class="neo-thumb-pulse"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="neo-gesture-area"></div>
-              <div class="neo-interaction-feedback">
-                <div class="neo-ripple"></div>
-                <div class="neo-progress-arc"></div>
-              </div>
-              <div class="neo-status">
-                <div class="neo-status-indicator">
-                  <div class="neo-status-dot"></div>
-                  <div class="neo-status-text"></div>
-                </div>
-              </div>
-            </label>
-          </div>
+        <div class="ps-card ps-row">
+          <span class="ps-tile"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18v16H3z M16 3v4 M8 3v4 M3 11h18"/></svg></span>
+          <span class="ps-row-text"><span class="ps-row-title" data-i18n="Session Reminders">Session Reminders</span><span class="ps-row-sub" data-i18n="notif_sub_sessions">Before each scheduled session</span></span>
+          <span class="ps-switch"><input class="ps-switch-input" id="toggleSessions" type="checkbox" checked onchange="toggleNotif('toggleSessions')" /><label class="ps-switch-track" for="toggleSessions" aria-label="Session Reminders"><span class="ps-switch-knob"></span></label></span>
         </div>
-        <div class="divider"></div>
-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="Daily Bible Verse">Daily Bible Verse</span>
-          <div class="neo-toggle-container">
-            <input class="neo-toggle-input" id="toggleVerse" type="checkbox" checked
-              onchange="toggleNotif('toggleVerse')" />
-            <label class="neo-toggle" for="toggleVerse">
-              <div class="neo-track">
-                <div class="neo-background-layer"></div>
-                <div class="neo-grid-layer"></div>
-                <div class="neo-spectrum-analyzer">
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                </div>
-                <div class="neo-track-highlight"></div>
-              </div>
-              <div class="neo-thumb">
-                <div class="neo-thumb-ring"></div>
-                <div class="neo-thumb-core">
-                  <div class="neo-thumb-icon">
-                    <div class="neo-thumb-wave"></div>
-                    <div class="neo-thumb-pulse"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="neo-gesture-area"></div>
-              <div class="neo-interaction-feedback">
-                <div class="neo-ripple"></div>
-                <div class="neo-progress-arc"></div>
-              </div>
-              <div class="neo-status">
-                <div class="neo-status-indicator">
-                  <div class="neo-status-dot"></div>
-                  <div class="neo-status-text"></div>
-                </div>
-              </div>
-            </label>
-          </div>
+        <div class="ps-card ps-row">
+          <span class="ps-tile"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/></svg></span>
+          <span class="ps-row-text"><span class="ps-row-title" data-i18n="Daily Bible Verse">Daily Bible Verse</span><span class="ps-row-sub" data-i18n="notif_sub_verse">One verse each morning</span></span>
+          <span class="ps-switch"><input class="ps-switch-input" id="toggleVerse" type="checkbox" checked onchange="toggleNotif('toggleVerse')" /><label class="ps-switch-track" for="toggleVerse" aria-label="Daily Bible Verse"><span class="ps-switch-knob"></span></label></span>
         </div>
-        <div class="divider"></div>
-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="Streak Reminders">Streak Reminders</span>
-          <div class="neo-toggle-container">
-            <input class="neo-toggle-input" id="toggleStreak" type="checkbox" checked
-              onchange="toggleNotif('toggleStreak')" />
-            <label class="neo-toggle" for="toggleStreak">
-              <div class="neo-track">
-                <div class="neo-background-layer"></div>
-                <div class="neo-grid-layer"></div>
-                <div class="neo-spectrum-analyzer">
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                </div>
-                <div class="neo-track-highlight"></div>
-              </div>
-              <div class="neo-thumb">
-                <div class="neo-thumb-ring"></div>
-                <div class="neo-thumb-core">
-                  <div class="neo-thumb-icon">
-                    <div class="neo-thumb-wave"></div>
-                    <div class="neo-thumb-pulse"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="neo-gesture-area"></div>
-              <div class="neo-interaction-feedback">
-                <div class="neo-ripple"></div>
-                <div class="neo-progress-arc"></div>
-              </div>
-              <div class="neo-status">
-                <div class="neo-status-indicator">
-                  <div class="neo-status-dot"></div>
-                  <div class="neo-status-text"></div>
-                </div>
-              </div>
-            </label>
-          </div>
+        <div class="ps-card ps-row">
+          <span class="ps-tile"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 2-4 3-7 1 1 2 2 3 2 0-3 0-5 0-7z"/></svg></span>
+          <span class="ps-row-text"><span class="ps-row-title" data-i18n="Streak Reminders">Streak Reminders</span><span class="ps-row-sub" data-i18n="notif_sub_streak">Keep your daily streak alive</span></span>
+          <span class="ps-switch"><input class="ps-switch-input" id="toggleStreak" type="checkbox" checked onchange="toggleNotif('toggleStreak')" /><label class="ps-switch-track" for="toggleStreak" aria-label="Streak Reminders"><span class="ps-switch-knob"></span></label></span>
         </div>
       </div>
-
-      <button type="button" class="btn btn-primary btn-full" onclick="saveNotificationsFromModal()"
-        data-i18n="btn_done">Done</button>
+      <div class="ps-foot">
+        <button type="button" class="btn btn-primary btn-full" onclick="saveNotificationsFromModal()" data-i18n="btn_done">Done</button>
+      </div>
     </div>
   </div>
 
   <!-- ── Modal: Mentor Profile ─────────────────────────────────── -->
-  <div id="mentorProfileModal" class="modal-overlay" onclick="if(event.target===this)closeMentorProfileModal()">
-    <div class="modal-sheet mentor-profile-sheet">
-      <div class="modal-handle"></div>
-      <div class="modal-title" data-i18n="Mentor Profile">Mentor Profile</div>
-      <p class="text-xs text-dim mb-16" data-i18n="mentor_profile_modal_subtitle">Configure your mentorship details, availability, and focus areas.</p>
-
-      <div class="form-group">
-        <label class="form-label" data-i18n="Bio">Bio</label>
-        <div id="bioDisplayWrap" class="bio-box" onclick="enterBioEditMode()">
-          <p id="bioDisplayText" class="bio-box-text"></p>
-          <button type="button" class="bio-edit-btn" onclick="enterBioEditMode(event)" aria-label="Edit bio">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-            </svg>
-          </button>
-        </div>
-
-        <div id="bioEditWrap" class="hidden">
-          <textarea id="settingBio" class="form-control" rows="4"
-            placeholder="Share a bit about your recovery journey…"></textarea>
-          <button type="button" class="btn btn-ghost btn-sm mt-8" onclick="exitBioEditMode()"
-            aria-label="Done editing bio" data-i18n="btn_done">Done</button>
+  <div id="mentorProfileModal" class="modal-overlay ps-overlay" onclick="if(event.target===this)closeMentorProfileModal()">
+    <div class="modal-sheet mentor-profile-sheet page-sheet" role="dialog" aria-modal="true" aria-labelledby="mentorProfileTitle">
+      <div class="ps-head">
+        <button type="button" class="ps-back" onclick="closeMentorProfileModal()" aria-label="Back"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <div>
+          <h2 class="ps-title" id="mentorProfileTitle" data-i18n="Mentor Profile">Mentor Profile</h2>
         </div>
       </div>
+      <p class="ps-sub" data-i18n="mentor_profile_modal_subtitle">Configure your mentorship details, availability, and focus areas.</p>
+      <div class="ps-body">
+        <div class="ps-card">
+          <label class="ps-label" data-i18n="Bio">Bio</label>
+          <div id="bioDisplayWrap" class="bio-box" onclick="enterBioEditMode()">
+            <p id="bioDisplayText" class="bio-box-text"></p>
+            <button type="button" class="bio-edit-btn" onclick="enterBioEditMode(event)" aria-label="Edit bio">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+            </button>
+          </div>
 
-      <div class="form-group">
-        <label class="form-label" data-i18n="Specialization">Specialization</label>
-        <input id="settingSpecialization" class="input" type="text" autocomplete="off"
-          placeholder="e.g. Young adults, Married men…" />
-      </div>
+          <div id="bioEditWrap" class="hidden">
+            <textarea id="settingBio" class="form-control" rows="4"
+              placeholder="Share a bit about your recovery journey…"></textarea>
+            <button type="button" class="btn btn-ghost btn-sm mt-8" onclick="exitBioEditMode()"
+              aria-label="Done editing bio" data-i18n="btn_done">Done</button>
+          </div>
+        </div>
 
-      <div class="form-group">
-        <label class="form-label" data-i18n="Mentees I Mentor">Mentees I Mentor</label>
-        <div class="premium-dropdown form-dropdown" data-dropdown id="settingMenteeSexDropdown">
-          <button type="button" class="premium-dropdown-btn" data-dropdown-toggle>
-            <span class="dropdown-label" id="settingMenteeSexLabel" data-i18n="Both">Both</span>
-            <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-          <div class="premium-dropdown-menu" data-dropdown-menu>
-            <button type="button" class="dropdown-item selected" data-value="prefer_not" onclick="selectMenteeSex('prefer_not', t('Both') || 'Both')" data-i18n="Both">Both</button>
-            <button type="button" class="dropdown-item" data-value="M" onclick="selectMenteeSex('M', t('Male only') || 'Male only')" data-i18n="Male only">Male only</button>
-            <button type="button" class="dropdown-item" data-value="F" onclick="selectMenteeSex('F', t('Female only') || 'Female only')" data-i18n="Female only">Female only</button>
+        <div class="ps-card">
+          <label class="ps-label" for="settingSpecialization" data-i18n="Specialization">Specialization</label>
+          <input id="settingSpecialization" class="input" type="text" autocomplete="off" enterkeyhint="done"
+            placeholder="e.g. Young adults, Married men…" />
+        </div>
+
+        <div class="ps-card">
+          <span class="ps-label" data-i18n="Mentees I Mentor">Mentees I Mentor</span>
+          <div class="ps-seg" id="settingMenteeSexDropdown" role="group" aria-label="Mentees I Mentor">
+            <button type="button" class="ps-seg-btn active" data-value="prefer_not" onclick="selectMenteeSex('prefer_not', t('Both') || 'Both')" data-i18n="Both">Both</button>
+            <button type="button" class="ps-seg-btn" data-value="M" onclick="selectMenteeSex('M', t('Male only') || 'Male only')" data-i18n="Male only">Male only</button>
+            <button type="button" class="ps-seg-btn" data-value="F" onclick="selectMenteeSex('F', t('Female only') || 'Female only')" data-i18n="Female only">Female only</button>
           </div>
           <input type="hidden" id="settingMenteeSex" value="prefer_not" />
         </div>
-      </div>
 
-      <div class="form-group">
-        <label class="form-label" data-i18n="Max Mentees">Max Mentees</label>
-        <input id="settingMaxMentees" class="input" type="number" min="1" max="20" value="5" />
-      </div>
+        <div class="ps-card ps-row ps-row--tight">
+          <label class="ps-row-title" for="settingMaxMentees" data-i18n="Max Mentees">Max Mentees</label>
+          <span class="ps-stepper">
+            <button type="button" class="ps-step" onclick="stepMaxMentees(-1)" aria-label="Fewer">−</button>
+            <input id="settingMaxMentees" class="ps-num" type="number" inputmode="numeric" min="1" max="20" value="5" />
+            <button type="button" class="ps-step" onclick="stepMaxMentees(1)" aria-label="More">+</button>
+          </span>
+        </div>
 
-      <div class="divider"></div>
+        <div class="ps-card ps-row">
+          <span class="ps-tile"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M19 8v6 M22 11h-6"/></svg></span>
+          <span class="ps-row-text"><span class="ps-row-title" data-i18n="Accept New Requests">Accept New Requests</span></span>
+          <span class="ps-switch"><input class="ps-switch-input" id="toggleAcceptingRequests" type="checkbox" checked onchange="toggleAcceptingRequests()" /><label class="ps-switch-track" for="toggleAcceptingRequests" aria-label="Accept New Requests"><span class="ps-switch-knob"></span></label></span>
+        </div>
 
-      <div class="toggle-wrap toggle-wrap--neo mb-16">
-        <span data-i18n="Accept New Requests">Accept New Requests</span>
-        <div class="neo-toggle-container">
-          <input class="neo-toggle-input" id="toggleAcceptingRequests" type="checkbox" checked
-            onchange="toggleAcceptingRequests()" />
-          <label class="neo-toggle" for="toggleAcceptingRequests">
-            <div class="neo-track">
-              <div class="neo-background-layer"></div>
-              <div class="neo-grid-layer"></div>
-              <div class="neo-spectrum-analyzer">
-                <div class="neo-spectrum-bar"></div>
-                <div class="neo-spectrum-bar"></div>
-                <div class="neo-spectrum-bar"></div>
-                <div class="neo-spectrum-bar"></div>
-                <div class="neo-spectrum-bar"></div>
-              </div>
-              <div class="neo-track-highlight"></div>
-            </div>
-            <div class="neo-thumb">
-              <div class="neo-thumb-ring"></div>
-              <div class="neo-thumb-core">
-                <div class="neo-thumb-icon">
-                  <div class="neo-thumb-wave"></div>
-                  <div class="neo-thumb-pulse"></div>
-                </div>
-              </div>
-            </div>
-            <div class="neo-gesture-area"></div>
-            <div class="neo-interaction-feedback">
-              <div class="neo-ripple"></div>
-              <div class="neo-progress-arc"></div>
-            </div>
-            <div class="neo-status">
-              <div class="neo-status-indicator">
-                <div class="neo-status-dot"></div>
-                <div class="neo-status-text"></div>
-              </div>
-            </div>
-          </label>
+        <div class="ps-card">
+          <span class="ps-label" data-i18n="settings_expertise_topics_label">Topics to Mentor</span>
+          <div class="ps-tags" id="mentorTopicPills"></div>
+          <button type="button" class="btn btn-outline btn-full" onclick="openTopicModal(true)"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/></svg><span data-i18n="mentor_edit_topics">Edit topics</span></button>
         </div>
       </div>
-
-      <button type="button" class="btn btn-outline btn-full mb-16" onclick="openTopicModal(true)"
-        data-i18n="settings_expertise_topics">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px">
-          <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-          <line x1="7" y1="7" x2="7.01" y2="7" />
-        </svg>
-        Topics to Mentor
-      </button>
-
-      <button type="button" class="btn btn-primary btn-full" onclick="saveMentorProfileFromModal()"
-        data-i18n="Save Changes">Save Changes</button>
+      <div class="ps-foot">
+        <button type="button" class="btn btn-primary btn-full" onclick="saveMentorProfileFromModal()" data-i18n="Save Changes">Save Changes</button>
+      </div>
     </div>
   </div>
 
@@ -2551,7 +2371,7 @@
   </div>
 
   <script src="locales.js?v=1.8"></script>
-  <script src="app.js?v=3.2"></script>
+  <script src="app.js?v=3.3"></script>
   <script src="goals.js?v=1.3"></script>
   <script src="chat-media.js?v=1.0"></script>
   <script src="session-room.js?v=1.4"></script>
