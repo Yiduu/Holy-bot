@@ -13466,7 +13466,8 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
   flex-direction: column;
   /* Fits its content (no empty gap above the buttons); long content scrolls inside .ps-body */
   height: auto;
-  max-height: min(92vh, calc(var(--app-height) - var(--kb-inset, 0px) - 12px));
+  /* % of the overlay = the really visible area (shrinks with the keyboard, no JS variable needed) */
+  max-height: min(92%, calc(100% - 12px));
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--border-dim);
@@ -13643,3 +13644,40 @@ body.kb-open .sch-sheet { padding-bottom: calc(20px + var(--safe-bottom)); }
 .sch-sheet input[type="date"]::-webkit-date-and-time-value, .sch-sheet input[type="time"]::-webkit-date-and-time-value { text-align: left; min-width: 0; margin: 0; }
 .sch-sheet input::-webkit-calendar-picker-indicator { margin: 0 0 0 4px; padding: 0; }
 @media (max-width: 360px) { .sch-grid { grid-template-columns: minmax(0, 1fr); } }
+
+
+/* ═══ Inputs behave like the chat box: calm, no blink ═══════════════════════
+   Causes removed: backdrop blur recomputed on every keyboard resize, scale-on-focus,
+   300ms "all" transitions, and focus rings that switched shadow *types* (inset <-> outer),
+   which the browser cannot animate and shows as a flash. Now: same shadow layers in
+   both states, only border-color + box-shadow animate (like .chat-input). ═══ */
+.modal-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0, 0, 0, 0.66); }
+.input, .form-control { transition: border-color 0.15s ease, box-shadow 0.15s ease; transform: none; }
+.input { border: 1px solid var(--border-dim); background-color: var(--bg3); box-shadow: 0 0 0 0 transparent; }
+.form-control { box-shadow: 0 0 0 0 transparent; }
+.input:focus, .form-control:focus { transform: none; background-color: var(--bg3); border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
+textarea.form-control { resize: none; }
+
+.ps-card .input, .ps-card .form-control, .ps-card .bio-box { box-shadow: 0 0 0 0 transparent, inset 0 2px 6px rgba(0, 0, 0, 0.35); }
+.ps-card .input:focus, .ps-card .form-control:focus { box-shadow: 0 0 0 3px var(--gold-dim), inset 0 2px 6px rgba(0, 0, 0, 0.35); }
+[data-theme="light"] .ps-card .input, [data-theme="light"] .ps-card .form-control { box-shadow: 0 0 0 0 transparent, inset 0 1px 3px rgba(30, 25, 15, 0.08); }
+[data-theme="light"] .ps-card .input:focus, [data-theme="light"] .ps-card .form-control:focus { box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
+
+.ps-search { box-shadow: 0 0 0 0 transparent, 0 6px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+.ps-search:focus-within { box-shadow: 0 0 0 3px var(--gold-dim), 0 6px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
+[data-theme="light"] .ps-search { box-shadow: 0 0 0 0 transparent, 0 6px 16px rgba(30, 25, 15, 0.10); }
+[data-theme="light"] .ps-search:focus-within { box-shadow: 0 0 0 3px var(--gold-dim), 0 6px 16px rgba(30, 25, 15, 0.10); }
+
+.journal-editor { box-shadow: 0 0 0 0 transparent, inset 0 2px 6px rgba(0, 0, 0, 0.25); }
+.journal-editor:focus-within { box-shadow: 0 0 0 3px var(--gold-dim), inset 0 2px 6px rgba(0, 0, 0, 0.25); }
+[data-theme="light"] .journal-editor { box-shadow: 0 0 0 0 transparent, inset 0 1px 3px rgba(30, 25, 15, 0.08); }
+[data-theme="light"] .journal-editor:focus-within { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
+
+/* Bio: one always-visible field, fixed height + inner scroll (like the chat box) */
+.ps-card textarea.ps-bio { min-height: 120px; max-height: 200px; overflow-y: auto; scrollbar-width: none; }
+.ps-card textarea.ps-bio::-webkit-scrollbar { display: none; }
+
+/* Schedule: native date/time pickers follow the theme and sit in two equal columns */
+.sch-sheet .sch-grid .form-group { margin: 0; }
+.sch-sheet .ps-card input[type="date"], .sch-sheet .ps-card input[type="time"] { color-scheme: dark; }
+[data-theme="light"] .sch-sheet .ps-card input[type="date"], [data-theme="light"] .sch-sheet .ps-card input[type="time"] { color-scheme: light; }

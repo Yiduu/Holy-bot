@@ -1,0 +1,163 @@
+diff --git a/frontend/index.html b/frontend/index.html
+index 7041810..dfedae2 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -15,7 +15,7 @@
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
+   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
+-  <link rel="stylesheet" href="styles.css?v=2.9" />
++  <link rel="stylesheet" href="styles.css?v=3.0" />
+   <link rel="stylesheet" href="goals.css?v=1.3" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+@@ -1961,24 +1961,11 @@
+       <p class="ps-sub" data-i18n="mentor_profile_modal_subtitle">Configure your mentorship details, availability, and focus areas.</p>
+       <div class="ps-body">
+         <div class="ps-card">
+-          <label class="ps-label" data-i18n="Bio">Bio</label>
+-          <div id="bioDisplayWrap" class="bio-box" onclick="enterBioEditMode()">
+-            <p id="bioDisplayText" class="bio-box-text"></p>
+-            <button type="button" class="bio-edit-btn" onclick="enterBioEditMode(event)" aria-label="Edit bio">
+-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+-                <path d="M12 20h9" />
+-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+-              </svg>
+-            </button>
+-          </div>
+-
+-          <div id="bioEditWrap" class="hidden">
+-            <textarea id="settingBio" class="form-control" rows="4"
+-              placeholder="Share a bit about your recovery journey…"></textarea>
+-            <button type="button" class="btn btn-ghost btn-sm mt-8" onclick="exitBioEditMode()"
+-              aria-label="Done editing bio" data-i18n="btn_done">Done</button>
+-          </div>
++          <label class="ps-label" for="settingBio" data-i18n="Bio">Bio</label>
++          <textarea id="settingBio" class="form-control ps-bio" rows="4"
++            placeholder="Share a bit about your recovery journey…"></textarea>
++          <!-- kept (hidden) so renderBioDisplay() in app.js still has its target -->
++          <div id="bioDisplayWrap" class="hidden"><p id="bioDisplayText" class="bio-box-text"></p></div>
+         </div>
+ 
+         <div class="ps-card">
+@@ -2351,35 +2338,39 @@
+   </div>
+ 
+   <!-- ── Modal: Schedule Session ───────────────────────────── -->
+-  <div id="scheduleModal" class="modal-overlay" onclick="if(event.target===this)closeScheduleModal()">
+-    <div class="modal-sheet sch-sheet">
+-      <div class="modal-handle"></div>
+-      <div class="hb-icon">
+-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+-      </div>
+-      <div id="scheduleModalTitle" class="modal-title sch-title" data-i18n="Schedule Session">Schedule Session</div>
+-
+-      <div id="groupTitleField" class="form-group hidden">
+-        <label class="form-label" for="scheduleTitle" data-i18n="session_title_label">Session Title</label>
+-        <input id="scheduleTitle" class="form-control sch-input" placeholder="e.g. Weekly Group Study" />
++  <div id="scheduleModal" class="modal-overlay ps-overlay" onclick="if(event.target===this)closeScheduleModal()">
++    <div class="modal-sheet sch-sheet page-sheet" role="dialog" aria-modal="true" aria-labelledby="scheduleModalTitle">
++      <div class="ps-head">
++        <button type="button" class="ps-back" onclick="closeScheduleModal()" aria-label="Back"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
++        <h2 id="scheduleModalTitle" class="ps-title modal-title" data-i18n="Schedule Session">Schedule Session</h2>
+       </div>
+-      <div class="sch-grid">
+-        <div class="form-group">
+-          <label class="form-label" for="scheduleDate" data-i18n="Date">Date</label>
+-          <input id="scheduleDate" type="date" class="form-control sch-input" />
++      <div class="ps-body">
++        <div id="groupTitleField" class="ps-card hidden">
++          <label class="ps-label" for="scheduleTitle" data-i18n="session_title_label">Session Title</label>
++          <input id="scheduleTitle" class="input" type="text" autocomplete="off" enterkeyhint="done" placeholder="e.g. Weekly Group Study" />
+         </div>
+-        <div class="form-group">
+-          <label class="form-label" for="scheduleTime" data-i18n="Time">Time</label>
+-          <input id="scheduleTime" type="time" class="form-control sch-input" />
++        <div class="ps-card">
++          <div class="sch-grid">
++            <div class="form-group">
++              <label class="ps-label" for="scheduleDate" data-i18n="Date">Date</label>
++              <input id="scheduleDate" type="date" class="input" />
++            </div>
++            <div class="form-group">
++              <label class="ps-label" for="scheduleTime" data-i18n="Time">Time</label>
++              <input id="scheduleTime" type="time" class="input" />
++            </div>
++          </div>
++        </div>
++        <div id="groupParticipantsField" class="ps-card hidden">
++          <span class="ps-label" data-i18n="invite_participants_label">Invite Participants (Mentees)</span>
++          <div id="menteeCheckboxes" class="sch-people"></div>
+         </div>
+       </div>
+-      <div id="groupParticipantsField" class="form-group hidden">
+-        <label class="form-label" data-i18n="invite_participants_label">Invite Participants (Mentees)</label>
+-        <div id="menteeCheckboxes" class="sch-people"></div>
+-      </div>
+-      <div class="hb-actions">
+-        <button type="button" class="btn btn-outline" onclick="closeScheduleModal()" data-i18n="btn_cancel">Cancel</button>
+-        <button type="button" id="scheduleBtn" class="btn btn-primary" data-i18n="btn_schedule_action">Schedule</button>
++      <div class="ps-foot">
++        <div class="hb-actions">
++          <button type="button" class="btn btn-outline" onclick="closeScheduleModal()" data-i18n="btn_cancel">Cancel</button>
++          <button type="button" id="scheduleBtn" class="btn btn-primary" data-i18n="btn_schedule_action">Schedule</button>
++        </div>
+       </div>
+     </div>
+   </div>
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 5f2b767..3fcf4e9 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13466,7 +13466,8 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+   flex-direction: column;
+   /* Fits its content (no empty gap above the buttons); long content scrolls inside .ps-body */
+   height: auto;
+-  max-height: min(92vh, calc(var(--app-height) - var(--kb-inset, 0px) - 12px));
++  /* % of the overlay = the really visible area (shrinks with the keyboard, no JS variable needed) */
++  max-height: min(92%, calc(100% - 12px));
+   padding: 0;
+   overflow: hidden;
+   border: 1px solid var(--border-dim);
+@@ -13643,3 +13644,40 @@ body.kb-open .sch-sheet { padding-bottom: calc(20px + var(--safe-bottom)); }
+ .sch-sheet input[type="date"]::-webkit-date-and-time-value, .sch-sheet input[type="time"]::-webkit-date-and-time-value { text-align: left; min-width: 0; margin: 0; }
+ .sch-sheet input::-webkit-calendar-picker-indicator { margin: 0 0 0 4px; padding: 0; }
+ @media (max-width: 360px) { .sch-grid { grid-template-columns: minmax(0, 1fr); } }
++
++
++/* ═══ Inputs behave like the chat box: calm, no blink ═══════════════════════
++   Causes removed: backdrop blur recomputed on every keyboard resize, scale-on-focus,
++   300ms "all" transitions, and focus rings that switched shadow *types* (inset <-> outer),
++   which the browser cannot animate and shows as a flash. Now: same shadow layers in
++   both states, only border-color + box-shadow animate (like .chat-input). ═══ */
++.modal-overlay { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0, 0, 0, 0.66); }
++.input, .form-control { transition: border-color 0.15s ease, box-shadow 0.15s ease; transform: none; }
++.input { border: 1px solid var(--border-dim); background-color: var(--bg3); box-shadow: 0 0 0 0 transparent; }
++.form-control { box-shadow: 0 0 0 0 transparent; }
++.input:focus, .form-control:focus { transform: none; background-color: var(--bg3); border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
++textarea.form-control { resize: none; }
++
++.ps-card .input, .ps-card .form-control, .ps-card .bio-box { box-shadow: 0 0 0 0 transparent, inset 0 2px 6px rgba(0, 0, 0, 0.35); }
++.ps-card .input:focus, .ps-card .form-control:focus { box-shadow: 0 0 0 3px var(--gold-dim), inset 0 2px 6px rgba(0, 0, 0, 0.35); }
++[data-theme="light"] .ps-card .input, [data-theme="light"] .ps-card .form-control { box-shadow: 0 0 0 0 transparent, inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++[data-theme="light"] .ps-card .input:focus, [data-theme="light"] .ps-card .form-control:focus { box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++
++.ps-search { box-shadow: 0 0 0 0 transparent, 0 6px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
++.ps-search:focus-within { box-shadow: 0 0 0 3px var(--gold-dim), 0 6px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
++[data-theme="light"] .ps-search { box-shadow: 0 0 0 0 transparent, 0 6px 16px rgba(30, 25, 15, 0.10); }
++[data-theme="light"] .ps-search:focus-within { box-shadow: 0 0 0 3px var(--gold-dim), 0 6px 16px rgba(30, 25, 15, 0.10); }
++
++.journal-editor { box-shadow: 0 0 0 0 transparent, inset 0 2px 6px rgba(0, 0, 0, 0.25); }
++.journal-editor:focus-within { box-shadow: 0 0 0 3px var(--gold-dim), inset 0 2px 6px rgba(0, 0, 0, 0.25); }
++[data-theme="light"] .journal-editor { box-shadow: 0 0 0 0 transparent, inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++[data-theme="light"] .journal-editor:focus-within { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++
++/* Bio: one always-visible field, fixed height + inner scroll (like the chat box) */
++.ps-card textarea.ps-bio { min-height: 120px; max-height: 200px; overflow-y: auto; scrollbar-width: none; }
++.ps-card textarea.ps-bio::-webkit-scrollbar { display: none; }
++
++/* Schedule: native date/time pickers follow the theme and sit in two equal columns */
++.sch-sheet .sch-grid .form-group { margin: 0; }
++.sch-sheet .ps-card input[type="date"], .sch-sheet .ps-card input[type="time"] { color-scheme: dark; }
++[data-theme="light"] .sch-sheet .ps-card input[type="date"], [data-theme="light"] .sch-sheet .ps-card input[type="time"] { color-scheme: light; }
