@@ -3828,6 +3828,15 @@ function renderMentorProfilePage(id) {
     : '';
   const tab = (mentorProfileTab === 'topics' && topics.length) ? 'topics' : 'about';
 
+  // Age + sex: the first facts a mentee wants, so they sit directly under the name.
+  const ageTxt = (m.age_range || '').trim();
+  const sexTxt = (m.sex === 'M' || m.sex === 'F') ? sexLabel : '';
+  const smallIco = (svg) => svg.replace('<svg ', '<svg width="16" height="16" aria-hidden="true" ');
+  const facts = (ageTxt || sexTxt) ? `<div class="profile-pills mp-facts">
+        ${ageTxt ? `<span class="profile-pill mp-fact">${smallIco(MP_ICONS.cake)}<span>${escapeHtml(t('sheet_age'))} ${escapeHtml(ageTxt)}</span></span>` : ''}
+        ${sexTxt ? `<span class="profile-pill mp-fact">${smallIco(MP_ICONS.user)}<span>${escapeHtml(sexTxt)}</span></span>` : ''}
+      </div>` : '';
+
   // header bookmark (lives in the static header)
   const saveBtn = $('mpSaveBtn');
   if (saveBtn) {
@@ -3843,7 +3852,8 @@ function renderMentorProfilePage(id) {
     : `<button class="btn btn-outline" onclick="openChat('${id}')">${MC_ICON_MSG} ${t('btn_message')}</button>
        ${mentorActionHtml(m, true)}`;
 
-  const aboutCards = mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: true });
+  // Gold = the one thing to read first: specialization when there is one, otherwise the bio.
+  const aboutCards = mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: !spec });
 
   const topicCards = topics.map(tp => {
     const mine = tp.id != null && myMentorTopicIds.has(Number(tp.id));
@@ -3863,24 +3873,19 @@ function renderMentorProfilePage(id) {
       </div>
       <div class="profile-hero-name">${escapeHtml(name)}</div>
       <div class="profile-hero-rating" style="display:flex">${renderProfileRating(ratingNum, ratingCount)}</div>
+      ${facts}
     </div>
 
-    <nav class="profile-menu-list mp-panel" aria-label="${escapeHtml(t('mp_label_status'))}">
-      <div class="mp-duo">
-        ${mpInfoCard({ icon: MP_ICONS.pulse, label: t('mp_label_status'), text: m.is_online ? t('status_online') : t('status_offline'), duo: true, iconClass: m.is_online ? 'mp-ok' : '' })}
-        ${mpInfoCard({ icon: MP_ICONS.people, label: t('mp_label_availability'), text: isMine ? t('active_mentorship_label') : st.text, duo: true })}
-      </div>
-      ${spec ? mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec }) : ''}
-      ${n ? mpInfoCard({ icon: MP_ICONS.spark, label: t('mp_matches_you'), text: t('match_topics', { n }), gold: true }) : ''}
-    </nav>
+    ${spec ? `<nav class="profile-menu-list mp-panel" aria-label="${escapeHtml(t('sheet_specialization'))}">
+      ${mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec, gold: true })}
+    </nav>` : ''}
+
+    <div class="mp-meta">
+      <span class="mp-avail ${isMine ? '' : st.cls}">${escapeHtml(isMine ? t('active_mentorship_label') : st.text)}</span>
+      ${n ? `<span class="mp-match">${smallIco(MP_ICONS.spark)}${escapeHtml(t('match_topics', { n }))}</span>` : ''}
+    </div>
 
     <div class="mp-actions">${actions}</div>
-
-    <div class="mp-stats">
-      <div class="stat-card"><div class="stat-num">${ratingNum > 0 ? ratingNum.toFixed(1) : '—'}</div><div class="stat-label">${t('mp_stat_rating')}</div></div>
-      <div class="stat-card"><div class="stat-num">${ratingCount}</div><div class="stat-label">${t('mp_stat_reviews')}</div></div>
-      <div class="stat-card"><div class="stat-num">${m.mentee_count || 0}<span class="mp-stat-of">/${max}</span></div><div class="stat-label">${t('mp_stat_mentees')}</div></div>
-    </div>
 
     ${topics.length ? `
     <div class="profile-tabs" role="tablist">
@@ -3895,10 +3900,6 @@ function renderMentorProfilePage(id) {
     <div id="mpPaneAbout" class="profile-pane${tab === 'about' ? ' active' : ''}">
       <nav class="profile-menu-list" aria-label="${escapeHtml(t('sheet_about'))}">
         ${aboutCards}
-        <div class="mp-duo">
-          ${mpInfoCard({ icon: MP_ICONS.cake, label: t('sheet_age'), text: m.age_range || '—', duo: true })}
-          ${mpInfoCard({ icon: MP_ICONS.people, label: t('sheet_gender'), text: sexLabel, duo: true })}
-        </div>
       </nav>
     </div>
 

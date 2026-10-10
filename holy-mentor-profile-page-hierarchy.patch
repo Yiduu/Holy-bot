@@ -1,0 +1,128 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 4406b96..8afbeba 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -3828,6 +3828,15 @@ function renderMentorProfilePage(id) {
+     : '';
+   const tab = (mentorProfileTab === 'topics' && topics.length) ? 'topics' : 'about';
+ 
++  // Age + sex: the first facts a mentee wants, so they sit directly under the name.
++  const ageTxt = (m.age_range || '').trim();
++  const sexTxt = (m.sex === 'M' || m.sex === 'F') ? sexLabel : '';
++  const smallIco = (svg) => svg.replace('<svg ', '<svg width="16" height="16" aria-hidden="true" ');
++  const facts = (ageTxt || sexTxt) ? `<div class="profile-pills mp-facts">
++        ${ageTxt ? `<span class="profile-pill mp-fact">${smallIco(MP_ICONS.cake)}<span>${escapeHtml(t('sheet_age'))} ${escapeHtml(ageTxt)}</span></span>` : ''}
++        ${sexTxt ? `<span class="profile-pill mp-fact">${smallIco(MP_ICONS.user)}<span>${escapeHtml(sexTxt)}</span></span>` : ''}
++      </div>` : '';
++
+   // header bookmark (lives in the static header)
+   const saveBtn = $('mpSaveBtn');
+   if (saveBtn) {
+@@ -3843,7 +3852,8 @@ function renderMentorProfilePage(id) {
+     : `<button class="btn btn-outline" onclick="openChat('${id}')">${MC_ICON_MSG} ${t('btn_message')}</button>
+        ${mentorActionHtml(m, true)}`;
+ 
+-  const aboutCards = mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: true });
++  // Gold = the one thing to read first: specialization when there is one, otherwise the bio.
++  const aboutCards = mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: !spec });
+ 
+   const topicCards = topics.map(tp => {
+     const mine = tp.id != null && myMentorTopicIds.has(Number(tp.id));
+@@ -3863,25 +3873,20 @@ function renderMentorProfilePage(id) {
+       </div>
+       <div class="profile-hero-name">${escapeHtml(name)}</div>
+       <div class="profile-hero-rating" style="display:flex">${renderProfileRating(ratingNum, ratingCount)}</div>
++      ${facts}
+     </div>
+ 
+-    <nav class="profile-menu-list mp-panel" aria-label="${escapeHtml(t('mp_label_status'))}">
+-      <div class="mp-duo">
+-        ${mpInfoCard({ icon: MP_ICONS.pulse, label: t('mp_label_status'), text: m.is_online ? t('status_online') : t('status_offline'), duo: true, iconClass: m.is_online ? 'mp-ok' : '' })}
+-        ${mpInfoCard({ icon: MP_ICONS.people, label: t('mp_label_availability'), text: isMine ? t('active_mentorship_label') : st.text, duo: true })}
+-      </div>
+-      ${spec ? mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec }) : ''}
+-      ${n ? mpInfoCard({ icon: MP_ICONS.spark, label: t('mp_matches_you'), text: t('match_topics', { n }), gold: true }) : ''}
+-    </nav>
+-
+-    <div class="mp-actions">${actions}</div>
++    ${spec ? `<nav class="profile-menu-list mp-panel" aria-label="${escapeHtml(t('sheet_specialization'))}">
++      ${mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec, gold: true })}
++    </nav>` : ''}
+ 
+-    <div class="mp-stats">
+-      <div class="stat-card"><div class="stat-num">${ratingNum > 0 ? ratingNum.toFixed(1) : '—'}</div><div class="stat-label">${t('mp_stat_rating')}</div></div>
+-      <div class="stat-card"><div class="stat-num">${ratingCount}</div><div class="stat-label">${t('mp_stat_reviews')}</div></div>
+-      <div class="stat-card"><div class="stat-num">${m.mentee_count || 0}<span class="mp-stat-of">/${max}</span></div><div class="stat-label">${t('mp_stat_mentees')}</div></div>
++    <div class="mp-meta">
++      <span class="mp-avail ${isMine ? '' : st.cls}">${escapeHtml(isMine ? t('active_mentorship_label') : st.text)}</span>
++      ${n ? `<span class="mp-match">${smallIco(MP_ICONS.spark)}${escapeHtml(t('match_topics', { n }))}</span>` : ''}
+     </div>
+ 
++    <div class="mp-actions">${actions}</div>
++
+     ${topics.length ? `
+     <div class="profile-tabs" role="tablist">
+       <button type="button" id="mpTabAbout" class="profile-tab${tab === 'about' ? ' active' : ''}" role="tab" aria-selected="${tab === 'about'}" onclick="switchMentorProfileTab('about')">
+@@ -3895,10 +3900,6 @@ function renderMentorProfilePage(id) {
+     <div id="mpPaneAbout" class="profile-pane${tab === 'about' ? ' active' : ''}">
+       <nav class="profile-menu-list" aria-label="${escapeHtml(t('sheet_about'))}">
+         ${aboutCards}
+-        <div class="mp-duo">
+-          ${mpInfoCard({ icon: MP_ICONS.cake, label: t('sheet_age'), text: m.age_range || '—', duo: true })}
+-          ${mpInfoCard({ icon: MP_ICONS.people, label: t('sheet_gender'), text: sexLabel, duo: true })}
+-        </div>
+       </nav>
+     </div>
+ 
+diff --git a/frontend/index.html b/frontend/index.html
+index 86aecd0..dff0e70 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -15,7 +15,7 @@
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
+   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
+-  <link rel="stylesheet" href="styles.css?v=3.1" />
++  <link rel="stylesheet" href="styles.css?v=3.2" />
+   <link rel="stylesheet" href="goals.css?v=1.4" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+@@ -2376,7 +2376,7 @@
+   </div>
+ 
+   <script src="locales.js?v=1.9"></script>
+-  <script src="app.js?v=3.5"></script>
++  <script src="app.js?v=3.6"></script>
+   <script src="goals.js?v=1.4"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="session-room.js?v=1.4"></script>
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 916d26b..a3387cd 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13770,3 +13770,25 @@ textarea.form-control { resize: none; }
+ [data-theme="light"] .btn-filter-trigger { color: #7A5812; }
+ [data-theme="light"] .mc-chip { background: transparent; border-color: rgba(150, 120, 40, 0.3); color: #5A5650; box-shadow: none; }
+ [data-theme="light"] .mc-chip.active { color: #1a1300; background: linear-gradient(180deg, #EBCD72, #C9A84C); border-color: transparent; }
++
++
++/* ═══ Mentor profile page: hierarchy ═════════════════════════════════════════
++   Order of reading: avatar + NAME -> rating -> age & sex -> specialization (the one golden card)
++   -> availability line -> actions -> about / topics.
++   Removed as duplicates: the Status card, the Rating / Reviews / Mentees stat row
++   (rating is already under the name, mentees are the availability line) and the
++   separate Age / Gender cards further down. ═══ */
++.mp-facts { gap: 8px; margin-top: 14px; }
++.mp-fact { cursor: default; height: 36px; padding: 0 14px; gap: 7px; font-size: var(--fs-sm); font-weight: 600; box-shadow: none; }
++.mp-fact:active { transform: none; }
++.mp-panel { margin-top: 18px; }
++.mp-meta { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 16px; margin-top: 14px; font-size: var(--fs-sm); font-weight: 600; color: var(--text2); }
++.mp-avail { display: inline-flex; align-items: center; gap: 8px; }
++.mp-avail::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
++.mp-avail.full::before { background: var(--warn, #E09B3A); }
++.mp-avail.paused::before { background: var(--text3); }
++.mp-match { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--gold-light); }
++.mp-match svg { width: 13px; height: 13px; flex: none; }
++.mp-actions { margin: 14px 0 20px; }
++[data-theme="light"] .mp-match { color: #7A5812; }
++[data-theme="light"] .mp-meta { color: #5A5650; }

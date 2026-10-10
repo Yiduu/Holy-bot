@@ -13770,3 +13770,25 @@ textarea.form-control { resize: none; }
 [data-theme="light"] .btn-filter-trigger { color: #7A5812; }
 [data-theme="light"] .mc-chip { background: transparent; border-color: rgba(150, 120, 40, 0.3); color: #5A5650; box-shadow: none; }
 [data-theme="light"] .mc-chip.active { color: #1a1300; background: linear-gradient(180deg, #EBCD72, #C9A84C); border-color: transparent; }
+
+
+/* ═══ Mentor profile page: hierarchy ═════════════════════════════════════════
+   Order of reading: avatar + NAME -> rating -> age & sex -> specialization (the one golden card)
+   -> availability line -> actions -> about / topics.
+   Removed as duplicates: the Status card, the Rating / Reviews / Mentees stat row
+   (rating is already under the name, mentees are the availability line) and the
+   separate Age / Gender cards further down. ═══ */
+.mp-facts { gap: 8px; margin-top: 14px; }
+.mp-fact { cursor: default; height: 36px; padding: 0 14px; gap: 7px; font-size: var(--fs-sm); font-weight: 600; box-shadow: none; }
+.mp-fact:active { transform: none; }
+.mp-panel { margin-top: 18px; }
+.mp-meta { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 16px; margin-top: 14px; font-size: var(--fs-sm); font-weight: 600; color: var(--text2); }
+.mp-avail { display: inline-flex; align-items: center; gap: 8px; }
+.mp-avail::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+.mp-avail.full::before { background: var(--warn, #E09B3A); }
+.mp-avail.paused::before { background: var(--text3); }
+.mp-match { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--gold-light); }
+.mp-match svg { width: 13px; height: 13px; flex: none; }
+.mp-actions { margin: 14px 0 20px; }
+[data-theme="light"] .mp-match { color: #7A5812; }
+[data-theme="light"] .mp-meta { color: #5A5650; }
