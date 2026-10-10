@@ -3401,6 +3401,47 @@ textarea.form-control {
   animation: msgPop 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* "Start messaging" placeholder: fills the message list while the two people
+   have not written yet. margin:auto centres it in the flex column; the padding
+   keeps it clear of the floating composer and nav. */
+.chat-empty {
+  margin: auto;
+  max-width: 280px;
+  padding: 24px 12px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  animation: chatEmptyIn 0.35s ease both;
+}
+.chat-empty-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 6px;
+  border-radius: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  background: var(--gold-dim);
+  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.28);
+}
+.chat-empty-title {
+  font-size: var(--fs-base);
+  font-weight: 700;
+  color: var(--text);
+}
+.chat-empty-sub {
+  margin: 0;
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  color: var(--text3);
+  word-break: break-word;
+}
+@keyframes chatEmptyIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .chat-empty { animation: none; } }
+
 .message-bubble.sent {
   align-self: flex-end;
   background: linear-gradient(145deg, var(--gold) 0%, #a87a28 100%);
@@ -13180,6 +13221,36 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
 .mpe-card .input,
 .mpe-card .form-control { font-weight: 500; }        /* the card row is semibold; field text is regular */
 .mpe-card textarea.form-control { min-height: 96px; }
+
+/* Typing in Bio / Specialization must not blink or jump.
+   - 16px text: iOS (Telegram's WebView included) zooms the whole page in when a
+     field under 16px gets focus and zooms back out on blur — that was the blink.
+   - The focus background joins the transition list, so it fades instead of snapping.
+   - No text-shadow on field text: the global faux-bold double shadow on <body>
+     is inherited by the field and re-blurred on every keystroke.
+   - The bio box keeps one fixed height and scrolls inside itself, with its
+     scrollbar space reserved, so neither the text nor the cards below it move
+     while typing. Its text metrics match the read-only box, so entering edit
+     mode does not shift the words either. */
+.mpe-card .input,
+.mpe-card .form-control {
+  font-size: max(16px, var(--fs-md));
+  text-shadow: none;
+  transition: border-color var(--transition), box-shadow var(--transition), background-color var(--transition);
+}
+.mpe-card .bio-box-text { font-size: max(16px, var(--fs-md)); line-height: 1.55; }
+.mpe-card textarea.form-control {
+  display: block;
+  padding: 14px 16px;
+  line-height: 1.55;
+  resize: none;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+#bioEditWrap:not(.hidden) { animation: bioEditIn 0.18s ease both; }
+@keyframes bioEditIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { #bioEditWrap:not(.hidden) { animation: none; } }
 
 /* the open dropdown must sit above the cards that follow it */
 .mpe-card:has([data-open]) { position: relative; z-index: 30; }

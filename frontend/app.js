@@ -623,6 +623,34 @@ function replaceOptimisticBubble(container, tempId, msg) {
   return true;
 }
 
+// Placeholder shown in place of the message list while the two people have not
+// written to each other yet. It lives inside #chatMessages so it takes the
+// same space as the list and goes away the moment the first bubble arrives.
+function chatEmptyStateHtml() {
+  const name = window.chatState?.name;
+  const sub = name
+    ? t('chat_empty_sub').replace('{name}', () => escapeHtml(name))
+    : t('chat_empty_sub_plain');
+  return `
+    <div class="chat-empty" id="chatEmpty">
+      <div class="chat-empty-icon">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      </div>
+      <div class="chat-empty-title">${t('chat_empty_title')}</div>
+      <p class="chat-empty-sub">${sub}</p>
+    </div>`;
+}
+
+// Keep the placeholder in step with what is on screen: gone as soon as there is
+// a message, back if the last one is deleted.
+function syncChatEmptyState(container = $('chatMessages')) {
+  if (!container) return;
+  const hasMessages = !!container.querySelector('.message-thread');
+  const empty = container.querySelector(':scope > .chat-empty');
+  if (hasMessages && empty) empty.remove();
+  else if (!hasMessages && !empty && window.chatState?.with) container.insertAdjacentHTML('beforeend', chatEmptyStateHtml());
+}
+
 function addMessageToChat(msg) {
   const container = $('chatMessages');
   if (!container) return;
@@ -637,6 +665,9 @@ function addMessageToChat(msg) {
   // Check if already exists (by ID)
   const existing = container.querySelector(`.message-thread[data-msg-id="${msg.id}"]`);
   if (existing) return;
+
+  // First message of the conversation: the "start messaging" placeholder makes way.
+  container.querySelector(':scope > .chat-empty')?.remove();
 
   // Only auto-scroll if the user is already at the bottom (or it's their own
   // message). Previously every incoming message yanked the view to the bottom
@@ -1653,6 +1684,7 @@ function connectSocket() {
     // Replies to the deleted message stay in place; their quote just updates.
     refreshReplyQuotesFor(id, null);
     document.querySelector(`#chatMessages .message-thread[data-msg-id="${id}"]`)?.remove();
+    syncChatEmptyState();
   });
 
   // Fired the instant a session actually goes live (first participant/host
@@ -5277,8 +5309,13 @@ async function loadMessages(with_id, opts = {}) {
       .sort().join('|');
     const serverSig = messages.map(m => `${m.id}:${m.edited_at || ''}`).sort().join('|');
 
+    // The "start messaging" placeholder must also match: an empty list that
+    // has no placeholder yet (or a placeholder over real bubbles) needs a render.
+    const hasEmptyEl = !!container.querySelector(':scope > .chat-empty');
+    const emptyMatches = hasEmptyEl === (renderedThreads.length === 0);
+
     // If earlier messages have been prepended, do not collapse DOM back on non-forced refresh
-    if (!opts.force && sameChat && (domSig === serverSig || (renderedThreads.length > messages.length && domSig.includes(serverSig)))) {
+    if (!opts.force && sameChat && emptyMatches && (domSig === serverSig || (renderedThreads.length > messages.length && domSig.includes(serverSig)))) {
       updateMessageBadge();
       return;
     }
@@ -5296,7 +5333,10 @@ async function loadMessages(with_id, opts = {}) {
 
     try {
       // Flat, chronological list; replies carry a quote of their original.
-      container.innerHTML = getLoadEarlierHtml() + renderThread(messages) + pending;
+      const threadsHtml = renderThread(messages);
+      container.innerHTML = (!threadsHtml && !pending)
+        ? chatEmptyStateHtml()
+        : getLoadEarlierHtml() + threadsHtml + pending;
       hydratePhotoMessages(container);
     } catch (renderError) {
       console.error('[loadMessages] Render error:', renderError);
@@ -6403,11 +6443,18 @@ function renderBioDisplay(bio) {
 function enterBioEditMode(event) {
   if (event) event.stopPropagation();
   haptic('selection');
-  $('bioDisplayWrap').classList.add('hidden');
-  $('bioEditWrap').classList.remove('hidden');
+  const box = $('bioDisplayWrap');
   const textarea = $('settingBio');
+  // Open the field at the height the read-only box had (within sensible limits)
+  // and keep it there while typing: a field that resizes on every keystroke
+  // makes the page below it jump.
+  const boxHeight = Math.round(box.getBoundingClientRect().height);
+  textarea.style.height = Math.min(Math.max(boxHeight, 120), 280) + 'px';
+  box.classList.add('hidden');
+  $('bioEditWrap').classList.remove('hidden');
   textarea.focus();
-  textarea.selectionStart = textarea.value.length;
+  const end = textarea.value.length;
+  textarea.setSelectionRange(end, end);
 }
 
 function exitBioEditMode() {
