@@ -1076,6 +1076,7 @@ function handleTelegramBack() {
   if (sheets.length) { sheets[sheets.length - 1].click(); return; }
   if (document.body.classList.contains('in-call')) return;
   if (currentPage === 'mentor-profile') { closeMentorProfile(); return; }
+  if (currentPage === 'end-mentorship') { closeEndReason(); return; }
   if (currentPage === 'goal-new' && window.HolyGoals?.back()) return;
   if (currentPage !== 'dashboard') navigate('dashboard');
 }
@@ -8509,19 +8510,31 @@ const END_REASON_MIN = 3, END_REASON_MAX = 300;
 let _endReasonAssignId = null, _endReasonBusy = false;
 
 function openEndReason(assignId) {
+  const m = (_myMenteesCache || []).find(x => x.id === assignId);
+  const user = m?.user || {};
+  const name = user.user_settings?.display_name || user.anonymous_id || '';
   _endReasonAssignId = assignId;
   _endReasonBusy = false;
-  document.querySelectorAll('#endReasonChips [data-chip]').forEach(b => { b.textContent = t(b.dataset.chip); });
+  const who = $('endReasonWho');
+  if (who) {
+    who.innerHTML = `${renderAvatar(user, (name || '?').charAt(0).toUpperCase())}
+      <div class="er-who-txt"><div class="er-who-name">${escapeHtml(name || t('mentee_label'))}</div>
+      <div class="er-who-sub">${escapeHtml(t('mentee_label'))}</div></div>`;
+  }
+  const intro = $('endReasonIntro');
+  if (intro) intro.textContent = t(name ? 'end_reason_body' : 'end_reason_body_noname', { name });
   const ta = $('endReasonText');
   if (ta) ta.value = '';
   onEndReasonInput();
-  $('endReasonModal')?.classList.add('open');
+  showAppPageQuiet('end-mentorship', 'nav-my-mentees');
+  const pc = document.querySelector('#page-end-mentorship .page-content');
+  if (pc) pc.scrollTop = 0;
 }
 
 function closeEndReason() {
   if (_endReasonBusy) return;
-  $('endReasonModal')?.classList.remove('open');
   _endReasonAssignId = null;
+  if (currentPage === 'end-mentorship') showAppPageQuiet('my-mentees', 'nav-my-mentees');
 }
 
 function onEndReasonInput() {
@@ -8531,15 +8544,6 @@ function onEndReasonInput() {
   if (count) count.textContent = `${(ta?.value || '').length}/${END_REASON_MAX}`;
   const yes = $('endReasonYes');
   if (yes) yes.disabled = _endReasonBusy || len < END_REASON_MIN;
-}
-
-function pickEndReasonChip(btn) {
-  const ta = $('endReasonText');
-  if (!ta) return;
-  haptic('selection');
-  ta.value = btn.textContent.trim();
-  onEndReasonInput();
-  ta.focus();
 }
 
 async function confirmEndReason() {

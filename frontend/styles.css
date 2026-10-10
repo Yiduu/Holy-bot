@@ -13884,15 +13884,23 @@ textarea.form-control { resize: none; }
 [data-theme="light"] .mentee-note textarea:focus { border-color: #A87C2A; box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
 
 
-/* ── End mentorship: reason sheet (mentor) and reason note (mentee rating popup) ── */
-#endReasonModal .er-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
-#endReasonModal .er-chip { min-height: 34px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--border-dim);
-  background: var(--bg3); color: var(--text2); font: 600 var(--fs-xs) var(--font-body); cursor: pointer; }
-#endReasonModal .er-chip:active { border-color: var(--gold); color: var(--text); }
-#endReasonModal .er-label { display: block; margin-bottom: 6px; font-size: var(--fs-xs); font-weight: 700; color: var(--text2); }
-#endReasonModal textarea { width: 100%; box-sizing: border-box; resize: none; min-height: 96px; }
-#endReasonModal .er-foot { display: flex; justify-content: space-between; gap: 8px; margin: 6px 0 14px; font-size: var(--fs-2xs); color: var(--text3); }
-#endReasonModal .btn:disabled { opacity: .5; pointer-events: none; }
+/* ── End mentorship page (mentor) – same cards, pills and gold accents as the other pages ── */
+#page-end-mentorship .page-content { display: flex; flex-direction: column; gap: 12px; padding-bottom: 28px; }
+#page-end-mentorship .er-who { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+#page-end-mentorship .er-who .mentor-avatar { width: 48px; height: 48px; flex: none; }
+#page-end-mentorship .er-who-txt { min-width: 0; }
+#page-end-mentorship .er-who-name { font: 800 var(--fs-lg) var(--font-body); color: var(--text); line-height: 1.25; overflow-wrap: anywhere; }
+#page-end-mentorship .er-who-sub { margin-top: 2px; font-size: var(--fs-xs); color: var(--text2); }
+#page-end-mentorship .er-form { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-color: rgba(201, 168, 76, 0.28); }
+#page-end-mentorship .er-label { font-size: var(--fs-xs); font-weight: 700; letter-spacing: .04em; color: var(--gold); }
+#page-end-mentorship textarea { width: 100%; box-sizing: border-box; resize: none; min-height: 140px; border-radius: 16px; scroll-margin-block: 96px; }
+#page-end-mentorship .er-foot { display: flex; justify-content: space-between; gap: 8px; font-size: var(--fs-2xs); color: var(--text3); }
+#page-end-mentorship .er-note { margin: 0 4px; font-size: var(--fs-xs); line-height: 1.45; color: var(--text2); }
+#page-end-mentorship .er-actions { display: flex; gap: 10px; margin-top: 4px; }
+#page-end-mentorship .er-actions .btn { flex: 1; min-height: 48px; }
+#page-end-mentorship .er-actions .btn:disabled { opacity: .45; pointer-events: none; }
+:is(#page-end-mentorship).active .page-content { animation: profilePaneIn 0.3s ease both; }
+@media (prefers-reduced-motion: reduce) { #page-end-mentorship.active .page-content { animation: none; } }
 .rating-end-reason { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 12px; padding: 10px 12px; text-align: left;
   border-radius: 14px; background: var(--bg3); border: 1px solid var(--border-dim); }
 .rating-end-reason b { font-size: var(--fs-2xs); letter-spacing: .04em; color: var(--gold); }
