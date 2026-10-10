@@ -1155,6 +1155,18 @@ async function endMentorship(chatId, partnerId, initiatorRole, opts = {}) {
   for (const row of mt || []) await notifyWaitingList(row.topic_id);
 }
 
+// Tell a mentee their mentor ended the mentorship, and why. Used by the mini
+// app's mentor flow, which has no rating prompt of its own to send.
+async function notifyMenteeMentorshipEnded(menteeId, mentorId, reason) {
+  const [lang, { data: mentor }] = await Promise.all([
+    getUserLang(menteeId),
+    supabase.from('users').select('anonymous_id, public_alias').eq('telegram_id', mentorId).single(),
+  ]);
+  const mentorName = mentor?.public_alias || mentor?.anonymous_id || (lang === 'am' ? 'አማካሪዎ' : 'Your mentor');
+  const c = endedCard(lang, tSync(lang, 'mentorship_ended_by_mentor', { mentor: mentorName }));
+  await sendCard(menteeId, { ...c, fields: [['', tSync(lang, 'mentorship_end_reason_label'), reason]] });
+}
+
 // ─── Amharic Translation ──────────────────────────────────────────────────────
 
 async function getAmharicVerse(verseText) {
@@ -3667,6 +3679,7 @@ module.exports = {
   notifyTaskDone,
   runGoalMaintenance,
   endMentorship,
+  notifyMenteeMentorshipEnded,
   safeSend,
   getUserLang,
   rejectOtherPendingRequestsForUser

@@ -82,6 +82,7 @@
   "mentor_at_capacity": "የተመካሪ ቁጥርዎ ሞልቷል። አስቀድመው አንዱን ያጠናቁ።",
   "mentorship_ended": "አማካሪነቱ ተጠናቋል። ለጊዜዎ እናመሰግናለን።",
   "mentorship_ended_by_mentor": "አማካሪዎ {mentor} የምክር አገልግሎቱን አጠናቀዋል።",
+  "mentorship_end_reason_label": "ምክንያት",
   "mentorship_ended_by_mentee": "ተመካሪዎ {mentee} የምክር አገልግሎቱን አጠናቀዋል።",
   "no_active_mentorship": "ንቁ አማካሪነት የለዎትም።",
   "no_active_partners": "ንቁ ጓደኛ የለዎትም።",

@@ -2333,6 +2333,28 @@
     </div>
   </div>
 
+  <!-- ── Modal: Mentor ends a mentorship (reason is required and goes to the mentee) ── -->
+  <div id="endReasonModal" class="modal-overlay" onclick="if(event.target===this)closeEndReason()">
+    <div class="modal-sheet er-sheet" role="dialog" aria-modal="true" aria-labelledby="endReasonTitle">
+      <div class="modal-handle"></div>
+      <div id="endReasonTitle" class="modal-title" data-i18n="end_reason_title">End this mentorship?</div>
+      <p class="hb-text" data-i18n="end_reason_body">Tell your mentee why. They will see your reason in their notification.</p>
+      <div class="er-chips" id="endReasonChips">
+        <button type="button" class="er-chip" data-chip="end_reason_chip_goals" onclick="pickEndReasonChip(this)"></button>
+        <button type="button" class="er-chip" data-chip="end_reason_chip_fit" onclick="pickEndReasonChip(this)"></button>
+        <button type="button" class="er-chip" data-chip="end_reason_chip_time" onclick="pickEndReasonChip(this)"></button>
+        <button type="button" class="er-chip" data-chip="end_reason_chip_quiet" onclick="pickEndReasonChip(this)"></button>
+      </div>
+      <label class="er-label" for="endReasonText" data-i18n="end_reason_label">Your reason</label>
+      <textarea id="endReasonText" class="form-control" rows="4" maxlength="300" data-i18n="end_reason_placeholder" placeholder="Write a few kind, clear words for your mentee…" oninput="onEndReasonInput()"></textarea>
+      <div class="er-foot"><span data-i18n="end_reason_hint">Required. At least 3 characters.</span><span id="endReasonCount">0/300</span></div>
+      <div class="hb-actions">
+        <button type="button" class="btn btn-outline" onclick="closeEndReason()" data-i18n="btn_cancel">Cancel</button>
+        <button type="button" id="endReasonYes" class="btn btn-danger" onclick="confirmEndReason()" disabled data-i18n="btn_end">End Mentorship</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Modal: Decline a request / referral ───────────────── -->
   <div id="requestDeclineModal" class="modal-overlay" onclick="if(event.target===this)closeRequestDecline()">
     <div class="modal-sheet tf-confirm-sheet" role="alertdialog" aria-modal="true" aria-labelledby="requestDeclineTitle" aria-describedby="requestDeclineBody">

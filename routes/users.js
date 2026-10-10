@@ -479,11 +479,20 @@ module.exports = function userRoutes(supabase, requireAuth) {
 
     if (existingRating) return res.json(null);
 
+    // Why it ended, when the mentor gave a reason. Separate best-effort query so
+    // this route still works before the end_reason migration has been run.
+    let end_reason = null;
+    try {
+      const { data: why } = await supabase.from('mentorship_assignments').select('end_reason, ended_by').eq('id', assignment.id).maybeSingle();
+      if (why?.ended_by === 'mentor' && why.end_reason) end_reason = why.end_reason;
+    } catch (_) { /* optional */ }
+
     const m = assignment.mentor;
     res.json({
       assignment_id: assignment.id,
       mentor_id: assignment.mentor_id,
-      display_name: m?.user_settings?.display_name || m?.anonymous_id || 'Your mentor'
+      display_name: m?.user_settings?.display_name || m?.anonymous_id || 'Your mentor',
+      end_reason
     });
   });
 

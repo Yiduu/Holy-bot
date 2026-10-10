@@ -1281,7 +1281,7 @@ async function checkPendingRating() {
   try {
     const pending = await apiFetch('/api/users/pending-rating');
     if (pending && pending.mentor_id) {
-      openRatingModal(pending.mentor_id, pending.display_name, pending.assignment_id);
+      openRatingModal(pending.mentor_id, pending.display_name, pending.assignment_id, pending.end_reason);
     }
   } catch (e) { /* silent — non-critical */ }
 }
@@ -1306,7 +1306,7 @@ function renderStars(rating, count, size = 11) {
   return `<div class="rating-row"><span class="stars">${svgs}</span><span class="rating-num">${r.toFixed(1)}</span><span class="rating-count">(${count})</span></div>`;
 }
 
-function openRatingModal(mentorId, mentorName, assignmentId) {
+function openRatingModal(mentorId, mentorName, assignmentId, endReason) {
   ratingModalOpen = true;
   let selected = 0;
   const overlay = document.createElement('div');
@@ -1324,6 +1324,7 @@ function openRatingModal(mentorId, mentorName, assignmentId) {
       </div>
       <div class="rating-modal-title">${t('rate_mentor_title') || 'Rate your mentor'}</div>
       <div class="rating-modal-sub">${(t('rate_mentor_sub') || 'Your mentorship with {name} just ended. Tap a star to rate your experience.').replace('{name}', escapeHtml(mentorName))}</div>
+      ${endReason ? `<div class="rating-end-reason"><b>${escapeHtml(t('end_reason_from_mentor') || 'Why it ended')}</b><span>${escapeHtml(endReason)}</span></div>` : ''}
       <div class="big-stars" id="ratingBigStars"></div>
       <div class="card-actions" style="display:flex;gap:8px;margin-top:4px;">
         <button class="btn btn-outline btn-sm flex-1" id="ratingSkipBtn">${t('btn_skip') || 'Skip'}</button>
@@ -8503,19 +8504,73 @@ async function confirmTransfer() {
   }
 }
 
+// ─── Mentor ends a mentorship: a written reason is required ──────
+const END_REASON_MIN = 3, END_REASON_MAX = 300;
+let _endReasonAssignId = null, _endReasonBusy = false;
+
+function openEndReason(assignId) {
+  _endReasonAssignId = assignId;
+  _endReasonBusy = false;
+  document.querySelectorAll('#endReasonChips [data-chip]').forEach(b => { b.textContent = t(b.dataset.chip); });
+  const ta = $('endReasonText');
+  if (ta) ta.value = '';
+  onEndReasonInput();
+  $('endReasonModal')?.classList.add('open');
+}
+
+function closeEndReason() {
+  if (_endReasonBusy) return;
+  $('endReasonModal')?.classList.remove('open');
+  _endReasonAssignId = null;
+}
+
+function onEndReasonInput() {
+  const ta = $('endReasonText');
+  const len = (ta?.value || '').trim().length;
+  const count = $('endReasonCount');
+  if (count) count.textContent = `${(ta?.value || '').length}/${END_REASON_MAX}`;
+  const yes = $('endReasonYes');
+  if (yes) yes.disabled = _endReasonBusy || len < END_REASON_MIN;
+}
+
+function pickEndReasonChip(btn) {
+  const ta = $('endReasonText');
+  if (!ta) return;
+  haptic('selection');
+  ta.value = btn.textContent.trim();
+  onEndReasonInput();
+  ta.focus();
+}
+
+async function confirmEndReason() {
+  if (_endReasonBusy || !_endReasonAssignId) return;
+  const reason = ($('endReasonText')?.value || '').trim();
+  if (reason.length < END_REASON_MIN) { haptic('error'); $('endReasonText')?.focus(); return; }
+  _endReasonBusy = true;
+  onEndReasonInput();
+  haptic('medium');
+  try {
+    await apiFetch(`/api/mentors/end-mentorship/${_endReasonAssignId}`, { method: 'DELETE', body: { reason } });
+    _endReasonBusy = false;
+    closeEndReason();
+    haptic('success');
+    showToast(t('mentorship_ended'), 'success');
+    // Refresh the badge — messages from this ended pairing no longer count.
+    updateMessageBadge();
+    loadMyMentees();
+  } catch (e) {
+    _endReasonBusy = false;
+    onEndReasonInput();
+    haptic('error');
+    showToast(e.message, 'error');
+  }
+}
+
 async function endMentorship(assignId, skipConfirm = false) {
   if (assignId && typeof assignId === 'string') {
-    // Mentor Flow (from My Mentees list)
-    if (!confirm('End this mentorship assignment?')) return;
-    haptic('medium');
-    try {
-      await apiFetch(`/api/mentors/end-mentorship/${assignId}`, { method: 'DELETE' });
-      haptic('success');
-      showToast(t('mentorship_ended'), 'success');
-      // Refresh the badge — messages from this ended pairing no longer count.
-      updateMessageBadge();
-      loadMyMentees();
-    } catch (e) { haptic('error'); showToast(e.message, 'error'); }
+    // Mentor Flow (from My Mentees list): ask for the reason first
+    openEndReason(assignId);
+    return;
   } else {
     // Mentee Flow (from Mentors Page)
     if (!skipConfirm && !confirm(t('confirm_end_mentorship'))) return;

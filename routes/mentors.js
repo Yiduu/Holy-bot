@@ -1310,8 +1310,13 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
   });
 
   // DELETE /api/mentors/end-mentorship/:assignment_id
+  // Body: { reason } - why the mentor is ending it (3-300 chars). The mentee
+  // sees the reason in their Telegram notification and in the app.
+  const END_REASON_MIN = 3, END_REASON_MAX = 300;
   router.delete('/end-mentorship/:assignment_id', requireAuth, async (req, res) => {
     const { id: mentor_id } = req.telegramUser;
+    const reason = String(req.body?.reason ?? '').trim().replace(/\s+/g, ' ').slice(0, END_REASON_MAX);
+    if (reason.length < END_REASON_MIN) return res.status(400).json({ error: 'Please tell your mentee why you are ending the mentorship.' });
     const { data: existing } = await supabase
       .from('mentorship_assignments')
       .select('user_id')
@@ -1321,8 +1326,8 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       .maybeSingle();
     let error;
     if (existing) {
-      // Also records that the mentor ended it
-      error = await closeAssignment(supabase, req.params.assignment_id, { endedBy: 'mentor' });
+      // Also records that the mentor ended it, and why
+      error = await closeAssignment(supabase, req.params.assignment_id, { reason, endedBy: 'mentor' });
     } else {
       ({ error } = await supabase
         .from('mentorship_assignments')
@@ -1332,7 +1337,10 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     }
     if (error) return res.status(500).json({ error: error.message });
     if (existing?.user_id) {
-      emitToUserRoom(existing.user_id, 'mentorship_ended', { by: 'mentor', assignment_id: req.params.assignment_id });
+      emitToUserRoom(existing.user_id, 'mentorship_ended', { by: 'mentor', assignment_id: req.params.assignment_id, reason });
+      // Telegram notice with the reason. Best-effort: never fails the request.
+      try { await require('../bot').notifyMenteeMentorshipEnded(existing.user_id, mentor_id, reason); }
+      catch (e) { console.error('[mentors] end-mentorship notification failed (non-fatal):', e.message); }
     }
     res.json({ success: true });
   });
