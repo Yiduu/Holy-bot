@@ -13131,14 +13131,16 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
    stacked cards with gold icon tiles, pill buttons. It reuses their classes
    (.profile-hero, .profile-tabs, .profile-menu-item, .mp-info, .mp-actions);
    only what a form needs is defined here. ═══ */
-#page-mentor-edit.active {
+#page-mentor-edit.active,
+#page-notifications.active {
   background: radial-gradient(120% 420px at 50% 0%, rgba(201, 168, 76, 0.30) 0%, rgba(168, 124, 42, 0.12) 45%, transparent 78%) no-repeat;
 }
-[data-theme="light"] #page-mentor-edit.active {
+[data-theme="light"] #page-mentor-edit.active,
+[data-theme="light"] #page-notifications.active {
   background: radial-gradient(120% 420px at 50% 0%, rgba(201, 168, 76, 0.32) 0%, rgba(201, 168, 76, 0.10) 45%, transparent 78%) no-repeat;
 }
-#page-mentor-edit .app-header { background: transparent; border-bottom-color: transparent; box-shadow: none; }
-#page-mentor-edit .page-content { animation: profilePaneIn 0.3s ease both; }
+:is(#page-mentor-edit, #page-notifications) .app-header { background: transparent; border-bottom-color: transparent; box-shadow: none; }
+:is(#page-mentor-edit, #page-notifications) .page-content { animation: profilePaneIn 0.3s ease both; }
 
 /* cards that hold a field: not tappable as a whole, fields get the card's roundness */
 .mpe-card { cursor: default; }
@@ -13182,8 +13184,53 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
 /* the open dropdown must sit above the cards that follow it */
 .mpe-card:has([data-open]) { position: relative; z-index: 30; }
 
-/* "Accept New Requests": label on the left, switch on the right */
-.mpe-toggle-card { align-items: center; }
-.mpe-toggle-card .neo-toggle-container { margin: 0 0 16px; }   /* room for the switch's ON/OFF caption */
+/* ─── Gold switch (Notifications rows, "Accept New Requests") ───────────────
+   A whole card is the tap target (it is a <label>); the checkbox inside keeps
+   its id, so saving/loading reads .checked exactly as before. ─── */
+.pm-switch-card { cursor: pointer; align-items: center; }
+.pm-switch-card:active { transform: scale(0.985); }
+.pm-switch-input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+.pm-switch {
+  flex: none;
+  position: relative;
+  width: 54px;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.pm-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #cfcbc0;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+  transition: transform 0.25s cubic-bezier(0.3, 1.3, 0.5, 1), background 0.25s ease;
+}
+.pm-switch-input:checked + .pm-switch {
+  background: linear-gradient(180deg, #EBCD72, #C9A84C);
+  border-color: rgba(255, 233, 160, 0.55);
+  box-shadow: 0 6px 16px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.pm-switch-input:checked + .pm-switch::after { transform: translateX(22px); background: #fff; }
+.pm-switch-input:focus-visible + .pm-switch { outline: 2px solid var(--gold); outline-offset: 3px; }
+[data-theme="light"] .pm-switch { background: rgba(30, 25, 15, 0.14); border-color: rgba(150, 120, 40, 0.3); box-shadow: inset 0 1px 3px rgba(30, 25, 15, 0.18); }
+[data-theme="light"] .pm-switch-input:checked + .pm-switch { background: linear-gradient(180deg, #EBCD72, #C9A84C); border-color: rgba(150, 120, 40, 0.45); }
 
-@media (prefers-reduced-motion: reduce) { #page-mentor-edit .page-content { animation: none; } }
+/* Notifications hero: a framed bell where the other pages show an avatar */
+.np-hero-icon { display: flex; align-items: center; justify-content: center; cursor: default; }
+.np-hero-icon svg { width: 52px; height: 52px; color: var(--gold-light); }
+.np-hero-icon:hover { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06); }
+.np-sub { max-width: 82%; margin: 8px auto 0; text-align: center; font-size: var(--fs-md); line-height: 1.45; color: var(--text2); }
+[data-theme="light"] .np-hero-icon svg { color: #7A5812; }
+
+@media (prefers-reduced-motion: reduce) {
+  :is(#page-mentor-edit, #page-notifications) .page-content { animation: none; }
+  .pm-switch, .pm-switch::after { transition: none; }
+}

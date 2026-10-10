@@ -1271,7 +1271,7 @@
         <!-- Section 1: Preferences -->
         <div id="profilePanePrefs" class="profile-pane active">
         <nav class="profile-menu-list" aria-label="Preferences">
-          <button type="button" class="profile-menu-item" onclick="openNotificationsModal()">
+          <button type="button" class="profile-menu-item" onclick="openNotificationsPage()">
             <span class="profile-menu-icon">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1495,7 +1495,7 @@
         <!-- Tab 2: requests, who you mentor, capacity, topics -->
         <div id="mentorEditPaneAvail" class="profile-pane">
           <nav class="profile-menu-list" aria-label="Availability">
-            <div class="profile-menu-item mp-info mpe-card mpe-toggle-card pm-gold">
+            <label class="profile-menu-item mp-info mpe-card pm-switch-card pm-gold" for="toggleAcceptingRequests">
               <span class="profile-menu-icon">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1503,45 +1503,10 @@
                 </svg>
               </span>
               <span class="profile-menu-label" data-i18n="Accept New Requests">Accept New Requests</span>
-              <div class="neo-toggle-container">
-                <input class="neo-toggle-input" id="toggleAcceptingRequests" type="checkbox" checked
-                  onchange="toggleAcceptingRequests()" />
-                <label class="neo-toggle" for="toggleAcceptingRequests">
-                  <div class="neo-track">
-                    <div class="neo-background-layer"></div>
-                    <div class="neo-grid-layer"></div>
-                    <div class="neo-spectrum-analyzer">
-                      <div class="neo-spectrum-bar"></div>
-                      <div class="neo-spectrum-bar"></div>
-                      <div class="neo-spectrum-bar"></div>
-                      <div class="neo-spectrum-bar"></div>
-                      <div class="neo-spectrum-bar"></div>
-                    </div>
-                    <div class="neo-track-highlight"></div>
-                  </div>
-                  <div class="neo-thumb">
-                    <div class="neo-thumb-ring"></div>
-                    <div class="neo-thumb-core">
-                      <div class="neo-thumb-icon">
-                        <div class="neo-thumb-wave"></div>
-                        <div class="neo-thumb-pulse"></div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="neo-gesture-area"></div>
-                  <div class="neo-interaction-feedback">
-                    <div class="neo-ripple"></div>
-                    <div class="neo-progress-arc"></div>
-                  </div>
-                  <div class="neo-status">
-                    <div class="neo-status-indicator">
-                      <div class="neo-status-dot"></div>
-                      <div class="neo-status-text"></div>
-                    </div>
-                  </div>
-                </label>
-              </div>
-            </div>
+              <input class="pm-switch-input" id="toggleAcceptingRequests" type="checkbox" checked
+                onchange="toggleAcceptingRequests()" />
+              <span class="pm-switch" aria-hidden="true"></span>
+            </label>
 
             <div class="profile-menu-item mp-info mpe-card">
               <span class="profile-menu-icon">
@@ -1605,6 +1570,83 @@
 
         <div class="mp-actions mpe-actions">
           <button type="button" class="btn btn-primary" onclick="saveMentorEditPage()" data-i18n="Save Changes">Save Changes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Page: Notifications ───────────────────────────────────────
+         Same look as Profile and Live: gold glow, framed icon hero, stacked
+         rounded cards with one gold switch each. Switch ids are the ones
+         loadSettings()/saveSettings() already use. ─────────────────── -->
+    <div id="page-notifications" class="page">
+      <div class="app-header mp-header">
+        <button type="button" class="profile-pill mp-back" onclick="closeNotifications()" aria-label="Back">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+          <span data-i18n="btn_back">Back</span>
+        </button>
+      </div>
+      <div class="page-content">
+        <div class="profile-hero mp-hero">
+          <div class="avatar-preview-wrap">
+            <div class="avatar-preview avatar-preview-xl np-hero-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+            </div>
+          </div>
+          <div class="profile-hero-name" data-i18n="Notifications">Notifications</div>
+          <p class="np-sub" data-i18n="notifications_modal_subtitle">Customize which alerts and reminders you receive.</p>
+        </div>
+
+        <nav class="profile-menu-list" aria-label="Notifications">
+            <label class="profile-menu-item mp-info mpe-card pm-switch-card pm-gold" for="toggleMessages">
+              <span class="profile-menu-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                </svg>
+              </span>
+              <span class="profile-menu-label" data-i18n="New Messages">New Messages</span>
+              <input class="pm-switch-input" id="toggleMessages" type="checkbox" checked onchange="toggleNotif('toggleMessages')" />
+              <span class="pm-switch" aria-hidden="true"></span>
+            </label>
+            <label class="profile-menu-item mp-info mpe-card pm-switch-card" for="toggleSessions">
+              <span class="profile-menu-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                </svg>
+              </span>
+              <span class="profile-menu-label" data-i18n="Session Reminders">Session Reminders</span>
+              <input class="pm-switch-input" id="toggleSessions" type="checkbox" checked onchange="toggleNotif('toggleSessions')" />
+              <span class="pm-switch" aria-hidden="true"></span>
+            </label>
+            <label class="profile-menu-item mp-info mpe-card pm-switch-card" for="toggleVerse">
+              <span class="profile-menu-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                </svg>
+              </span>
+              <span class="profile-menu-label" data-i18n="Daily Bible Verse">Daily Bible Verse</span>
+              <input class="pm-switch-input" id="toggleVerse" type="checkbox" checked onchange="toggleNotif('toggleVerse')" />
+              <span class="pm-switch" aria-hidden="true"></span>
+            </label>
+            <label class="profile-menu-item mp-info mpe-card pm-switch-card" for="toggleStreak">
+              <span class="profile-menu-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+              </span>
+              <span class="profile-menu-label" data-i18n="Streak Reminders">Streak Reminders</span>
+              <input class="pm-switch-input" id="toggleStreak" type="checkbox" checked onchange="toggleNotif('toggleStreak')" />
+              <span class="pm-switch" aria-hidden="true"></span>
+            </label>
+        </nav>
+
+        <div class="mp-actions mpe-actions">
+          <button type="button" class="btn btn-primary" onclick="saveNotificationsPage()" data-i18n="btn_done">Done</button>
         </div>
       </div>
     </div>
@@ -2069,184 +2111,6 @@
 
       <button type="button" class="btn btn-primary btn-full mt-16" onclick="saveProfileFromModal()"
         data-i18n="btn_save">Save</button>
-    </div>
-  </div>
-
-  <!-- ── Modal: Notifications ─────────────────────────────────── -->
-  <div id="notificationsModal" class="modal-overlay" onclick="if(event.target===this)closeNotificationsModal()">
-    <div class="modal-sheet notifications-sheet">
-      <div class="modal-handle"></div>
-      <div class="modal-title" data-i18n="Notifications">Notifications</div>
-      <p class="text-xs text-dim mb-16" data-i18n="notifications_modal_subtitle">Customize which alerts and reminders you receive.</p>
-
-      <div class="card mb-16">
-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="New Messages">New Messages</span>
-          <div class="neo-toggle-container">
-            <input class="neo-toggle-input" id="toggleMessages" type="checkbox" checked
-              onchange="toggleNotif('toggleMessages')" />
-            <label class="neo-toggle" for="toggleMessages">
-              <div class="neo-track">
-                <div class="neo-background-layer"></div>
-                <div class="neo-grid-layer"></div>
-                <div class="neo-spectrum-analyzer">
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                </div>
-                <div class="neo-track-highlight"></div>
-              </div>
-              <div class="neo-thumb">
-                <div class="neo-thumb-ring"></div>
-                <div class="neo-thumb-core">
-                  <div class="neo-thumb-icon">
-                    <div class="neo-thumb-wave"></div>
-                    <div class="neo-thumb-pulse"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="neo-gesture-area"></div>
-              <div class="neo-interaction-feedback">
-                <div class="neo-ripple"></div>
-                <div class="neo-progress-arc"></div>
-              </div>
-              <div class="neo-status">
-                <div class="neo-status-indicator">
-                  <div class="neo-status-dot"></div>
-                  <div class="neo-status-text"></div>
-                </div>
-              </div>
-            </label>
-          </div>
-        </div>
-        <div class="divider"></div>
-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="Session Reminders">Session Reminders</span>
-          <div class="neo-toggle-container">
-            <input class="neo-toggle-input" id="toggleSessions" type="checkbox" checked
-              onchange="toggleNotif('toggleSessions')" />
-            <label class="neo-toggle" for="toggleSessions">
-              <div class="neo-track">
-                <div class="neo-background-layer"></div>
-                <div class="neo-grid-layer"></div>
-                <div class="neo-spectrum-analyzer">
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                </div>
-                <div class="neo-track-highlight"></div>
-              </div>
-              <div class="neo-thumb">
-                <div class="neo-thumb-ring"></div>
-                <div class="neo-thumb-core">
-                  <div class="neo-thumb-icon">
-                    <div class="neo-thumb-wave"></div>
-                    <div class="neo-thumb-pulse"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="neo-gesture-area"></div>
-              <div class="neo-interaction-feedback">
-                <div class="neo-ripple"></div>
-                <div class="neo-progress-arc"></div>
-              </div>
-              <div class="neo-status">
-                <div class="neo-status-indicator">
-                  <div class="neo-status-dot"></div>
-                  <div class="neo-status-text"></div>
-                </div>
-              </div>
-            </label>
-          </div>
-        </div>
-        <div class="divider"></div>
-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="Daily Bible Verse">Daily Bible Verse</span>
-          <div class="neo-toggle-container">
-            <input class="neo-toggle-input" id="toggleVerse" type="checkbox" checked
-              onchange="toggleNotif('toggleVerse')" />
-            <label class="neo-toggle" for="toggleVerse">
-              <div class="neo-track">
-                <div class="neo-background-layer"></div>
-                <div class="neo-grid-layer"></div>
-                <div class="neo-spectrum-analyzer">
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                </div>
-                <div class="neo-track-highlight"></div>
-              </div>
-              <div class="neo-thumb">
-                <div class="neo-thumb-ring"></div>
-                <div class="neo-thumb-core">
-                  <div class="neo-thumb-icon">
-                    <div class="neo-thumb-wave"></div>
-                    <div class="neo-thumb-pulse"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="neo-gesture-area"></div>
-              <div class="neo-interaction-feedback">
-                <div class="neo-ripple"></div>
-                <div class="neo-progress-arc"></div>
-              </div>
-              <div class="neo-status">
-                <div class="neo-status-indicator">
-                  <div class="neo-status-dot"></div>
-                  <div class="neo-status-text"></div>
-                </div>
-              </div>
-            </label>
-          </div>
-        </div>
-        <div class="divider"></div>
-        <div class="toggle-wrap toggle-wrap--neo"><span data-i18n="Streak Reminders">Streak Reminders</span>
-          <div class="neo-toggle-container">
-            <input class="neo-toggle-input" id="toggleStreak" type="checkbox" checked
-              onchange="toggleNotif('toggleStreak')" />
-            <label class="neo-toggle" for="toggleStreak">
-              <div class="neo-track">
-                <div class="neo-background-layer"></div>
-                <div class="neo-grid-layer"></div>
-                <div class="neo-spectrum-analyzer">
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                  <div class="neo-spectrum-bar"></div>
-                </div>
-                <div class="neo-track-highlight"></div>
-              </div>
-              <div class="neo-thumb">
-                <div class="neo-thumb-ring"></div>
-                <div class="neo-thumb-core">
-                  <div class="neo-thumb-icon">
-                    <div class="neo-thumb-wave"></div>
-                    <div class="neo-thumb-pulse"></div>
-                  </div>
-                </div>
-              </div>
-              <div class="neo-gesture-area"></div>
-              <div class="neo-interaction-feedback">
-                <div class="neo-ripple"></div>
-                <div class="neo-progress-arc"></div>
-              </div>
-              <div class="neo-status">
-                <div class="neo-status-indicator">
-                  <div class="neo-status-dot"></div>
-                  <div class="neo-status-text"></div>
-                </div>
-              </div>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <button type="button" class="btn btn-primary btn-full" onclick="saveNotificationsFromModal()"
-        data-i18n="btn_done">Done</button>
     </div>
   </div>
 

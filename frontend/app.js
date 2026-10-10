@@ -1046,6 +1046,7 @@ function handleTelegramBack() {
   if (document.body.classList.contains('in-call')) return;
   if (currentPage === 'mentor-profile') { closeMentorProfile(); return; }
   if (currentPage === 'mentor-edit') { closeMentorEdit(); return; }
+  if (currentPage === 'notifications') { closeNotifications(); return; }
   if (currentPage !== 'dashboard') navigate('dashboard');
 }
 
@@ -6472,20 +6473,28 @@ async function saveProfileFromModal() {
   if (ok) closeEditProfileModal();
 }
 
-// ─── Notifications modal ───────────────────────────────────────
-function openNotificationsModal() {
+// ─── Notifications page (Profile → Notifications) ─────────────
+// A full page now (it used to be a bottom sheet) so it looks like the Profile
+// and Live pages. The switches keep their old ids, so loadSettings() fills them
+// and saveSettings() reads them exactly as before.
+function openNotificationsPage() {
+  if (!$('page-notifications')) return;
   haptic('light');
-  $('notificationsModal')?.classList.add('open');
+  showAppPageQuiet('notifications', 'nav-settings');
+  const pc = document.querySelector('#page-notifications .page-content');
+  if (pc) pc.scrollTop = 0;
 }
 
-function closeNotificationsModal() {
-  haptic('light');
-  $('notificationsModal')?.classList.remove('open');
+// Back to Profile. navigate() reloads the saved settings, so switches that were
+// not saved are put back (same as dismissing the old sheet).
+function closeNotifications() {
+  if (currentPage !== 'notifications') return;
+  navigate('settings');
 }
 
-async function saveNotificationsFromModal() {
+async function saveNotificationsPage() {
   const ok = await saveSettings();
-  if (ok) closeNotificationsModal();
+  if (ok) closeNotifications();
 }
 
 // ─── Mentor Profile page (Profile → Mentor Profile) ───────────
