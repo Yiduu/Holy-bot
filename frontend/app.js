@@ -1088,6 +1088,43 @@ function syncTelegramBack() {
   try { currentPage !== 'dashboard' ? bb.show() : bb.hide(); } catch { }
 }
 
+// ─── Loading screen controller ────────────────────────────────
+// The intro animation takes ~1.9s. On a fast start the app is ready sooner, so
+// hideLoadingScreen() waits until LOADER_MIN_MS has passed since the page began
+// loading (performance.now() counts from navigation start, so a reload gets the
+// full animation too). The progress line eases toward 90% while booting and
+// jumps to 100% right before the screen leaves.
+const LOADER_MIN_MS = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1200 : 2400;
+const LOADER_FILL_MS = 400;     // let the bar visibly reach 100%
+const LOADER_LEAVE_MS = 600;    // matches the .is-leaving fade in styles.css
+let __loaderHide = null;
+(function startLoaderProgress() {
+  const el = $('loadingScreen');
+  if (!el) return;
+  (function tick() {
+    if (__loaderHide) return;
+    const t = performance.now() / 1000;
+    el.style.setProperty('--ld-p', (0.9 * (1 - Math.exp(-t / 1.4))).toFixed(3));
+    requestAnimationFrame(tick);
+  })();
+})();
+
+function hideLoadingScreen() {
+  if (__loaderHide) return __loaderHide;
+  const el = $('loadingScreen');
+  if (!el || el.classList.contains('hidden')) return Promise.resolve();
+  __loaderHide = new Promise(resolve => {
+    setTimeout(() => {
+      el.style.setProperty('--ld-p', '1');
+      setTimeout(() => {
+        el.classList.add('is-leaving');
+        setTimeout(() => { el.classList.add('hidden'); resolve(); }, LOADER_LEAVE_MS);
+      }, LOADER_FILL_MS);
+    }, Math.max(0, LOADER_MIN_MS - performance.now()));
+  });
+  return __loaderHide;
+}
+
 // ─── Init ─────────────────────────────────────────────────────
 let __initStarted = false;
 async function init() {
@@ -1127,7 +1164,7 @@ async function init() {
     failed = true;
     showConnectionError(e);
   } finally {
-    if (!failed) $('loadingScreen')?.classList.add('hidden');
+    if (!failed) hideLoadingScreen();
   }
 }
 
@@ -1148,7 +1185,7 @@ async function fetchMeWithRetry() {
 function showConnectionError(err) {
   const ls = $('loadingScreen');
   if (!ls) return;
-  ls.classList.remove('hidden');
+  ls.classList.remove('hidden', 'is-leaving');
   const msg = err?.status === 401
     ? 'Session expired. Please close and reopen the app.'
     : 'Could not reach the server.';
@@ -2072,7 +2109,7 @@ const ICON_CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 const ICON_WARN_SVG = '<svg class="err-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="13"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
 
 async function showOnboarding() {
-  $('loadingScreen')?.classList.add('hidden');
+  hideLoadingScreen();
   $('onboarding').style.display = 'flex';
   applyLanguage();
 

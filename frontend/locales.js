@@ -964,7 +964,7 @@ const I18N = {
     "filter_all": "ሁሉም",
     "filter_spots_open_only": "ክፍት ቦታ ያላቸው ብቻ",
     "filter_online_only": "አሁን መስመር ላይ",
-    "filter_rating_any": "ማንኛውም ደረጃ",
+    "filter_rating_any": "ማንኛውም",
     "btn_apply_filters": "ማጣሪያዎችን ተግብር",
     "ptr_refreshing": "በማደስ ላይ…",
     "filter_show_n": "{n} አማካሪዎችን አሳይ",

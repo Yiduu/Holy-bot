@@ -4333,256 +4333,145 @@ textarea.form-control {
   padding: 14px;
 }
 
-/* ─── Loading ───────────────────────────────────────────────── */
+/* ─── Loading screen ────────────────────────────────────────────
+   Motion design for the logo (timeline, 0 → 1.9s, then loops while loading):
+   0.0s  gold glow blooms behind the mark
+   0.1s  the H rises into place (bottom-to-top reveal, blur → sharp)
+   1.0s  a light sweep runs along the diagonal stroke of the H (repeats)
+   0.85s wordmark is drawn in left → right
+   1.4s  progress line fades in and fills as the app boots
+   Exit: stage lifts + fades (.is-leaving), then .hidden removes it. */
 .loading-screen {
   position: fixed;
   inset: 0;
   z-index: 9999;
+  overflow: hidden;
   background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.55s ease;
+}
+.loading-screen.is-leaving { opacity: 0; pointer-events: none; }
+.loading-screen::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 46%;
+  width: min(120vw, 520px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(201, 168, 76, 0.24), rgba(201, 168, 76, 0.07) 55%, transparent 72%);
+  transform: translate(-50%, -50%) scale(0.6);
+  opacity: 0;
+  animation: ldGlowIn 1.3s var(--ease-premium) forwards, ldBreathe 3.4s ease-in-out 1.3s infinite;
+}
+.ld-stage {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 20px;
-  transition: opacity 0.4s ease;
+  gap: 18px;
+  margin-top: -4vh;
+  transition: transform 0.55s var(--ease-premium), opacity 0.45s ease;
 }
+.loading-screen.is-leaving .ld-stage { transform: translateY(-8px) scale(1.05); opacity: 0; }
 
-.loading-screen.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.loading-logo {
-  font-family: var(--font-display);
-  font-size: 2rem;
-  color: var(--gold);
-  letter-spacing: 0.1em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.loading-logo-img {
-  height: 80px;
-  width: auto;
-  object-fit: contain;
-  filter: drop-shadow(0 4px 16px rgba(201, 168, 76, 0.25));
-}
-
-/* ── Geometric Square Shift Loader (Uiverse.io by Nawsome) ── */
-.loadingspinner {
-  --square: 20px;
-  --offset: 25px;
-  --duration: 2.4s;
-  --delay: 0.2s;
-  --timing-function: cubic-bezier(0.45, 0.05, 0.55, 0.95);
-  --in-duration: 0.4s;
-  --in-delay: 0.1s;
-  --in-timing-function: ease-out;
-  width: calc(3 * var(--offset) + var(--square));
-  height: calc(2 * var(--offset) + var(--square));
-  padding: 0;
-  margin: 12px auto 0;
+.ld-mark-wrap { filter: drop-shadow(0 8px 24px rgba(201, 168, 76, 0.3)); }
+.ld-mark {
   position: relative;
+  width: clamp(92px, 28vw, 124px);
+  aspect-ratio: 248 / 242;
+  background: var(--ld-mark) center / contain no-repeat;
+  animation: ldMarkIn 1.05s var(--ease-premium) 0.1s both;
 }
-
-.loadingspinner div {
-  display: inline-block;
-  background: linear-gradient(135deg, var(--gold-light) 0%, var(--gold) 55%, #A87C2A 100%);
-  border: none;
-  border-radius: 4px;
-  width: var(--square);
-  height: var(--square);
+.ld-word {
+  position: relative;
+  width: clamp(176px, 54vw, 232px);
+  aspect-ratio: 440 / 39;
+  background: var(--ld-word) center / contain no-repeat;
+  animation: ldWordIn 0.95s var(--ease-premium) 0.85s both;
+}
+/* light sweep, masked to the artwork so it only touches the gold */
+.ld-mark::after, .ld-word::after {
+  content: '';
   position: absolute;
-  padding: 0;
-  margin: 0;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35), 0 0 12px rgba(201, 168, 76, 0.3);
+  inset: 0;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.85) 50%, transparent 62%) no-repeat;
+  background-size: 280% 100%;
+  background-position: 100% 0;
+  animation: ldSheen 3s ease-in-out 1.15s infinite;
+}
+.ld-mark::after {
+  -webkit-mask: var(--ld-mark) center / contain no-repeat;
+          mask: var(--ld-mark) center / contain no-repeat;
+}
+.ld-word::after {
+  -webkit-mask: var(--ld-word) center / contain no-repeat;
+          mask: var(--ld-word) center / contain no-repeat;
+  animation-delay: 1.45s;
 }
 
-.loadingspinner #square1 {
-  left: calc(0 * var(--offset));
-  top: calc(0 * var(--offset));
-  animation: square1 var(--duration) var(--delay) var(--timing-function) infinite,
-             squarefadein var(--in-duration) calc(1 * var(--in-delay)) var(--in-timing-function) both;
+.ld-bar {
+  position: relative;
+  width: clamp(120px, 38vw, 168px);
+  height: 3px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: rgba(201, 168, 76, 0.2);
+  overflow: hidden;
+  opacity: 0;
+  animation: ldFade 0.5s ease 1.4s forwards;
+}
+.ld-bar i {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #A87C2A, #EBCD72);
+  transform-origin: left center;
+  transform: scaleX(var(--ld-p, 0));
+  transition: transform 0.4s var(--ease-premium);
+  overflow: hidden;
+}
+.ld-bar i::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+  animation: ldBarShine 1.4s ease-in-out infinite;
 }
 
-.loadingspinner #square2 {
-  left: calc(0 * var(--offset));
-  top: calc(1 * var(--offset));
-  animation: square2 var(--duration) var(--delay) var(--timing-function) infinite,
-             squarefadein var(--in-duration) calc(1 * var(--in-delay)) var(--in-timing-function) both;
+@keyframes ldGlowIn {
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
-
-.loadingspinner #square3 {
-  left: calc(1 * var(--offset));
-  top: calc(1 * var(--offset));
-  animation: square3 var(--duration) var(--delay) var(--timing-function) infinite,
-             squarefadein var(--in-duration) calc(2 * var(--in-delay)) var(--in-timing-function) both;
+@keyframes ldBreathe {
+  0%, 100% { opacity: 1;    transform: translate(-50%, -50%) scale(1); }
+  50%      { opacity: 0.78; transform: translate(-50%, -50%) scale(1.07); }
 }
-
-.loadingspinner #square4 {
-  left: calc(2 * var(--offset));
-  top: calc(1 * var(--offset));
-  animation: square4 var(--duration) var(--delay) var(--timing-function) infinite,
-             squarefadein var(--in-duration) calc(3 * var(--in-delay)) var(--in-timing-function) both;
+@keyframes ldMarkIn {
+  0%   { clip-path: inset(100% 0 0 0); opacity: 0; transform: translateY(14px) scale(0.93); filter: blur(6px); }
+  35%  { opacity: 1; }
+  100% { clip-path: inset(0 0 0 0);    opacity: 1; transform: none; filter: blur(0); }
 }
-
-.loadingspinner #square5 {
-  left: calc(3 * var(--offset));
-  top: calc(1 * var(--offset));
-  animation: square5 var(--duration) var(--delay) var(--timing-function) infinite,
-             squarefadein var(--in-duration) calc(4 * var(--in-delay)) var(--in-timing-function) both;
+@keyframes ldWordIn {
+  0%   { clip-path: inset(0 100% 0 0); opacity: 0; transform: translateY(6px); }
+  30%  { opacity: 1; }
+  100% { clip-path: inset(0 0 0 0);    opacity: 1; transform: none; }
 }
-
-@keyframes square1 {
-  0% {
-    left: calc(0 * var(--offset));
-    top: calc(0 * var(--offset));
-  }
-  8.333% {
-    left: calc(0 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  100% {
-    left: calc(0 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
+@keyframes ldSheen {
+  0%   { background-position: 100% 0; }
+  40%, 100% { background-position: 0% 0; }
 }
-
-@keyframes square2 {
-  0% {
-    left: calc(0 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  8.333% {
-    left: calc(0 * var(--offset));
-    top: calc(2 * var(--offset));
-  }
-  16.67% {
-    left: calc(1 * var(--offset));
-    top: calc(2 * var(--offset));
-  }
-  25.00% {
-    left: calc(1 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  83.33% {
-    left: calc(1 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  91.67% {
-    left: calc(1 * var(--offset));
-    top: calc(0 * var(--offset));
-  }
-  100% {
-    left: calc(0 * var(--offset));
-    top: calc(0 * var(--offset));
-  }
+@keyframes ldFade { to { opacity: 1; } }
+@keyframes ldBarShine {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(260%); }
 }
-
-@keyframes square3 {
-  0%, 100% {
-    left: calc(1 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  16.67% {
-    left: calc(1 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  25.00% {
-    left: calc(1 * var(--offset));
-    top: calc(0 * var(--offset));
-  }
-  33.33% {
-    left: calc(2 * var(--offset));
-    top: calc(0 * var(--offset));
-  }
-  41.67% {
-    left: calc(2 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  66.67% {
-    left: calc(2 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  75.00% {
-    left: calc(2 * var(--offset));
-    top: calc(2 * var(--offset));
-  }
-  83.33% {
-    left: calc(1 * var(--offset));
-    top: calc(2 * var(--offset));
-  }
-  91.67% {
-    left: calc(1 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
+@media (prefers-reduced-motion: reduce) {
+  .loading-screen::before { animation: ldGlowIn 0.6s ease forwards; }
+  .ld-mark, .ld-word { animation: ldFadeIn 0.5s ease both; }
+  .ld-mark::after, .ld-word::after, .ld-bar i::after { animation: none; }
 }
-
-@keyframes square4 {
-  0% {
-    left: calc(2 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  33.33% {
-    left: calc(2 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  41.67% {
-    left: calc(2 * var(--offset));
-    top: calc(2 * var(--offset));
-  }
-  50.00% {
-    left: calc(3 * var(--offset));
-    top: calc(2 * var(--offset));
-  }
-  58.33% {
-    left: calc(3 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  100% {
-    left: calc(3 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-}
-
-@keyframes square5 {
-  0% {
-    left: calc(3 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  50.00% {
-    left: calc(3 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  58.33% {
-    left: calc(3 * var(--offset));
-    top: calc(0 * var(--offset));
-  }
-  66.67% {
-    left: calc(2 * var(--offset));
-    top: calc(0 * var(--offset));
-  }
-  75.00% {
-    left: calc(2 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-  100% {
-    left: calc(2 * var(--offset));
-    top: calc(1 * var(--offset));
-  }
-}
-
-@keyframes squarefadein {
-  0% {
-    transform: scale(0.75);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
+@keyframes ldFadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* Fallback inline spinner for dynamic lists */
 .loading-spinner {
