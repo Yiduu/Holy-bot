@@ -1160,11 +1160,16 @@ async function endMentorship(chatId, partnerId, initiatorRole, opts = {}) {
 async function notifyMenteeMentorshipEnded(menteeId, mentorId, reason) {
   const [lang, { data: mentor }] = await Promise.all([
     getUserLang(menteeId),
-    supabase.from('users').select('anonymous_id, public_alias').eq('telegram_id', mentorId).single(),
+    supabase.from('users').select('anonymous_id, user_settings(display_name)').eq('telegram_id', mentorId).maybeSingle(),
   ]);
-  const mentorName = mentor?.public_alias || mentor?.anonymous_id || (lang === 'am' ? 'አማካሪዎ' : 'Your mentor');
-  const c = endedCard(lang, tSync(lang, 'mentorship_ended_by_mentor', { mentor: mentorName }));
-  await sendCard(menteeId, { ...c, fields: [['', tSync(lang, 'mentorship_end_reason_label'), reason]] });
+  const mentorName = mentor?.user_settings?.display_name || mentor?.anonymous_id || '';
+  // No name found: use the sentence without one, so "Your mentor" is never said twice.
+  const line = mentorName
+    ? tSync(lang, 'mentorship_ended_by_mentor', { mentor: mentorName })
+    : tSync(lang, 'mentorship_ended_by_mentor_noname');
+  const c = endedCard(lang, line);
+  await sendCard(menteeId, { ...c, fields: [['', tSync(lang, 'mentorship_end_reason_label'), reason]] },
+    { label: tSync(lang, 'btn_open_app') });
 }
 
 // ─── Amharic Translation ──────────────────────────────────────────────────────

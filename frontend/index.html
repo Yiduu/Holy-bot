@@ -775,6 +775,35 @@
       </div>
     </div>
 
+    <!-- ── Page: End a mentorship (mentor writes the reason the mentee will see) ── -->
+    <div id="page-end-mentorship" class="page">
+      <div class="app-header mp-header">
+        <button type="button" class="profile-pill mp-back" onclick="closeEndReason()" aria-label="Back">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+          <span data-i18n="btn_back">Back</span>
+        </button>
+      </div>
+      <div class="page-content">
+        <div class="page-intro mb-12 stagger-fade">
+          <span class="page-intro-eyebrow" data-i18n="end_reason_eyebrow">End mentorship</span>
+          <p id="endReasonIntro" class="page-intro-text"></p>
+        </div>
+        <div id="endReasonWho" class="card er-who"></div>
+        <div class="card er-form">
+          <label class="er-label" for="endReasonText" data-i18n="end_reason_label">Your reason</label>
+          <textarea id="endReasonText" class="form-control" rows="6" maxlength="300" data-i18n="end_reason_placeholder"
+            placeholder="Write a few kind, clear words for your mentee…" oninput="onEndReasonInput()"></textarea>
+          <div class="er-foot"><span data-i18n="end_reason_hint">Required. At least 3 characters.</span><span id="endReasonCount">0/300</span></div>
+        </div>
+        <p class="er-note" data-i18n="end_reason_note">Your mentee gets your reason as a notification. Your chat history stays.</p>
+        <div class="er-actions">
+          <button type="button" class="btn btn-outline" onclick="closeEndReason()" data-i18n="btn_cancel">Cancel</button>
+          <button type="button" id="endReasonYes" class="btn btn-danger" onclick="confirmEndReason()" disabled data-i18n="btn_end">End Mentorship</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Page: Sessions ────────────────────────────────────────── -->
     <div id="page-sessions" class="page">
       <div class="app-header">
@@ -2329,28 +2358,6 @@
           <button type="button" id="transferConfirmNo" class="btn btn-outline" onclick="closeTransferConfirm()" data-i18n="btn_cancel">Cancel</button>
           <button type="button" id="transferConfirmYes" class="btn btn-primary" onclick="confirmTransfer()" data-i18n="transfer_confirm_yes">Yes, transfer</button>
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Modal: Mentor ends a mentorship (reason is required and goes to the mentee) ── -->
-  <div id="endReasonModal" class="modal-overlay" onclick="if(event.target===this)closeEndReason()">
-    <div class="modal-sheet er-sheet" role="dialog" aria-modal="true" aria-labelledby="endReasonTitle">
-      <div class="modal-handle"></div>
-      <div id="endReasonTitle" class="modal-title" data-i18n="end_reason_title">End this mentorship?</div>
-      <p class="hb-text" data-i18n="end_reason_body">Tell your mentee why. They will see your reason in their notification.</p>
-      <div class="er-chips" id="endReasonChips">
-        <button type="button" class="er-chip" data-chip="end_reason_chip_goals" onclick="pickEndReasonChip(this)"></button>
-        <button type="button" class="er-chip" data-chip="end_reason_chip_fit" onclick="pickEndReasonChip(this)"></button>
-        <button type="button" class="er-chip" data-chip="end_reason_chip_time" onclick="pickEndReasonChip(this)"></button>
-        <button type="button" class="er-chip" data-chip="end_reason_chip_quiet" onclick="pickEndReasonChip(this)"></button>
-      </div>
-      <label class="er-label" for="endReasonText" data-i18n="end_reason_label">Your reason</label>
-      <textarea id="endReasonText" class="form-control" rows="4" maxlength="300" data-i18n="end_reason_placeholder" placeholder="Write a few kind, clear words for your mentee…" oninput="onEndReasonInput()"></textarea>
-      <div class="er-foot"><span data-i18n="end_reason_hint">Required. At least 3 characters.</span><span id="endReasonCount">0/300</span></div>
-      <div class="hb-actions">
-        <button type="button" class="btn btn-outline" onclick="closeEndReason()" data-i18n="btn_cancel">Cancel</button>
-        <button type="button" id="endReasonYes" class="btn btn-danger" onclick="confirmEndReason()" disabled data-i18n="btn_end">End Mentorship</button>
       </div>
     </div>
   </div>
