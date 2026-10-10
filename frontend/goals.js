@@ -37,7 +37,7 @@
       plan_title: 'Plan each day', planned_n: '{n} of {m} days planned', apply_all: 'Copy to all days',
       apply_empty: 'Copy to empty days', clear_day: 'Clear (rest day)', rest_day: 'Rest day', no_tasks: 'No tasks on this day.',
       prev_month: 'Previous month', next_month: 'Next month', plan_dates_first: 'Pick valid start and end dates first (up to 120 days).',
-      plan_empty: 'Add tasks for at least one day', rename: 'Rename',
+      plan_empty: 'Add tasks for at least one day', rename: 'Rename', tick_when_done: 'Tick when finished',
     },
     am: {
       new_goal: 'አዲስ ግብ', type_one: 'ነጠላ ተግባር', type_prog: 'ደረጃ በደረጃ የሚከናወን', type_chal: 'ቻሌንጅ',
@@ -67,7 +67,7 @@
       plan_title: 'የእያንዳንዱን ቀን እቅድ', planned_n: '{n} ከ{m} ቀናት ታቅደዋል', apply_all: 'ለሁሉም ቀናት ቅዳ',
       apply_empty: 'ለባዶ ቀናት ቅዳ', clear_day: 'አጽዳ (የእረፍት ቀን)', rest_day: 'የእረፍት ቀን', no_tasks: 'ለዚህ ቀን ተግባር የለም።',
       prev_month: 'ያለፈው ወር', next_month: 'የሚቀጥለው ወር', plan_dates_first: 'መጀመሪያ ትክክለኛ የመጀመሪያና የመጨረሻ ቀን ይምረጡ (እስከ 120 ቀን)።',
-      plan_empty: 'ቢያንስ ለአንድ ቀን ተግባር ይጨምሩ', rename: 'ስም ቀይር',
+      plan_empty: 'ቢያንስ ለአንድ ቀን ተግባር ይጨምሩ', rename: 'ስም ቀይር', tick_when_done: 'ሲጨርሱ ምልክት ያድርጉ',
     },
   };
   const tr = (k, r) => {
@@ -86,6 +86,9 @@
   const fmt = (s, o) => new Date(utc(s)).toLocaleDateString(currentLanguage === 'am' ? 'am-ET' : 'en-US', { timeZone: 'UTC', ...o });
 
   const CHK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  const ICO = p => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+  const ICO_SKIP = ICO('<path d="M5 5l9 7-9 7z"/><path d="M19 5v14"/>');
+  const ICO_RESTORE = ICO('<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>');
 
   // ── state ──────────────────────────────────────────────────────────────
   const store = { mentor: {}, mine: null };   // goals by mentee id / for the signed-in mentee
@@ -134,10 +137,16 @@
       return `<div class="hg-trow hg-ren"><input type="text" maxlength="200" data-ren="${t.id}" value="${esc(t.title)}">
         <button type="button" class="hg-btn hg-btn-sm" data-act="saveren" data-task="${t.id}">${tr('save')}</button></div>`;
     }
-    const tools = role === 'mentor' ? `
-      <button type="button" class="hg-mini hg-mini-ic" data-act="rename" data-task="${t.id}" aria-label="${tr('rename')}">${menteeIcon('pencil', 13)}</button>
-      <button type="button" class="hg-mini" data-act="skip" data-task="${t.id}">${tr(t.status === 'skipped' ? 'restore' : 'skip')}</button>
-      <button type="button" class="hg-mini hg-mini-ic" data-act="deltask" data-task="${t.id}" aria-label="${tr('del')}">${menteeIcon('trash', 13)}</button>` : '';
+    // A one-time goal has exactly one task and it IS the goal, so its title is
+    // never shown a second time (the goal title above already says it). Rename
+    // and delete then live on the goal itself; only skip stays on the task.
+    const single = g.type === 'one_time' && g.tasks.length === 1;
+    const label = single ? (on ? tr('done') : tr('tick_when_done')) : esc(t.title);
+    const skipped = t.status === 'skipped';
+    const tools = role === 'mentor' ? `<div class="hg-tools">
+      ${single ? '' : `<button type="button" class="hg-mini hg-mini-lbl" data-act="rename" data-task="${t.id}">${menteeIcon('pencil', 13)}<span>${tr('rename')}</span></button>`}
+      <button type="button" class="hg-mini hg-mini-lbl" data-act="skip" data-task="${t.id}">${skipped ? ICO_RESTORE : ICO_SKIP}<span>${tr(skipped ? 'restore' : 'skip')}</span></button>
+      ${single ? '' : `<button type="button" class="hg-mini hg-mini-lbl hg-mini-danger" data-act="deltask" data-task="${t.id}">${menteeIcon('trash', 13)}<span>${tr('del')}</span></button>`}</div>` : '';
     let note = '';
     if (role === 'mentee' && ui.note[t.id] && on && !lk) {
       note = `<div class="hg-note"><textarea maxlength="500" rows="2" data-note="${t.id}" placeholder="${tr('note_ph')}">${esc(t.note || '')}</textarea>
@@ -148,7 +157,7 @@
     return `<div class="hg-trow">
       <button type="button" class="hg-task${on ? ' dn' : ''}${t.status === 'missed' ? ' ms' : ''}" data-act="tick" data-task="${t.id}" aria-pressed="${on}"${lk ? ' disabled' : ''}>
         <span class="hg-ck${on ? ' on' : ''}">${on ? CHK : ''}</span>
-        <span class="hg-tt">${esc(t.title)}</span><span class="hg-sub">${sub}</span>
+        <span class="hg-tcol"><span class="hg-tt">${label}</span><span class="hg-sub">${sub}</span></span>
       </button>${tools}</div>${note}`;
   }
 
@@ -244,15 +253,15 @@
     meta.push(tr('n_of_m', { n: s.done, m: s.total }));
     if (g.type === 'challenge') { meta.push(`${tr('streak')} ${s.streak}`); if (s.missed) meta.push(`${tr('missed_n')} ${s.missed}`); }
     const typeLbl = tr(g.type === 'one_time' ? 'type_one' : g.type === 'progressive' ? 'type_prog' : 'type_chal');
-    const tools = role === 'mentor' ? `
-      <button type="button" class="hg-mini hg-mini-ic" data-act="edit" data-goal="${g.id}" aria-label="${tr('edit')}">${menteeIcon('pencil', 13)}</button>
-      <button type="button" class="hg-mini hg-mini-ic" data-act="delgoal" data-goal="${g.id}" aria-label="${tr('del')}">${menteeIcon('trash', 13)}</button>` : '';
+    const tools = role === 'mentor' ? `<div class="hg-tools hg-gtools">
+      <button type="button" class="hg-mini hg-mini-lbl" data-act="edit" data-goal="${g.id}">${menteeIcon('pencil', 13)}<span>${tr('edit')}</span></button>
+      <button type="button" class="hg-mini hg-mini-lbl hg-mini-danger" data-act="delgoal" data-goal="${g.id}">${menteeIcon('trash', 13)}<span>${tr('del')}</span></button></div>` : '';
     const body = g.type === 'challenge'
       ? `<div class="hg-calwrap">${calendar(g)}</div>${dayPanel(g, role)}`
       : `<div class="hg-list">${g.tasks.map(t => taskRow(g, t, role)).join('')}</div>`;
     return `<section class="hg-goal${g.status === 'completed' ? ' fin' : ''}" data-goal-id="${g.id}">
       <header class="hg-head"><div class="hg-headtxt"><span class="hg-chip">${typeLbl}</span>
-      <h4 class="hg-title">${esc(g.title)}</h4><div class="hg-meta">${meta.join(' · ')}${g.status === 'completed' ? ' · ' + tr('finished') : ''}</div></div>${tools}</header>
+      <h4 class="hg-title">${esc(g.title)}</h4><div class="hg-meta">${meta.join(' · ')}${g.status === 'completed' ? ' · ' + tr('finished') : ''}</div>${tools}</div></header>
       <div class="hg-bar"><i style="transform:scaleX(${s.pct / 100})"></i></div>
       ${ui.edit[g.id] ? editPanel(g) : ''}${body}</section>`;
   }
