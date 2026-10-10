@@ -1,0 +1,171 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index ddeb919..4406b96 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -3706,33 +3706,34 @@ function mentorCardHtml(m) {
+   const spec = (m.user_settings?.specialization || '').trim();
+   const matchHtml = unavailable ? '' : mentorMatchBadge(mentorMatchCount(m));
+ 
++  // Three zones, one focal point each:
++  //   1. identity   - avatar, NAME (largest), specialization, rating, save
++  //   2. summary    - short bio, availability (+ topic match) as quiet text
++  //   3. actions    - ONE filled button (Request); message / view profile stay quiet
+   return `
+     <div class="mc-card ${unavailable ? 'muted' : ''}" data-mentor-id="${id}" onclick="mentorCardClick(event, ${id})">
+       <div class="mc-top">
+         ${halo}
+         <div class="mc-main">
+           <div class="mc-name">${escapeHtml(name)}</div>
++          ${spec ? `<div class="mc-spec"><span>${escapeHtml(spec)}</span></div>` : ''}
+           ${renderModernRating(m.rating || null, m.rating_count || 0)}
+         </div>
+-        <div class="mc-icons">
+-          <button class="mc-icon-btn ${isSaved ? 'saved' : ''}" onclick="toggleSaveMentor(${id})" aria-label="${t('tab_saved')}">${MC_ICON_BOOKMARK(isSaved)}</button>
+-          <button class="mc-icon-btn" onclick="openChat('${id}')" aria-label="${t('btn_message')}">${MC_ICON_MSG}</button>
+-        </div>
+-      </div>
+-      <div class="mc-body">
+-        ${spec ? `<div class="mc-spec">${MC_ICON_BOOK}<span>${escapeHtml(spec)}</span></div>` : ''}
+-        <p class="mc-bio">${mentorBioInline(bio)}</p>
++        <button class="mc-icon-btn mc-save ${isSaved ? 'saved' : ''}" onclick="toggleSaveMentor(${id})" aria-label="${t('tab_saved')}">${MC_ICON_BOOKMARK(isSaved)}</button>
+       </div>
++      <p class="mc-bio">${mentorBioInline(bio)}</p>
+       <div class="mc-meta">
+         <span class="mc-status ${st.cls}">${st.text}</span>
+         ${matchHtml}
+       </div>
+       <div class="mc-footer">
+-        <button type="button" class="mc-view" onclick="openMentorSheet(${id})">
+-          <span class="mc-view-ico">${MC_ICON_USER}</span>
+-          <span class="mc-view-label">${t('btn_view_profile')}</span>
+-          <span class="mc-view-arrow">${MC_ICON_CHEV}</span>
+-        </button>
++        <div class="mc-quiet">
++          <button class="mc-icon-btn mc-msg" onclick="openChat('${id}')" aria-label="${t('btn_message')}">${MC_ICON_MSG}</button>
++          <button type="button" class="mc-view" onclick="openMentorSheet(${id})">
++            <span class="mc-view-label">${t('btn_view_profile')}</span>
++            <span class="mc-view-arrow">${MC_ICON_CHEV}</span>
++          </button>
++        </div>
+         ${mentorActionHtml(m)}
+       </div>
+     </div>`;
+diff --git a/frontend/index.html b/frontend/index.html
+index d381e3a..86aecd0 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -15,7 +15,7 @@
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
+   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
+-  <link rel="stylesheet" href="styles.css?v=3.0" />
++  <link rel="stylesheet" href="styles.css?v=3.1" />
+   <link rel="stylesheet" href="goals.css?v=1.4" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+@@ -2376,7 +2376,7 @@
+   </div>
+ 
+   <script src="locales.js?v=1.9"></script>
+-  <script src="app.js?v=3.4"></script>
++  <script src="app.js?v=3.5"></script>
+   <script src="goals.js?v=1.4"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="session-room.js?v=1.4"></script>
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 3fcf4e9..916d26b 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13681,3 +13681,92 @@ textarea.form-control { resize: none; }
+ .sch-sheet .sch-grid .form-group { margin: 0; }
+ .sch-sheet .ps-card input[type="date"], .sch-sheet .ps-card input[type="time"] { color-scheme: dark; }
+ [data-theme="light"] .sch-sheet .ps-card input[type="date"], [data-theme="light"] .sch-sheet .ps-card input[type="time"] { color-scheme: light; }
++
++
++/* ═══ Mentors page: hierarchy · balance · contrast ═══════════════════════════
++   Before: every element (name, stars, specialization, status, match, view-profile,
++   request, two icon buttons) was gold, bordered and glowing at the same weight, so
++   nothing led the eye. Now each card has THREE zones and ONE focal point per zone:
++     1 identity  -> the NAME is largest/brightest; specialization is the only gold text
++     2 summary   -> bio + availability as quiet text (no pills, no borders)
++     3 actions   -> a SINGLE filled gold button (Request); everything else is ghost
++   Gold is reserved for: the CTA, the specialization, and "selected" states. ═══ */
++.mentors-page-content #mentorsList { gap: 16px !important; }
++
++/* card shell: calmer, more room, one soft shadow */
++.mc-card { padding: 18px; border-radius: 26px; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28); }
++
++/* zone 1 - identity */
++.mc-card .mc-top { align-items: center; gap: 14px; }
++.mc-card .mc-name { font-size: var(--fs-lg); font-weight: 800; letter-spacing: 0; color: var(--text); line-height: 1.25; }
++.mc-card .mc-spec { display: block; margin-top: 3px; font-size: var(--fs-sm); font-weight: 600; letter-spacing: 0; color: var(--gold-light); }
++.mc-card .mc-spec span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.mc-card .rating-row { margin-top: 6px; }
++.mc-card .rating-num { color: var(--text); }
++.mc-card .rating-count { color: var(--text3); }
++/* the avatar ring shows capacity; keep it, drop the glow and the pulsing beacon */
++.mc-card .halo-avatar svg.halo-ring { filter: none; }
++.mc-card .halo-online-dot { animation: none; width: 13px; height: 13px; background: var(--success); border-color: #111319; box-shadow: none; }
++
++/* save: ghost icon, gold only when saved */
++.mc-card .mc-icon-btn { width: 40px; height: 40px; background: transparent; border: 0; box-shadow: none; color: var(--text3); }
++.mc-card .mc-icon-btn:active { background: rgba(255, 255, 255, 0.08); }
++.mc-card .mc-icon-btn.saved { background: transparent; color: var(--gold-light); }
++.mc-card .mc-save { align-self: flex-start; margin: -6px -8px 0 0; }
++
++/* zone 2 - summary */
++.mc-card .mc-bio { margin: 14px 0 0; padding: 0; border: 0; font-size: var(--fs-sm); line-height: 1.55; color: var(--text2); }
++.mc-card .mc-more { color: var(--gold-light); font-weight: 600; }
++.mc-card .mc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 12px; }
++.mc-card .mc-status { padding: 0; border: 0; background: none; box-shadow: none; font-size: var(--fs-xs); font-weight: 600; color: var(--text2); }
++.mc-card .mc-status::before { width: 8px; height: 8px; }
++.mc-card .mc-match { margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; font-size: var(--fs-xs); font-weight: 700; color: var(--gold-light); }
++
++/* zone 3 - actions: quiet on the left, ONE filled button on the right */
++.mc-card .mc-footer { flex-wrap: nowrap; justify-content: space-between; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
++.mc-card .mc-quiet { display: flex; align-items: center; gap: 2px; min-width: 0; }
++.mc-card .mc-msg { margin-left: -8px; color: var(--text2); }
++.mc-card .mc-view {
++  flex: none; width: auto; height: 40px; margin: 0; padding: 0 6px 0 10px; gap: 2px;
++  border: 0; border-radius: 999px; background: none; box-shadow: none;
++  color: var(--text2); font-size: var(--fs-sm); font-weight: 600; letter-spacing: 0;
++}
++.mc-card .mc-view:active { background: rgba(255, 255, 255, 0.08); transform: none; }
++.mc-card .mc-view-label { flex: none; padding: 0; }
++.mc-card .mc-view-arrow { width: 20px; height: 20px; background: none; box-shadow: none; color: var(--text3); }
++.mc-card .mc-footer .btn { flex: none; height: 44px; min-height: 44px; padding: 0 22px; font-size: var(--fs-md); font-weight: 700; }
++.mc-card .mc-footer .btn-primary { font-weight: 800; }
++.mc-card .mc-footer .btn-outline, .mc-card .mc-footer .btn-ghost { box-shadow: none; background: transparent; border-color: rgba(255, 255, 255, 0.16); color: var(--text2); }
++
++/* unavailable mentors: dim the picture, keep the words readable (was opacity .55 on everything) */
++.mc-card.muted { opacity: 1; }
++.mc-card.muted .halo-avatar { opacity: 0.55; filter: grayscale(0.5); }
++.mc-card.muted .mc-name { color: var(--text2); }
++.mc-card.muted .mc-spec { color: var(--text2); }
++
++/* page chrome: search + filter + chips step back so the cards lead */
++.mc-sticky { padding-bottom: 6px; }
++.mentor-search-wrap { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.08); }
++.btn-filter-trigger { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.08); color: var(--gold-light); box-shadow: none; transition: background 0.2s, border-color 0.2s; }
++.btn-filter-trigger:hover, .btn-filter-trigger.active { transform: none; }
++.mc-chip { height: 34px; padding: 0 14px; font-size: var(--fs-xs); font-weight: 600; color: var(--text2); background: transparent; border-color: rgba(255, 255, 255, 0.12); box-shadow: none; }
++.mc-chip.active { color: #1a1300; background: linear-gradient(180deg, #EBCD72, #C9A84C); border-color: transparent; font-weight: 700; box-shadow: 0 6px 16px rgba(201, 168, 76, 0.32); }
++
++/* "your mentor" card: same zones, actions simplified */
++.mc-mine .mc-name { font-size: var(--fs-lg); font-weight: 800; }
++.mc-mine .mc-online { color: var(--text2); }
++
++/* light theme */
++[data-theme="light"] .mc-card { box-shadow: 0 8px 20px rgba(30, 25, 15, 0.10); }
++[data-theme="light"] .mc-card .mc-spec, [data-theme="light"] .mc-card .mc-more, [data-theme="light"] .mc-card .mc-match, [data-theme="light"] .mc-card .mc-icon-btn.saved { color: #7A5812; background: transparent; }
++[data-theme="light"] .mc-card .mc-icon-btn { background: transparent; border: 0; box-shadow: none; color: #6F6659; }
++[data-theme="light"] .mc-card .mc-msg, [data-theme="light"] .mc-card .mc-view, [data-theme="light"] .mc-card .mc-status { color: #5A5650; }
++[data-theme="light"] .mc-card .mc-view-arrow { color: #6F6659; background: none; box-shadow: none; }
++[data-theme="light"] .mc-card .mc-footer { border-top-color: rgba(150, 120, 40, 0.2); }
++[data-theme="light"] .mc-card .rating-num { color: #1A1714; }
++[data-theme="light"] .mc-card .halo-online-dot { border-color: #fff; }
++[data-theme="light"] .mc-card .mc-footer .btn-outline, [data-theme="light"] .mc-card .mc-footer .btn-ghost { border-color: rgba(150, 120, 40, 0.35); color: #5A5650; }
++[data-theme="light"] .mentor-search-wrap, [data-theme="light"] .btn-filter-trigger { background: rgba(255, 255, 255, 0.8); border-color: rgba(150, 120, 40, 0.22); }
++[data-theme="light"] .btn-filter-trigger { color: #7A5812; }
++[data-theme="light"] .mc-chip { background: transparent; border-color: rgba(150, 120, 40, 0.3); color: #5A5650; box-shadow: none; }
++[data-theme="light"] .mc-chip.active { color: #1a1300; background: linear-gradient(180deg, #EBCD72, #C9A84C); border-color: transparent; }

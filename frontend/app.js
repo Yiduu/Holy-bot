@@ -3706,33 +3706,34 @@ function mentorCardHtml(m) {
   const spec = (m.user_settings?.specialization || '').trim();
   const matchHtml = unavailable ? '' : mentorMatchBadge(mentorMatchCount(m));
 
+  // Three zones, one focal point each:
+  //   1. identity   - avatar, NAME (largest), specialization, rating, save
+  //   2. summary    - short bio, availability (+ topic match) as quiet text
+  //   3. actions    - ONE filled button (Request); message / view profile stay quiet
   return `
     <div class="mc-card ${unavailable ? 'muted' : ''}" data-mentor-id="${id}" onclick="mentorCardClick(event, ${id})">
       <div class="mc-top">
         ${halo}
         <div class="mc-main">
           <div class="mc-name">${escapeHtml(name)}</div>
+          ${spec ? `<div class="mc-spec"><span>${escapeHtml(spec)}</span></div>` : ''}
           ${renderModernRating(m.rating || null, m.rating_count || 0)}
         </div>
-        <div class="mc-icons">
-          <button class="mc-icon-btn ${isSaved ? 'saved' : ''}" onclick="toggleSaveMentor(${id})" aria-label="${t('tab_saved')}">${MC_ICON_BOOKMARK(isSaved)}</button>
-          <button class="mc-icon-btn" onclick="openChat('${id}')" aria-label="${t('btn_message')}">${MC_ICON_MSG}</button>
-        </div>
+        <button class="mc-icon-btn mc-save ${isSaved ? 'saved' : ''}" onclick="toggleSaveMentor(${id})" aria-label="${t('tab_saved')}">${MC_ICON_BOOKMARK(isSaved)}</button>
       </div>
-      <div class="mc-body">
-        ${spec ? `<div class="mc-spec">${MC_ICON_BOOK}<span>${escapeHtml(spec)}</span></div>` : ''}
-        <p class="mc-bio">${mentorBioInline(bio)}</p>
-      </div>
+      <p class="mc-bio">${mentorBioInline(bio)}</p>
       <div class="mc-meta">
         <span class="mc-status ${st.cls}">${st.text}</span>
         ${matchHtml}
       </div>
       <div class="mc-footer">
-        <button type="button" class="mc-view" onclick="openMentorSheet(${id})">
-          <span class="mc-view-ico">${MC_ICON_USER}</span>
-          <span class="mc-view-label">${t('btn_view_profile')}</span>
-          <span class="mc-view-arrow">${MC_ICON_CHEV}</span>
-        </button>
+        <div class="mc-quiet">
+          <button class="mc-icon-btn mc-msg" onclick="openChat('${id}')" aria-label="${t('btn_message')}">${MC_ICON_MSG}</button>
+          <button type="button" class="mc-view" onclick="openMentorSheet(${id})">
+            <span class="mc-view-label">${t('btn_view_profile')}</span>
+            <span class="mc-view-arrow">${MC_ICON_CHEV}</span>
+          </button>
+        </div>
         ${mentorActionHtml(m)}
       </div>
     </div>`;
