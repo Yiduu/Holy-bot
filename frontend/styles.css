@@ -13885,7 +13885,7 @@ textarea.form-control { resize: none; }
 
 
 /* ── End mentorship page (mentor) – same cards, pills and gold accents as the other pages ── */
-#page-end-mentorship .page-content { display: flex; flex-direction: column; gap: 12px; padding-bottom: 28px; }
+#page-end-mentorship .page-content { display: flex; flex-direction: column; gap: 12px; padding-bottom: calc(28px + var(--nav-h) + var(--safe-bottom)); }
 #page-end-mentorship .er-who { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
 #page-end-mentorship .er-who .mentor-avatar { width: 48px; height: 48px; flex: none; }
 #page-end-mentorship .er-who-txt { min-width: 0; }
