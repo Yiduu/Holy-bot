@@ -3791,7 +3791,20 @@ const MP_ICONS = {
   book:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'
 };
 
-function mpInfoCard({ icon, label, text, gold = false, duo = false, trailing = '', iconClass = '' }) {
+function mpInfoCard({ icon, label, text, gold = false, duo = false, trailing = '', iconClass = '', para = false }) {
+  // Paragraph card (specialization, about): small icon + label on one line, then the text
+  // runs the FULL width from the left edge, like normal writing, instead of being squeezed
+  // into a narrow column beside a big icon tile.
+  if (para) {
+    return `
+    <div class="profile-menu-item mp-info mp-para${gold ? ' pm-gold' : ''}">
+      <span class="mp-para-head">
+        <span class="profile-menu-icon ${iconClass}">${icon}</span>
+        <span class="mp-info-label">${escapeHtml(label)}</span>
+      </span>
+      <span class="mp-info-text">${escapeHtml(text)}</span>
+    </div>`;
+  }
   return `
     <div class="profile-menu-item mp-info${gold ? ' pm-gold' : ''}${duo ? ' mp-info-duo' : ''}">
       <span class="profile-menu-icon ${iconClass}">${icon}</span>
@@ -3853,7 +3866,7 @@ function renderMentorProfilePage(id) {
        ${mentorActionHtml(m, true)}`;
 
   // Gold = the one thing to read first: specialization when there is one, otherwise the bio.
-  const aboutCards = mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: !spec });
+  const aboutCards = mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: !spec, para: true });
 
   const topicCards = topics.map(tp => {
     const mine = tp.id != null && myMentorTopicIds.has(Number(tp.id));
@@ -3877,7 +3890,7 @@ function renderMentorProfilePage(id) {
     </div>
 
     ${spec ? `<nav class="profile-menu-list mp-panel" aria-label="${escapeHtml(t('sheet_specialization'))}">
-      ${mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec, gold: true })}
+      ${mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec, gold: true, para: true })}
     </nav>` : ''}
 
     <div class="mp-meta">

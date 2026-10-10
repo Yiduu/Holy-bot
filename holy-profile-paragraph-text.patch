@@ -1,0 +1,85 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 8afbeba..4545f96 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -3791,7 +3791,20 @@ const MP_ICONS = {
+   book:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'
+ };
+ 
+-function mpInfoCard({ icon, label, text, gold = false, duo = false, trailing = '', iconClass = '' }) {
++function mpInfoCard({ icon, label, text, gold = false, duo = false, trailing = '', iconClass = '', para = false }) {
++  // Paragraph card (specialization, about): small icon + label on one line, then the text
++  // runs the FULL width from the left edge, like normal writing, instead of being squeezed
++  // into a narrow column beside a big icon tile.
++  if (para) {
++    return `
++    <div class="profile-menu-item mp-info mp-para${gold ? ' pm-gold' : ''}">
++      <span class="mp-para-head">
++        <span class="profile-menu-icon ${iconClass}">${icon}</span>
++        <span class="mp-info-label">${escapeHtml(label)}</span>
++      </span>
++      <span class="mp-info-text">${escapeHtml(text)}</span>
++    </div>`;
++  }
+   return `
+     <div class="profile-menu-item mp-info${gold ? ' pm-gold' : ''}${duo ? ' mp-info-duo' : ''}">
+       <span class="profile-menu-icon ${iconClass}">${icon}</span>
+@@ -3853,7 +3866,7 @@ function renderMentorProfilePage(id) {
+        ${mentorActionHtml(m, true)}`;
+ 
+   // Gold = the one thing to read first: specialization when there is one, otherwise the bio.
+-  const aboutCards = mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: !spec });
++  const aboutCards = mpInfoCard({ icon: MP_ICONS.user, label: t('sheet_about'), text: bio, gold: !spec, para: true });
+ 
+   const topicCards = topics.map(tp => {
+     const mine = tp.id != null && myMentorTopicIds.has(Number(tp.id));
+@@ -3877,7 +3890,7 @@ function renderMentorProfilePage(id) {
+     </div>
+ 
+     ${spec ? `<nav class="profile-menu-list mp-panel" aria-label="${escapeHtml(t('sheet_specialization'))}">
+-      ${mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec, gold: true })}
++      ${mpInfoCard({ icon: MP_ICONS.book, label: t('sheet_specialization'), text: spec, gold: true, para: true })}
+     </nav>` : ''}
+ 
+     <div class="mp-meta">
+diff --git a/frontend/index.html b/frontend/index.html
+index dff0e70..551f54d 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -15,7 +15,7 @@
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
+   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
+-  <link rel="stylesheet" href="styles.css?v=3.2" />
++  <link rel="stylesheet" href="styles.css?v=3.3" />
+   <link rel="stylesheet" href="goals.css?v=1.4" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+@@ -2376,7 +2376,7 @@
+   </div>
+ 
+   <script src="locales.js?v=1.9"></script>
+-  <script src="app.js?v=3.6"></script>
++  <script src="app.js?v=3.7"></script>
+   <script src="goals.js?v=1.4"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="session-room.js?v=1.4"></script>
+diff --git a/frontend/styles.css b/frontend/styles.css
+index a3387cd..b1165b0 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13792,3 +13792,14 @@ textarea.form-control { resize: none; }
+ .mp-actions { margin: 14px 0 20px; }
+ [data-theme="light"] .mp-match { color: #7A5812; }
+ [data-theme="light"] .mp-meta { color: #5A5650; }
++
++
++/* ═══ Mentor profile: specialization + about read as paragraphs ═══════════════
++   Small icon + label on one line, text below it from the far left edge at full width. ═══ */
++.mp-info.mp-para { flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 12px; min-height: 0; padding: 16px 18px 18px; text-align: left; }
++.mp-para-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
++.mp-para .profile-menu-icon { width: 34px; height: 34px; border-radius: 12px; flex: none; }
++.mp-para .profile-menu-icon svg { width: 17px; height: 17px; }
++.mp-para .mp-info-label { flex: 1; min-width: 0; }
++.mp-para .mp-info-text { display: block; width: 100%; padding: 0; font-size: var(--fs-md); font-weight: 400; line-height: 1.7; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
++.mp-panel .mp-para .mp-info-text { text-align: left; }
