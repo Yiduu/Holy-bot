@@ -13305,3 +13305,42 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
   :is(#page-mentor-edit, #page-notifications) .page-content { animation: none; }
   .pm-switch, .pm-switch::after { transition: none; }
 }
+
+/* ═══ Keyboard: fields rise above it smoothly ═══════════════════════════════
+   updateKeyboardState() in app.js sets body.kb-open while a text field (other
+   than the chat composer, which docks itself) has the keyboard up, and
+   --kb-inset = how much of the layout viewport the keyboard covers (0 where the
+   WebView already resizes above it). The focused field is then scrolled clear
+   of the keyboard by scrollFieldAboveKeyboard(). ═══ */
+
+/* the floating nav would sit on top of the field: slide it away, bring it back after */
+.bottom-nav { transition: transform 0.28s var(--ease-premium), opacity 0.2s ease; }
+body.kb-open .bottom-nav {
+  transform: translateY(calc(100% + var(--safe-bottom) + 16px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* bottom sheets ride up on top of the keyboard instead of being covered by it */
+.modal-overlay {
+  padding-bottom: var(--kb-inset, 0px);
+  transition: opacity var(--transition), padding-bottom 0.25s var(--ease-premium);
+}
+.modal-overlay .modal-sheet {
+  max-height: min(85vh, calc(var(--app-height) - var(--kb-inset, 0px) - 12px));
+}
+
+/* extra scroll room under the content, so the last field can still reach the
+   top of the keyboard; zero-height whenever the keyboard isn't covering the page */
+body.kb-open .page-content::after,
+body.kb-open #onboarding::after {
+  content: '';
+  display: block;
+  flex: none;
+  height: var(--kb-inset, 0px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bottom-nav { transition: none; }
+  .modal-overlay { transition: opacity var(--transition); }
+}

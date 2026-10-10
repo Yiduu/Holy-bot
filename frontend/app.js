@@ -1524,7 +1524,7 @@ function connectSocket() {
 
   socket.on('chat_cleared', ({ by_id }) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(by_id)) {
-      loadMessages(window.chatState.with);
+      loadMessages(window.chatState.with, { force: true });
     }
   });
 
@@ -1964,6 +1964,94 @@ if (window.ResizeObserver) {
   const _chatRO = new ResizeObserver(() => syncChatInputHeight());
   const _watch = () => { ['chatInputRow', 'chatMessages'].forEach(id => { const el = $(id); if (el && !el._ro) { el._ro = 1; _chatRO.observe(el); } }); };
   _watch(); setTimeout(_watch, 800); setTimeout(_watch, 2500);
+}
+
+// ─── Every other field: lift it above the keyboard, smoothly ──
+// The chat composer docks itself (above). For any other text field — profile,
+// settings, forms inside sheets, onboarding — we do three things when the
+// keyboard opens:
+//   1. body.kb-open: the floating nav slides away instead of covering the field.
+//   2. --kb-inset: how far the keyboard covers the layout viewport (0 where the
+//      WebView already resizes to sit above it). Sheets and scrolling pages use
+//      it to lift themselves, with a CSS transition.
+//   3. The focused field is scrolled (smooth, once the keyboard has settled)
+//      until it sits fully above the keyboard.
+const _KB_NON_TEXT_INPUTS = /^(checkbox|radio|range|button|submit|reset|file|color|image|hidden)$/i;
+let _kbBase = 0;
+let _kbInset = 0;
+let _kbScrollTimer = 0;
+
+function isKeyboardField(el) {
+  if (!el || !el.tagName) return false;
+  if (el.closest?.('.chat-input-row')) return false;        // the composer has its own dock
+  if (el.tagName === 'TEXTAREA') return !el.readOnly;
+  if (el.tagName === 'INPUT') return !_KB_NON_TEXT_INPUTS.test(el.type || 'text') && !el.readOnly;
+  return !!el.isContentEditable;
+}
+
+function keyboardScrollParent(el) {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) return p;
+  }
+  return document.scrollingElement || document.documentElement;
+}
+
+function scrollFieldAboveKeyboard(el) {
+  if (!el || !el.isConnected || el !== document.activeElement || !isKeyboardField(el)) return;
+  const vv = window.visualViewport;
+  const viewTop = vv ? vv.offsetTop : 0;
+  const viewBottom = viewTop + (vv ? vv.height : window.innerHeight);
+  const r = el.getBoundingClientRect();
+  const GAP = 24;                                           // breathing room above the keyboard
+  let delta = 0;
+  if (r.bottom > viewBottom - GAP) delta = r.bottom - (viewBottom - GAP);
+  else if (r.top < viewTop + 8) delta = r.top - (viewTop + 8);
+  if (Math.abs(delta) < 4) return;
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  keyboardScrollParent(el).scrollBy({ top: delta, behavior: reduce ? 'auto' : 'smooth' });
+}
+
+// Debounced: the keyboard animation fires many viewport resizes; scroll once it
+// has settled, so the page glides to the field instead of chasing it.
+function scheduleFieldAboveKeyboard(el, delay = 140) {
+  clearTimeout(_kbScrollTimer);
+  _kbScrollTimer = setTimeout(() => scrollFieldAboveKeyboard(el), delay);
+}
+
+function updateKeyboardState() {
+  const ae = document.activeElement;
+  const typing = isKeyboardField(ae);
+  const vv = window.visualViewport;
+  const h = vv ? vv.height : window.innerHeight;
+  // The full (keyboard-less) height is only re-measured while no field is
+  // focused, so a keyboard that is already half open can't become the baseline.
+  if (!typing || !_kbBase) _kbBase = Math.max(h, window.innerHeight);
+  const tg = window.Telegram?.WebApp;
+  const tgDiff = tg ? (Number(tg.viewportStableHeight) || 0) - (Number(tg.viewportHeight) || 0) : 0;
+  const covered = typing && vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
+  const open = typing && (_kbBase - h > 120 || tgDiff > 120 || covered > 120);
+
+  const inset = open ? covered : 0;
+  if (inset !== _kbInset) {
+    _kbInset = inset;
+    document.documentElement.style.setProperty('--kb-inset', inset + 'px');
+  }
+  if (document.body.classList.contains('kb-open') !== open) document.body.classList.toggle('kb-open', open);
+  if (open) scheduleFieldAboveKeyboard(ae);
+}
+{
+  let _kbRaf2 = 0;
+  const schedule = () => { if (_kbRaf2) return; _kbRaf2 = requestAnimationFrame(() => { _kbRaf2 = 0; updateKeyboardState(); }); };
+  document.addEventListener('focusin', (e) => {
+    setTimeout(updateKeyboardState, 60);
+    // Keyboard already up (moving between fields): no resize will follow, so scroll now.
+    if (document.body.classList.contains('kb-open') && isKeyboardField(e.target)) scheduleFieldAboveKeyboard(e.target, 80);
+  });
+  document.addEventListener('focusout', () => setTimeout(updateKeyboardState, 120));
+  window.visualViewport?.addEventListener('resize', schedule);
+  window.addEventListener('resize', schedule);
+  try { window.Telegram?.WebApp?.onEvent?.('viewportChanged', schedule); } catch { }
 }
 
 // ─── Onboarding ───────────────────────────────────────────────
@@ -5314,8 +5402,11 @@ async function loadMessages(with_id, opts = {}) {
     const hasEmptyEl = !!container.querySelector(':scope > .chat-empty');
     const emptyMatches = hasEmptyEl === (renderedThreads.length === 0);
 
-    // If earlier messages have been prepended, do not collapse DOM back on non-forced refresh
-    if (!opts.force && sameChat && emptyMatches && (domSig === serverSig || (renderedThreads.length > messages.length && domSig.includes(serverSig)))) {
+    // If earlier messages have been prepended, do not collapse DOM back on non-forced refresh.
+    // That shortcut needs a non-empty server list: with zero messages (a cleared
+    // conversation) every signature "includes" the empty string, which used to
+    // keep the old bubbles on screen instead of showing the empty state.
+    if (!opts.force && sameChat && emptyMatches && (domSig === serverSig || (messages.length > 0 && renderedThreads.length > messages.length && domSig.includes(serverSig)))) {
       updateMessageBadge();
       return;
     }
@@ -5422,7 +5513,7 @@ async function clearChatHistory() {
     await apiFetch(`/api/messages/${window.chatState.with}`, { method: 'DELETE' });
     haptic('success');
     showToast('Chat history cleared', 'success');
-    loadMessages(window.chatState.with);
+    loadMessages(window.chatState.with, { force: true });
   } catch (e) { haptic('error'); showToast(e.message, 'error'); }
 }
 
