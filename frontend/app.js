@@ -7401,14 +7401,22 @@ function menteeActivityMeta(user) {
 /** Renders the compact "● Online now / Active 2h ago [Follow-up]" readout for a mentee card. */
 function renderMenteeActivity(user) {
   const a = menteeActivityMeta(user);
-  const chip = a.needsFollowup
-    ? `<span class="mentee-followup-pill">${t('mentee_needs_followup')}</span>`
-    : '';
   return `<div class="mentee-status-line mentee-status-line-compact">
     <div class="mentee-status-row">
       <span class="mentee-status-dot ${a.dotClass}"></span>
       <span class="mentee-status-text">${escapeHtml(a.label)}</span>
     </div>
+  </div>`;
+}
+
+/** Chip row under the card header: Bible streak, plus the follow-up flag when it applies. */
+function renderMenteeStats(user) {
+  const needsFollowup = menteeActivityMeta(user).needsFollowup;
+  const chip = needsFollowup
+    ? `<span class="mentee-followup-pill">${t('mentee_needs_followup')}</span>`
+    : '';
+  return `<div class="mentee-card-stats">
+    ${renderMenteeStreakBadge(user.telegram_id)}
     ${chip}
   </div>`;
 }
@@ -7419,16 +7427,21 @@ const MENTEE_STREAK_FLAME = `<svg width="12" height="12" viewBox="0 0 24 24" ari
   <path fill="currentColor" d="M12.5 2c.6 2.4-.4 3.9-1.8 5.4C9 9.2 7 11 7 14a5 5 0 0 0 10 0c0-1.7-.7-2.7-1.4-3.7-.3 1.6-1.1 2.4-1.9 2.9.4-2.1-.3-3.6-1.6-5-1-1.1-1.3-2.3.4-4-.7 1.6.1 2.4 1 3.2C15 8.8 16 10.4 16 12.6a4.7 4.7 0 0 1-.4 1.9c1-1 1.4-2.3 1.4-3.8 0-3-2-4.6-3.4-6.4C13 3.5 12.8 2.8 12.5 2z"/>
 </svg>`;
 
-/** Builds a compact "🔥 5 day streak · best 12" badge for a mentee, or a muted no-streak state. */
+/** Builds the streak chip: flame, a bold number and a short unit ("12 day streak · Best 20"), or a muted no-streak state. */
 function renderMenteeStreakBadge(menteeId) {
   const s = _myMenteesStreakCache[menteeId] || { current_streak: 0, longest_streak: 0 };
   const active = s.current_streak > 0;
   const best = s.longest_streak > s.current_streak
-    ? `<span class="mentee-streak-best">${t('mentee_streak_best', { count: s.longest_streak })}</span>`
+    ? `<span class="mentee-streak-best">${t('mentee_streak_best_short', { count: s.longest_streak })}</span>`
     : '';
-  return `<div class="mentee-streak-badge ${active ? 'is-active' : 'is-idle'}">
-    <span class="mentee-streak-flame">${MENTEE_STREAK_FLAME}</span>
-    <span class="mentee-streak-count">${active ? t('mentee_streak_count', { count: s.current_streak }) : t('mentee_streak_none')}</span>
+  // The full sentence stays available to screen readers and on long-press.
+  const full = active ? t('mentee_streak_count', { count: s.current_streak }) : t('mentee_streak_none');
+  const body = active
+    ? `<span class="mentee-streak-num">${s.current_streak}</span><span class="mentee-streak-unit">${t('mentee_streak_unit')}</span>`
+    : `<span class="mentee-streak-unit">${t('mentee_streak_idle')}</span>`;
+  return `<div class="mentee-streak-badge ${active ? 'is-active' : 'is-idle'}" title="${escapeHtml(full)}" aria-label="${escapeHtml(full)}">
+    <span class="mentee-streak-flame" aria-hidden="true">${MENTEE_STREAK_FLAME}</span>
+    ${body}
     ${best}
   </div>`;
 }
@@ -7566,10 +7579,7 @@ function renderMenteesList() {
             ${renderAvatar(user, letter)}
             <div class="mentee-card-identity">
               <div class="mentee-card-name">${escapeHtml(displayName)}</div>
-              <div class="mentee-card-meta">
-                ${renderMenteeActivity(user)}
-                ${renderMenteeStreakBadge(user.telegram_id)}
-              </div>
+              ${renderMenteeActivity(user)}
             </div>
             <div class="premium-dropdown mentee-actions" data-dropdown id="${actionsId}">
               <button type="button" class="mentee-actions-btn" data-dropdown-toggle aria-haspopup="menu" aria-label="${t('mentee_actions_label')}" title="${t('mentee_actions_label')}">${menteeIcon('more', 18)}</button>
@@ -7579,6 +7589,7 @@ function renderMenteesList() {
               </div>
             </div>
           </div>
+          ${renderMenteeStats(user)}
         </div>
 
         <div class="mentee-card-body">
