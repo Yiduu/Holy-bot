@@ -13464,8 +13464,9 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
 .modal-sheet.page-sheet {
   display: flex;
   flex-direction: column;
-  height: min(92vh, calc(var(--app-height) - var(--kb-inset, 0px) - 12px));
-  max-height: none;
+  /* Fits its content (no empty gap above the buttons); long content scrolls inside .ps-body */
+  height: auto;
+  max-height: min(92vh, calc(var(--app-height) - var(--kb-inset, 0px) - 12px));
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--border-dim);
@@ -13494,7 +13495,7 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
 .ps-title { margin: 0; font-family: var(--font-display); font-size: var(--fs-xl); letter-spacing: 0.02em; color: var(--text); }
 .ps-sub { flex: none; margin: 6px 22px 12px; font-size: var(--fs-sm); line-height: 1.5; color: var(--text2); }
 .ps-body {
-  flex: 1; min-height: 0;
+  flex: 0 1 auto; min-height: 0;
   display: flex; flex-direction: column; gap: 12px;
   padding: 6px 16px 20px;
   overflow-y: auto;
@@ -13606,3 +13607,39 @@ body.kb-open .ps-foot { padding-bottom: calc(12px + var(--safe-bottom)); }
 .ps-card .btn-outline { gap: 8px; }
 
 @media (prefers-reduced-motion: reduce) { .ps-switch-knob, .ps-switch-track, .ps-seg-btn { transition: none; } }
+
+
+/* ═══ Topic picker (Edit topics): same cards as the "Select a Topic" sheet ═══ */
+.ps-title.modal-title { margin: 0; color: var(--text); font-size: var(--fs-xl); }
+.ps-sub--count { margin-bottom: 10px; }
+.ps-search-wrap { flex: none; padding: 0 16px 12px; }
+.ps-search {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 48px; padding: 0 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.ps-search:focus-within { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
+.ps-search-ico { flex: none; color: var(--gold-light); }
+.ps-search input { flex: 1; min-width: 0; padding: 12px 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 16px; -webkit-appearance: none; appearance: none; }
+.ps-search input::placeholder { color: var(--text3); }
+.ps-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+[data-theme="light"] .ps-search { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); box-shadow: 0 6px 16px rgba(30, 25, 15, 0.10); }
+[data-theme="light"] .ps-search-ico { color: #7A5812; }
+.topic-sheet .ps-body .profile-menu-item { width: 100%; text-align: left; flex: none; }
+
+/* ═══ Live page: schedule sheet — Date/Time never wider than their column ═══ */
+.sch-sheet { padding-bottom: calc(20px + var(--nav-h) + var(--safe-bottom)); overflow-x: hidden; }   /* clears the bottom nav */
+body.kb-open .sch-sheet { padding-bottom: calc(20px + var(--safe-bottom)); }
+.sch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sch-grid > .form-group { min-width: 0; }
+.sch-sheet input[type="date"], .sch-sheet input[type="time"] {
+  display: block; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
+  padding: 0 12px; font-size: var(--fs-md); text-align: left;
+}
+.sch-sheet input[type="date"]::-webkit-date-and-time-value, .sch-sheet input[type="time"]::-webkit-date-and-time-value { text-align: left; min-width: 0; margin: 0; }
+.sch-sheet input::-webkit-calendar-picker-indicator { margin: 0 0 0 4px; padding: 0; }
+@media (max-width: 360px) { .sch-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -8568,27 +8568,42 @@ function renderTopicList(topics, selectedIds) {
   if (!container) return;
   if (!topics.length) {
     container.innerHTML = `<div class="empty-state"><span>${t('no_topics_found') || 'No topics found'}</span></div>`;
+    updateTopicCount();
     return;
   }
-  container.innerHTML = topics.map(topicItem => `
-    <div id="topic-${topicItem.id}" class="topic-chip-card${selectedIds.includes(topicItem.id) ? ' active' : ''}" onclick="toggleTopic(${topicItem.id})">
-      <span class="chip-check-icon">${ICON_CHECK_SVG}</span>
-      <span class="chip-name">${escapeHtml(topicLabel(topicItem))}</span>
-    </div>
-  `).join('');
+  // Same stacked cards as the "Select a Topic" request sheet; chosen ones turn golden.
+  const tagIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
+  container.innerHTML = topics.map(topicItem => {
+    const sel = selectedIds.includes(topicItem.id);
+    return `
+      <button type="button" role="checkbox" aria-checked="${sel}" id="topic-${topicItem.id}" class="profile-menu-item rt-topic${sel ? ' pm-gold selected' : ''}" onclick="toggleTopic(${topicItem.id})">
+        <span class="profile-menu-icon">${tagIcon}</span>
+        <span class="profile-menu-label rt-label"><span class="rt-name">${escapeHtml(topicLabel(topicItem))}</span></span>
+        <span class="rt-radio" aria-hidden="true"></span>
+      </button>`;
+  }).join('');
+  updateTopicCount();
+}
+
+function updateTopicCount() {
+  const el = $('topicSelectedCount');
+  if (!el) return;
+  const n = (window.selectedTopics || []).length;
+  el.textContent = t('topics_selected_count', { n }) || `${n} selected`;
 }
 
 function toggleTopic(id) {
   haptic('light');
   const idx = window.selectedTopics.indexOf(id);
   const chip = $(`topic-${id}`);
-  if (idx > -1) {
-    window.selectedTopics.splice(idx, 1);
-    if (chip) chip.classList.remove('active');
-  } else {
-    window.selectedTopics.push(id);
-    if (chip) chip.classList.add('active');
+  const on = idx === -1;
+  if (on) window.selectedTopics.push(id); else window.selectedTopics.splice(idx, 1);
+  if (chip) {
+    chip.classList.toggle('pm-gold', on);
+    chip.classList.toggle('selected', on);
+    chip.setAttribute('aria-checked', on ? 'true' : 'false');
   }
+  updateTopicCount();
 }
 
 function closeTopicModal() {

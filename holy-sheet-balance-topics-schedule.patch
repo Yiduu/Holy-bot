@@ -1,0 +1,207 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 6e5b95e..ddeb919 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -8568,27 +8568,42 @@ function renderTopicList(topics, selectedIds) {
+   if (!container) return;
+   if (!topics.length) {
+     container.innerHTML = `<div class="empty-state"><span>${t('no_topics_found') || 'No topics found'}</span></div>`;
++    updateTopicCount();
+     return;
+   }
+-  container.innerHTML = topics.map(topicItem => `
+-    <div id="topic-${topicItem.id}" class="topic-chip-card${selectedIds.includes(topicItem.id) ? ' active' : ''}" onclick="toggleTopic(${topicItem.id})">
+-      <span class="chip-check-icon">${ICON_CHECK_SVG}</span>
+-      <span class="chip-name">${escapeHtml(topicLabel(topicItem))}</span>
+-    </div>
+-  `).join('');
++  // Same stacked cards as the "Select a Topic" request sheet; chosen ones turn golden.
++  const tagIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
++  container.innerHTML = topics.map(topicItem => {
++    const sel = selectedIds.includes(topicItem.id);
++    return `
++      <button type="button" role="checkbox" aria-checked="${sel}" id="topic-${topicItem.id}" class="profile-menu-item rt-topic${sel ? ' pm-gold selected' : ''}" onclick="toggleTopic(${topicItem.id})">
++        <span class="profile-menu-icon">${tagIcon}</span>
++        <span class="profile-menu-label rt-label"><span class="rt-name">${escapeHtml(topicLabel(topicItem))}</span></span>
++        <span class="rt-radio" aria-hidden="true"></span>
++      </button>`;
++  }).join('');
++  updateTopicCount();
++}
++
++function updateTopicCount() {
++  const el = $('topicSelectedCount');
++  if (!el) return;
++  const n = (window.selectedTopics || []).length;
++  el.textContent = t('topics_selected_count', { n }) || `${n} selected`;
+ }
+ 
+ function toggleTopic(id) {
+   haptic('light');
+   const idx = window.selectedTopics.indexOf(id);
+   const chip = $(`topic-${id}`);
+-  if (idx > -1) {
+-    window.selectedTopics.splice(idx, 1);
+-    if (chip) chip.classList.remove('active');
+-  } else {
+-    window.selectedTopics.push(id);
+-    if (chip) chip.classList.add('active');
+-  }
++  const on = idx === -1;
++  if (on) window.selectedTopics.push(id); else window.selectedTopics.splice(idx, 1);
++  if (chip) {
++    chip.classList.toggle('pm-gold', on);
++    chip.classList.toggle('selected', on);
++    chip.setAttribute('aria-checked', on ? 'true' : 'false');
++  }
++  updateTopicCount();
+ }
+ 
+ function closeTopicModal() {
+diff --git a/frontend/index.html b/frontend/index.html
+index 99b6604..7041810 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -15,7 +15,7 @@
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
+   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
+-  <link rel="stylesheet" href="styles.css?v=2.8" />
++  <link rel="stylesheet" href="styles.css?v=2.9" />
+   <link rel="stylesheet" href="goals.css?v=1.3" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+@@ -2207,17 +2207,28 @@
+   </div>
+ 
+   <!-- ─── Topic Selection Modal ────────────────────────────────── -->
+-  <div id="topicModal" class="modal-overlay" onclick="if(event.target===this)closeTopicModal()">
+-    <div class="modal-sheet">
+-      <div class="modal-handle"></div>
+-      <div class="modal-title" data-i18n="select_your_topics">Select Topics</div>
+-      <input type="text" id="topicSearch" class="form-control" placeholder="Search topics..."
+-        style="margin-bottom:12px;" />
+-      <div id="topicsList" class="topics-chips-grid topics-modal-grid">
++  <div id="topicModal" class="modal-overlay ps-overlay" onclick="if(event.target===this)closeTopicModal()">
++    <div class="modal-sheet topic-sheet page-sheet" role="dialog" aria-modal="true" aria-labelledby="topicModalTitle">
++      <div class="ps-head">
++        <button type="button" class="ps-back" onclick="closeTopicModal()" aria-label="Back"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
++        <h2 class="ps-title modal-title" id="topicModalTitle" data-i18n="select_your_topics">Select Topics</h2>
++      </div>
++      <p class="ps-sub ps-sub--count" id="topicSelectedCount" aria-live="polite"></p>
++      <div class="ps-search-wrap">
++        <label class="ps-search" for="topicSearch">
++          <svg class="ps-search-ico" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
++          <input type="search" id="topicSearch" placeholder="Search topics..." autocomplete="off" enterkeyhint="search" />
++        </label>
++      </div>
++      <!-- Topic cards: same stacked cards as the "Select a Topic" request sheet; chosen cards turn golden -->
++      <div id="topicsList" class="ps-body" role="group" aria-label="Topics">
+         <!-- Dynamic topics -->
+       </div>
+-      <div style="display: flex; justify-content: center; margin-top: 20px;">
+-        <button class="btn btn-primary" style="min-width: 120px;" onclick="saveTopics()" data-i18n="Save">Save</button>
++      <div class="ps-foot">
++        <div class="hb-actions">
++          <button type="button" class="btn btn-outline" onclick="closeTopicModal()" data-i18n="btn_cancel">Cancel</button>
++          <button type="button" class="btn btn-primary" onclick="saveTopics()" data-i18n="Save">Save</button>
++        </div>
+       </div>
+     </div>
+   </div>
+@@ -2373,8 +2384,8 @@
+     </div>
+   </div>
+ 
+-  <script src="locales.js?v=1.8"></script>
+-  <script src="app.js?v=3.3"></script>
++  <script src="locales.js?v=1.9"></script>
++  <script src="app.js?v=3.4"></script>
+   <script src="goals.js?v=1.3"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="session-room.js?v=1.4"></script>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 2b2de17..f52bf80 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -528,6 +528,7 @@ const I18N = {
+     "settings_expertise_topics_label": "Topics to Mentor",
+     "mentor_edit_topics": "Edit topics",
+     "mentor_no_topics": "No topics selected yet",
++    "topics_selected_count": "{n} selected",
+     "Bio": "Bio",
+     "Specialization": "Specialization",
+     "Mentees I Mentor": "Mentees I Mentor",
+@@ -1303,6 +1304,7 @@ const I18N = {
+     "settings_expertise_topics_label": "ለማማከር ርዕሶች",
+     "mentor_edit_topics": "ርዕሶችን አርትዕ",
+     "mentor_no_topics": "ገና ምንም ርዕስ አልተመረጠም",
++    "topics_selected_count": "{n} ተመርጧል",
+     "Bio": "ስለ እኔ",
+     "Specialization": "ልዩ መስክ",
+     "Mentees I Mentor": "የማማክራቸው ተመካሪዎች",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 6462d62..5f2b767 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13464,8 +13464,9 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+ .modal-sheet.page-sheet {
+   display: flex;
+   flex-direction: column;
+-  height: min(92vh, calc(var(--app-height) - var(--kb-inset, 0px) - 12px));
+-  max-height: none;
++  /* Fits its content (no empty gap above the buttons); long content scrolls inside .ps-body */
++  height: auto;
++  max-height: min(92vh, calc(var(--app-height) - var(--kb-inset, 0px) - 12px));
+   padding: 0;
+   overflow: hidden;
+   border: 1px solid var(--border-dim);
+@@ -13494,7 +13495,7 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+ .ps-title { margin: 0; font-family: var(--font-display); font-size: var(--fs-xl); letter-spacing: 0.02em; color: var(--text); }
+ .ps-sub { flex: none; margin: 6px 22px 12px; font-size: var(--fs-sm); line-height: 1.5; color: var(--text2); }
+ .ps-body {
+-  flex: 1; min-height: 0;
++  flex: 0 1 auto; min-height: 0;
+   display: flex; flex-direction: column; gap: 12px;
+   padding: 6px 16px 20px;
+   overflow-y: auto;
+@@ -13606,3 +13607,39 @@ body.kb-open .ps-foot { padding-bottom: calc(12px + var(--safe-bottom)); }
+ .ps-card .btn-outline { gap: 8px; }
+ 
+ @media (prefers-reduced-motion: reduce) { .ps-switch-knob, .ps-switch-track, .ps-seg-btn { transition: none; } }
++
++
++/* ═══ Topic picker (Edit topics): same cards as the "Select a Topic" sheet ═══ */
++.ps-title.modal-title { margin: 0; color: var(--text); font-size: var(--fs-xl); }
++.ps-sub--count { margin-bottom: 10px; }
++.ps-search-wrap { flex: none; padding: 0 16px 12px; }
++.ps-search {
++  display: flex; align-items: center; gap: 10px;
++  min-height: 48px; padding: 0 16px;
++  border-radius: 999px;
++  background: rgba(255, 255, 255, 0.06);
++  border: 1px solid rgba(255, 255, 255, 0.12);
++  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
++  transition: border-color 0.2s, box-shadow 0.2s;
++}
++.ps-search:focus-within { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
++.ps-search-ico { flex: none; color: var(--gold-light); }
++.ps-search input { flex: 1; min-width: 0; padding: 12px 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 16px; -webkit-appearance: none; appearance: none; }
++.ps-search input::placeholder { color: var(--text3); }
++.ps-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
++[data-theme="light"] .ps-search { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); box-shadow: 0 6px 16px rgba(30, 25, 15, 0.10); }
++[data-theme="light"] .ps-search-ico { color: #7A5812; }
++.topic-sheet .ps-body .profile-menu-item { width: 100%; text-align: left; flex: none; }
++
++/* ═══ Live page: schedule sheet — Date/Time never wider than their column ═══ */
++.sch-sheet { padding-bottom: calc(20px + var(--nav-h) + var(--safe-bottom)); overflow-x: hidden; }   /* clears the bottom nav */
++body.kb-open .sch-sheet { padding-bottom: calc(20px + var(--safe-bottom)); }
++.sch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
++.sch-grid > .form-group { min-width: 0; }
++.sch-sheet input[type="date"], .sch-sheet input[type="time"] {
++  display: block; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
++  padding: 0 12px; font-size: var(--fs-md); text-align: left;
++}
++.sch-sheet input[type="date"]::-webkit-date-and-time-value, .sch-sheet input[type="time"]::-webkit-date-and-time-value { text-align: left; min-width: 0; margin: 0; }
++.sch-sheet input::-webkit-calendar-picker-indicator { margin: 0 0 0 4px; padding: 0; }
++@media (max-width: 360px) { .sch-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
-  <link rel="stylesheet" href="styles.css?v=2.8" />
+  <link rel="stylesheet" href="styles.css?v=2.9" />
   <link rel="stylesheet" href="goals.css?v=1.3" />
   <link rel="stylesheet" href="chat-media.css?v=1.0" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -2207,17 +2207,28 @@
   </div>
 
   <!-- ─── Topic Selection Modal ────────────────────────────────── -->
-  <div id="topicModal" class="modal-overlay" onclick="if(event.target===this)closeTopicModal()">
-    <div class="modal-sheet">
-      <div class="modal-handle"></div>
-      <div class="modal-title" data-i18n="select_your_topics">Select Topics</div>
-      <input type="text" id="topicSearch" class="form-control" placeholder="Search topics..."
-        style="margin-bottom:12px;" />
-      <div id="topicsList" class="topics-chips-grid topics-modal-grid">
+  <div id="topicModal" class="modal-overlay ps-overlay" onclick="if(event.target===this)closeTopicModal()">
+    <div class="modal-sheet topic-sheet page-sheet" role="dialog" aria-modal="true" aria-labelledby="topicModalTitle">
+      <div class="ps-head">
+        <button type="button" class="ps-back" onclick="closeTopicModal()" aria-label="Back"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <h2 class="ps-title modal-title" id="topicModalTitle" data-i18n="select_your_topics">Select Topics</h2>
+      </div>
+      <p class="ps-sub ps-sub--count" id="topicSelectedCount" aria-live="polite"></p>
+      <div class="ps-search-wrap">
+        <label class="ps-search" for="topicSearch">
+          <svg class="ps-search-ico" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="search" id="topicSearch" placeholder="Search topics..." autocomplete="off" enterkeyhint="search" />
+        </label>
+      </div>
+      <!-- Topic cards: same stacked cards as the "Select a Topic" request sheet; chosen cards turn golden -->
+      <div id="topicsList" class="ps-body" role="group" aria-label="Topics">
         <!-- Dynamic topics -->
       </div>
-      <div style="display: flex; justify-content: center; margin-top: 20px;">
-        <button class="btn btn-primary" style="min-width: 120px;" onclick="saveTopics()" data-i18n="Save">Save</button>
+      <div class="ps-foot">
+        <div class="hb-actions">
+          <button type="button" class="btn btn-outline" onclick="closeTopicModal()" data-i18n="btn_cancel">Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="saveTopics()" data-i18n="Save">Save</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2373,8 +2384,8 @@
     </div>
   </div>
 
-  <script src="locales.js?v=1.8"></script>
-  <script src="app.js?v=3.3"></script>
+  <script src="locales.js?v=1.9"></script>
+  <script src="app.js?v=3.4"></script>
   <script src="goals.js?v=1.3"></script>
   <script src="chat-media.js?v=1.0"></script>
   <script src="session-room.js?v=1.4"></script>
