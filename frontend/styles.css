@@ -13123,3 +13123,67 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
   border-color: rgba(150, 120, 40, 0.2);
   box-shadow: 0 8px 20px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff;
 }
+
+
+/* ═══ Mentor Profile (edit) page ═════════════════════════════════════════════
+   Profile → Mentor Profile. Same chrome as the Profile, Live and mentor-view
+   pages: gold glow behind the hero, framed avatar, gold segmented tabs, 26px
+   stacked cards with gold icon tiles, pill buttons. It reuses their classes
+   (.profile-hero, .profile-tabs, .profile-menu-item, .mp-info, .mp-actions);
+   only what a form needs is defined here. ═══ */
+#page-mentor-edit.active {
+  background: radial-gradient(120% 420px at 50% 0%, rgba(201, 168, 76, 0.30) 0%, rgba(168, 124, 42, 0.12) 45%, transparent 78%) no-repeat;
+}
+[data-theme="light"] #page-mentor-edit.active {
+  background: radial-gradient(120% 420px at 50% 0%, rgba(201, 168, 76, 0.32) 0%, rgba(201, 168, 76, 0.10) 45%, transparent 78%) no-repeat;
+}
+#page-mentor-edit .app-header { background: transparent; border-bottom-color: transparent; box-shadow: none; }
+#page-mentor-edit .page-content { animation: profilePaneIn 0.3s ease both; }
+
+/* cards that hold a field: not tappable as a whole, fields get the card's roundness */
+.mpe-card { cursor: default; }
+.mpe-card .mp-info-body { gap: 8px; }
+.mpe-card .mp-info-label { cursor: default; }
+.mpe-card .input,
+.mpe-card .form-control,
+.mpe-card .bio-box,
+.mpe-card .premium-dropdown.form-dropdown .premium-dropdown-btn {
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25);
+}
+[data-theme="light"] .mpe-card .input,
+[data-theme="light"] .mpe-card .form-control,
+[data-theme="light"] .mpe-card .bio-box,
+[data-theme="light"] .mpe-card .premium-dropdown.form-dropdown .premium-dropdown-btn {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(150, 120, 40, 0.22);
+  box-shadow: inset 0 1px 3px rgba(30, 25, 15, 0.08);
+}
+.mpe-card .input:focus,
+.mpe-card .form-control:focus,
+.mpe-card .premium-dropdown[data-open] .premium-dropdown-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-dim);
+  transform: none;                                   /* no zoom-in inside a card */
+}
+[data-theme="light"] .mpe-card .input:focus,
+[data-theme="light"] .mpe-card .form-control:focus,
+[data-theme="light"] .mpe-card .premium-dropdown[data-open] .premium-dropdown-btn { background: #fff; }
+.mpe-card .bio-box:hover { transform: none; box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25); border-color: rgba(201, 168, 76, 0.45); }
+[data-theme="light"] .mpe-card .bio-box:hover { box-shadow: inset 0 1px 3px rgba(30, 25, 15, 0.08); }
+.mpe-card .bio-box-text,
+.mpe-card .input,
+.mpe-card .form-control { font-weight: 500; }        /* the card row is semibold; field text is regular */
+.mpe-card textarea.form-control { min-height: 96px; }
+
+/* the open dropdown must sit above the cards that follow it */
+.mpe-card:has([data-open]) { position: relative; z-index: 30; }
+
+/* "Accept New Requests": label on the left, switch on the right */
+.mpe-toggle-card { align-items: center; }
+.mpe-toggle-card .neo-toggle-container { margin: 0 0 16px; }   /* room for the switch's ON/OFF caption */
+
+@media (prefers-reduced-motion: reduce) { #page-mentor-edit .page-content { animation: none; } }

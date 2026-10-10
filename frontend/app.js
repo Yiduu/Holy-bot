@@ -1045,6 +1045,7 @@ function handleTelegramBack() {
   if (sheets.length) { sheets[sheets.length - 1].click(); return; }
   if (document.body.classList.contains('in-call')) return;
   if (currentPage === 'mentor-profile') { closeMentorProfile(); return; }
+  if (currentPage === 'mentor-edit') { closeMentorEdit(); return; }
   if (currentPage !== 'dashboard') navigate('dashboard');
 }
 
@@ -6081,10 +6082,28 @@ function updateProfileIdentity() {
     }
   }
 
+  // The Mentor Profile page repeats the same hero (name + rating).
+  const editName = $('mentorEditHeroName');
+  if (editName) editName.textContent = name;
+  const editRating = $('mentorEditHeroRating');
+  if (editRating) {
+    if (currentUser?.role === 'mentor') {
+      editRating.innerHTML = renderProfileRating(currentUser.rating, currentUser.rating_count);
+      editRating.style.display = 'flex';
+    } else {
+      editRating.style.display = 'none';
+      editRating.innerHTML = '';
+    }
+  }
+
   const anonId = currentUser?.anonymous_id || '';
   const rawRole = currentUser?.role || '';
   const formattedRole = rawRole ? (rawRole.charAt(0).toUpperCase() + rawRole.slice(1)) : '';
 
+  if ($('mentorEditRole')) {
+    $('mentorEditRole').textContent = formattedRole;
+    $('mentorEditRole').style.display = formattedRole ? 'inline-block' : 'none';
+  }
   if ($('userAnonId')) $('userAnonId').textContent = anonId;
   if ($('userRole')) {
     $('userRole').textContent = formattedRole;
@@ -6145,7 +6164,7 @@ function avatarInitials() {
 // hero and the editable Edit Profile modal — so this keeps both in sync
 // from a single fetch instead of loading the photo twice.
 async function loadProfilePhoto() {
-  const targets = [$('settingsAvatarPreview'), $('editAvatarPreview')].filter(Boolean);
+  const targets = [$('settingsAvatarPreview'), $('editAvatarPreview'), $('mentorEditAvatar')].filter(Boolean);
   const removeBtn = $('removeAvatarBtn');
   if (!targets.length) return;
 
@@ -6469,20 +6488,47 @@ async function saveNotificationsFromModal() {
   if (ok) closeNotificationsModal();
 }
 
-// ─── Mentor Profile modal ──────────────────────────────────────
-function openMentorProfileModal() {
-  haptic('light');
-  $('mentorProfileModal')?.classList.add('open');
+// ─── Mentor Profile page (Profile → Mentor Profile) ───────────
+// A full page now (it used to be a bottom sheet) so it looks like the Profile
+// and Live pages. The form fields keep their old ids, so loadSettings() fills
+// them and saveSettings() reads them exactly as before.
+function switchMentorEditTab(tab) {
+  const avail = tab === 'avail';
+  $('mentorEditPaneAbout')?.classList.toggle('active', !avail);
+  $('mentorEditPaneAvail')?.classList.toggle('active', avail);
+  [['mentorEditTabAbout', !avail], ['mentorEditTabAvail', avail]].forEach(([id, on]) => {
+    const el = $(id); if (!el) return;
+    el.classList.toggle('active', on);
+    el.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  haptic('selection');
 }
 
-function closeMentorProfileModal() {
+function openMentorEditPage() {
+  if (!$('page-mentor-edit')) return;
   haptic('light');
-  $('mentorProfileModal')?.classList.remove('open');
+  // Always start on the first tab with the bio in its read-only state.
+  switchMentorEditTab('about');
+  $('bioEditWrap')?.classList.add('hidden');
+  $('bioDisplayWrap')?.classList.remove('hidden');
+  renderBioDisplay($('settingBio')?.value || '');
+  updateProfileIdentity();
+  loadProfilePhoto();
+  showAppPageQuiet('mentor-edit', 'nav-settings');
+  const pc = document.querySelector('#page-mentor-edit .page-content');
+  if (pc) pc.scrollTop = 0;
 }
 
-async function saveMentorProfileFromModal() {
+// Back to Profile. navigate() reloads the saved settings, so edits that were
+// not saved are dropped (same as closing the old sheet and reopening it).
+function closeMentorEdit() {
+  if (currentPage !== 'mentor-edit') return;
+  navigate('settings');
+}
+
+async function saveMentorEditPage() {
   const ok = await saveSettings();
-  if (ok) closeMentorProfileModal();
+  if (ok) closeMentorEdit();
 }
 
 // ─── Contact Admin ────────────────────────────────────────────
