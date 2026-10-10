@@ -13955,3 +13955,26 @@ textarea.form-control { resize: none; }
 [data-theme="light"] .mentee-card-stats .mentee-streak-unit { color: #5A5650; }
 [data-theme="light"] .mentee-card-stats .mentee-streak-best { border-left-color: rgba(150, 120, 40, 0.3); color: #6B665D; }
 [data-theme="light"] .mentee-card-stats .mentee-followup-pill { background: rgba(179, 57, 39, 0.08); border-color: rgba(179, 57, 39, 0.35); color: #B33927; }
+
+/* ═══ Transfer sheet: tighter cards, grouped unavailable mentors ═══ */
+#transferModal .tf-mentee { padding: 8px 12px; margin-bottom: 8px; border-radius: 16px; gap: 10px; }
+#transferModal .tf-mentee .mentor-avatar { width: 36px; height: 36px; min-width: 36px; min-height: 36px; }
+#transferModal .tf-chips { padding-bottom: 6px; }
+#transferModal .tf-chip { min-height: 34px; padding: 0 14px; }
+#transferModal .tf-search {
+  position: sticky; top: 0; z-index: 2; margin-bottom: 8px; padding: 10px 14px;
+  background: var(--bg2);
+}
+#transferModal .tf-list { gap: 8px; }
+#transferModal .tf-mentor { padding: 10px 12px; gap: 10px; border-radius: 18px; }
+#transferModal .tf-mentor .mentor-avatar { width: 42px; height: 42px; min-width: 42px; min-height: 42px; }
+#transferModal .tf-mentor-body { gap: 3px; }
+#transferModal .tf-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; }
+#transferModal .tf-unavail { display: grid; gap: 8px; }
+#transferModal .tf-unavail summary {
+  font-size: var(--fs-xs); font-weight: 700; color: var(--text2);
+  padding: 8px 4px; cursor: pointer; list-style: none;
+}
+#transferModal .tf-unavail summary::-webkit-details-marker { display: none; }
+#transferModal .tf-unavail summary::after { content: ' ▾'; }
+#transferModal .tf-unavail[open] summary::after { content: ' ▴'; }

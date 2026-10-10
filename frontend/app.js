@@ -8280,7 +8280,7 @@ function renderTransferList() {
   const firstAvail = rows.findIndex(r => r.info.available);
   const manyAvail = rows.filter(r => r.info.available).length > 1;
 
-  list.innerHTML = rows.map(({ m, info }, i) => {
+  const renderCard = ({ m, info }, i) => {
     const name = mentorNameOf(m) || `Mentor ${m.telegram_id}`;
     const letter = name.charAt(0).toUpperCase();
     const sel = String(m.telegram_id) === String(_transferSelectedId);
@@ -8288,6 +8288,14 @@ function renderTransferList() {
     const status = mentorStatus(m);
     const best = manyAvail && i === firstAvail && info.matched > 0;
     const stateChip = info.paused ? t('not_accepting') : info.full ? t('capacity_full') : '';
+    // One tag row: "Best match" and the topic-match count used to be two lines.
+    const matchTxt = info.matched > 0 && totalTopics > 0
+      ? t(info.matched === 1 ? 'transfer_match_one' : 'transfer_match', { n: info.matched, total: totalTopics })
+      : '';
+    const tags = [
+      best ? `<span class="tf-best">${TRANSFER_ICON_STAR}${escapeHtml(t('transfer_best_match'))}</span>` : '',
+      matchTxt ? `<span class="tf-match">${escapeHtml(matchTxt)}</span>` : '',
+    ].filter(Boolean).join('');
     const trailing = stateChip
       ? `<span class="tf-state-chip">${escapeHtml(stateChip)}</span>`
       : `<span class="rt-radio" aria-hidden="true"></span>`;
@@ -8305,12 +8313,23 @@ function renderTransferList() {
             <span class="tf-cap" aria-hidden="true"><i class="${info.full ? 'full' : ''}" style="width:${pct}%"></i></span>
             <span class="tf-cap-text">${info.count}/${info.max}${info.available ? ` · ${escapeHtml(status.text)}` : ''}</span>
           </span>
-          ${best ? `<span class="tf-best">${TRANSFER_ICON_STAR}${escapeHtml(t('transfer_best_match'))}</span>` : ''}
-          ${info.matched > 0 && totalTopics > 0 ? `<span class="tf-match">${escapeHtml(t(info.matched === 1 ? 'transfer_match_one' : 'transfer_match', { n: info.matched, total: totalTopics }))}</span>` : ''}
+          ${tags ? `<span class="tf-tags">${tags}</span>` : ''}
         </span>
         ${trailing}
       </button>`;
-  }).join('');
+  };
+
+  // Mentors who can't be picked (full / paused) collapse into one row
+  // instead of taking up full-size cards.
+  const cards = rows.map((r, i) => ({ r, html: renderCard(r, i) }));
+  const openHtml = cards.filter(c => c.r.info.available).map(c => c.html).join('');
+  const closedCards = cards.filter(c => !c.r.info.available);
+  list.innerHTML = openHtml + (closedCards.length
+    ? `<details class="tf-unavail"${openHtml ? '' : ' open'}>
+        <summary>${escapeHtml(t('transfer_unavailable', { n: closedCards.length }))}</summary>
+        ${closedCards.map(c => c.html).join('')}
+      </details>`
+    : '');
   hydrateAvatars(list);
 }
 
