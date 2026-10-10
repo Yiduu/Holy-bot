@@ -13804,70 +13804,63 @@ textarea.form-control { resize: none; }
 .mp-para .mp-info-text { display: block; width: 100%; padding: 0; font-size: var(--fs-md); font-weight: 400; line-height: 1.7; text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
 .mp-panel .mp-para .mp-info-text { text-align: left; }
 
+/* ═══ My Mentees: same look as the other pages ════════════════════════════════
+   The yellow "Active Mentees" card is the original gold foil, untouched.
+   Everything below it uses the same shapes as the Mentors page: full-width pill control
+   (like the search bar), 26px gradient cards, round gold-ringed avatar, glass pills. ═══ */
 
-/* ═══ My Mentees page: hierarchy · balance · contrast ═════════════════════════
-   Page:  quiet summary bar -> compact sort pill -> the people.
-   Card:  1 identity (avatar, NAME, quiet status + streak)  2 goals  3 private note.
-   Gold is reserved for the count and the goals pill; the ONE loud signal on the page is
-   the red "needs follow-up", so it stands out only when something needs attention. ═══ */
+/* sort = the same full-width pill as the Mentors search bar */
+#menteeSortDropdown { width: 100%; margin: 0 0 16px; }
+#menteeSortDropdown .premium-dropdown-btn {
+  width: 100%; min-height: 48px; padding: 0 18px; justify-content: space-between;
+  border-radius: 999px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text); font-size: var(--fs-md); font-weight: 600; box-shadow: none;
+}
+#menteeSortDropdown .dropdown-arrow { color: var(--gold-light); }
 
-/* summary bar */
-.mentee-stats-hero {
-  flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 14px;
-  padding: 16px 18px; margin-bottom: 14px; text-align: left; overflow: visible;
-  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 22px;
+/* cards: same shell as .mc-card on the Mentors page */
+.mentees-list { gap: 16px; }
+.card.mentee-card {
+  gap: 14px; padding: 18px; border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
-.mentee-stats-hero::before { display: none; }
-.mentee-hero-ico { width: 48px; height: 48px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 16px; background: rgba(201, 168, 76, 0.13); color: var(--gold-light); box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.22); }
-.mentee-hero-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.mentee-hero-label { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text2); }
-.mentee-hero-number { font-family: var(--font-display); font-size: 2rem; line-height: 1.05; font-weight: 800; letter-spacing: 0; color: var(--text); text-shadow: none; }
-.mentee-hero-followup { margin: 0 0 0 auto; padding: 7px 8px 7px 12px; gap: 8px; background: rgba(224, 92, 92, 0.12); border: 1px solid rgba(224, 92, 92, 0.35); color: var(--text); font-weight: 600; }
-.mentee-followup-icon { color: var(--danger); }
-.mentee-followup-badge { min-width: 24px; text-align: center; background: var(--danger); color: #fff; font-family: var(--font-body); font-weight: 800; padding: 2px 8px; }
-
-/* sort: a compact pill on the right instead of a full-width bar */
-#menteeSortDropdown { width: fit-content; margin: 0 0 14px auto; }
-#menteeSortDropdown .premium-dropdown-btn { width: auto; min-height: 40px; padding: 0 14px; gap: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); color: var(--text); font-size: var(--fs-sm); font-weight: 600; box-shadow: none; }
-#menteeSortDropdown .dropdown-arrow { color: var(--gold-light); }
-#menteeSortDropdown .premium-dropdown-menu { left: auto; right: 0; min-width: 240px; transform-origin: top right; }
-
-/* card */
-.mentees-list { gap: 16px; }
-.card.mentee-card { gap: 14px; padding: 18px; border-radius: 22px; border: 1px solid rgba(255, 255, 255, 0.07); background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
 .mentee-card::before { display: none; }
 .mentee-card-profile { gap: 0; }
 .mentee-card-head { align-items: center; gap: 14px; }
-#menteesList .mentee-card-head .mentor-avatar { width: 52px; height: 52px; flex: 0 0 52px; }
-.mentee-card-identity { gap: 3px; padding-top: 0; }
+#menteesList .mentee-card-head .mentor-avatar { width: 56px; height: 56px; flex: 0 0 56px; box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.55); }
+.mentee-card-identity { gap: 4px; padding-top: 0; }
 .mentee-card-name { font-size: var(--fs-lg); font-weight: 800; line-height: 1.25; color: var(--text); }
 
-/* quiet meta: status + streak as plain text, follow-up is the one coloured signal */
-.mentee-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; }
+/* status + streak: dot text and a glass pill, like the pills on the other pages */
+.mentee-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; }
 .mentee-card-meta .mentee-status-line-compact { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
-.mentee-card-meta .mentee-status-dot.online { box-shadow: none; }
-.mentee-card-meta .mentee-status-dot.stale { box-shadow: none; }
-.mentee-card-meta .mentee-status-row { color: var(--text2); }
-.mentee-card-meta .mentee-followup-pill { padding: 2px 8px; border-radius: 999px; font-size: var(--fs-2xs); background: rgba(224, 92, 92, 0.14); border-color: rgba(224, 92, 92, 0.4); }
-.mentee-card-meta .mentee-streak-badge { margin: 0; padding: 0; border: 0; background: none; border-radius: 0; gap: 5px; font-size: var(--fs-xs); font-weight: 600; color: var(--text2); }
-.mentee-card-meta .mentee-streak-badge.is-active { background: none; border: 0; color: var(--text2); }
-.mentee-card-meta .mentee-streak-badge.is-idle { background: none; border: 0; color: var(--text3); }
-.mentee-card-meta .mentee-streak-flame { color: var(--gold); }
+.mentee-card-meta .mentee-status-dot.online, .mentee-card-meta .mentee-status-dot.stale { box-shadow: none; }
+.mentee-card-meta .mentee-status-row { color: var(--text2); font-weight: 600; }
+.mentee-card-meta .mentee-followup-pill { padding: 3px 9px; border-radius: 999px; background: rgba(224, 92, 92, 0.14); border-color: rgba(224, 92, 92, 0.4); }
+.mentee-card-meta .mentee-streak-badge,
+.mentee-card-meta .mentee-streak-badge.is-active,
+.mentee-card-meta .mentee-streak-badge.is-idle {
+  margin: 0; padding: 4px 11px; gap: 6px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: var(--fs-xs); font-weight: 600; color: var(--text);
+}
+.mentee-card-meta .mentee-streak-badge.is-idle { color: var(--text2); }
+.mentee-card-meta .mentee-streak-flame { color: var(--gold-light); }
 .mentee-card-meta .mentee-streak-badge.is-idle .mentee-streak-flame { color: var(--text3); }
 .mentee-card-meta .mentee-streak-best { color: var(--text3); font-weight: 500; }
 
-/* actions menu: ghost icon, no box */
-.mentee-actions-btn { width: 40px; height: 40px; border: 0; border-radius: 50%; background: transparent; color: var(--text3); }
-.mentee-actions-btn:hover, .mentee-actions[data-open] .mentee-actions-btn { background: rgba(255, 255, 255, 0.08); color: var(--text); border-color: transparent; }
-.mentee-actions { margin-right: -6px; align-self: flex-start; }
+/* actions menu: round glass button like the other pages' icon buttons */
+.mentee-actions-btn { width: 40px; height: 40px; border-radius: 50%; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); color: var(--text2); }
+.mentee-actions-btn:hover, .mentee-actions[data-open] .mentee-actions-btn { background: var(--gold-dim); border-color: var(--gold); color: var(--gold-light); }
+.mentee-actions { align-self: flex-start; }
 
-/* body: goals pill + calm private note */
+/* body: goals pill (goals.css) + calm private note */
 .mentee-card-body { gap: 16px; padding-top: 16px; border-top-color: rgba(255, 255, 255, 0.07); }
 .mentee-note { gap: 10px; }
 .mentee-note-label { font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text2); }
-.mentee-note-label svg { color: var(--text3); }
+.mentee-note-label svg { color: var(--gold-light); }
 .mentee-note textarea {
   min-height: 76px; padding: 12px 16px; border-radius: 16px; resize: none; font-size: 16px; line-height: 1.5;
   background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.10);
@@ -13877,19 +13870,15 @@ textarea.form-control { resize: none; }
 .mentee-note textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim), inset 0 2px 6px rgba(0, 0, 0, 0.35); }
 
 /* light theme */
-[data-theme="light"] .mentee-stats-hero, [data-theme="light"] .card.mentee-card { background: linear-gradient(160deg, #fff, #f6f3ea); border-color: rgba(150, 120, 40, 0.2); box-shadow: 0 8px 20px rgba(30, 25, 15, 0.10), inset 0 1px 0 #fff; }
-[data-theme="light"] .mentee-hero-ico { background: rgba(201, 168, 76, 0.16); color: #7A5812; box-shadow: inset 0 0 0 1px rgba(150, 120, 40, 0.25); }
-[data-theme="light"] .mentee-hero-label, [data-theme="light"] .mentee-note-label, [data-theme="light"] .mentee-card-meta .mentee-status-row, [data-theme="light"] .mentee-card-meta .mentee-streak-badge, [data-theme="light"] .mentee-card-meta .mentee-streak-badge.is-active { color: #5A5650; }
-[data-theme="light"] .mentee-hero-number, [data-theme="light"] .mentee-card-name { color: #1A1714; }
-[data-theme="light"] .mentee-hero-followup { background: rgba(179, 57, 39, 0.1); border-color: rgba(179, 57, 39, 0.35); color: #1A1714; }
-[data-theme="light"] .mentee-followup-icon { color: #B33927; }
-[data-theme="light"] .mentee-followup-badge { background: #B33927; }
+[data-theme="light"] .card.mentee-card { background: linear-gradient(160deg, #fff, #f6f3ea); border-color: rgba(150, 120, 40, 0.2); box-shadow: 0 8px 20px rgba(30, 25, 15, 0.10), inset 0 1px 0 #fff; }
+[data-theme="light"] .mentee-card-name { color: #1A1714; }
+[data-theme="light"] .mentee-card-meta .mentee-status-row, [data-theme="light"] .mentee-note-label { color: #5A5650; }
+[data-theme="light"] .mentee-card-meta .mentee-streak-badge, [data-theme="light"] .mentee-card-meta .mentee-streak-badge.is-active, [data-theme="light"] .mentee-card-meta .mentee-streak-badge.is-idle { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); color: #1A1714; }
 [data-theme="light"] .mentee-card-meta .mentee-streak-flame { color: #A87C2A; }
-[data-theme="light"] .mentee-actions-btn { color: #6F6659; }
-[data-theme="light"] .mentee-actions-btn:hover, [data-theme="light"] .mentee-actions[data-open] .mentee-actions-btn { background: rgba(0, 0, 0, 0.06); color: #1A1714; }
+[data-theme="light"] .mentee-note-label svg { color: #7A5812; }
+[data-theme="light"] .mentee-actions-btn { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); color: #5A5650; }
 [data-theme="light"] .mentee-card-body { border-top-color: rgba(150, 120, 40, 0.2); }
-[data-theme="light"] #menteeSortDropdown .premium-dropdown-btn { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); color: var(--text); }
+[data-theme="light"] #menteeSortDropdown .premium-dropdown-btn { background: rgba(255, 255, 255, 0.8); border-color: rgba(150, 120, 40, 0.22); color: var(--text); }
 [data-theme="light"] #menteeSortDropdown .dropdown-arrow { color: #7A5812; }
 [data-theme="light"] .mentee-note textarea { background: rgba(255, 255, 255, 0.9); border-color: rgba(150, 120, 40, 0.25); box-shadow: 0 0 0 0 transparent, inset 0 1px 3px rgba(30, 25, 15, 0.08); }
 [data-theme="light"] .mentee-note textarea:focus { border-color: #A87C2A; box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
-@media (max-width: 380px) { .mentee-hero-followup { margin-left: 0; } }
