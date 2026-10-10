@@ -1524,7 +1524,7 @@ function connectSocket() {
 
   socket.on('chat_cleared', ({ by_id }) => {
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(by_id)) {
-      loadMessages(window.chatState.with, { force: true });
+      loadMessages(window.chatState.with, { force: true }).catch(() => { });
     }
   });
 
@@ -5513,7 +5513,18 @@ async function clearChatHistory() {
     await apiFetch(`/api/messages/${window.chatState.with}`, { method: 'DELETE' });
     haptic('success');
     showToast('Chat history cleared', 'success');
-    loadMessages(window.chatState.with, { force: true });
+    // Show the empty state right away; don't make it wait on a second request.
+    const box = $('chatMessages');
+    if (box) {
+      box.innerHTML = chatEmptyStateHtml();
+      box.dataset.chatWith = String(window.chatState.with);
+      box.scrollTop = 0;
+    }
+    window._chatMessagesMap?.clear();
+    window._chatEarliestDate = null;
+    window._hasEarlierMessages = false;
+    // Then reconcile with the server (e.g. a message that arrived meanwhile).
+    loadMessages(window.chatState.with, { force: true }).catch(() => { });
   } catch (e) { haptic('error'); showToast(e.message, 'error'); }
 }
 
