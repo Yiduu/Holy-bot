@@ -13,6 +13,15 @@
       new_goal: 'New goal', type_one: 'One-time task', type_prog: 'Progressive', type_chal: 'Challenge',
       type_one_d: 'A single action with a due date', type_prog_d: 'Repeat it several times, track each',
       type_chal_d: 'Start to end date, tasks every day',
+      pick_title: 'What kind of goal is this?', pick_sub: 'Pick one. You will fill in the details on the next page.',
+      how_title: 'How it works',
+      one_hero: 'One clear action, finished by one day.',
+      one_h1: 'Name the task.', one_h2: 'Pick the day it is due (or leave it open).', one_h3: 'Your mentee ticks it off when it is done.',
+      prog_hero: 'A habit built one step at a time.',
+      prog_h1: 'Say what to do.', prog_h2: 'Choose how many times it should be done.', prog_h3: 'Each time gets ticked off and counted.',
+      chal_hero: 'A daily practice from a start day to an end day.',
+      chal_h1: 'Choose the dates.', chal_h2: 'Set the tasks for each day.', chal_h3: 'Your mentee ticks them off every day and builds a streak.',
+      back: 'Back',
       f_title: 'Title', f_due: 'Due date (optional)', f_deadline: 'Deadline (optional)', f_target: 'How many times',
       f_start: 'Start', f_end: 'End', f_daily: 'Daily tasks', f_daily_ph: 'Daily task', f_more: 'Add another task',
       f_reminder: 'Daily reminder', create: 'Create', cancel: 'Cancel', save: 'Save', edit: 'Edit', del: 'Delete',
@@ -71,7 +80,7 @@
 
   // ── state ──────────────────────────────────────────────────────────────
   const store = { mentor: {}, mine: null };   // goals by mentee id / for the signed-in mentee
-  const ui = { sel: {}, edit: {}, note: {}, form: {}, ftype: {}, month: {}, fd: {}, ren: {} };
+  const ui = { sel: {}, edit: {}, note: {}, form: {}, ftype: {}, month: {}, fd: {}, ren: {}, step: {} };
   const MAX_DAYS = 120, MAX_TASKS = 4;   // keep in step with utils/goalRules.js
   const mounts = { mentor: {}, mentee: null };
 
@@ -293,17 +302,29 @@
       </div></div>`;
   }
 
+  const TI = {
+    one_time: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>',
+    progressive: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+    challenge: '<path d="M5 21V4"/><path d="M5 4h12l-2 4 2 4H5"/>'
+  };
+  const TK = { one_time: ['type_one', 'type_one_d', 'one'], progressive: ['type_prog', 'type_prog_d', 'prog'], challenge: ['type_chal', 'type_chal_d', 'chal'] };
+  const icon = (v, s = 22) => `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TI[v]}</svg>`;
+
+  // Page 1: choose the type. Each card opens that type's own page.
+  function pickerHtml() {
+    const card = v => `<button type="button" class="hg-type hg-pick" data-act="pick" data-type="${v}">
+      <span class="hg-type-ico">${icon(v)}</span>
+      <span class="hg-type-txt"><b>${tr(TK[v][0])}</b><small>${tr(TK[v][1])}</small></span>
+      <span class="hg-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></button>`;
+    return `<div class="hg-pagehead"><h2>${tr('pick_title')}</h2><p>${tr('pick_sub')}</p></div>
+      <div class="hg-types">${card('one_time')}${card('progressive')}${card('challenge')}</div>`;
+  }
+
+  // Page 2: one page per type, with its own explanation and fields.
   function formHtml(menteeId) {
     const type = ui.ftype[menteeId] || 'challenge';
     const d = fd(menteeId), td = today();
-    const TI = {
-      one_time: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>',
-      progressive: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
-      challenge: '<path d="M5 21V4"/><path d="M5 4h12l-2 4 2 4H5"/>'
-    };
-    const opt = (v, k, dd) => `<button type="button" class="hg-type${type === v ? ' on' : ''}" data-act="ftype" data-type="${v}" aria-pressed="${type === v}">
-      <span class="hg-type-ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TI[v]}</svg></span>
-      <span class="hg-type-txt"><b>${tr(k)}</b><small>${tr(dd)}</small></span><span class="hg-radio" aria-hidden="true"></span></button>`;
+    const k = TK[type][2];
     let fields = '';
     if (type === 'one_time') fields = `<label>${tr('f_due')}<input type="date" data-f="due" min="${td}" value="${esc(d.due)}"></label>`;
     if (type === 'progressive') fields = `<label>${tr('f_target')}<input type="number" data-f="target" min="1" max="50" value="${esc(d.target)}" inputmode="numeric"></label>
@@ -322,15 +343,59 @@
         ${d.mode === 'custom' ? planner(menteeId, d) : same}
         <label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${esc(d.reminder)}"></label>`;
     }
-    return `<div class="hg-form hg-new">
-      <div class="hg-new-head"><span class="hg-new-ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><b>${tr('new_goal')}</b></div>
-      <div class="hg-types">${opt('one_time', 'type_one', 'type_one_d')}${opt('progressive', 'type_prog', 'type_prog_d')}${opt('challenge', 'type_chal', 'type_chal_d')}</div>
+    return `<div class="hg-hero"><span class="hg-type-ico hg-hero-ico">${icon(type, 28)}</span>
+        <div><h2>${tr(TK[type][0])}</h2><p>${tr(k + '_hero')}</p></div></div>
+      <div class="hg-how"><div class="hg-eyebrow">${tr('how_title')}</div>
+        <ol><li>${tr(k + '_h1')}</li><li>${tr(k + '_h2')}</li><li>${tr(k + '_h3')}</li></ol></div>
+      <div class="hg-form hg-new">
       <label>${tr('f_title')}<input type="text" maxlength="200" data-f="title" value="${esc(d.title)}"></label>${fields}
-      <div class="hg-actions"><button type="button" class="hg-btn hg-btn-ghost" data-act="cancel-new">${tr('cancel')}</button>
+      <div class="hg-actions"><button type="button" class="hg-btn hg-btn-ghost" data-act="back">${tr('back')}</button>
       <button type="button" class="hg-btn" data-act="create">${tr('create')}</button></div></div>`;
   }
 
+  // ── the goal pages (#page-goal-new) ───────────────────────────────────
+  const pageRoot = () => document.getElementById('goalPageBody');
+
+  function paintPage(root) {
+    const mid = root.dataset.mentee;
+    root.innerHTML = (ui.step[mid] || 'pick') === 'pick' ? pickerHtml() : formHtml(mid);
+    if (!document.activeElement?.closest?.('.hg-root')) typingOff();
+  }
+
+  function goStep(mid, step) {
+    const root = pageRoot();
+    if (!root) return;
+    root.classList.add('hg-root');
+    root.dataset.role = 'mentor';
+    root.dataset.page = '1';
+    root.dataset.mentee = mid;
+    bind(root);
+    ui.step[mid] = step;
+    paintPage(root);
+    if (currentPage !== 'goal-new') showAppPageQuiet('goal-new', 'nav-my-mentees');
+    const sc = root.closest('.page-content');
+    if (sc) sc.scrollTop = 0;
+    haptic('light');
+  }
+
+  function closePage() {
+    const root = pageRoot(), mid = root?.dataset.mentee;
+    if (mid) { delete ui.fd[mid]; delete ui.step[mid]; }
+    if (currentPage === 'goal-new') showAppPageQuiet('my-mentees', 'nav-my-mentees');
+    repaintAll();
+  }
+
+  // Back: type page -> type list -> mentees. Returns true when it handled the press.
+  function back() {
+    if (currentPage !== 'goal-new') return false;
+    const root = pageRoot(), mid = root?.dataset.mentee;
+    if (mid && ui.step[mid] && ui.step[mid] !== 'pick') { snap(root); goStep(mid, 'pick'); }
+    else closePage();
+    return true;
+  }
+
   function paint(root, force) {
+    if (root.dataset.page) return paintPage(root);
     const a = document.activeElement;
     if (!force && a && root.contains(a) && a.matches('textarea,input')) return; // never repaint under a typing user
     const role = root.dataset.role, mid = root.dataset.mentee;
@@ -440,9 +505,10 @@
       case 'tick': return tick(root, tid);
       case 'day': ui.sel[gid] = el.dataset.date; delete ui.month[gid]; return paint(root, true);
       case 'mnav': ui.month[el.dataset.key] = el.dataset.m; return paint(root, true);
-      case 'new': ui.form[mid] = true; return paint(root, true);
-      case 'cancel-new': ui.form[mid] = false; delete ui.fd[mid]; return paint(root, true);
-      case 'ftype': ui.ftype[mid] = el.dataset.type; return paint(root, true);
+      case 'new': return goStep(mid, 'pick');
+      case 'pick': ui.ftype[mid] = el.dataset.type; return goStep(mid, el.dataset.type);
+      case 'back': return back();
+      case 'cancel-new': return closePage();
       case 'fmode': fd(mid).mode = el.dataset.mode; return paint(root, true);
       case 'fday': fd(mid).day = el.dataset.date; delete ui.month['form:' + mid]; return paint(root, true);
       case 'dur': { const d = fd(mid); if (isDay(d.start)) d.end = addDays(d.start, Number(el.dataset.n) - 1); return paint(root, true); }
@@ -472,7 +538,7 @@
         if (!body.title) return root.querySelector('.hg-new [data-f="title"]').focus();
         el.disabled = true;
         return apiFetch('/api/goals', { method: 'POST', body }).then(g => {
-          applyGoal(g); ui.form[mid] = false; delete ui.fd[mid]; showToast(tr('created'), 'success'); repaintAll();
+          applyGoal(g); showToast(tr('created'), 'success'); closePage();
         }).catch(err => { el.disabled = false; fail(err); });
       }
       case 'rename': ui.ren[tid] = true; return paint(root, true);
@@ -631,5 +697,5 @@
   function onRealtime(goal) { applyGoal(goal); repaintAll(); }
   function onRealtimeDeleted({ id, mentee_id } = {}) { removeGoal(id, mentee_id); repaintAll(); }
 
-  window.HolyGoals = { mountMentor, mountMentee, onRealtime, onRealtimeDeleted };
+  window.HolyGoals = { mountMentor, mountMentee, onRealtime, onRealtimeDeleted, back };
 })();

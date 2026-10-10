@@ -1076,6 +1076,7 @@ function handleTelegramBack() {
   if (sheets.length) { sheets[sheets.length - 1].click(); return; }
   if (document.body.classList.contains('in-call')) return;
   if (currentPage === 'mentor-profile') { closeMentorProfile(); return; }
+  if (currentPage === 'goal-new' && window.HolyGoals?.back()) return;
   if (currentPage !== 'dashboard') navigate('dashboard');
 }
 
