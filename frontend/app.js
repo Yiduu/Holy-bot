@@ -7557,13 +7557,16 @@ function renderMenteesList() {
     // are unchanged; the goals toggle must stay directly before its panel
     // (see updateMenteeGoalsBadge, which uses previousElementSibling).
     html += `
-      <div class="card gold-border mentee-card">
+      <div class="card mentee-card">
         <div class="mentee-card-profile">
           <div class="mentee-card-head">
             ${renderAvatar(user, letter)}
             <div class="mentee-card-identity">
               <div class="mentee-card-name">${escapeHtml(displayName)}</div>
-              ${renderMenteeActivity(user)}
+              <div class="mentee-card-meta">
+                ${renderMenteeActivity(user)}
+                ${renderMenteeStreakBadge(user.telegram_id)}
+              </div>
             </div>
             <div class="premium-dropdown mentee-actions" data-dropdown id="${actionsId}">
               <button type="button" class="mentee-actions-btn" data-dropdown-toggle aria-haspopup="menu" aria-label="${t('mentee_actions_label')}" title="${t('mentee_actions_label')}">${menteeIcon('more', 18)}</button>
@@ -7573,7 +7576,6 @@ function renderMenteesList() {
               </div>
             </div>
           </div>
-          ${renderMenteeStreakBadge(user.telegram_id)}
         </div>
 
         <div class="mentee-card-body">
