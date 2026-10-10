@@ -8574,16 +8574,90 @@ async function saveTopics() {
 
 // ─── Journal ──────────────────────────────────────────────────
 // One entry card, shared by the list view and the calendar's by-date view so
-// both look identical.
+// both look identical. Entries are kept in a map and opened by id, so the entry
+// text never has to travel through an inline onclick attribute.
+window._journalEntries = window._journalEntries || new Map();
+
+// Plain one-line version of an entry for the card preview (markdown markers
+// stripped, bullets kept, line breaks flattened).
+function journalPlainText(text) {
+  return String(text || '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/(^|[^*])\*(?!\s)(.+?)\*(?!\*)/g, '$1$2')
+    .replace(/^\s*-\s+/gm, '• ')
+    .replace(/\s*\n+\s*/g, ' ')
+    .trim();
+}
+
+// Full entry text as safe HTML. The text is escaped FIRST; only fixed tags are
+// added afterwards, for the same markers the editor toolbar inserts
+// (**bold**, *italic*, "- " lists).
+function renderJournalText(text) {
+  const inline = (str) => str
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*(?!\s)(.+?)\*(?!\*)/g, '$1<em>$2</em>');
+  let html = '';
+  let list = [];
+  let para = [];
+  const flushList = () => {
+    if (list.length) html += '<ul>' + list.map(li => `<li>${inline(escapeHtml(li))}</li>`).join('') + '</ul>';
+    list = [];
+  };
+  const flushPara = () => {
+    if (para.length) html += '<p>' + para.map(l => inline(escapeHtml(l))).join('<br>') + '</p>';
+    para = [];
+  };
+  String(text || '').replace(/\r\n?/g, '\n').split('\n').forEach((line) => {
+    const m = line.match(/^\s*-\s+(.*)$/);
+    if (m) { flushPara(); list.push(m[1]); }
+    else if (!line.trim()) { flushList(); flushPara(); }
+    else { flushList(); para.push(line); }
+  });
+  flushList(); flushPara();
+  return html;
+}
+
 function journalItemHtml(e) {
+  window._journalEntries.set(String(e.id), e);
+  const id = escapeHtml(String(e.id));
   return `
-      <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`, '${e.mood || 'neutral'}')">
+      <div class="journal-item" data-id="${id}" role="button" tabindex="0" onclick="openJournalEntry('${id}')" onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openJournalEntry('${id}')}">
         <div class="journal-mood">${getMoodIcon(e.mood)}</div>
         <div class="journal-item-body">
           <div class="journal-date">${formatDateTime(e.created_at)}</div>
-          <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
+          <div class="journal-preview">${escapeHtml(journalPlainText(e.content))}</div>
+          <button type="button" class="journal-more hidden" aria-expanded="false" onclick="toggleJournalExpand(event, this)">${t('journal_read_more')}</button>
         </div>
       </div>`;
+}
+
+// Show "Read more" only on cards whose text is actually cut off.
+function journalCheckOverflow(root = $('journalEntriesList')) {
+  if (!root) return;
+  const run = () => root.querySelectorAll('.journal-item').forEach((card) => {
+    if (card.classList.contains('is-open')) return;
+    const prev = card.querySelector('.journal-preview');
+    const btn = card.querySelector('.journal-more');
+    if (!prev || !btn) return;
+    btn.classList.toggle('hidden', prev.scrollHeight <= prev.clientHeight + 1);
+  });
+  requestAnimationFrame(run);
+  document.fonts?.ready?.then(run).catch(() => { });
+}
+
+// Expand / collapse a long entry inside its card (tapping the rest of the card
+// still opens the full read view).
+function toggleJournalExpand(ev, btn) {
+  ev.stopPropagation();
+  const card = btn.closest('.journal-item');
+  const entry = window._journalEntries.get(card?.dataset.id);
+  if (!card || !entry) return;
+  const open = card.classList.toggle('is-open');
+  const prev = card.querySelector('.journal-preview');
+  prev.innerHTML = open ? renderJournalText(entry.content) : escapeHtml(journalPlainText(entry.content));
+  btn.textContent = t(open ? 'journal_show_less' : 'journal_read_more');
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  haptic('selection');
 }
 
 async function loadJournalEntries() {
@@ -8596,6 +8670,7 @@ async function loadJournalEntries() {
       return;
     }
     container.innerHTML = entries.map(journalItemHtml).join('');
+    journalCheckOverflow(container);
   } catch (e) { container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`; }
 }
 
@@ -8609,30 +8684,93 @@ function getMoodIcon(mood) {
 }
 window.currentJournalEntryId = null;
 
+// Reload whichever journal view is on screen (list or calendar).
+function refreshJournal() {
+  if (journalView === 'calendar') showJournalCalendar();
+  else loadJournalEntries();
+}
+
+function setJournalMood(mood) {
+  const sel = $('journalMood');
+  if (!sel) return;
+  sel.value = mood || 'neutral';
+  sel.dispatchEvent(new Event('change'));   // keeps the visual picker in sync
+}
+
+// One sheet, three states: 'new' (blank editor), 'read' (an existing entry,
+// shown calmly with Edit / Delete) and 'edit' (changing an existing entry).
+function setJournalModalMode(mode) {
+  const read = mode === 'read';
+  $('journalSheet').dataset.mode = mode;
+  $('journalReadView').classList.toggle('hidden', !read);
+  $('journalEditView').classList.toggle('hidden', read);
+  $('closeJournalBtn').classList.toggle('hidden', !read);
+  $('editJournalBtn').classList.toggle('hidden', !read);
+  $('cancelJournalBtn').classList.toggle('hidden', read);
+  $('saveJournalBtn').classList.toggle('hidden', mode !== 'new');
+  $('updateJournalBtn').classList.toggle('hidden', mode !== 'edit');
+  $('journalModalTitle').textContent =
+    mode === 'new' ? (t('btn_new_entry') || 'New Entry')
+      : mode === 'edit' ? t('journal_edit_entry')
+        : t('journal_title');
+}
+
+function focusJournalEditor(atEnd) {
+  setTimeout(() => {
+    const ta = $('journalContent');
+    if (!ta || $('journalSheet').dataset.mode === 'read') return;
+    ta.focus();
+    if (atEnd) ta.selectionStart = ta.selectionEnd = ta.value.length;
+  }, 300);
+}
+
 function showNewJournalEntry() {
   haptic('light');
   window.currentJournalEntryId = null;
-  $('journalModalTitle').textContent = t('btn_new_entry') || 'New Entry';
   $('journalContent').value = '';
   $('journalContent').readOnly = false;
-  $('journalMood').value = 'neutral';
-  $('saveJournalBtn').classList.remove('hidden');
-  $('updateJournalBtn').classList.add('hidden');
-  $('deleteJournalBtn').classList.add('hidden');
+  setJournalMood('neutral');
+  setJournalModalMode('new');
+  $('journalModal').classList.add('open');
+  focusJournalEditor(false);
+}
+
+// Opens an existing entry in the read view. `content` / `mood` are optional
+// (older callers passed them); by default they come from the loaded entry.
+function openJournalEntry(id, content, mood) {
+  haptic('light');
+  const entry = window._journalEntries.get(String(id)) || {};
+  const text = content !== undefined ? content : (entry.content || '');
+  const m = (mood !== undefined ? mood : entry.mood) || 'neutral';
+  window.currentJournalEntryId = id;
+
+  // Prepare the editor too, so "Edit" only has to flip the view.
+  $('journalContent').value = text;
+  $('journalContent').readOnly = false;
+  setJournalMood(m);
+
+  $('journalReadMood').innerHTML = getMoodIcon(m);
+  $('journalReadDate').textContent = entry.created_at ? formatDateTime(entry.created_at) : '';
+  $('journalReadMoodLabel').textContent = t('mood_' + m);
+  $('journalReadBody').innerHTML = renderJournalText(text);
+  $('journalReadBody').scrollTop = 0;
+
+  setJournalModalMode('read');
   $('journalModal').classList.add('open');
 }
 
-function openJournalEntry(id, content, mood = 'neutral') {
+function startEditJournalEntry() {
   haptic('light');
-  window.currentJournalEntryId = id;
-  $('journalModalTitle').textContent = t('journal_title') || 'Edit Entry';
-  $('journalContent').value = content;
-  $('journalContent').readOnly = false;
-  $('journalMood').value = mood;
-  $('saveJournalBtn').classList.add('hidden');
-  $('updateJournalBtn').classList.remove('hidden');
-  $('deleteJournalBtn').classList.remove('hidden');
-  $('journalModal').classList.add('open');
+  setJournalModalMode('edit');
+  focusJournalEditor(true);
+}
+
+// Cancel while editing: an existing entry goes back to its read view with the
+// edits discarded; a brand-new entry just closes.
+function cancelJournalEdit() {
+  const id = window.currentJournalEntryId;
+  if (id) openJournalEntry(id);
+  else closeJournalModal();
 }
 
 function closeJournalModal() {
@@ -8650,7 +8788,7 @@ async function saveJournalEntry() {
     haptic('success');
     showToast(t('journal_saved') || 'Journal saved successfully', 'success');
     closeJournalModal();
-    loadJournalEntries();
+    refreshJournal();
   } catch (e) { showToast(e.message, 'error'); }
 }
 
@@ -8665,7 +8803,7 @@ async function updateJournalEntry() {
     haptic('success');
     showToast('Journal entry updated', 'success');
     closeJournalModal();
-    loadJournalEntries();
+    refreshJournal();
   } catch (e) { showToast(e.message, 'error'); }
 }
 
@@ -8679,7 +8817,8 @@ async function deleteJournalEntry() {
     haptic('success');
     showToast('Journal entry deleted', 'success');
     closeJournalModal();
-    loadJournalEntries();
+    window._journalEntries.delete(String(id));
+    refreshJournal();
   } catch (e) { showToast(e.message, 'error'); }
 }
 
@@ -8782,7 +8921,8 @@ async function showJournalCalendar() {
       return;
     }
     $('journalEntriesList').innerHTML = entries.map(journalItemHtml).join('');
-    $('journalEntriesList').insertAdjacentHTML('afterbegin', `<button class="btn btn-sm btn-ghost journal-back-btn" onclick="setJournalView('list', { reload: true })">← ${t('Back to all entries') || 'Back to all entries'}</button>`);
+    $('journalEntriesList').insertAdjacentHTML('afterbegin', `<button class="btn btn-sm btn-ghost journal-back-btn" onclick="setJournalView('list', { reload: true })">← ${t('journal_back_all')}</button>`);
+    journalCheckOverflow();
   };
   renderCalendar();
 }
