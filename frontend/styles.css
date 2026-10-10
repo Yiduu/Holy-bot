@@ -2477,15 +2477,6 @@ textarea.form-control {
   border-color: #A87C2A;
 }
 
-#mentorFilterModal .modal-sheet {
-  overflow: visible !important;
-}
-
-#mentorFilterModal .filter-group {
-  position: relative;
-  overflow: visible;
-}
-
 .mentor-tabs-segmented {
   display: flex;
   background: var(--surface);
@@ -13978,3 +13969,9 @@ textarea.form-control { resize: none; }
 #transferModal .tf-unavail summary::-webkit-details-marker { display: none; }
 #transferModal .tf-unavail summary::after { content: ' ▾'; }
 #transferModal .tf-unavail[open] summary::after { content: ' ▴'; }
+
+/* ═══ Mentor filter page-sheet: pills sized to fit their row ═══ */
+.mentor-filter-sheet .ps-body { padding-bottom: 12px; }
+.mentor-filter-sheet .mf-seg4 .ps-seg-btn { padding: 0 4px; font-size: var(--fs-sm); }
+.mentor-filter-sheet .mf-seg-wrap { flex-wrap: wrap; }
+.mentor-filter-sheet .mf-seg-wrap .ps-seg-btn { flex: 1 1 28%; padding: 0 12px; }

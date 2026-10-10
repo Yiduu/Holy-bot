@@ -1,0 +1,272 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index e968275..570da5c 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -3402,6 +3402,40 @@ function resetAllMentorFilters() {
+ }
+ 
+ // ─── Filter Modal Dialog ──────────────────────────────────────
++// Same rules as renderMentorsList(), applied to the filters being edited in the
++// sheet, so the Apply button can say how many mentors it will show.
++function countMentorsForFilters(f) {
++  const query = (f.search || '').trim().toLowerCase();
++  const minRating = Number(f.min_rating) || 0;
++  const activeId = activeMentorData ? String(activeMentorData.telegram_id) : null;
++  return (mentorsCache || []).filter(m => {
++    if (activeId && String(m.telegram_id) === activeId) return false;
++    if (query) {
++      const topics = ((m.topics && m.topics.length) ? m.topics.map(x => `${x.name || ''} ${x.name_am || ''}`) : (m.expertise_topics || [])).join(' ');
++      const hay = [m.user_settings?.display_name || m.anonymous_id || '', m.user_settings?.bio || '', m.user_settings?.specialization || '', topics].join(' ').toLowerCase();
++      if (!hay.includes(query)) return false;
++    }
++    if (f.topic_id) {
++      const ok = (m.topics || []).some(tp => String(tp.id) === String(f.topic_id)) ||
++                 (m.topic_ids || []).map(String).includes(String(f.topic_id));
++      if (!ok) return false;
++    }
++    if (f.sex && m.sex !== f.sex) return false;
++    if (minRating > 0 && (Number(m.rating) || 0) < minRating) return false;
++    if (f.availability === 'available' && (mentorState(m) === 'paused' || mentorState(m) === 'full')) return false;
++    if (f.availability === 'online' && !m.is_online) return false;
++    return true;
++  }).length;
++}
++
++function updateMentorFilterCount() {
++  const n = countMentorsForFilters(mentorModalTempFilters);
++  const sub = $('mentorFilterCount');
++  if (sub) sub.textContent = t('mentors_available_count', { count: n });
++  const btn = $('mentorFilterApplyBtn');
++  if (btn) btn.textContent = n === 0 ? t('filter_no_match') : n === 1 ? t('filter_show_one') : t('filter_show_n', { n });
++}
++
+ function openMentorFilterModal() {
+   haptic('light');
+   mentorModalTempFilters = { ...mentorFilters };
+@@ -3415,21 +3449,22 @@ function openMentorFilterModal() {
+   if (modalInput) modalInput.value = mentorModalTempFilters.topic_id || '';
+ 
+   // Sync Sex pills
+-  $$('#modalFilterSexGrid .filter-pill-btn').forEach(btn => {
++  $$('#modalFilterSexGrid .ps-seg-btn').forEach(btn => {
+     btn.classList.toggle('active', (btn.dataset.value || '') === (mentorModalTempFilters.sex || ''));
+   });
+ 
+   // Sync Rating pills
+-  $$('#modalFilterRatingGrid .filter-pill-btn').forEach(btn => {
++  $$('#modalFilterRatingGrid .ps-seg-btn').forEach(btn => {
+     btn.classList.toggle('active', String(btn.dataset.value || '0') === String(mentorModalTempFilters.min_rating || 0));
+   });
+ 
+   // Sync Availability pills
+-  $$('#modalFilterAvailGrid .filter-pill-btn').forEach(btn => {
++  $$('#modalFilterAvailGrid .ps-seg-btn').forEach(btn => {
+     btn.classList.toggle('active', (btn.dataset.value || '') === (mentorModalTempFilters.availability || ''));
+   });
+ 
+   $('modalFilterTopicDropdown')?.removeAttribute('data-open');
++  updateMentorFilterCount();
+   $('mentorFilterModal')?.classList.add('open');
+ }
+ 
+@@ -3442,25 +3477,28 @@ function closeMentorFilterModal() {
+ function setFilterSex(val) {
+   haptic('selection');
+   mentorModalTempFilters.sex = val || '';
+-  $$('#modalFilterSexGrid .filter-pill-btn').forEach(btn => {
++  $$('#modalFilterSexGrid .ps-seg-btn').forEach(btn => {
+     btn.classList.toggle('active', (btn.dataset.value || '') === (mentorModalTempFilters.sex || ''));
+   });
++  updateMentorFilterCount();
+ }
+ 
+ function setFilterRating(val) {
+   haptic('selection');
+   mentorModalTempFilters.min_rating = Number(val) || 0;
+-  $$('#modalFilterRatingGrid .filter-pill-btn').forEach(btn => {
++  $$('#modalFilterRatingGrid .ps-seg-btn').forEach(btn => {
+     btn.classList.toggle('active', String(btn.dataset.value || '0') === String(mentorModalTempFilters.min_rating));
+   });
++  updateMentorFilterCount();
+ }
+ 
+ function setFilterAvailability(val) {
+   haptic('selection');
+   mentorModalTempFilters.availability = val || '';
+-  $$('#modalFilterAvailGrid .filter-pill-btn').forEach(btn => {
++  $$('#modalFilterAvailGrid .ps-seg-btn').forEach(btn => {
+     btn.classList.toggle('active', (btn.dataset.value || '') === (mentorModalTempFilters.availability || ''));
+   });
++  updateMentorFilterCount();
+ }
+ 
+ function resetMentorFiltersInModal() {
+@@ -3480,15 +3518,16 @@ function resetMentorFiltersInModal() {
+   const modalInput = $('modalFilterTopicSelectedId');
+   if (modalInput) modalInput.value = '';
+ 
+-  $$('#modalFilterSexGrid .filter-pill-btn').forEach(btn => {
++  $$('#modalFilterSexGrid .ps-seg-btn').forEach(btn => {
+     btn.classList.toggle('active', !btn.dataset.value);
+   });
+-  $$('#modalFilterRatingGrid .filter-pill-btn').forEach(btn => {
++  $$('#modalFilterRatingGrid .ps-seg-btn').forEach(btn => {
+     btn.classList.toggle('active', btn.dataset.value === '0');
+   });
+-  $$('#modalFilterAvailGrid .filter-pill-btn').forEach(btn => {
++  $$('#modalFilterAvailGrid .ps-seg-btn').forEach(btn => {
+     btn.classList.toggle('active', !btn.dataset.value);
+   });
++  updateMentorFilterCount();
+ }
+ 
+ function applyMentorFiltersFromModal() {
+diff --git a/frontend/index.html b/frontend/index.html
+index d2b97e7..bcbb1fb 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -2155,50 +2155,53 @@
+     </div>
+   </div>
+ 
+-  <!-- ─── Comprehensive Mentor Filter Modal ───────────────────── -->
+-  <div id="mentorFilterModal" class="modal-overlay" onclick="if(event.target===this)closeMentorFilterModal()">
+-    <div class="modal-sheet" style="max-width:440px;margin:0 auto;overflow:visible;">
+-      <div class="modal-handle"></div>
+-      <div class="flex items-center justify-between mb-16">
+-        <div class="modal-title" style="margin:0;" data-i18n="filter_mentors_title">Filter Mentors</div>
+-        <button type="button" class="btn btn-ghost btn-sm" onclick="closeMentorFilterModal()" style="padding:4px 8px;font-size:var(--fs-lg);line-height:1;">✕</button>
++  <!-- ─── Mentor Filter page-sheet (same layout as the Topic / Profile sheets) ─── -->
++  <div id="mentorFilterModal" class="modal-overlay ps-overlay" onclick="if(event.target===this)closeMentorFilterModal()">
++    <div class="modal-sheet mentor-filter-sheet page-sheet" role="dialog" aria-modal="true" aria-labelledby="mentorFilterTitle">
++      <div class="ps-head">
++        <button type="button" class="ps-back" onclick="closeMentorFilterModal()" aria-label="Back"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
++        <h2 class="ps-title modal-title" id="mentorFilterTitle" data-i18n="filter_mentors_title">Filter Mentors</h2>
+       </div>
++      <p class="ps-sub ps-sub--count" id="mentorFilterCount" aria-live="polite"></p>
+ 
+-      <!-- Filter Section: Gender / Sex -->
+-      <div class="filter-group mb-16">
+-        <label class="form-label" data-i18n="filter_sex_label">Gender</label>
+-        <div class="filter-segmented-grid" id="modalFilterSexGrid">
+-          <button type="button" class="filter-pill-btn active" data-value="" onclick="setFilterSex('')" data-i18n="filter_all">All</button>
+-          <button type="button" class="filter-pill-btn" data-value="M" onclick="setFilterSex('M')" data-i18n="sex_male">Male</button>
+-          <button type="button" class="filter-pill-btn" data-value="F" onclick="setFilterSex('F')" data-i18n="sex_female">Female</button>
++      <div class="ps-body">
++        <!-- Gender -->
++        <div class="ps-card">
++          <span class="ps-label" data-i18n="filter_sex_label">Gender</span>
++          <div class="ps-seg" id="modalFilterSexGrid" role="group" aria-label="Gender">
++            <button type="button" class="ps-seg-btn active" data-value="" onclick="setFilterSex('')" data-i18n="filter_all">All</button>
++            <button type="button" class="ps-seg-btn" data-value="M" onclick="setFilterSex('M')" data-i18n="sex_male">Male</button>
++            <button type="button" class="ps-seg-btn" data-value="F" onclick="setFilterSex('F')" data-i18n="sex_female">Female</button>
++          </div>
+         </div>
+-      </div>
+ 
+-      <!-- Filter Section: Minimum Rating -->
+-      <div class="filter-group mb-16">
+-        <label class="form-label" data-i18n="filter_rating_label">Minimum Rating</label>
+-        <div class="filter-segmented-grid" id="modalFilterRatingGrid">
+-          <button type="button" class="filter-pill-btn active" data-value="0" onclick="setFilterRating(0)" data-i18n="filter_rating_any">Any</button>
+-          <button type="button" class="filter-pill-btn" data-value="4.5" onclick="setFilterRating(4.5)">★ 4.5+</button>
+-          <button type="button" class="filter-pill-btn" data-value="4.0" onclick="setFilterRating(4.0)">★ 4.0+</button>
+-          <button type="button" class="filter-pill-btn" data-value="3.5" onclick="setFilterRating(3.5)">★ 3.5+</button>
++        <!-- Minimum rating -->
++        <div class="ps-card">
++          <span class="ps-label" data-i18n="filter_rating_label">Minimum Rating</span>
++          <div class="ps-seg mf-seg4" id="modalFilterRatingGrid" role="group" aria-label="Minimum rating">
++            <button type="button" class="ps-seg-btn active" data-value="0" onclick="setFilterRating(0)" data-i18n="filter_rating_any">Any</button>
++            <button type="button" class="ps-seg-btn" data-value="4.5" onclick="setFilterRating(4.5)">★ 4.5+</button>
++            <button type="button" class="ps-seg-btn" data-value="4.0" onclick="setFilterRating(4.0)">★ 4.0+</button>
++            <button type="button" class="ps-seg-btn" data-value="3.5" onclick="setFilterRating(3.5)">★ 3.5+</button>
++          </div>
+         </div>
+-      </div>
+ 
+-      <!-- Filter Section: Availability -->
+-      <div class="filter-group mb-20">
+-        <label class="form-label" data-i18n="filter_availability_label">Availability</label>
+-        <div class="filter-segmented-grid" id="modalFilterAvailGrid">
+-          <button type="button" class="filter-pill-btn active" data-value="" onclick="setFilterAvailability('')" data-i18n="filter_all">All</button>
+-          <button type="button" class="filter-pill-btn" data-value="available" onclick="setFilterAvailability('available')" data-i18n="filter_spots_open_only">Spots Open</button>
+-          <button type="button" class="filter-pill-btn" data-value="online" onclick="setFilterAvailability('online')" data-i18n="filter_online_only">Online</button>
++        <!-- Availability -->
++        <div class="ps-card">
++          <span class="ps-label" data-i18n="filter_availability_label">Availability</span>
++          <div class="ps-seg mf-seg-wrap" id="modalFilterAvailGrid" role="group" aria-label="Availability">
++            <button type="button" class="ps-seg-btn active" data-value="" onclick="setFilterAvailability('')" data-i18n="filter_all">All</button>
++            <button type="button" class="ps-seg-btn" data-value="available" onclick="setFilterAvailability('available')" data-i18n="filter_spots_open_only">Spots Open</button>
++            <button type="button" class="ps-seg-btn" data-value="online" onclick="setFilterAvailability('online')" data-i18n="filter_online_only">Online</button>
++          </div>
+         </div>
+       </div>
+ 
+-      <!-- Modal Footer -->
+-      <div class="flex gap-8 mt-20">
+-        <button type="button" class="btn btn-ghost flex-1" onclick="resetMentorFiltersInModal()" data-i18n="btn_reset">Reset</button>
+-        <button type="button" class="btn btn-primary flex-1" onclick="applyMentorFiltersFromModal()" data-i18n="btn_apply_filters">Apply Filters</button>
++      <div class="ps-foot">
++        <div class="hb-actions">
++          <button type="button" class="btn btn-outline" onclick="resetMentorFiltersInModal()" data-i18n="btn_reset_filters">Reset</button>
++          <button type="button" id="mentorFilterApplyBtn" class="btn btn-primary" onclick="applyMentorFiltersFromModal()">Apply Filters</button>
++        </div>
+       </div>
+     </div>
+   </div>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index ab5b039..b51f4f0 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -145,6 +145,10 @@ const I18N = {
+     "filter_online_only": "Online",
+     "filter_rating_any": "Any",
+     "btn_apply_filters": "Apply Filters",
++    "filter_show_n": "Show {n} mentors",
++    "filter_show_one": "Show 1 mentor",
++    "filter_no_match": "No mentors match",
++    "btn_reset_filters": "Reset",
+     "active_filters": "Active Filters",
+     "active_mentorship_label": "Active Mentorship",
+     "btn_more": "More",
+@@ -961,6 +965,10 @@ const I18N = {
+     "filter_online_only": "አሁን መስመር ላይ",
+     "filter_rating_any": "ማንኛውም ደረጃ",
+     "btn_apply_filters": "ማጣሪያዎችን ተግብር",
++    "filter_show_n": "{n} አማካሪዎችን አሳይ",
++    "filter_show_one": "1 አማካሪ አሳይ",
++    "filter_no_match": "ምንም አማካሪ አልተገኘም",
++    "btn_reset_filters": "አጽዳ",
+     "active_filters": "ንቁ ማጣሪያዎች",
+     "active_mentorship_label": "ንቁ የምክር አገልግሎት",
+     "btn_more": "ተጨማሪ",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 77dfd52..a47ec5b 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -2477,15 +2477,6 @@ textarea.form-control {
+   border-color: #A87C2A;
+ }
+ 
+-#mentorFilterModal .modal-sheet {
+-  overflow: visible !important;
+-}
+-
+-#mentorFilterModal .filter-group {
+-  position: relative;
+-  overflow: visible;
+-}
+-
+ .mentor-tabs-segmented {
+   display: flex;
+   background: var(--surface);
+@@ -13978,3 +13969,9 @@ textarea.form-control { resize: none; }
+ #transferModal .tf-unavail summary::-webkit-details-marker { display: none; }
+ #transferModal .tf-unavail summary::after { content: ' ▾'; }
+ #transferModal .tf-unavail[open] summary::after { content: ' ▴'; }
++
++/* ═══ Mentor filter page-sheet: pills sized to fit their row ═══ */
++.mentor-filter-sheet .ps-body { padding-bottom: 12px; }
++.mentor-filter-sheet .mf-seg4 .ps-seg-btn { padding: 0 4px; font-size: var(--fs-sm); }
++.mentor-filter-sheet .mf-seg-wrap { flex-wrap: wrap; }
++.mentor-filter-sheet .mf-seg-wrap .ps-seg-btn { flex: 1 1 28%; padding: 0 12px; }

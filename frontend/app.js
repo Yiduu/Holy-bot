@@ -3402,6 +3402,40 @@ function resetAllMentorFilters() {
 }
 
 // ─── Filter Modal Dialog ──────────────────────────────────────
+// Same rules as renderMentorsList(), applied to the filters being edited in the
+// sheet, so the Apply button can say how many mentors it will show.
+function countMentorsForFilters(f) {
+  const query = (f.search || '').trim().toLowerCase();
+  const minRating = Number(f.min_rating) || 0;
+  const activeId = activeMentorData ? String(activeMentorData.telegram_id) : null;
+  return (mentorsCache || []).filter(m => {
+    if (activeId && String(m.telegram_id) === activeId) return false;
+    if (query) {
+      const topics = ((m.topics && m.topics.length) ? m.topics.map(x => `${x.name || ''} ${x.name_am || ''}`) : (m.expertise_topics || [])).join(' ');
+      const hay = [m.user_settings?.display_name || m.anonymous_id || '', m.user_settings?.bio || '', m.user_settings?.specialization || '', topics].join(' ').toLowerCase();
+      if (!hay.includes(query)) return false;
+    }
+    if (f.topic_id) {
+      const ok = (m.topics || []).some(tp => String(tp.id) === String(f.topic_id)) ||
+                 (m.topic_ids || []).map(String).includes(String(f.topic_id));
+      if (!ok) return false;
+    }
+    if (f.sex && m.sex !== f.sex) return false;
+    if (minRating > 0 && (Number(m.rating) || 0) < minRating) return false;
+    if (f.availability === 'available' && (mentorState(m) === 'paused' || mentorState(m) === 'full')) return false;
+    if (f.availability === 'online' && !m.is_online) return false;
+    return true;
+  }).length;
+}
+
+function updateMentorFilterCount() {
+  const n = countMentorsForFilters(mentorModalTempFilters);
+  const sub = $('mentorFilterCount');
+  if (sub) sub.textContent = t('mentors_available_count', { count: n });
+  const btn = $('mentorFilterApplyBtn');
+  if (btn) btn.textContent = n === 0 ? t('filter_no_match') : n === 1 ? t('filter_show_one') : t('filter_show_n', { n });
+}
+
 function openMentorFilterModal() {
   haptic('light');
   mentorModalTempFilters = { ...mentorFilters };
@@ -3415,21 +3449,22 @@ function openMentorFilterModal() {
   if (modalInput) modalInput.value = mentorModalTempFilters.topic_id || '';
 
   // Sync Sex pills
-  $$('#modalFilterSexGrid .filter-pill-btn').forEach(btn => {
+  $$('#modalFilterSexGrid .ps-seg-btn').forEach(btn => {
     btn.classList.toggle('active', (btn.dataset.value || '') === (mentorModalTempFilters.sex || ''));
   });
 
   // Sync Rating pills
-  $$('#modalFilterRatingGrid .filter-pill-btn').forEach(btn => {
+  $$('#modalFilterRatingGrid .ps-seg-btn').forEach(btn => {
     btn.classList.toggle('active', String(btn.dataset.value || '0') === String(mentorModalTempFilters.min_rating || 0));
   });
 
   // Sync Availability pills
-  $$('#modalFilterAvailGrid .filter-pill-btn').forEach(btn => {
+  $$('#modalFilterAvailGrid .ps-seg-btn').forEach(btn => {
     btn.classList.toggle('active', (btn.dataset.value || '') === (mentorModalTempFilters.availability || ''));
   });
 
   $('modalFilterTopicDropdown')?.removeAttribute('data-open');
+  updateMentorFilterCount();
   $('mentorFilterModal')?.classList.add('open');
 }
 
@@ -3442,25 +3477,28 @@ function closeMentorFilterModal() {
 function setFilterSex(val) {
   haptic('selection');
   mentorModalTempFilters.sex = val || '';
-  $$('#modalFilterSexGrid .filter-pill-btn').forEach(btn => {
+  $$('#modalFilterSexGrid .ps-seg-btn').forEach(btn => {
     btn.classList.toggle('active', (btn.dataset.value || '') === (mentorModalTempFilters.sex || ''));
   });
+  updateMentorFilterCount();
 }
 
 function setFilterRating(val) {
   haptic('selection');
   mentorModalTempFilters.min_rating = Number(val) || 0;
-  $$('#modalFilterRatingGrid .filter-pill-btn').forEach(btn => {
+  $$('#modalFilterRatingGrid .ps-seg-btn').forEach(btn => {
     btn.classList.toggle('active', String(btn.dataset.value || '0') === String(mentorModalTempFilters.min_rating));
   });
+  updateMentorFilterCount();
 }
 
 function setFilterAvailability(val) {
   haptic('selection');
   mentorModalTempFilters.availability = val || '';
-  $$('#modalFilterAvailGrid .filter-pill-btn').forEach(btn => {
+  $$('#modalFilterAvailGrid .ps-seg-btn').forEach(btn => {
     btn.classList.toggle('active', (btn.dataset.value || '') === (mentorModalTempFilters.availability || ''));
   });
+  updateMentorFilterCount();
 }
 
 function resetMentorFiltersInModal() {
@@ -3480,15 +3518,16 @@ function resetMentorFiltersInModal() {
   const modalInput = $('modalFilterTopicSelectedId');
   if (modalInput) modalInput.value = '';
 
-  $$('#modalFilterSexGrid .filter-pill-btn').forEach(btn => {
+  $$('#modalFilterSexGrid .ps-seg-btn').forEach(btn => {
     btn.classList.toggle('active', !btn.dataset.value);
   });
-  $$('#modalFilterRatingGrid .filter-pill-btn').forEach(btn => {
+  $$('#modalFilterRatingGrid .ps-seg-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.value === '0');
   });
-  $$('#modalFilterAvailGrid .filter-pill-btn').forEach(btn => {
+  $$('#modalFilterAvailGrid .ps-seg-btn').forEach(btn => {
     btn.classList.toggle('active', !btn.dataset.value);
   });
+  updateMentorFilterCount();
 }
 
 function applyMentorFiltersFromModal() {

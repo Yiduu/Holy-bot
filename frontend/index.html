@@ -2155,50 +2155,53 @@
     </div>
   </div>
 
-  <!-- ─── Comprehensive Mentor Filter Modal ───────────────────── -->
-  <div id="mentorFilterModal" class="modal-overlay" onclick="if(event.target===this)closeMentorFilterModal()">
-    <div class="modal-sheet" style="max-width:440px;margin:0 auto;overflow:visible;">
-      <div class="modal-handle"></div>
-      <div class="flex items-center justify-between mb-16">
-        <div class="modal-title" style="margin:0;" data-i18n="filter_mentors_title">Filter Mentors</div>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="closeMentorFilterModal()" style="padding:4px 8px;font-size:var(--fs-lg);line-height:1;">✕</button>
+  <!-- ─── Mentor Filter page-sheet (same layout as the Topic / Profile sheets) ─── -->
+  <div id="mentorFilterModal" class="modal-overlay ps-overlay" onclick="if(event.target===this)closeMentorFilterModal()">
+    <div class="modal-sheet mentor-filter-sheet page-sheet" role="dialog" aria-modal="true" aria-labelledby="mentorFilterTitle">
+      <div class="ps-head">
+        <button type="button" class="ps-back" onclick="closeMentorFilterModal()" aria-label="Back"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <h2 class="ps-title modal-title" id="mentorFilterTitle" data-i18n="filter_mentors_title">Filter Mentors</h2>
       </div>
+      <p class="ps-sub ps-sub--count" id="mentorFilterCount" aria-live="polite"></p>
 
-      <!-- Filter Section: Gender / Sex -->
-      <div class="filter-group mb-16">
-        <label class="form-label" data-i18n="filter_sex_label">Gender</label>
-        <div class="filter-segmented-grid" id="modalFilterSexGrid">
-          <button type="button" class="filter-pill-btn active" data-value="" onclick="setFilterSex('')" data-i18n="filter_all">All</button>
-          <button type="button" class="filter-pill-btn" data-value="M" onclick="setFilterSex('M')" data-i18n="sex_male">Male</button>
-          <button type="button" class="filter-pill-btn" data-value="F" onclick="setFilterSex('F')" data-i18n="sex_female">Female</button>
+      <div class="ps-body">
+        <!-- Gender -->
+        <div class="ps-card">
+          <span class="ps-label" data-i18n="filter_sex_label">Gender</span>
+          <div class="ps-seg" id="modalFilterSexGrid" role="group" aria-label="Gender">
+            <button type="button" class="ps-seg-btn active" data-value="" onclick="setFilterSex('')" data-i18n="filter_all">All</button>
+            <button type="button" class="ps-seg-btn" data-value="M" onclick="setFilterSex('M')" data-i18n="sex_male">Male</button>
+            <button type="button" class="ps-seg-btn" data-value="F" onclick="setFilterSex('F')" data-i18n="sex_female">Female</button>
+          </div>
+        </div>
+
+        <!-- Minimum rating -->
+        <div class="ps-card">
+          <span class="ps-label" data-i18n="filter_rating_label">Minimum Rating</span>
+          <div class="ps-seg mf-seg4" id="modalFilterRatingGrid" role="group" aria-label="Minimum rating">
+            <button type="button" class="ps-seg-btn active" data-value="0" onclick="setFilterRating(0)" data-i18n="filter_rating_any">Any</button>
+            <button type="button" class="ps-seg-btn" data-value="4.5" onclick="setFilterRating(4.5)">★ 4.5+</button>
+            <button type="button" class="ps-seg-btn" data-value="4.0" onclick="setFilterRating(4.0)">★ 4.0+</button>
+            <button type="button" class="ps-seg-btn" data-value="3.5" onclick="setFilterRating(3.5)">★ 3.5+</button>
+          </div>
+        </div>
+
+        <!-- Availability -->
+        <div class="ps-card">
+          <span class="ps-label" data-i18n="filter_availability_label">Availability</span>
+          <div class="ps-seg mf-seg-wrap" id="modalFilterAvailGrid" role="group" aria-label="Availability">
+            <button type="button" class="ps-seg-btn active" data-value="" onclick="setFilterAvailability('')" data-i18n="filter_all">All</button>
+            <button type="button" class="ps-seg-btn" data-value="available" onclick="setFilterAvailability('available')" data-i18n="filter_spots_open_only">Spots Open</button>
+            <button type="button" class="ps-seg-btn" data-value="online" onclick="setFilterAvailability('online')" data-i18n="filter_online_only">Online</button>
+          </div>
         </div>
       </div>
 
-      <!-- Filter Section: Minimum Rating -->
-      <div class="filter-group mb-16">
-        <label class="form-label" data-i18n="filter_rating_label">Minimum Rating</label>
-        <div class="filter-segmented-grid" id="modalFilterRatingGrid">
-          <button type="button" class="filter-pill-btn active" data-value="0" onclick="setFilterRating(0)" data-i18n="filter_rating_any">Any</button>
-          <button type="button" class="filter-pill-btn" data-value="4.5" onclick="setFilterRating(4.5)">★ 4.5+</button>
-          <button type="button" class="filter-pill-btn" data-value="4.0" onclick="setFilterRating(4.0)">★ 4.0+</button>
-          <button type="button" class="filter-pill-btn" data-value="3.5" onclick="setFilterRating(3.5)">★ 3.5+</button>
+      <div class="ps-foot">
+        <div class="hb-actions">
+          <button type="button" class="btn btn-outline" onclick="resetMentorFiltersInModal()" data-i18n="btn_reset_filters">Reset</button>
+          <button type="button" id="mentorFilterApplyBtn" class="btn btn-primary" onclick="applyMentorFiltersFromModal()">Apply Filters</button>
         </div>
-      </div>
-
-      <!-- Filter Section: Availability -->
-      <div class="filter-group mb-20">
-        <label class="form-label" data-i18n="filter_availability_label">Availability</label>
-        <div class="filter-segmented-grid" id="modalFilterAvailGrid">
-          <button type="button" class="filter-pill-btn active" data-value="" onclick="setFilterAvailability('')" data-i18n="filter_all">All</button>
-          <button type="button" class="filter-pill-btn" data-value="available" onclick="setFilterAvailability('available')" data-i18n="filter_spots_open_only">Spots Open</button>
-          <button type="button" class="filter-pill-btn" data-value="online" onclick="setFilterAvailability('online')" data-i18n="filter_online_only">Online</button>
-        </div>
-      </div>
-
-      <!-- Modal Footer -->
-      <div class="flex gap-8 mt-20">
-        <button type="button" class="btn btn-ghost flex-1" onclick="resetMentorFiltersInModal()" data-i18n="btn_reset">Reset</button>
-        <button type="button" class="btn btn-primary flex-1" onclick="applyMentorFiltersFromModal()" data-i18n="btn_apply_filters">Apply Filters</button>
       </div>
     </div>
   </div>
