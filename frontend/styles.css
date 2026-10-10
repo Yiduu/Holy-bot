@@ -13548,25 +13548,45 @@ body.kb-open .ps-foot { padding-bottom: calc(12px + var(--safe-bottom)); }
 .ps-label { display: block; margin-bottom: 10px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-light); }
 [data-theme="light"] .ps-label { color: #7A5812; }
 
-/* fields: 16px stops iOS zooming in on focus; no scale-on-focus (it made the card jump) */
-.ps-card .input, .ps-card .form-control { font-size: 16px; line-height: 1.45; }
-.ps-card .input:focus { transform: none; }
+/* fields: taller, softly inset, gold focus ring. 16px stops iOS zooming in on focus; no scale-on-focus (it made the card jump) */
+.ps-card .input, .ps-card .form-control, .ps-card .bio-box {
+  min-height: 52px; padding: 14px 16px; border-radius: 16px;
+  font-size: 16px; line-height: 1.45;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.ps-card .bio-box { padding-right: 44px; }
+.ps-card .input:focus, .ps-card .form-control:focus { transform: none; background: rgba(0, 0, 0, 0.28); border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim), inset 0 2px 6px rgba(0, 0, 0, 0.2); }
+.ps-card .input::placeholder, .ps-card .form-control::placeholder { color: var(--text3); }
+[data-theme="light"] .ps-card .input, [data-theme="light"] .ps-card .form-control, [data-theme="light"] .ps-card .bio-box { background: rgba(255, 255, 255, 0.9); border-color: rgba(150, 120, 40, 0.25); box-shadow: inset 0 1px 3px rgba(30, 25, 15, 0.08); }
+[data-theme="light"] .ps-card .input:focus, [data-theme="light"] .ps-card .form-control:focus { background: #fff; border-color: #A87C2A; }
+.ps-field { position: relative; }
+.ps-field-ico { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); display: flex; color: var(--gold-light); pointer-events: none; }
+.ps-card .ps-input { padding-left: 46px; }
+[data-theme="light"] .ps-field-ico { color: #7A5812; }
 .ps-card textarea.form-control { resize: none; }
 .ps-card .bio-box:hover { transform: none; }
 
-/* pill segmented control (same as Browse | Saved) */
-.ps-seg { display: flex; gap: 4px; padding: 5px; border-radius: 999px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.25); }
-.ps-seg-btn { flex: 1; min-width: 0; height: 40px; padding: 0 8px; border-radius: 999px; font-size: var(--fs-md); font-weight: 600; color: var(--text2); white-space: nowrap; transition: background 0.2s, color 0.2s; }
-.ps-seg-btn.active { color: #1a1300; background: linear-gradient(180deg, #EBCD72, #C9A84C); box-shadow: 0 8px 20px rgba(201, 168, 76, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
-[data-theme="light"] .ps-seg { background: rgba(255, 255, 255, 0.7); border-color: rgba(150, 120, 40, 0.2); box-shadow: inset 0 2px 6px rgba(30, 25, 15, 0.08); }
+/* pill segmented control: three separate pills, inactive ones clearly visible (same as profile pills) */
+.ps-seg { display: flex; gap: 8px; }
+.ps-seg-btn { flex: 1; min-width: 0; height: 44px; padding: 0 8px; border-radius: 999px; font-size: var(--fs-md); font-weight: 600; color: var(--text); white-space: nowrap; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06); transition: background 0.2s, color 0.2s, border-color 0.2s; }
+.ps-seg-btn.active { color: #1a1300; border-color: transparent; background: linear-gradient(180deg, #EBCD72, #C9A84C); box-shadow: 0 8px 20px rgba(201, 168, 76, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
+[data-theme="light"] .ps-seg-btn { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); box-shadow: 0 6px 16px rgba(30, 25, 15, 0.10); }
+[data-theme="light"] .ps-seg-btn.active { border-color: transparent; background: linear-gradient(180deg, #EBCD72, #C9A84C); }
 
-/* stepper */
-.ps-stepper { display: flex; align-items: center; gap: 10px; }
-.ps-step { width: 44px; height: 44px; border-radius: 50%; font-size: 22px; font-weight: 700; line-height: 1; color: var(--text); border: 1px solid rgba(255, 255, 255, 0.10); background: rgba(255, 255, 255, 0.06); }
-.ps-step:active { transform: scale(0.94); }
-[data-theme="light"] .ps-step { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); }
-.ps-card .ps-num { width: 48px; padding: 0; text-align: center; font-size: 18px; font-weight: 700; background: transparent; box-shadow: none; -moz-appearance: textfield; appearance: textfield; }
+/* stepper: one inset pill, gold round − / + inside, value in the middle */
+.ps-stepper { display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.25); }
+.ps-step { width: 40px; height: 40px; flex: none; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 0; color: var(--gold-light); background: rgba(201, 168, 76, 0.13); box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.22); transition: opacity 0.2s, transform 0.15s; }
+.ps-step:active:not(:disabled) { transform: scale(0.92); }
+.ps-step:disabled { opacity: 0.35; cursor: default; }
+.ps-card .ps-num { width: 40px; padding: 0; text-align: center; font-size: 20px; font-weight: 900; color: var(--gold-light); background: transparent; border: 0; box-shadow: none; min-height: 0; -moz-appearance: textfield; appearance: textfield; }
+.ps-card .ps-num:focus { background: transparent; box-shadow: none; }
 .ps-num::-webkit-outer-spin-button, .ps-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+[data-theme="light"] .ps-stepper { background: rgba(255, 255, 255, 0.7); border-color: rgba(150, 120, 40, 0.2); box-shadow: inset 0 2px 6px rgba(30, 25, 15, 0.08); }
+[data-theme="light"] .ps-step { color: #7A5812; }
+[data-theme="light"] .ps-card .ps-num { color: #7A5812; }
 
 /* switch: transform/background only */
 .ps-switch { position: relative; flex: none; }

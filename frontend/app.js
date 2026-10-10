@@ -6630,6 +6630,7 @@ async function saveNotificationsFromModal() {
 function openMentorProfileModal() {
   haptic('light');
   $('mentorProfileModal')?.classList.add('open');
+  syncMaxMentees();
   renderMentorTopicPills();
 }
 
@@ -6719,6 +6720,17 @@ function stepMaxMentees(delta) {
   if (!el) return;
   const next = Math.min(20, Math.max(1, (parseInt(el.value) || 5) + delta));
   el.value = next;
+  syncMaxMentees();
+}
+
+// Grey out − / + at the limits (1 and 20).
+function syncMaxMentees() {
+  const el = $('settingMaxMentees');
+  if (!el) return;
+  const n = parseInt(el.value) || 5;
+  const dec = $('maxMenteesDec'), inc = $('maxMenteesInc');
+  if (dec) dec.disabled = n <= 1;
+  if (inc) inc.disabled = n >= 20;
 }
 
 // Selected "Topics to Mentor" shown as gold tag pills on the Mentor Profile.
