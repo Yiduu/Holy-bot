@@ -281,3 +281,20 @@ body.hg-typing .hg-root { padding-bottom: 140px; }
 [data-theme="light"] .hg-plan { background: rgba(255, 255, 255, 0.6); border-color: rgba(150, 120, 40, 0.2); }
 [data-theme="light"] .hg-radio { border-color: rgba(150, 120, 40, 0.4); }
 [data-theme="light"] .hg-trow { border-bottom-color: rgba(150, 120, 40, 0.15); }
+
+/* ── New goal pages: type list + one page per type ─────────────────────── */
+.hg-page { gap: 16px; padding-bottom: 24px; }
+.hg-pagehead h2, .hg-hero h2 { margin: 0; font: 700 var(--fs-xl) var(--font-display); color: var(--text); }
+.hg-pagehead p, .hg-hero p { margin: 6px 0 0; color: var(--text2); font-size: var(--fs-sm); line-height: 1.4; }
+.hg-pick { width: 100%; cursor: pointer; }
+.hg-chev { flex: none; color: var(--text3); display: inline-flex; }
+.hg-hero { display: flex; align-items: center; gap: 14px; }
+.hg-hero > div { min-width: 0; }
+.hg-hero-ico { width: 56px; height: 56px; flex: none; border-radius: 18px; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%); color: #2a1e05;
+  box-shadow: 0 6px 16px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
+.hg-how { background: var(--bg2); border: 1px solid var(--border-dim); border-radius: 22px; padding: 14px 16px; }
+.hg-how ol { margin: 8px 0 0; padding: 0; list-style: none; counter-reset: hg; display: flex; flex-direction: column; gap: 10px; }
+.hg-how li { counter-increment: hg; display: flex; align-items: flex-start; gap: 10px; color: var(--text); font-size: var(--fs-sm); line-height: 1.4; }
+.hg-how li::before { content: counter(hg); flex: none; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--gold-dim); color: var(--gold); font: 700 12px var(--font-body); }

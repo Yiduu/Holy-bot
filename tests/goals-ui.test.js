@@ -22,7 +22,7 @@ function makeGoal() {
     start_date: start, end_date: end, tasks, stats: { done: 4, total: 16, pct: 25, streak: 1, missed: 2 } };
 }
 
-const dom = new JSDOM('<!doctype html><body><div id="panel"></div><div id="card" class="hidden"><span id="myGoalsProgressLabel"></span><div id="myGoalsProgressTrack"></div><div id="list"></div></div></body>',
+const dom = new JSDOM('<!doctype html><body><div id="panel"></div><div class="page-content"><div id="goalPageBody"></div></div><div id="card" class="hidden"><span id="myGoalsProgressLabel"></span><div id="myGoalsProgressTrack"></div><div id="list"></div></div></body>',
   { runScripts: 'outside-only', pretendToBeVisual: true });
 const w = dom.window;
 const calls = [];
@@ -31,6 +31,8 @@ w.currentUser = { telegram_id: 2 };
 w.escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 w.menteeIcon = () => '<i></i>';
 w.haptic = () => {};
+w.currentPage = 'my-mentees';
+w.showAppPageQuiet = p => { w.currentPage = p; };
 w.showToast = () => {};
 w.apiFetch = async (p, o = {}) => {
   calls.push([o.method || 'GET', p, o.body]);
@@ -67,41 +69,58 @@ const tick = () => new Promise(r => setTimeout(r, 20));
   await tick();
   assert(calls.some(c => c[0] === 'PATCH' && c[1] === `/api/goals/tasks/t-${TODAY}-0` && c[2].done === true), 'PATCH sent');
 
-  // new goal form: switch type, validate required title
+  // new goal: "New goal" opens a type list page, each type opens its own page
+  const page = doc.getElementById('goalPageBody');
   panel.querySelector('[data-act="new"]').click();
-  assert(panel.querySelector('.hg-new'), 'form opens');
-  panel.querySelector('[data-act="addtpl"]').click();
-  assert.strictEqual(panel.querySelectorAll('[data-tpl] input').length, 2, 'extra daily task input');
-  panel.querySelector('[data-type="progressive"]').click();
-  assert(panel.querySelector('[data-f="target"]'), 'progressive fields');
+  assert.strictEqual(w.currentPage, 'goal-new', 'goal page opens');
+  assert.strictEqual(page.querySelectorAll('[data-act="pick"]').length, 3, 'three goal types listed');
+  assert(!page.querySelector('.hg-new'), 'no form until a type is picked');
+  page.querySelector('[data-type="progressive"]').click();
+  assert(page.querySelector('[data-f="target"]'), 'progressive page has its own fields');
+  assert(!page.querySelector('[data-f="start"]'), 'progressive page has no challenge fields');
+  assert(page.querySelector('.hg-how li'), 'type page explains how it works');
+  page.querySelector('[data-f="title"]').value = 'Kept title';
+  assert(w.HolyGoals.back(), 'back handled');
+  assert(page.querySelector('[data-act="pick"]'), 'back returns to the type list');
+  page.querySelector('[data-type="one_time"]').click();
+  assert(page.querySelector('[data-f="due"]'), 'one-time page has a due date');
+  assert.strictEqual(page.querySelector('[data-f="title"]').value, 'Kept title', 'title survives switching pages');
+  w.HolyGoals.back();
+  page.querySelector('[data-type="challenge"]').click();
+  page.querySelector('[data-act="addtpl"]').click();
+  assert.strictEqual(page.querySelectorAll('[data-tpl] input').length, 2, 'extra daily task input');
 
   // per-day planner: switch to "different each day", plan two days, submit
-  panel.querySelector('[data-type="challenge"]').click();
-  panel.querySelector('[data-f="title"]').value = 'Lent';
-  panel.querySelector('[data-act="fmode"][data-mode="custom"]').click();
-  assert.strictEqual(panel.querySelector('[data-f="title"]').value, 'Lent', 'typed title survives repaint');
-  assert(panel.querySelector('[data-dayedit]'), 'day editor shown');
-  assert.strictEqual(panel.querySelectorAll('.hg-plan .hg-d:not(.x)').length, 30, 'one planner cell per day (30-day default)');
-  panel.querySelector('[data-dayedit] input').value = 'Read Psalm 1';
-  panel.querySelector(`.hg-plan .hg-d[data-date="${add(TODAY, 1)}"]`).click();
-  panel.querySelector('[data-dayedit] input').value = 'Fast until noon';
-  panel.querySelector('[data-act="padd"]').click();
-  panel.querySelectorAll('[data-dayedit] input')[1].value = 'Evening prayer';
-  panel.querySelector('[data-act="create"]').click();
+  page.querySelector('[data-f="title"]').value = 'Lent';
+  page.querySelector('[data-act="fmode"][data-mode="custom"]').click();
+  assert.strictEqual(page.querySelector('[data-f="title"]').value, 'Lent', 'typed title survives repaint');
+  assert(page.querySelector('[data-dayedit]'), 'day editor shown');
+  assert.strictEqual(page.querySelectorAll('.hg-plan .hg-d:not(.x)').length, 30, 'one planner cell per day (30-day default)');
+  page.querySelector('[data-dayedit] input').value = 'Read Psalm 1';
+  page.querySelector(`.hg-plan .hg-d[data-date="${add(TODAY, 1)}"]`).click();
+  page.querySelector('[data-dayedit] input').value = 'Fast until noon';
+  page.querySelector('[data-act="padd"]').click();
+  page.querySelectorAll('[data-dayedit] input')[1].value = 'Evening prayer';
+  page.querySelector('[data-act="create"]').click();
   await tick();
   const post = calls.find(c => c[0] === 'POST' && c[1] === '/api/goals');
   assert(post, 'goal POSTed');
   assert.strictEqual(JSON.stringify(post[2].day_plan), JSON.stringify({ [TODAY]: ['Read Psalm 1'], [add(TODAY, 1)]: ['Fast until noon', 'Evening prayer'] }), 'different tasks per day sent');
   assert(!post[2].task_template, 'no repeated template in custom mode');
+  assert.strictEqual(w.currentPage, 'my-mentees', 'creating returns to the mentee list');
   // creating with an empty plan is blocked client-side
   panel.querySelector('[data-act="new"]').click();
-  panel.querySelector('[data-act="fmode"][data-mode="custom"]').click();
+  page.querySelector('[data-type="challenge"]').click();
+  page.querySelector('[data-act="fmode"][data-mode="custom"]').click();
   const before = calls.length;
-  panel.querySelector('[data-f="title"]').value = 'Empty';
-  panel.querySelector('[data-act="create"]').click();
+  page.querySelector('[data-f="title"]').value = 'Empty';
+  page.querySelector('[data-act="create"]').click();
   await tick();
   assert.strictEqual(calls.length, before, 'empty plan not submitted');
-  panel.querySelector('[data-act="cancel-new"]').click();
+  page.querySelector('[data-act="back"]').click();
+  page.querySelector('[data-act="back"]')?.click();
+  w.HolyGoals.back();
+  assert.strictEqual(w.currentPage, 'my-mentees', 'back leaves the goal pages');
 
   // calendar shows one month at a time
   assert(panel.querySelectorAll('.hg-goal .hg-cal:not([hidden])').length === 1, 'single visible month');
