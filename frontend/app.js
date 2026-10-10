@@ -3455,7 +3455,7 @@ function openMentorFilterModal() {
 
   // Sync Rating pills
   $$('#modalFilterRatingGrid .ps-seg-btn').forEach(btn => {
-    btn.classList.toggle('active', String(btn.dataset.value || '0') === String(mentorModalTempFilters.min_rating || 0));
+    btn.classList.toggle('active', Number(btn.dataset.value || 0) === (Number(mentorModalTempFilters.min_rating) || 0));
   });
 
   // Sync Availability pills
@@ -3487,7 +3487,7 @@ function setFilterRating(val) {
   haptic('selection');
   mentorModalTempFilters.min_rating = Number(val) || 0;
   $$('#modalFilterRatingGrid .ps-seg-btn').forEach(btn => {
-    btn.classList.toggle('active', String(btn.dataset.value || '0') === String(mentorModalTempFilters.min_rating));
+    btn.classList.toggle('active', Number(btn.dataset.value || 0) === (Number(mentorModalTempFilters.min_rating) || 0));
   });
   updateMentorFilterCount();
 }
@@ -9519,3 +9519,114 @@ document.addEventListener('click', (e) => {
   }
 })();
 
+// ─── Pull to refresh ─────────────────────────────────────────
+// Pull down at the top of a page: a round badge follows the finger and turns
+// with it; past the threshold it goes gold, and on release it spins while that
+// page's own loader runs. Only pages listed in `refreshers` take part, and it
+// stays out of the way of open sheets, text fields, scrolled lists and sideways swipes.
+(function initPullToRefresh() {
+  const ARM = 84;            // finger travel (px) that arms the refresh
+  const Y_MAX = 84;          // furthest the badge is dragged down
+  const Y_HOLD = 72;         // where the badge rests while refreshing
+  const MIN_SPIN_MS = 800;   // keep the spinner up long enough to be seen
+
+  // Same loaders navigate() calls for each page.
+  const refreshers = {
+    dashboard: () => loadDashboard(),
+    mentors: () => loadMentors(),
+    sessions: () => loadSessions(),
+    requests: () => loadRequests(),
+    settings: () => loadSettings(),
+    'my-mentees': () => loadMyMentees(),
+    support: () => loadUserTickets(),
+    journal: () => setJournalView(journalView, { reload: true }),
+  };
+
+  const el = document.createElement('div');
+  el.className = 'ptr';
+  el.setAttribute('role', 'status');
+  el.setAttribute('aria-live', 'polite');
+  el.innerHTML = '<span class="ptr-badge"><svg class="ptr-ring" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>';
+  document.body.appendChild(el);
+
+  let startX = 0, startY = 0, tracking = false, pulling = false, armed = false, busy = false, pageContent = null;
+
+  function paint(dist) {
+    const y = Math.min(dist * 0.85, Y_MAX);
+    el.style.setProperty('--ptr-y', y + 'px');
+    el.style.setProperty('--ptr-o', String(Math.min(dist / 40, 1)));
+    el.style.setProperty('--ptr-r', Math.round(Math.min(dist / ARM, 1) * 270) + 'deg');
+    const nowArmed = dist >= ARM;
+    if (nowArmed !== armed) { armed = nowArmed; el.classList.toggle('is-armed', armed); if (armed) haptic('light'); }
+  }
+  function hide() {
+    el.classList.add('is-animating');
+    el.style.setProperty('--ptr-y', '0px');
+    el.style.setProperty('--ptr-o', '0');
+    setTimeout(() => el.classList.remove('is-animating', 'is-armed', 'is-refreshing'), 300);
+    armed = false;
+  }
+  function reset() { tracking = false; pulling = false; pageContent = null; }
+
+  // Is the touch somewhere a pull must not start (open sheet, field, scrolled list)?
+  function blocked(target) {
+    if (busy || !refreshers[currentPage]) return true;
+    if (document.querySelector('.modal-overlay.open') || document.body.classList.contains('kb-open')) return true;
+    if (target.closest('input, textarea, select, [contenteditable="true"], [data-no-ptr]')) return true;
+    const page = $(`page-${currentPage}`);
+    if (!page) return true;
+    for (let n = target; n && n !== page; n = n.parentElement) {
+      if (n.scrollHeight > n.clientHeight + 1 && n.scrollTop > 0) {
+        const oy = getComputedStyle(n).overflowY;
+        if (oy === 'auto' || oy === 'scroll') return true;
+      }
+    }
+    pageContent = page.querySelector('.page-content');
+    return !!(pageContent && pageContent.scrollTop > 0);
+  }
+
+  document.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1 || blocked(e.target)) { reset(); return; }
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    tracking = true;
+    pulling = false;
+    el.classList.remove('is-animating');
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!tracking) return;
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if (!pulling) {
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) { reset(); return; }   // sideways swipe
+      if (dy < -4) { reset(); return; }                                            // scrolling down the page
+      if (dy < 10) return;
+      pulling = true;
+    }
+    if (pageContent && pageContent.scrollTop > 0) { reset(); hide(); return; }     // list started moving
+    paint(Math.min(Math.max(dy - 10, 0), ARM * 1.6));
+  }, { passive: true });
+
+  async function refresh() {
+    busy = true;
+    el.classList.add('is-armed', 'is-refreshing', 'is-animating');
+    el.style.setProperty('--ptr-y', Y_HOLD + 'px');
+    el.style.setProperty('--ptr-o', '1');
+    el.setAttribute('aria-label', t('ptr_refreshing') || 'Refreshing…');
+    haptic('medium');
+    try {
+      await Promise.all([Promise.resolve(refreshers[currentPage]()), new Promise(r => setTimeout(r, MIN_SPIN_MS))]);
+    } catch (err) { /* loaders show their own errors */ }
+    busy = false;
+    hide();
+  }
+
+  document.addEventListener('touchend', () => {
+    const wasPulling = pulling, wasArmed = armed;
+    reset();
+    if (!wasPulling) return;
+    if (wasArmed) refresh(); else hide();
+  }, { passive: true });
+  document.addEventListener('touchcancel', () => { if (pulling) hide(); reset(); }, { passive: true });
+})();

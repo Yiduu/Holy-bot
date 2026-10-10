@@ -1,0 +1,262 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 570da5c..d35f07b 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -3455,7 +3455,7 @@ function openMentorFilterModal() {
+ 
+   // Sync Rating pills
+   $$('#modalFilterRatingGrid .ps-seg-btn').forEach(btn => {
+-    btn.classList.toggle('active', String(btn.dataset.value || '0') === String(mentorModalTempFilters.min_rating || 0));
++    btn.classList.toggle('active', Number(btn.dataset.value || 0) === (Number(mentorModalTempFilters.min_rating) || 0));
+   });
+ 
+   // Sync Availability pills
+@@ -3487,7 +3487,7 @@ function setFilterRating(val) {
+   haptic('selection');
+   mentorModalTempFilters.min_rating = Number(val) || 0;
+   $$('#modalFilterRatingGrid .ps-seg-btn').forEach(btn => {
+-    btn.classList.toggle('active', String(btn.dataset.value || '0') === String(mentorModalTempFilters.min_rating));
++    btn.classList.toggle('active', Number(btn.dataset.value || 0) === (Number(mentorModalTempFilters.min_rating) || 0));
+   });
+   updateMentorFilterCount();
+ }
+@@ -9519,3 +9519,114 @@ document.addEventListener('click', (e) => {
+   }
+ })();
+ 
++// ─── Pull to refresh ─────────────────────────────────────────
++// Pull down at the top of a page: a round badge follows the finger and turns
++// with it; past the threshold it goes gold, and on release it spins while that
++// page's own loader runs. Only pages listed in `refreshers` take part, and it
++// stays out of the way of open sheets, text fields, scrolled lists and sideways swipes.
++(function initPullToRefresh() {
++  const ARM = 84;            // finger travel (px) that arms the refresh
++  const Y_MAX = 84;          // furthest the badge is dragged down
++  const Y_HOLD = 72;         // where the badge rests while refreshing
++  const MIN_SPIN_MS = 800;   // keep the spinner up long enough to be seen
++
++  // Same loaders navigate() calls for each page.
++  const refreshers = {
++    dashboard: () => loadDashboard(),
++    mentors: () => loadMentors(),
++    sessions: () => loadSessions(),
++    requests: () => loadRequests(),
++    settings: () => loadSettings(),
++    'my-mentees': () => loadMyMentees(),
++    support: () => loadUserTickets(),
++    journal: () => setJournalView(journalView, { reload: true }),
++  };
++
++  const el = document.createElement('div');
++  el.className = 'ptr';
++  el.setAttribute('role', 'status');
++  el.setAttribute('aria-live', 'polite');
++  el.innerHTML = '<span class="ptr-badge"><svg class="ptr-ring" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>';
++  document.body.appendChild(el);
++
++  let startX = 0, startY = 0, tracking = false, pulling = false, armed = false, busy = false, pageContent = null;
++
++  function paint(dist) {
++    const y = Math.min(dist * 0.85, Y_MAX);
++    el.style.setProperty('--ptr-y', y + 'px');
++    el.style.setProperty('--ptr-o', String(Math.min(dist / 40, 1)));
++    el.style.setProperty('--ptr-r', Math.round(Math.min(dist / ARM, 1) * 270) + 'deg');
++    const nowArmed = dist >= ARM;
++    if (nowArmed !== armed) { armed = nowArmed; el.classList.toggle('is-armed', armed); if (armed) haptic('light'); }
++  }
++  function hide() {
++    el.classList.add('is-animating');
++    el.style.setProperty('--ptr-y', '0px');
++    el.style.setProperty('--ptr-o', '0');
++    setTimeout(() => el.classList.remove('is-animating', 'is-armed', 'is-refreshing'), 300);
++    armed = false;
++  }
++  function reset() { tracking = false; pulling = false; pageContent = null; }
++
++  // Is the touch somewhere a pull must not start (open sheet, field, scrolled list)?
++  function blocked(target) {
++    if (busy || !refreshers[currentPage]) return true;
++    if (document.querySelector('.modal-overlay.open') || document.body.classList.contains('kb-open')) return true;
++    if (target.closest('input, textarea, select, [contenteditable="true"], [data-no-ptr]')) return true;
++    const page = $(`page-${currentPage}`);
++    if (!page) return true;
++    for (let n = target; n && n !== page; n = n.parentElement) {
++      if (n.scrollHeight > n.clientHeight + 1 && n.scrollTop > 0) {
++        const oy = getComputedStyle(n).overflowY;
++        if (oy === 'auto' || oy === 'scroll') return true;
++      }
++    }
++    pageContent = page.querySelector('.page-content');
++    return !!(pageContent && pageContent.scrollTop > 0);
++  }
++
++  document.addEventListener('touchstart', e => {
++    if (e.touches.length !== 1 || blocked(e.target)) { reset(); return; }
++    startX = e.touches[0].clientX;
++    startY = e.touches[0].clientY;
++    tracking = true;
++    pulling = false;
++    el.classList.remove('is-animating');
++  }, { passive: true });
++
++  document.addEventListener('touchmove', e => {
++    if (!tracking) return;
++    const dx = e.touches[0].clientX - startX;
++    const dy = e.touches[0].clientY - startY;
++    if (!pulling) {
++      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) { reset(); return; }   // sideways swipe
++      if (dy < -4) { reset(); return; }                                            // scrolling down the page
++      if (dy < 10) return;
++      pulling = true;
++    }
++    if (pageContent && pageContent.scrollTop > 0) { reset(); hide(); return; }     // list started moving
++    paint(Math.min(Math.max(dy - 10, 0), ARM * 1.6));
++  }, { passive: true });
++
++  async function refresh() {
++    busy = true;
++    el.classList.add('is-armed', 'is-refreshing', 'is-animating');
++    el.style.setProperty('--ptr-y', Y_HOLD + 'px');
++    el.style.setProperty('--ptr-o', '1');
++    el.setAttribute('aria-label', t('ptr_refreshing') || 'Refreshing…');
++    haptic('medium');
++    try {
++      await Promise.all([Promise.resolve(refreshers[currentPage]()), new Promise(r => setTimeout(r, MIN_SPIN_MS))]);
++    } catch (err) { /* loaders show their own errors */ }
++    busy = false;
++    hide();
++  }
++
++  document.addEventListener('touchend', () => {
++    const wasPulling = pulling, wasArmed = armed;
++    reset();
++    if (!wasPulling) return;
++    if (wasArmed) refresh(); else hide();
++  }, { passive: true });
++  document.addEventListener('touchcancel', () => { if (pulling) hide(); reset(); }, { passive: true });
++})();
+diff --git a/frontend/index.html b/frontend/index.html
+index bcbb1fb..544f170 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -2181,7 +2181,7 @@
+           <div class="ps-seg mf-seg4" id="modalFilterRatingGrid" role="group" aria-label="Minimum rating">
+             <button type="button" class="ps-seg-btn active" data-value="0" onclick="setFilterRating(0)" data-i18n="filter_rating_any">Any</button>
+             <button type="button" class="ps-seg-btn" data-value="4.5" onclick="setFilterRating(4.5)">★ 4.5+</button>
+-            <button type="button" class="ps-seg-btn" data-value="4.0" onclick="setFilterRating(4.0)">★ 4.0+</button>
++            <button type="button" class="ps-seg-btn" data-value="4" onclick="setFilterRating(4)">★ 4.0+</button>
+             <button type="button" class="ps-seg-btn" data-value="3.5" onclick="setFilterRating(3.5)">★ 3.5+</button>
+           </div>
+         </div>
+@@ -2548,42 +2548,6 @@
+        tab into view so it's visible after navigating.
+        ────────────────────────────────────────────────────────── */
+     const bottomNav = document.querySelector('.bottom-nav');
+-
+-    /* ── Pull-to-refresh ─────────────────────────────────────── */
+-    let ptStartY = 0, ptPulling = false;
+-    const ptIndicator = document.createElement('div');
+-    ptIndicator.textContent = '↓ Pull to refresh';
+-    ptIndicator.style.cssText = `
+-    position:fixed;top:0;left:0;right:0;z-index:8999;
+-    text-align:center;font-size:var(--fs-xs);color:var(--text3);
+-    padding:8px;background:var(--bg2);
+-    transform:translateY(-100%);transition:transform .2s ease;
+-  `;
+-    document.body.appendChild(ptIndicator);
+-
+-    document.addEventListener('touchstart', e => {
+-      const page = document.querySelector('.page.active .page-content, #chatMessages');
+-      if (page && page.scrollTop === 0) {
+-        ptStartY = e.touches[0].clientY;
+-        ptPulling = true;
+-      }
+-    }, { passive: true });
+-    document.addEventListener('touchmove', e => {
+-      if (!ptPulling) return;
+-      const dy = e.touches[0].clientY - ptStartY;
+-      if (dy > 10) ptIndicator.style.transform = `translateY(${Math.min(dy - 10, 50)}px)`;
+-    }, { passive: true });
+-    document.addEventListener('touchend', e => {
+-      if (!ptPulling) return;
+-      const dy = e.changedTouches[0].clientY - ptStartY;
+-      ptIndicator.style.transform = 'translateY(-100%)';
+-      ptPulling = false;
+-      if (dy > 70) {
+-        HF?.impactOccurred('medium');
+-        if (window.loadDashboard) window.loadDashboard();
+-        else location.reload();
+-      }
+-    }, { passive: true });
+   </script>
+ 
+   <!-- Voice / file attachment CSS -->
+diff --git a/frontend/locales.js b/frontend/locales.js
+index b51f4f0..1f6e909 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -145,6 +145,7 @@ const I18N = {
+     "filter_online_only": "Online",
+     "filter_rating_any": "Any",
+     "btn_apply_filters": "Apply Filters",
++    "ptr_refreshing": "Refreshing…",
+     "filter_show_n": "Show {n} mentors",
+     "filter_show_one": "Show 1 mentor",
+     "filter_no_match": "No mentors match",
+@@ -965,6 +966,7 @@ const I18N = {
+     "filter_online_only": "አሁን መስመር ላይ",
+     "filter_rating_any": "ማንኛውም ደረጃ",
+     "btn_apply_filters": "ማጣሪያዎችን ተግብር",
++    "ptr_refreshing": "በማደስ ላይ…",
+     "filter_show_n": "{n} አማካሪዎችን አሳይ",
+     "filter_show_one": "1 አማካሪ አሳይ",
+     "filter_no_match": "ምንም አማካሪ አልተገኘም",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index a47ec5b..41ddcfb 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13972,6 +13972,41 @@ textarea.form-control { resize: none; }
+ 
+ /* ═══ Mentor filter page-sheet: pills sized to fit their row ═══ */
+ .mentor-filter-sheet .ps-body { padding-bottom: 12px; }
+-.mentor-filter-sheet .mf-seg4 .ps-seg-btn { padding: 0 4px; font-size: var(--fs-sm); }
+-.mentor-filter-sheet .mf-seg-wrap { flex-wrap: wrap; }
+-.mentor-filter-sheet .mf-seg-wrap .ps-seg-btn { flex: 1 1 28%; padding: 0 12px; }
++/* Pills grow to fit their label (long Amharic labels wrap to two lines inside the pill instead of spilling out) */
++.mentor-filter-sheet .ps-seg-btn { height: auto; min-height: 44px; padding: 8px 10px; white-space: normal; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
++.mentor-filter-sheet .mf-seg4 .ps-seg-btn { padding: 8px 4px; font-size: var(--fs-sm); white-space: nowrap; }
++.mentor-filter-sheet .mf-seg-wrap .ps-seg-btn { font-size: var(--fs-sm); }
++
++/* ═══ Pull to refresh: round gold badge that rotates with the finger, then spins ═══ */
++.ptr {
++  position: fixed; left: 50%; z-index: 8999;
++  top: calc(var(--safe-top, 0px) + 6px);
++  pointer-events: none;
++  opacity: var(--ptr-o, 0);
++  transform: translate3d(-50%, calc(var(--ptr-y, 0px) - 64px), 0);
++  will-change: transform, opacity;
++}
++.ptr.is-animating { transition: transform 0.28s var(--ease-premium), opacity 0.2s ease; }
++.ptr-badge {
++  width: 44px; height: 44px; border-radius: 50%;
++  display: flex; align-items: center; justify-content: center;
++  color: var(--gold-light);
++  background: var(--bg2);
++  border: 1px solid rgba(201, 168, 76, 0.45);
++  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
++  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
++}
++.ptr-ring { transform: rotate(var(--ptr-r, 0deg)); }
++.ptr.is-armed .ptr-badge {
++  color: #1a1300; border-color: transparent;
++  background: linear-gradient(180deg, #EBCD72, #C9A84C);
++  box-shadow: 0 8px 20px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
++}
++.ptr.is-refreshing .ptr-ring { animation: ptrSpin 0.8s linear infinite; }
++@keyframes ptrSpin {
++  from { transform: rotate(var(--ptr-r, 0deg)); }
++  to   { transform: rotate(calc(var(--ptr-r, 0deg) + 360deg)); }
++}
++[data-theme="light"] .ptr-badge { color: #7A5812; border-color: rgba(150, 120, 40, 0.35); box-shadow: 0 8px 18px rgba(30, 25, 15, 0.16); }
++[data-theme="light"] .ptr.is-armed .ptr-badge { color: #1a1300; }
++@media (prefers-reduced-motion: reduce) { .ptr.is-refreshing .ptr-ring { animation-duration: 2s; } }

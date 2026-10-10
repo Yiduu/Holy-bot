@@ -13972,6 +13972,41 @@ textarea.form-control { resize: none; }
 
 /* ═══ Mentor filter page-sheet: pills sized to fit their row ═══ */
 .mentor-filter-sheet .ps-body { padding-bottom: 12px; }
-.mentor-filter-sheet .mf-seg4 .ps-seg-btn { padding: 0 4px; font-size: var(--fs-sm); }
-.mentor-filter-sheet .mf-seg-wrap { flex-wrap: wrap; }
-.mentor-filter-sheet .mf-seg-wrap .ps-seg-btn { flex: 1 1 28%; padding: 0 12px; }
+/* Pills grow to fit their label (long Amharic labels wrap to two lines inside the pill instead of spilling out) */
+.mentor-filter-sheet .ps-seg-btn { height: auto; min-height: 44px; padding: 8px 10px; white-space: normal; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
+.mentor-filter-sheet .mf-seg4 .ps-seg-btn { padding: 8px 4px; font-size: var(--fs-sm); white-space: nowrap; }
+.mentor-filter-sheet .mf-seg-wrap .ps-seg-btn { font-size: var(--fs-sm); }
+
+/* ═══ Pull to refresh: round gold badge that rotates with the finger, then spins ═══ */
+.ptr {
+  position: fixed; left: 50%; z-index: 8999;
+  top: calc(var(--safe-top, 0px) + 6px);
+  pointer-events: none;
+  opacity: var(--ptr-o, 0);
+  transform: translate3d(-50%, calc(var(--ptr-y, 0px) - 64px), 0);
+  will-change: transform, opacity;
+}
+.ptr.is-animating { transition: transform 0.28s var(--ease-premium), opacity 0.2s ease; }
+.ptr-badge {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--gold-light);
+  background: var(--bg2);
+  border: 1px solid rgba(201, 168, 76, 0.45);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.ptr-ring { transform: rotate(var(--ptr-r, 0deg)); }
+.ptr.is-armed .ptr-badge {
+  color: #1a1300; border-color: transparent;
+  background: linear-gradient(180deg, #EBCD72, #C9A84C);
+  box-shadow: 0 8px 20px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.ptr.is-refreshing .ptr-ring { animation: ptrSpin 0.8s linear infinite; }
+@keyframes ptrSpin {
+  from { transform: rotate(var(--ptr-r, 0deg)); }
+  to   { transform: rotate(calc(var(--ptr-r, 0deg) + 360deg)); }
+}
+[data-theme="light"] .ptr-badge { color: #7A5812; border-color: rgba(150, 120, 40, 0.35); box-shadow: 0 8px 18px rgba(30, 25, 15, 0.16); }
+[data-theme="light"] .ptr.is-armed .ptr-badge { color: #1a1300; }
+@media (prefers-reduced-motion: reduce) { .ptr.is-refreshing .ptr-ring { animation-duration: 2s; } }
