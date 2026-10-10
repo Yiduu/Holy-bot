@@ -13137,3 +13137,88 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
   border-color: rgba(150, 120, 40, 0.2);
   box-shadow: 0 6px 16px rgba(30, 25, 15, 0.10), inset 0 1px 0 #fff;
 }
+
+/* ═══ Journal page: same look as Live / Requests / Support ═══════════════
+   The List | Calendar switch is now the shared pill tab bar (.profile-tabs),
+   and entries use the same card as session rows: soft surface, 22px radius,
+   46px gold icon tile and a gold hairline on hover. The old left accent bar
+   and blur are gone. ═══ */
+.journal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.journal-back-btn { align-self: flex-start; }
+
+.journal-item {
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 22px;
+  background: var(--surface);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border-dim);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28), var(--inset-hi);
+  overflow: visible;
+  transition: transform 0.25s var(--ease-premium), border-color 0.25s ease;
+}
+.journal-item::before {
+  top: 0;
+  left: 16px;
+  right: 16px;
+  width: auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0;
+}
+.journal-item:active {
+  background: var(--surface);
+  transform: scale(0.985);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28), var(--inset-hi);
+}
+@media (hover: hover) {
+  .journal-item:hover {
+    background: var(--surface);
+    transform: translateY(-2px);
+    border-color: var(--border);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28), var(--inset-hi);
+  }
+  .journal-item:hover::before { opacity: 1; }
+}
+
+/* Gold icon tile — identical to .session-icon (this rule used to turn it into
+   a 34px circle and beat the shared tile rule). */
+.journal-item .journal-mood {
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  background: rgba(201, 168, 76, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.24);
+  color: var(--gold-light);
+}
+.journal-item .journal-mood .mood-svg { width: 22px; height: 22px; color: var(--gold-light); }
+[data-theme="light"] .journal-item .journal-mood { background: rgba(201, 168, 76, 0.18); color: #7A5812; }
+[data-theme="light"] .journal-item .journal-mood .mood-svg { color: #7A5812; }
+
+/* Same type scale as .session-title / .session-meta */
+.journal-item-body { gap: 4px; }
+.journal-date { font-size: var(--fs-xs, var(--fs-2xs)); }
+/* Entry text: up to two lines so more of the note is readable */
+.journal-preview {
+  font-size: var(--fs-md, var(--fs-base));
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text);
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Calendar view sits on a card like everything else */
+.journal-calendar { padding: 16px; }
+.journal-calendar .calendar-header { font-weight: 700; color: var(--text); }
+.journal-calendar .calendar-grid { gap: 6px; }
+.journal-calendar .calendar-weekday { font-size: var(--fs-xs, var(--fs-2xs)); letter-spacing: 0.08em; }
+.journal-calendar .calendar-day { border-radius: 12px; }

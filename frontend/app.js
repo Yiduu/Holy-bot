@@ -1812,9 +1812,7 @@ function navigate(page) {
     case 'settings': loadSettings(); break;
     case 'my-mentees': loadMyMentees(); break;
     case 'journal':
-      journalView = 'list';
-      loadJournalEntries();
-      $('journalViewToggle').innerHTML = ICON_CALENDAR + ' ' + t('Calendar');
+      setJournalView('list', { reload: true });
       break;
   }
 
@@ -7263,14 +7261,7 @@ function applyLanguage() {
     btn.textContent = currentLanguage.toUpperCase();
   });
 
-  const toggleBtn = $('journalViewToggle');
-  if (toggleBtn) {
-    if (journalView === 'list') {
-      toggleBtn.innerHTML = '📅 ' + t('Calendar');
-    } else {
-      toggleBtn.innerHTML = '📋 ' + t('List');
-    }
-  }
+  // The journal List | Calendar tabs carry data-i18n labels, so nothing to do here.
 }
 
 function changeLanguage(lang) {
@@ -8582,6 +8573,19 @@ async function saveTopics() {
 }
 
 // ─── Journal ──────────────────────────────────────────────────
+// One entry card, shared by the list view and the calendar's by-date view so
+// both look identical.
+function journalItemHtml(e) {
+  return `
+      <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`, '${e.mood || 'neutral'}')">
+        <div class="journal-mood">${getMoodIcon(e.mood)}</div>
+        <div class="journal-item-body">
+          <div class="journal-date">${formatDateTime(e.created_at)}</div>
+          <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
+        </div>
+      </div>`;
+}
+
 async function loadJournalEntries() {
   const container = $('journalEntriesList');
   container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
@@ -8591,15 +8595,7 @@ async function loadJournalEntries() {
       container.innerHTML = `<div class="empty-state"><span>${t('journal_empty')}</span></div>`;
       return;
     }
-    container.innerHTML = entries.map(e => `
-      <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`, '${e.mood || 'neutral'}')">
-        <div class="journal-mood">${getMoodIcon(e.mood)}</div>
-        <div class="journal-item-body">
-          <div class="journal-date">${formatDateTime(e.created_at)}</div>
-          <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
-        </div>
-      </div>
-    `).join('');
+    container.innerHTML = entries.map(journalItemHtml).join('');
   } catch (e) { container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`; }
 }
 
@@ -8712,16 +8708,25 @@ let journalView = 'list'; // 'list' or 'calendar'
 
 const ICON_CALENDAR = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
 const ICON_LIST = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>';
+// List | Calendar switch (pill tabs, same pattern as Live and Requests).
+function setJournalView(view, opts = {}) {
+  const next = view === 'calendar' ? 'calendar' : 'list';
+  const changed = next !== journalView;
+  journalView = next;
+  [['journalTabList', next === 'list'], ['journalTabCalendar', next === 'calendar']].forEach(([id, on]) => {
+    const el = $(id); if (!el) return;
+    el.classList.toggle('active', on);
+    el.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  if (!changed && !opts.reload) return;
+  if (!opts.reload) haptic('selection');
+  if (next === 'calendar') showJournalCalendar();
+  else loadJournalEntries();
+}
+
+// Kept for any older callers.
 function toggleJournalView() {
-  if (journalView === 'list') {
-    journalView = 'calendar';
-    showJournalCalendar();
-    $('journalViewToggle').innerHTML = ICON_LIST + ' ' + t('List');
-  } else {
-    journalView = 'list';
-    loadJournalEntries();
-    $('journalViewToggle').innerHTML = ICON_CALENDAR + ' ' + t('Calendar');
-  }
+  setJournalView(journalView === 'list' ? 'calendar' : 'list');
 }
 
 async function showJournalCalendar() {
@@ -8743,7 +8748,7 @@ async function showJournalCalendar() {
     const startDay = firstDay.getDay(); // 0 = Sunday
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
-    let html = `<div class="calendar-header">
+    let html = `<div class="journal-calendar card"><div class="calendar-header">
       <button class="btn btn-sm btn-ghost" onclick="prevMonth()">◀</button>
       <span>${firstDay.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
       <button class="btn btn-sm btn-ghost" onclick="nextMonth()">▶</button>
@@ -8756,7 +8761,7 @@ async function showJournalCalendar() {
       const hasEntries = entriesByDate[dateStr] && entriesByDate[dateStr].length > 0;
       html += `<div class="calendar-day ${hasEntries ? 'has-entry' : ''}" onclick="showEntriesForDate('${dateStr}')">${d}</div>`;
     }
-    html += `</div>`;
+    html += `</div></div>`;
     $('journalEntriesList').innerHTML = html;
   }
 
@@ -8776,14 +8781,8 @@ async function showJournalCalendar() {
       showToast('No entries for this date', 'info');
       return;
     }
-    $('journalEntriesList').innerHTML = entries.map(e => `
-      <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`, '${e.mood || 'neutral'}')">
-        <div class="journal-date">${formatDateTime(e.created_at)}</div>
-        <div class="journal-mood">${getMoodIcon(e.mood)}</div>
-        <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
-      </div>
-    `).join('');
-    $('journalEntriesList').insertAdjacentHTML('afterbegin', `<button class="btn btn-sm btn-ghost" onclick="loadJournalEntries()">← Back to all entries</button>`);
+    $('journalEntriesList').innerHTML = entries.map(journalItemHtml).join('');
+    $('journalEntriesList').insertAdjacentHTML('afterbegin', `<button class="btn btn-sm btn-ghost journal-back-btn" onclick="setJournalView('list', { reload: true })">← ${t('Back to all entries') || 'Back to all entries'}</button>`);
   };
   renderCalendar();
 }

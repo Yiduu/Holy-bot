@@ -1,0 +1,285 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 63b46a1..e957c13 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1812,9 +1812,7 @@ function navigate(page) {
+     case 'settings': loadSettings(); break;
+     case 'my-mentees': loadMyMentees(); break;
+     case 'journal':
+-      journalView = 'list';
+-      loadJournalEntries();
+-      $('journalViewToggle').innerHTML = ICON_CALENDAR + ' ' + t('Calendar');
++      setJournalView('list', { reload: true });
+       break;
+   }
+ 
+@@ -7263,14 +7261,7 @@ function applyLanguage() {
+     btn.textContent = currentLanguage.toUpperCase();
+   });
+ 
+-  const toggleBtn = $('journalViewToggle');
+-  if (toggleBtn) {
+-    if (journalView === 'list') {
+-      toggleBtn.innerHTML = '📅 ' + t('Calendar');
+-    } else {
+-      toggleBtn.innerHTML = '📋 ' + t('List');
+-    }
+-  }
++  // The journal List | Calendar tabs carry data-i18n labels, so nothing to do here.
+ }
+ 
+ function changeLanguage(lang) {
+@@ -8582,6 +8573,19 @@ async function saveTopics() {
+ }
+ 
+ // ─── Journal ──────────────────────────────────────────────────
++// One entry card, shared by the list view and the calendar's by-date view so
++// both look identical.
++function journalItemHtml(e) {
++  return `
++      <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`, '${e.mood || 'neutral'}')">
++        <div class="journal-mood">${getMoodIcon(e.mood)}</div>
++        <div class="journal-item-body">
++          <div class="journal-date">${formatDateTime(e.created_at)}</div>
++          <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
++        </div>
++      </div>`;
++}
++
+ async function loadJournalEntries() {
+   const container = $('journalEntriesList');
+   container.innerHTML = window.skeletonHTML ? skeletonHTML(3) : '<div class="loading-spinner" style="margin:40px auto"></div>';
+@@ -8591,15 +8595,7 @@ async function loadJournalEntries() {
+       container.innerHTML = `<div class="empty-state"><span>${t('journal_empty')}</span></div>`;
+       return;
+     }
+-    container.innerHTML = entries.map(e => `
+-      <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`, '${e.mood || 'neutral'}')">
+-        <div class="journal-mood">${getMoodIcon(e.mood)}</div>
+-        <div class="journal-item-body">
+-          <div class="journal-date">${formatDateTime(e.created_at)}</div>
+-          <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
+-        </div>
+-      </div>
+-    `).join('');
++    container.innerHTML = entries.map(journalItemHtml).join('');
+   } catch (e) { container.innerHTML = `<div class="empty-state"><span>${e.message}</span></div>`; }
+ }
+ 
+@@ -8712,16 +8708,25 @@ let journalView = 'list'; // 'list' or 'calendar'
+ 
+ const ICON_CALENDAR = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>';
+ const ICON_LIST = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>';
++// List | Calendar switch (pill tabs, same pattern as Live and Requests).
++function setJournalView(view, opts = {}) {
++  const next = view === 'calendar' ? 'calendar' : 'list';
++  const changed = next !== journalView;
++  journalView = next;
++  [['journalTabList', next === 'list'], ['journalTabCalendar', next === 'calendar']].forEach(([id, on]) => {
++    const el = $(id); if (!el) return;
++    el.classList.toggle('active', on);
++    el.setAttribute('aria-selected', on ? 'true' : 'false');
++  });
++  if (!changed && !opts.reload) return;
++  if (!opts.reload) haptic('selection');
++  if (next === 'calendar') showJournalCalendar();
++  else loadJournalEntries();
++}
++
++// Kept for any older callers.
+ function toggleJournalView() {
+-  if (journalView === 'list') {
+-    journalView = 'calendar';
+-    showJournalCalendar();
+-    $('journalViewToggle').innerHTML = ICON_LIST + ' ' + t('List');
+-  } else {
+-    journalView = 'list';
+-    loadJournalEntries();
+-    $('journalViewToggle').innerHTML = ICON_CALENDAR + ' ' + t('Calendar');
+-  }
++  setJournalView(journalView === 'list' ? 'calendar' : 'list');
+ }
+ 
+ async function showJournalCalendar() {
+@@ -8743,7 +8748,7 @@ async function showJournalCalendar() {
+     const startDay = firstDay.getDay(); // 0 = Sunday
+     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+ 
+-    let html = `<div class="calendar-header">
++    let html = `<div class="journal-calendar card"><div class="calendar-header">
+       <button class="btn btn-sm btn-ghost" onclick="prevMonth()">◀</button>
+       <span>${firstDay.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
+       <button class="btn btn-sm btn-ghost" onclick="nextMonth()">▶</button>
+@@ -8756,7 +8761,7 @@ async function showJournalCalendar() {
+       const hasEntries = entriesByDate[dateStr] && entriesByDate[dateStr].length > 0;
+       html += `<div class="calendar-day ${hasEntries ? 'has-entry' : ''}" onclick="showEntriesForDate('${dateStr}')">${d}</div>`;
+     }
+-    html += `</div>`;
++    html += `</div></div>`;
+     $('journalEntriesList').innerHTML = html;
+   }
+ 
+@@ -8776,14 +8781,8 @@ async function showJournalCalendar() {
+       showToast('No entries for this date', 'info');
+       return;
+     }
+-    $('journalEntriesList').innerHTML = entries.map(e => `
+-      <div class="journal-item" onclick="openJournalEntry('${e.id}', \`${escapeHtml(e.content)}\`, '${e.mood || 'neutral'}')">
+-        <div class="journal-date">${formatDateTime(e.created_at)}</div>
+-        <div class="journal-mood">${getMoodIcon(e.mood)}</div>
+-        <div class="journal-preview">${escapeHtml(e.content.substring(0, 80))}${e.content.length > 80 ? '…' : ''}</div>
+-      </div>
+-    `).join('');
+-    $('journalEntriesList').insertAdjacentHTML('afterbegin', `<button class="btn btn-sm btn-ghost" onclick="loadJournalEntries()">← Back to all entries</button>`);
++    $('journalEntriesList').innerHTML = entries.map(journalItemHtml).join('');
++    $('journalEntriesList').insertAdjacentHTML('afterbegin', `<button class="btn btn-sm btn-ghost journal-back-btn" onclick="setJournalView('list', { reload: true })">← ${t('Back to all entries') || 'Back to all entries'}</button>`);
+   };
+   renderCalendar();
+ }
+diff --git a/frontend/index.html b/frontend/index.html
+index 139fe4a..7fada28 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -1194,17 +1194,8 @@
+     <div id="page-journal" class="page">
+       <div class="app-header">
+         <h2 data-i18n="btn_journal">Journal</h2>
+-        <div class="header-actions">
+-          <button id="journalViewToggle" class="btn btn-sm btn-outline" onclick="toggleJournalView()"><svg
+-              xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+-              <rect x="3" y="4" width="18" height="18" rx="2" />
+-              <path d="M16 2v4M8 2v4M3 10h18" />
+-            </svg>
+-            Calendar</button>
+-          <button class="btn btn-sm btn-primary" onclick="showNewJournalEntry()" data-i18n="btn_new_entry">+
+-            New</button>
+-        </div>
++        <button class="btn btn-sm btn-primary" onclick="showNewJournalEntry()" data-i18n="btn_new_entry">+
++          New</button>
+       </div>
+       <div class="page-content">
+         <div class="page-intro mb-12 stagger-fade">
+@@ -1212,7 +1203,28 @@
+           <p class="page-intro-text" data-i18n="journal_intro_text">Reflect on your walk and track how you're feeling
+             day to day.</p>
+         </div>
+-        <div id="journalEntriesList" style="display:flex;flex-direction:column;gap:10px">
++        <!-- List | Calendar: same pill segmented control as Live and Requests -->
++        <div class="profile-tabs journal-tabs" role="tablist">
++          <button type="button" id="journalTabList" class="profile-tab active" role="tab" aria-selected="true"
++            onclick="setJournalView('list')">
++            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++              <path d="M8 6h13M8 12h13M8 18h13" />
++              <path d="M3 6h.01M3 12h.01M3 18h.01" />
++            </svg>
++            <span data-i18n="List">List</span>
++          </button>
++          <button type="button" id="journalTabCalendar" class="profile-tab" role="tab" aria-selected="false"
++            onclick="setJournalView('calendar')">
++            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++              <rect x="3" y="4" width="18" height="18" rx="2" />
++              <path d="M16 2v4M8 2v4M3 10h18" />
++            </svg>
++            <span data-i18n="Calendar">Calendar</span>
++          </button>
++        </div>
++        <div id="journalEntriesList" class="journal-list">
+           <div class="loading-spinner" style="margin:40px auto"></div>
+         </div>
+       </div>
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 134d458..b155eb5 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13137,3 +13137,88 @@ h1, h2, h3, h4 { font-family: var(--font-body); font-weight: 700; letter-spacing
+   border-color: rgba(150, 120, 40, 0.2);
+   box-shadow: 0 6px 16px rgba(30, 25, 15, 0.10), inset 0 1px 0 #fff;
+ }
++
++/* ═══ Journal page: same look as Live / Requests / Support ═══════════════
++   The List | Calendar switch is now the shared pill tab bar (.profile-tabs),
++   and entries use the same card as session rows: soft surface, 22px radius,
++   46px gold icon tile and a gold hairline on hover. The old left accent bar
++   and blur are gone. ═══ */
++.journal-list {
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++}
++.journal-back-btn { align-self: flex-start; }
++
++.journal-item {
++  gap: 14px;
++  padding: 14px 16px;
++  border-radius: 22px;
++  background: var(--surface);
++  backdrop-filter: none;
++  -webkit-backdrop-filter: none;
++  border: 1px solid var(--border-dim);
++  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28), var(--inset-hi);
++  overflow: visible;
++  transition: transform 0.25s var(--ease-premium), border-color 0.25s ease;
++}
++.journal-item::before {
++  top: 0;
++  left: 16px;
++  right: 16px;
++  width: auto;
++  height: 2px;
++  background: linear-gradient(90deg, transparent, var(--gold), transparent);
++  opacity: 0;
++}
++.journal-item:active {
++  background: var(--surface);
++  transform: scale(0.985);
++  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28), var(--inset-hi);
++}
++@media (hover: hover) {
++  .journal-item:hover {
++    background: var(--surface);
++    transform: translateY(-2px);
++    border-color: var(--border);
++    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28), var(--inset-hi);
++  }
++  .journal-item:hover::before { opacity: 1; }
++}
++
++/* Gold icon tile — identical to .session-icon (this rule used to turn it into
++   a 34px circle and beat the shared tile rule). */
++.journal-item .journal-mood {
++  width: 46px;
++  height: 46px;
++  border-radius: 16px;
++  background: rgba(201, 168, 76, 0.13);
++  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.24);
++  color: var(--gold-light);
++}
++.journal-item .journal-mood .mood-svg { width: 22px; height: 22px; color: var(--gold-light); }
++[data-theme="light"] .journal-item .journal-mood { background: rgba(201, 168, 76, 0.18); color: #7A5812; }
++[data-theme="light"] .journal-item .journal-mood .mood-svg { color: #7A5812; }
++
++/* Same type scale as .session-title / .session-meta */
++.journal-item-body { gap: 4px; }
++.journal-date { font-size: var(--fs-xs, var(--fs-2xs)); }
++/* Entry text: up to two lines so more of the note is readable */
++.journal-preview {
++  font-size: var(--fs-md, var(--fs-base));
++  font-weight: 500;
++  line-height: 1.4;
++  color: var(--text);
++  white-space: normal;
++  display: -webkit-box;
++  -webkit-line-clamp: 2;
++  -webkit-box-orient: vertical;
++  overflow: hidden;
++}
++
++/* Calendar view sits on a card like everything else */
++.journal-calendar { padding: 16px; }
++.journal-calendar .calendar-header { font-weight: 700; color: var(--text); }
++.journal-calendar .calendar-grid { gap: 6px; }
++.journal-calendar .calendar-weekday { font-size: var(--fs-xs, var(--fs-2xs)); letter-spacing: 0.08em; }
++.journal-calendar .calendar-day { border-radius: 12px; }
