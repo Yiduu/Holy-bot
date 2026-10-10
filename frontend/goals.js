@@ -37,7 +37,7 @@
       plan_title: 'Plan each day', planned_n: '{n} of {m} days planned', apply_all: 'Copy to all days',
       apply_empty: 'Copy to empty days', clear_day: 'Clear (rest day)', rest_day: 'Rest day', no_tasks: 'No tasks on this day.',
       prev_month: 'Previous month', next_month: 'Next month', plan_dates_first: 'Pick valid start and end dates first (up to 120 days).',
-      plan_empty: 'Add tasks for at least one day', rename: 'Rename', tick_when_done: 'Tick when finished',
+      plan_empty: 'Add tasks for at least one day', rename: 'Rename', tick_when_done: 'Tick when finished', actions: 'Actions',
     },
     am: {
       new_goal: 'አዲስ ግብ', type_one: 'ነጠላ ተግባር', type_prog: 'ደረጃ በደረጃ የሚከናወን', type_chal: 'ቻሌንጅ',
@@ -67,7 +67,7 @@
       plan_title: 'የእያንዳንዱን ቀን እቅድ', planned_n: '{n} ከ{m} ቀናት ታቅደዋል', apply_all: 'ለሁሉም ቀናት ቅዳ',
       apply_empty: 'ለባዶ ቀናት ቅዳ', clear_day: 'አጽዳ (የእረፍት ቀን)', rest_day: 'የእረፍት ቀን', no_tasks: 'ለዚህ ቀን ተግባር የለም።',
       prev_month: 'ያለፈው ወር', next_month: 'የሚቀጥለው ወር', plan_dates_first: 'መጀመሪያ ትክክለኛ የመጀመሪያና የመጨረሻ ቀን ይምረጡ (እስከ 120 ቀን)።',
-      plan_empty: 'ቢያንስ ለአንድ ቀን ተግባር ይጨምሩ', rename: 'ስም ቀይር', tick_when_done: 'ሲጨርሱ ምልክት ያድርጉ',
+      plan_empty: 'ቢያንስ ለአንድ ቀን ተግባር ይጨምሩ', rename: 'ስም ቀይር', tick_when_done: 'ሲጨርሱ ምልክት ያድርጉ', actions: 'ተግባራት',
     },
   };
   const tr = (k, r) => {
@@ -86,9 +86,22 @@
   const fmt = (s, o) => new Date(utc(s)).toLocaleDateString(currentLanguage === 'am' ? 'am-ET' : 'en-US', { timeZone: 'UTC', ...o });
 
   const CHK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
-  const ICO = p => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+  const ICO = p => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
   const ICO_SKIP = ICO('<path d="M5 5l9 7-9 7z"/><path d="M19 5v14"/>');
   const ICO_RESTORE = ICO('<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>');
+
+  // ⋯ action menu. Reuses the app's click-toggle dropdown (app.js: [data-dropdown],
+  // [data-dropdown-toggle], .dropdown-item), which also closes it after a pick or an
+  // outside tap. Items keep their data-act hooks, so the delegated click handler
+  // below treats them exactly like the old inline buttons.
+  const menuItem = (act, attrs, icon, label, danger) =>
+    `<button type="button" class="dropdown-item hg-item${danger ? ' hg-item-danger' : ''}" role="menuitem" data-act="${act}" ${attrs}>${icon}<span>${label}</span></button>`;
+  const skipItem = t => menuItem('skip', `data-task="${t.id}"`, t.status === 'skipped' ? ICO_RESTORE : ICO_SKIP, tr(t.status === 'skipped' ? 'restore' : 'skip'));
+  const menu = items => `<div class="premium-dropdown hg-menu" data-dropdown>
+      <button type="button" class="hg-menu-btn" data-dropdown-toggle aria-haspopup="menu" aria-label="${tr('actions')}" title="${tr('actions')}">${menteeIcon('more', 18)}</button>
+      <div class="premium-dropdown-menu" data-dropdown-menu role="menu">${items.join('')}</div></div>`;
+  // One-time goal with its single task: the task is the goal, so it gets no row of its own actions.
+  const isSingle = g => g.type === 'one_time' && g.tasks.length === 1;
 
   // ── state ──────────────────────────────────────────────────────────────
   const store = { mentor: {}, mine: null };   // goals by mentee id / for the signed-in mentee
@@ -138,15 +151,15 @@
         <button type="button" class="hg-btn hg-btn-sm" data-act="saveren" data-task="${t.id}">${tr('save')}</button></div>`;
     }
     // A one-time goal has exactly one task and it IS the goal, so its title is
-    // never shown a second time (the goal title above already says it). Rename
-    // and delete then live on the goal itself; only skip stays on the task.
-    const single = g.type === 'one_time' && g.tasks.length === 1;
+    // never shown a second time (the goal title above already says it). Its
+    // actions (edit / skip / delete) all live in the goal's own menu instead.
+    const single = isSingle(g);
     const label = single ? (on ? tr('done') : tr('tick_when_done')) : esc(t.title);
-    const skipped = t.status === 'skipped';
-    const tools = role === 'mentor' ? `<div class="hg-tools">
-      ${single ? '' : `<button type="button" class="hg-mini hg-mini-lbl" data-act="rename" data-task="${t.id}">${menteeIcon('pencil', 13)}<span>${tr('rename')}</span></button>`}
-      <button type="button" class="hg-mini hg-mini-lbl" data-act="skip" data-task="${t.id}">${skipped ? ICO_RESTORE : ICO_SKIP}<span>${tr(skipped ? 'restore' : 'skip')}</span></button>
-      ${single ? '' : `<button type="button" class="hg-mini hg-mini-lbl hg-mini-danger" data-act="deltask" data-task="${t.id}">${menteeIcon('trash', 13)}<span>${tr('del')}</span></button>`}</div>` : '';
+    const tools = role === 'mentor' && !single ? menu([
+      menuItem('rename', `data-task="${t.id}"`, menteeIcon('pencil', 14), tr('rename')),
+      skipItem(t),
+      menuItem('deltask', `data-task="${t.id}"`, menteeIcon('trash', 14), tr('del'), true),
+    ]) : '';
     let note = '';
     if (role === 'mentee' && ui.note[t.id] && on && !lk) {
       note = `<div class="hg-note"><textarea maxlength="500" rows="2" data-note="${t.id}" placeholder="${tr('note_ph')}">${esc(t.note || '')}</textarea>
@@ -253,15 +266,17 @@
     meta.push(tr('n_of_m', { n: s.done, m: s.total }));
     if (g.type === 'challenge') { meta.push(`${tr('streak')} ${s.streak}`); if (s.missed) meta.push(`${tr('missed_n')} ${s.missed}`); }
     const typeLbl = tr(g.type === 'one_time' ? 'type_one' : g.type === 'progressive' ? 'type_prog' : 'type_chal');
-    const tools = role === 'mentor' ? `<div class="hg-tools hg-gtools">
-      <button type="button" class="hg-mini hg-mini-lbl" data-act="edit" data-goal="${g.id}">${menteeIcon('pencil', 13)}<span>${tr('edit')}</span></button>
-      <button type="button" class="hg-mini hg-mini-lbl hg-mini-danger" data-act="delgoal" data-goal="${g.id}">${menteeIcon('trash', 13)}<span>${tr('del')}</span></button></div>` : '';
+    const tools = role === 'mentor' ? menu([
+      menuItem('edit', `data-goal="${g.id}"`, menteeIcon('pencil', 14), tr('edit')),
+      isSingle(g) ? skipItem(g.tasks[0]) : '',
+      menuItem('delgoal', `data-goal="${g.id}"`, menteeIcon('trash', 14), tr('del'), true),
+    ]) : '';
     const body = g.type === 'challenge'
       ? `<div class="hg-calwrap">${calendar(g)}</div>${dayPanel(g, role)}`
       : `<div class="hg-list">${g.tasks.map(t => taskRow(g, t, role)).join('')}</div>`;
     return `<section class="hg-goal${g.status === 'completed' ? ' fin' : ''}" data-goal-id="${g.id}">
-      <header class="hg-head"><div class="hg-headtxt"><span class="hg-chip">${typeLbl}</span>
-      <h4 class="hg-title">${esc(g.title)}</h4><div class="hg-meta">${meta.join(' · ')}${g.status === 'completed' ? ' · ' + tr('finished') : ''}</div>${tools}</div></header>
+      <header class="hg-head"><div class="hg-headtxt"><div class="hg-headrow"><span class="hg-chip">${typeLbl}</span>${tools}</div>
+      <h4 class="hg-title">${esc(g.title)}</h4><div class="hg-meta">${meta.join(' · ')}${g.status === 'completed' ? ' · ' + tr('finished') : ''}</div></div></header>
       <div class="hg-bar"><i style="transform:scaleX(${s.pct / 100})"></i></div>
       ${ui.edit[g.id] ? editPanel(g) : ''}${body}</section>`;
   }

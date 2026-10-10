@@ -300,40 +300,40 @@ body.hg-typing .hg-root { padding-bottom: 140px; }
   background: var(--gold-dim); color: var(--gold); font: 700 12px var(--font-body); }
 
 
-/* ═══ Goal rows: titles use the full width, actions get their own row ═══════════
-   Before, the Edit / Delete / Rename / Skip buttons sat beside the title and took
-   its width, so long titles were squeezed into a narrow column. Now the title runs
-   edge to edge and the labelled buttons sit underneath it. */
+/* ═══ Goal rows: full-width titles, actions tucked into a ⋯ menu ═══════════════
+   The Edit / Delete (goal) and Rename / Skip / Delete (task) buttons used to sit
+   beside the title and squeeze it. They now live in one ⋯ menu: on a goal it sits
+   on the chip row above the title, on a task it sits at the end of the row. The
+   menu is the app's own dropdown (same one as the mentee card), so it opens and
+   closes the same way. */
 .hg-head { display: block; }
 .hg-headtxt { width: 100%; }
+.hg-headrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .hg-title { margin: 8px 0 4px; font-size: var(--fs-lg); line-height: 1.3; text-align: left; }
 .hg-meta { line-height: 1.4; }
 
-.hg-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.hg-mini.hg-mini-lbl {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  min-width: 0; min-height: 36px; padding: 0 14px; border-radius: 999px; white-space: nowrap;
-  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12);
-  color: var(--text2); font: 600 var(--fs-xs) var(--font-body);
-}
-.hg-mini.hg-mini-lbl svg { flex: none; }
-.hg-mini.hg-mini-danger { background: rgba(224, 92, 92, 0.08); border-color: rgba(224, 92, 92, 0.35); color: var(--danger); }
-
-.hg-trow { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 0; }
-.hg-trow.hg-ren { flex-direction: row; align-items: center; }
-.hg-task { flex: none; width: 100%; align-items: flex-start; min-height: 0; }
+.hg-trow { gap: 4px; padding: 4px 0; }
+.hg-task { align-items: flex-start; min-height: 48px; padding: 10px 0; }
 .hg-task .hg-ck { margin-top: 1px; }
 .hg-tcol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; text-align: left; }
 .hg-tt { flex: none; font-size: var(--fs-md); line-height: 1.35; }
 .hg-sub { flex: none; line-height: 1.3; }
 .hg-sub:empty { display: none; }
-.hg-trow > .hg-tools { margin: 0 0 0 36px; }
 
-[data-theme="light"] .hg-mini.hg-mini-lbl { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); color: #5A5650; }
-[data-theme="light"] .hg-mini.hg-mini-danger { background: rgba(179, 57, 39, 0.07); border-color: rgba(179, 57, 39, 0.35); color: #B33927; }
+.hg-menu { position: relative; flex: none; display: block; }
+.hg-menu[data-open] { z-index: 30; }
+.hg-menu-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
+  border-radius: 50%; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text2); cursor: pointer; transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.hg-menu-btn:hover, .hg-menu[data-open] .hg-menu-btn { background: var(--gold-dim); border-color: var(--gold); color: var(--gold-light); }
+.hg-menu .premium-dropdown-menu { left: auto; right: 0; min-width: min(220px, calc(100vw - 48px)); transform-origin: top right; max-height: none; }
+.hg-item { white-space: nowrap; }
+.hg-item svg { flex: none; }
+.hg-item-danger, .hg-item-danger:hover { color: var(--danger); }
+.hg-goal:has([data-open]) { position: relative; z-index: 20; }
 
-/* Three task actions share one row, edge to edge, instead of wrapping onto two. */
-.hg-mini.hg-mini-lbl { padding: 0 12px; }
-.hg-trow > .hg-tools { margin: 0; }
-.hg-trow > .hg-tools:has(> :nth-child(3)) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.hg-trow > .hg-tools:has(> :nth-child(3)) .hg-mini.hg-mini-lbl { padding: 0 6px; gap: 4px; }
+[data-theme="light"] .hg-menu-btn { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); color: #5A5650; }
+[data-theme="light"] .hg-menu-btn:hover, [data-theme="light"] .hg-menu[data-open] .hg-menu-btn { background: var(--gold-dim); border-color: #A87C2A; color: #7A5812; }
+[data-theme="light"] .hg-item-danger, [data-theme="light"] .hg-item-danger:hover { color: #B33927; }
