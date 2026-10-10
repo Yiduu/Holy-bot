@@ -1,0 +1,212 @@
+diff --git a/frontend/goals.css b/frontend/goals.css
+index 44fe1d4..00c1521 100644
+--- a/frontend/goals.css
++++ b/frontend/goals.css
+@@ -127,3 +127,157 @@
+ body.hg-typing .bottom-nav { transform: translateY(100%); }
+ body.hg-typing .hg-root { padding-bottom: 140px; }
+ .hg-form input, .hg-note textarea, .hg-addrow input { scroll-margin-block: 96px; }
++
++
++/* ═══ Goal setting — new look ═════════════════════════════════════════════════
++   Same language as Profile / Mentors / Notifications: 22px gradient cards, gold icon
++   tiles, pill buttons, calm inset fields (focus ring keeps the SAME shadow layers, so it
++   fades instead of flashing). Only colours/radii/spacing change here; goals.js logic
++   and every data-act / data-f hook are untouched. ═══ */
++.goal-panel { margin-top: 10px; padding: 0; background: transparent; border: 0; }
++
++/* the "Goals" row on the mentee card */
++.goal-toggle-btn {
++  min-height: 52px; padding: 8px 16px 8px 10px;
++  border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 999px;
++  background: rgba(255, 255, 255, 0.06); color: var(--text);
++  font-size: var(--fs-md); font-weight: 700;
++  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
++}
++.goal-toggle-btn > span:first-child { gap: 10px !important; }
++.goal-toggle-btn > span:first-child > svg {
++  width: 36px; height: 36px; padding: 9px; box-sizing: border-box; flex: none; border-radius: 50%;
++  background: rgba(201, 168, 76, 0.13); color: var(--gold-light);
++  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.22);
++}
++.goal-toggle-btn:active { transform: scale(0.985); opacity: 1; }
++
++/* add button */
++.hg-add {
++  min-height: 52px; gap: 8px; border: 0; border-radius: 999px;
++  background: linear-gradient(135deg, var(--gold-light), var(--gold) 65%, #A87C2A); color: #20180a;
++  font: 700 var(--fs-md) var(--font-body);
++  box-shadow: 0 8px 22px rgba(201, 168, 76, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.38);
++  transition: transform 0.12s ease;
++}
++.hg-add:active { transform: scale(0.97); }
++.hg-empty { text-align: center; padding: 14px 8px; }
++
++/* cards */
++.hg-goal, .hg-new, .hg-type {
++  border: 1px solid rgba(255, 255, 255, 0.07);
++  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
++}
++.hg-goal, .hg-new { border-radius: 22px; padding: 16px; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
++.hg-chip { padding: 4px 10px; background: var(--gold-dim); color: var(--gold-light); border: 1px solid rgba(201, 168, 76, 0.35); }
++.hg-chip.ok { background: rgba(91, 173, 122, 0.18); color: var(--success); border-color: rgba(91, 173, 122, 0.4); }
++.hg-chip.bad { background: rgba(224, 92, 92, 0.16); color: var(--danger); border-color: rgba(224, 92, 92, 0.4); }
++.hg-bar { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); margin: 12px 0; }
++.hg-bar i { border-radius: 999px; background: linear-gradient(90deg, var(--gold), var(--gold-light)); }
++.hg-mini { min-width: 36px; min-height: 36px; border-radius: 50%; }
++.hg-mini-ic { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.10); color: var(--text2); }
++.hg-mini:active { transform: scale(0.92); }
++.hg-ck { width: 24px; height: 24px; border-radius: 8px; border: 2px solid var(--text3); }
++.hg-ck.on { background: linear-gradient(180deg, #EBCD72, #C9A84C); border-color: transparent; }
++.hg-trow { border-bottom-color: rgba(255, 255, 255, 0.06); }
++
++/* calendar */
++.hg-mnav { width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.10); background: rgba(255, 255, 255, 0.06); }
++.hg-d { height: 36px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); }
++.hg-d.n { background: linear-gradient(180deg, #EBCD72, #C9A84C); }
++.hg-d.sel { outline: 2px solid var(--gold-light); outline-offset: 1px; }
++
++/* new-goal form */
++.hg-new { gap: 16px; border-color: rgba(201, 168, 76, 0.35); }
++.hg-new-head { display: flex; align-items: center; gap: 12px; }
++.hg-new-head b { font: 700 var(--fs-lg) var(--font-display); color: var(--text); }
++.hg-new-ico, .hg-type-ico {
++  width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center;
++  border-radius: 14px; background: rgba(201, 168, 76, 0.13); color: var(--gold-light);
++  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.22);
++}
++.hg-new-ico { background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%); color: #2a1e05; box-shadow: 0 6px 16px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
++
++/* goal type: three stacked cards, chosen one turns golden */
++.hg-types { display: flex; flex-direction: column; gap: 10px; }
++.hg-type { display: flex; flex-direction: row; align-items: center; gap: 14px; min-height: 68px; padding: 12px 14px; border-radius: 22px; text-align: left; transition: border-color 0.2s, background 0.2s; }
++.hg-type-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
++.hg-type b { font-size: var(--fs-base); color: var(--text); }
++.hg-type small { font-size: var(--fs-xs); line-height: 1.35; color: var(--text2); }
++.hg-radio { position: relative; flex: none; width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.22); transition: background 0.2s, border-color 0.2s; }
++.hg-type.on {
++  border-color: rgba(201, 168, 76, 0.45);
++  background: radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.22) 0%, rgba(201, 168, 76, 0.06) 55%, transparent 100%), #17140c;
++}
++.hg-type.on .hg-type-ico { background: radial-gradient(circle at 30% 25%, #f1d786, #c9a84c 70%); color: #2a1e05; box-shadow: 0 6px 16px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.5); }
++.hg-type.on .hg-radio { border-color: var(--gold-light); background: linear-gradient(180deg, #EBCD72, #C9A84C); box-shadow: 0 0 14px rgba(201, 168, 76, 0.55); }
++.hg-type.on .hg-radio::after { content: ''; position: absolute; left: 7px; top: 3px; width: 6px; height: 11px; border: solid #1a1300; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
++
++/* fields */
++.hg-form { gap: 14px; }
++.hg-form label, .hg-tpl > span { gap: 8px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold-light); }
++.hg-form input, .hg-note textarea, .hg-addrow input {
++  min-height: 52px; padding: 12px 16px; border-radius: 16px; outline: none;
++  text-transform: none; letter-spacing: normal; font-weight: 400; color: var(--text);
++  background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.10);
++  box-shadow: 0 0 0 0 transparent, inset 0 2px 6px rgba(0, 0, 0, 0.35);
++  transition: border-color 0.15s ease, box-shadow 0.15s ease;
++}
++.hg-note textarea { min-height: 76px; resize: none; }
++.hg-form input:focus, .hg-note textarea:focus, .hg-addrow input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim), inset 0 2px 6px rgba(0, 0, 0, 0.35); }
++.hg-form input::placeholder, .hg-note textarea::placeholder, .hg-addrow input::placeholder { color: var(--text3); }
++.hg-form input[type="date"], .hg-form input[type="time"] { color-scheme: dark; padding: 0 12px; font-size: var(--fs-md); }
++.hg-row2 { gap: 10px; }
++.hg-tpl [data-tpl] { gap: 10px; }
++
++/* duration pills + same/different segmented pills: visible when inactive, gold when chosen */
++.hg-chips { gap: 8px; }
++.hg-pill, .hg-seg button {
++  min-height: 44px; padding: 0 16px; border-radius: 999px;
++  border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.06); color: var(--text);
++  font: 700 var(--fs-sm) var(--font-body);
++  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
++  transition: background 0.2s, color 0.2s, border-color 0.2s;
++}
++.hg-pill { min-height: 40px; }
++.hg-pill.on, .hg-seg button.on { color: #1a1300; border-color: transparent; background: linear-gradient(180deg, #EBCD72, #C9A84C); box-shadow: 0 8px 20px rgba(201, 168, 76, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
++.hg-seg { gap: 8px; padding: 0; background: transparent; border-radius: 0; }
++
++/* day planner */
++.hg-plan { gap: 12px; padding: 14px; border-radius: 22px; border: 1px solid rgba(255, 255, 255, 0.07); background: rgba(0, 0, 0, 0.18); }
++.hg-day-title { font: 700 var(--fs-md) var(--font-display); }
++.hg-link { min-height: 40px; padding: 0 14px; border-radius: 999px; background: rgba(201, 168, 76, 0.13); border: 1px solid rgba(201, 168, 76, 0.28); color: var(--gold-light); font-size: var(--fs-xs); }
++.hg-plan-actions { gap: 8px; }
++
++/* buttons: pills like the rest of the app */
++.hg-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 2px; }
++.hg-btn {
++  min-height: 52px; border-radius: 999px; font-size: var(--fs-md);
++  background: linear-gradient(135deg, var(--gold-light), var(--gold) 65%, #A87C2A); color: #20180a;
++  box-shadow: 0 8px 22px rgba(201, 168, 76, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.38);
++  transition: transform 0.12s ease;
++}
++.hg-btn:active { transform: scale(0.96); }
++.hg-btn-sm { min-height: 40px; border-radius: 999px; }
++.hg-btn-ghost { background: rgba(255, 255, 255, 0.06); color: var(--text); border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06); }
++
++@media (max-width: 420px) { .hg-goal, .hg-new { padding: 14px; } .hg-type { min-height: 64px; } }
++
++/* light theme */
++[data-theme="light"] .goal-toggle-btn, [data-theme="light"] .hg-pill, [data-theme="light"] .hg-seg button, [data-theme="light"] .hg-btn-ghost {
++  background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); box-shadow: 0 6px 16px rgba(30, 25, 15, 0.10); color: var(--text);
++}
++[data-theme="light"] .hg-pill.on, [data-theme="light"] .hg-seg button.on { color: #1a1300; border-color: transparent; background: linear-gradient(180deg, #EBCD72, #C9A84C); box-shadow: 0 8px 20px rgba(201, 168, 76, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
++[data-theme="light"] .hg-goal, [data-theme="light"] .hg-new, [data-theme="light"] .hg-type { background: linear-gradient(160deg, #fff, #f6f3ea); border-color: rgba(150, 120, 40, 0.2); box-shadow: 0 8px 20px rgba(30, 25, 15, 0.12), inset 0 1px 0 #fff; }
++[data-theme="light"] .hg-new { border-color: rgba(150, 120, 40, 0.4); }
++[data-theme="light"] .hg-type.on { background: radial-gradient(120% 140% at 0% 0%, rgba(201, 168, 76, 0.28), rgba(201, 168, 76, 0.08) 60%, #fffaf0); border-color: rgba(150, 120, 40, 0.45); }
++[data-theme="light"] .hg-form label, [data-theme="light"] .hg-tpl > span { color: #7A5812; }
++[data-theme="light"] .hg-form input, [data-theme="light"] .hg-note textarea, [data-theme="light"] .hg-addrow input { background: rgba(255, 255, 255, 0.9); border-color: rgba(150, 120, 40, 0.25); box-shadow: 0 0 0 0 transparent, inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++[data-theme="light"] .hg-form input:focus, [data-theme="light"] .hg-note textarea:focus, [data-theme="light"] .hg-addrow input:focus { border-color: #A87C2A; box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++[data-theme="light"] .hg-form input[type="date"], [data-theme="light"] .hg-form input[type="time"] { color-scheme: light; }
++[data-theme="light"] .goal-toggle-btn > span:first-child > svg, [data-theme="light"] .hg-type-ico, [data-theme="light"] .hg-link { color: #7A5812; }
++[data-theme="light"] .hg-chip { color: #7A5812; }
++[data-theme="light"] .hg-bar, [data-theme="light"] .hg-d, [data-theme="light"] .hg-mnav, [data-theme="light"] .hg-mini-ic { background: rgba(0, 0, 0, 0.05); border-color: rgba(150, 120, 40, 0.2); }
++[data-theme="light"] .hg-plan { background: rgba(255, 255, 255, 0.6); border-color: rgba(150, 120, 40, 0.2); }
++[data-theme="light"] .hg-radio { border-color: rgba(150, 120, 40, 0.4); }
++[data-theme="light"] .hg-trow { border-bottom-color: rgba(150, 120, 40, 0.15); }
+diff --git a/frontend/goals.js b/frontend/goals.js
+index 274bd40..651287f 100644
+--- a/frontend/goals.js
++++ b/frontend/goals.js
+@@ -296,7 +296,14 @@
+   function formHtml(menteeId) {
+     const type = ui.ftype[menteeId] || 'challenge';
+     const d = fd(menteeId), td = today();
+-    const opt = (v, k, dd) => `<button type="button" class="hg-type${type === v ? ' on' : ''}" data-act="ftype" data-type="${v}"><b>${tr(k)}</b><small>${tr(dd)}</small></button>`;
++    const TI = {
++      one_time: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>',
++      progressive: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
++      challenge: '<path d="M5 21V4"/><path d="M5 4h12l-2 4 2 4H5"/>'
++    };
++    const opt = (v, k, dd) => `<button type="button" class="hg-type${type === v ? ' on' : ''}" data-act="ftype" data-type="${v}" aria-pressed="${type === v}">
++      <span class="hg-type-ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TI[v]}</svg></span>
++      <span class="hg-type-txt"><b>${tr(k)}</b><small>${tr(dd)}</small></span><span class="hg-radio" aria-hidden="true"></span></button>`;
+     let fields = '';
+     if (type === 'one_time') fields = `<label>${tr('f_due')}<input type="date" data-f="due" min="${td}" value="${esc(d.due)}"></label>`;
+     if (type === 'progressive') fields = `<label>${tr('f_target')}<input type="number" data-f="target" min="1" max="50" value="${esc(d.target)}" inputmode="numeric"></label>
+@@ -316,6 +323,7 @@
+         <label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${esc(d.reminder)}"></label>`;
+     }
+     return `<div class="hg-form hg-new">
++      <div class="hg-new-head"><span class="hg-new-ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><b>${tr('new_goal')}</b></div>
+       <div class="hg-types">${opt('one_time', 'type_one', 'type_one_d')}${opt('progressive', 'type_prog', 'type_prog_d')}${opt('challenge', 'type_chal', 'type_chal_d')}</div>
+       <label>${tr('f_title')}<input type="text" maxlength="200" data-f="title" value="${esc(d.title)}"></label>${fields}
+       <div class="hg-actions"><button type="button" class="hg-btn hg-btn-ghost" data-act="cancel-new">${tr('cancel')}</button>
+diff --git a/frontend/index.html b/frontend/index.html
+index dfedae2..d381e3a 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -16,7 +16,7 @@
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
+   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
+   <link rel="stylesheet" href="styles.css?v=3.0" />
+-  <link rel="stylesheet" href="goals.css?v=1.3" />
++  <link rel="stylesheet" href="goals.css?v=1.4" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+ 
+@@ -2377,7 +2377,7 @@
+ 
+   <script src="locales.js?v=1.9"></script>
+   <script src="app.js?v=3.4"></script>
+-  <script src="goals.js?v=1.3"></script>
++  <script src="goals.js?v=1.4"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="session-room.js?v=1.4"></script>
+ 

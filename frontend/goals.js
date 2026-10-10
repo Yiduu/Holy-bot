@@ -296,7 +296,14 @@
   function formHtml(menteeId) {
     const type = ui.ftype[menteeId] || 'challenge';
     const d = fd(menteeId), td = today();
-    const opt = (v, k, dd) => `<button type="button" class="hg-type${type === v ? ' on' : ''}" data-act="ftype" data-type="${v}"><b>${tr(k)}</b><small>${tr(dd)}</small></button>`;
+    const TI = {
+      one_time: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>',
+      progressive: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+      challenge: '<path d="M5 21V4"/><path d="M5 4h12l-2 4 2 4H5"/>'
+    };
+    const opt = (v, k, dd) => `<button type="button" class="hg-type${type === v ? ' on' : ''}" data-act="ftype" data-type="${v}" aria-pressed="${type === v}">
+      <span class="hg-type-ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TI[v]}</svg></span>
+      <span class="hg-type-txt"><b>${tr(k)}</b><small>${tr(dd)}</small></span><span class="hg-radio" aria-hidden="true"></span></button>`;
     let fields = '';
     if (type === 'one_time') fields = `<label>${tr('f_due')}<input type="date" data-f="due" min="${td}" value="${esc(d.due)}"></label>`;
     if (type === 'progressive') fields = `<label>${tr('f_target')}<input type="number" data-f="target" min="1" max="50" value="${esc(d.target)}" inputmode="numeric"></label>
@@ -316,6 +323,7 @@
         <label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${esc(d.reminder)}"></label>`;
     }
     return `<div class="hg-form hg-new">
+      <div class="hg-new-head"><span class="hg-new-ico"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><b>${tr('new_goal')}</b></div>
       <div class="hg-types">${opt('one_time', 'type_one', 'type_one_d')}${opt('progressive', 'type_prog', 'type_prog_d')}${opt('challenge', 'type_chal', 'type_chal_d')}</div>
       <label>${tr('f_title')}<input type="text" maxlength="200" data-f="title" value="${esc(d.title)}"></label>${fields}
       <div class="hg-actions"><button type="button" class="hg-btn hg-btn-ghost" data-act="cancel-new">${tr('cancel')}</button>
