@@ -4334,12 +4334,13 @@ textarea.form-control {
 }
 
 /* ─── Loading screen ────────────────────────────────────────────
-   Motion design for the logo (timeline, 0 → 1.9s, then loops while loading):
-   0.0s  gold glow blooms behind the mark
-   0.1s  the H rises into place (bottom-to-top reveal, blur → sharp)
-   1.0s  a light sweep runs along the diagonal stroke of the H (repeats)
-   0.85s wordmark is drawn in left → right
-   1.4s  progress line fades in and fills as the app boots
+   Logo motion, "trace and assemble" (intro ≈ 2.2s, then the sweep + glint loop while loading):
+   0.00s  gold outlines draw themselves around the four pieces of the H while the pieces glide in
+   0.42s  the swoosh slides out of the left pillar along its own diagonal
+   0.45s+ each piece fills with the real gold artwork, its outline fades
+   0.95s  wordmark appears letter by letter
+   1.90s  a light band travels along the swoosh and ends in a glint at its tip (repeats)
+   1.70s  progress line fades in and fills as the app boots
    Exit: stage lifts + fades (.is-leaving), then .hidden removes it. */
 .loading-screen {
   position: fixed;
@@ -4353,74 +4354,120 @@ textarea.form-control {
   transition: opacity 0.55s ease;
 }
 .loading-screen.is-leaving { opacity: 0; pointer-events: none; }
-.loading-screen::before {
-  content: '';
-  position: absolute;
-  left: 50%; top: 46%;
-  width: min(120vw, 520px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(201, 168, 76, 0.24), rgba(201, 168, 76, 0.07) 55%, transparent 72%);
-  transform: translate(-50%, -50%) scale(0.6);
-  opacity: 0;
-  animation: ldGlowIn 1.3s var(--ease-premium) forwards, ldBreathe 3.4s ease-in-out 1.3s infinite;
-}
 .ld-stage {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  gap: 20px;
   margin-top: -4vh;
   transition: transform 0.55s var(--ease-premium), opacity 0.45s ease;
 }
 .loading-screen.is-leaving .ld-stage { transform: translateY(-8px) scale(1.05); opacity: 0; }
 
-.ld-mark-wrap { filter: drop-shadow(0 8px 24px rgba(201, 168, 76, 0.3)); }
+/* ── the H ── */
 .ld-mark {
-  position: relative;
-  width: clamp(92px, 28vw, 124px);
-  aspect-ratio: 248 / 242;
-  background: var(--ld-mark) center / contain no-repeat;
-  animation: ldMarkIn 1.05s var(--ease-premium) 0.1s both;
+  display: block;
+  width: clamp(96px, 30vw, 132px);
+  height: auto;
+  overflow: visible;
 }
+.ld-mark .pc { animation: ldPiece 1.05s var(--ease-premium) var(--d) both; }
+.ld-mark .pc-l { --d: 0s;    --fx: 0px;   --fy: 36px; }
+.ld-mark .pc-u { --d: 0.12s; --fx: 0px;   --fy: -34px; }
+.ld-mark .pc-r { --d: 0.18s; --fx: 10px;  --fy: 40px; }
+.ld-mark .pc-s { --d: 0.42s; --fx: -62px; --fy: 32px; }
+@keyframes ldPiece {
+  from { transform: translate(var(--fx), var(--fy)); }
+  to   { transform: none; }
+}
+.ld-mark .fill { animation: ldFillIn 0.6s ease calc(var(--d) + 0.45s) both; }
+@keyframes ldFillIn { from { opacity: 0; } to { opacity: 1; } }
+.ld-mark .trace {
+  fill: none;
+  stroke: url(#ld-gold);
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: ldDraw 0.85s cubic-bezier(0.5, 0, 0.2, 1) var(--d) both,
+             ldTraceOut 0.55s ease calc(var(--d) + 1.05s) forwards;
+}
+@keyframes ldDraw { to { stroke-dashoffset: 0; } }
+@keyframes ldTraceOut { to { opacity: 0; } }
+
+/* light band along the swoosh axis + glint at its tip, same 3.2s cycle so they stay in step */
+.ld-sheen-wrap { opacity: 0; animation: ldFadeIn 0.01s linear 1.9s forwards; }
+.ld-sheen { transform: translateX(-150px); animation: ldSweep 3.2s ease-in-out 1.9s infinite; }
+@keyframes ldSweep {
+  0%        { transform: translateX(-150px); }
+  45%, 100% { transform: translateX(260px); }
+}
+.ld-glint {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0);
+  animation: ldGlint 3.2s ease-in-out 1.9s infinite;
+}
+@keyframes ldGlint {
+  0%, 30%  { transform: scale(0) rotate(0deg); }
+  38%      { transform: scale(1.15) rotate(45deg); }
+  50%, 100% { transform: scale(0) rotate(90deg); }
+}
+
+/* ── wordmark: letter by letter ── */
 .ld-word {
   position: relative;
-  width: clamp(176px, 54vw, 232px);
+  width: clamp(180px, 56vw, 240px);
   aspect-ratio: 440 / 39;
-  background: var(--ld-word) center / contain no-repeat;
-  animation: ldWordIn 0.95s var(--ease-premium) 0.85s both;
 }
-/* light sweep, masked to the artwork so it only touches the gold */
-.ld-mark::after, .ld-word::after {
+.ld-word span {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background-image: var(--ld-word);
+  background-repeat: no-repeat;
+  animation: ldLetter 0.7s var(--ease-premium) calc(0.95s + var(--i) * 40ms) both;
+}
+@keyframes ldLetter {
+  from { opacity: 0; transform: translateY(12px); filter: blur(5px); }
+  to   { opacity: 1; transform: none; filter: blur(0); }
+}
+.ld-word::after {
   content: '';
   position: absolute;
   inset: 0;
   background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.85) 50%, transparent 62%) no-repeat;
   background-size: 280% 100%;
   background-position: 100% 0;
-  animation: ldSheen 3s ease-in-out 1.15s infinite;
-}
-.ld-mark::after {
-  -webkit-mask: var(--ld-mark) center / contain no-repeat;
-          mask: var(--ld-mark) center / contain no-repeat;
-}
-.ld-word::after {
   -webkit-mask: var(--ld-word) center / contain no-repeat;
           mask: var(--ld-word) center / contain no-repeat;
-  animation-delay: 1.45s;
+  animation: ldSheen 3.2s ease-in-out 2.3s infinite;
+}
+@keyframes ldSheen {
+  0%   { background-position: 100% 0; }
+  40%, 100% { background-position: 0% 0; }
 }
 
+/* light theme: a white glint / sweep would vanish on cream, so warm the glint and soften the wordmark sweep */
+[data-theme="light"] .ld-glint path { fill: #C9A84C; }
+[data-theme="light"] .ld-glint circle { fill: #E8C96B; }
+[data-theme="light"] .ld-word::after {
+  background-image: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.5) 50%, transparent 62%);
+}
+
+/* ── progress line ── */
 .ld-bar {
   position: relative;
   width: clamp(120px, 38vw, 168px);
   height: 3px;
-  margin-top: 8px;
+  margin-top: 6px;
   border-radius: 999px;
   background: rgba(201, 168, 76, 0.2);
   overflow: hidden;
   opacity: 0;
-  animation: ldFade 0.5s ease 1.4s forwards;
+  animation: ldFadeIn 0.5s ease 1.7s forwards;
 }
 .ld-bar i {
   position: absolute;
@@ -4439,39 +4486,19 @@ textarea.form-control {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
   animation: ldBarShine 1.4s ease-in-out infinite;
 }
-
-@keyframes ldGlowIn {
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-}
-@keyframes ldBreathe {
-  0%, 100% { opacity: 1;    transform: translate(-50%, -50%) scale(1); }
-  50%      { opacity: 0.78; transform: translate(-50%, -50%) scale(1.07); }
-}
-@keyframes ldMarkIn {
-  0%   { clip-path: inset(100% 0 0 0); opacity: 0; transform: translateY(14px) scale(0.93); filter: blur(6px); }
-  35%  { opacity: 1; }
-  100% { clip-path: inset(0 0 0 0);    opacity: 1; transform: none; filter: blur(0); }
-}
-@keyframes ldWordIn {
-  0%   { clip-path: inset(0 100% 0 0); opacity: 0; transform: translateY(6px); }
-  30%  { opacity: 1; }
-  100% { clip-path: inset(0 0 0 0);    opacity: 1; transform: none; }
-}
-@keyframes ldSheen {
-  0%   { background-position: 100% 0; }
-  40%, 100% { background-position: 0% 0; }
-}
-@keyframes ldFade { to { opacity: 1; } }
 @keyframes ldBarShine {
   0%   { transform: translateX(-120%); }
   100% { transform: translateX(260%); }
 }
-@media (prefers-reduced-motion: reduce) {
-  .loading-screen::before { animation: ldGlowIn 0.6s ease forwards; }
-  .ld-mark, .ld-word { animation: ldFadeIn 0.5s ease both; }
-  .ld-mark::after, .ld-word::after, .ld-bar i::after { animation: none; }
-}
 @keyframes ldFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ld-sheen-wrap, .ld-glint, .ld-mark .trace { display: none; }
+  .ld-mark .pc { animation: none; }
+  .ld-mark .fill { animation: ldFadeIn 0.5s ease both; }
+  .ld-word span { animation: ldFadeIn 0.5s ease 0.2s both; }
+  .ld-word::after, .ld-bar i::after { animation: none; }
+}
 
 /* Fallback inline spinner for dynamic lists */
 .loading-spinner {
