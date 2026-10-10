@@ -588,15 +588,26 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
 
     const { data: rows, error } = await supabase
       .from('bible_streaks')
-      .select('telegram_id, current_streak, longest_streak, last_read_date')
+      .select('telegram_id, current_streak, longest_streak, last_read_date, freezes_available')
       .in('telegram_id', menteeIds);
     if (error) return res.status(500).json({ error: error.message });
 
+    // bible_streaks.current_streak only changes when the mentee reads, so it never
+    // drops on its own: someone who stopped weeks ago would still show their old
+    // run here. Apply the same rule as POST /api/streaks/mark: a streak is alive
+    // if they read today or yesterday, or two days ago with a Streak Saver banked.
+    const dayStr = (offset) => new Date(Date.now() + 3 * 3600000 + offset * 86400000).toISOString().split('T')[0];
+    const today = dayStr(0), yesterday = dayStr(-1), twoDaysAgo = dayStr(-2);
+
     (rows || []).forEach(r => {
+      const last = r.last_read_date || null;
+      const alive = last === today || last === yesterday
+        || (last === twoDaysAgo && (r.freezes_available || 0) > 0);
       streaks[r.telegram_id] = {
-        current_streak: r.current_streak || 0,
+        current_streak: alive ? (r.current_streak || 0) : 0,
         longest_streak: r.longest_streak || 0,
-        last_read_date: r.last_read_date || null,
+        last_read_date: last,
+        read_today: last === today,
       };
     });
 

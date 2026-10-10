@@ -13905,3 +13905,53 @@ textarea.form-control { resize: none; }
   border-radius: 14px; background: var(--bg3); border: 1px solid var(--border-dim); }
 .rating-end-reason b { font-size: var(--fs-2xs); letter-spacing: .04em; color: var(--gold); }
 .rating-end-reason span { font-size: var(--fs-sm); color: var(--text); line-height: 1.4; overflow-wrap: anywhere; }
+
+/* ── My Mentees card polish ──────────────────────────────────────────
+   Header = avatar + name + one status line + menu. The streak and the
+   follow-up flag moved into their own chip row, so the name block is no
+   longer crowded. Every chip is the same height and the row wraps between
+   chips (never inside one), which keeps long Amharic labels tidy. */
+.card.mentee-card { gap: 16px; padding: 18px; }
+.mentee-card-profile { gap: 14px; }
+.mentee-card-head { align-items: flex-start; }
+.mentee-card-identity { gap: 6px; padding-top: 2px; }
+.mentee-card-name { font-size: var(--fs-lg); line-height: 1.3; overflow-wrap: anywhere; }
+.mentee-card-identity .mentee-status-line-compact { gap: 0; }
+.mentee-card-identity .mentee-status-row { display: flex; align-items: flex-start; gap: 8px; line-height: 1.35; font-size: var(--fs-xs); color: var(--text2); font-weight: 600; }
+.mentee-card-identity .mentee-status-dot { margin-top: 5px; flex: none; }
+.mentee-card-identity .mentee-status-text { min-width: 0; overflow-wrap: anywhere; }
+
+.mentee-card-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; min-width: 0; }
+.mentee-card-stats .mentee-streak-badge,
+.mentee-card-stats .mentee-streak-badge.is-active,
+.mentee-card-stats .mentee-streak-badge.is-idle,
+.mentee-card-stats .mentee-followup-pill {
+  display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box;
+  min-height: 34px; margin: 0; padding: 0 14px; max-width: 100%;
+  border-radius: 999px; font-size: var(--fs-xs); line-height: 1.2; white-space: nowrap;
+}
+.mentee-card-stats .mentee-streak-badge.is-active { background: var(--gold-dim); border: 1px solid rgba(201, 168, 76, 0.4); color: var(--text); }
+.mentee-card-stats .mentee-streak-badge.is-idle { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.10); color: var(--text3); font-weight: 600; }
+.mentee-card-stats .mentee-streak-flame { color: var(--gold-light); }
+.mentee-card-stats .mentee-streak-flame svg { width: 14px; height: 14px; }
+.mentee-card-stats .mentee-streak-badge.is-idle .mentee-streak-flame { color: var(--text3); opacity: .7; }
+.mentee-card-stats .mentee-streak-num { font-size: var(--fs-md); font-weight: 800; color: var(--gold-light); font-variant-numeric: tabular-nums; }
+.mentee-card-stats .mentee-streak-unit { font-weight: 600; color: var(--text2); }
+.mentee-card-stats .mentee-streak-best { margin: 0 0 0 2px; padding: 0 0 0 10px; border-left: 1px solid rgba(255, 255, 255, 0.16); font-weight: 600; color: var(--text3); }
+.mentee-card-stats .mentee-followup-pill { font-weight: 700; background: rgba(224, 92, 92, 0.14); border: 1px solid rgba(224, 92, 92, 0.4); color: #f0a0a0; }
+
+/* The goals row holds long Amharic text: a stadium shape looks wrong once it
+   wraps to two lines, so use a rounded rectangle and let the text flow. */
+.mentee-card-body { gap: 16px; padding-top: 16px; }
+.mentee-card-body .goal-toggle-btn { border-radius: 18px; min-height: 52px; padding: 8px 14px 8px 10px; text-align: left; }
+.mentee-card-body .goal-toggle-btn > span:first-child { flex: 1 1 auto; min-width: 0; align-items: center; line-height: 1.3; overflow-wrap: anywhere; }
+.mentee-card-body .goal-toggle-caret { margin-left: 10px; }
+
+[data-theme="light"] .mentee-card-identity .mentee-status-row { color: #5A5650; }
+[data-theme="light"] .mentee-card-stats .mentee-streak-badge.is-active { background: rgba(201, 168, 76, 0.16); border-color: rgba(150, 120, 40, 0.4); color: #1A1714; }
+[data-theme="light"] .mentee-card-stats .mentee-streak-badge.is-idle { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.25); color: #6B665D; }
+[data-theme="light"] .mentee-card-stats .mentee-streak-flame { color: #A87C2A; }
+[data-theme="light"] .mentee-card-stats .mentee-streak-num { color: #7A5812; }
+[data-theme="light"] .mentee-card-stats .mentee-streak-unit { color: #5A5650; }
+[data-theme="light"] .mentee-card-stats .mentee-streak-best { border-left-color: rgba(150, 120, 40, 0.3); color: #6B665D; }
+[data-theme="light"] .mentee-card-stats .mentee-followup-pill { background: rgba(179, 57, 39, 0.08); border-color: rgba(179, 57, 39, 0.35); color: #B33927; }
