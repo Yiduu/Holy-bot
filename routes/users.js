@@ -240,6 +240,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
         .select('from_id')
         .eq('to_id', telegram_id)
         .eq('is_read', false)
+        .or('is_deleted.eq.false,is_deleted.is.null')
         .in('from_id', fromIds);
       const counts = {};
       (rows || []).forEach(r => { counts[r.from_id] = (counts[r.from_id] || 0) + 1; });

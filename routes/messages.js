@@ -292,6 +292,9 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers, 
       .select('id', { count: 'exact', head: true })
       .eq('to_id', id)
       .eq('is_read', false)
+      // A message the sender unsent before it was read must not keep the
+      // badge lit. `is_deleted` can be NULL on older rows, so accept both.
+      .or('is_deleted.eq.false,is_deleted.is.null')
       .in('from_id', partnerIds);
     if (cErr) throw cErr;
 
@@ -740,7 +743,7 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers, 
       if (error) return res.status(500).json({ error: error.message });
 
       // Notify the partner via socket if online
-      io.to(userRoom(partner_id)).emit('chat_cleared', { by_id: user_id });
+      io.to([userRoom(partner_id), userRoom(user_id)]).emit('chat_cleared', { by_id: user_id });
 
       if (notifs?.length) {
         require('../bot').syncNotificationDelete(notifs.map(n => n.message_id)).catch(() => { });
@@ -766,7 +769,12 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers, 
 
     if (error) return res.status(500).json({ error: error.message });
 
-    io.to([userRoom(msg.to_id), userRoom(user_id)]).emit('message_deleted', { id: messageId, is_deleted: true });
+    io.to([userRoom(msg.to_id), userRoom(user_id)]).emit('message_deleted', {
+      id: messageId,
+      is_deleted: true,
+      from_id: msg.from_id,
+      to_id: msg.to_id,
+    });
 
     // Also remove the bot's Telegram copy, if one was sent. Fire-and-forget.
     require('../bot').syncNotificationDelete([messageId]).catch(() => { });

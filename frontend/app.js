@@ -1485,6 +1485,8 @@ function connectSocket() {
     stopChatPolling();
     $('reconnectBanner')?.classList.remove('show');
     setGoalsLiveStatus(true);
+    // Deletes/reads that happened while offline never reached us as events.
+    updateMessageBadge();
     // Re-auth on reconnect
     const userId = String(currentUser?.telegram_id || getTelegramData().user?.id || '');
     socket.emit('auth', userId);
@@ -1521,6 +1523,9 @@ function connectSocket() {
   });
 
   socket.on('chat_cleared', ({ by_id }) => {
+    // Cleared messages no longer count as unread, on any page.
+    updateMessageBadge();
+    refreshChatPartnerBadges();
     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(by_id)) {
       loadMessages(window.chatState.with, { force: true }).catch(() => { });
     }
@@ -1678,6 +1683,11 @@ function connectSocket() {
   socket.on('message_deleted', ({ id } = {}) => {
     if (!id) return;
     window._chatMessagesMap?.delete(String(id));
+    // The sender may unsend a message before the receiver ever opens the
+    // chat. The server no longer counts it as unread, so re-sync the nav
+    // badge (and the mentor's per-mentee badges) no matter which page is open.
+    updateMessageBadge();
+    refreshChatPartnerBadges();
     if (currentPage !== 'chat' || !window.chatState?.with) return;
     // Replies to the deleted message stay in place; their quote just updates.
     refreshReplyQuotesFor(id, null);

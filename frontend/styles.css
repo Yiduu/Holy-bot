@@ -10638,6 +10638,63 @@ input:focus, textarea:focus, select:focus {
   scroll-padding-bottom: var(--chat-covered, 120px);
 }
 
+/* ─── Chat empty state ─────────────────────────────────────────
+   Shown inside #chatMessages (a flex column) while the conversation has no
+   messages. `margin: auto` centres it both horizontally and vertically in
+   the space above the fixed input row (that space is already reserved by the
+   container's bottom padding), so it sits in the optical middle of the
+   visible area on every screen size and in both themes. */
+.chat-empty {
+  margin: auto;
+  width: 100%;
+  max-width: 300px;
+  padding: 24px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
+  animation: chatEmptyIn .4s ease both;
+}
+.chat-empty-icon {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  background: radial-gradient(circle at 30% 25%, rgba(201, 168, 76, .22), rgba(201, 168, 76, .07) 70%);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-gold);
+}
+.chat-empty-icon svg { width: 30px; height: 30px; display: block; }
+.chat-empty-title {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: .01em;
+  color: var(--text);
+}
+.chat-empty-sub {
+  margin: 0;
+  font-size: .86rem;
+  line-height: 1.55;
+  color: var(--text2);
+  text-wrap: balance;
+}
+@keyframes chatEmptyIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-empty { animation: none; }
+}
+
 /* Nav tabs share the pill's width equally and shrink their label to fit, so
    longer labels ("Requests", "Mentees", Amharic) are never cut off. */
 .bottom-nav { overflow: visible; }

@@ -1,0 +1,152 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index adf6bab..63b46a1 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1485,6 +1485,8 @@ function connectSocket() {
+     stopChatPolling();
+     $('reconnectBanner')?.classList.remove('show');
+     setGoalsLiveStatus(true);
++    // Deletes/reads that happened while offline never reached us as events.
++    updateMessageBadge();
+     // Re-auth on reconnect
+     const userId = String(currentUser?.telegram_id || getTelegramData().user?.id || '');
+     socket.emit('auth', userId);
+@@ -1521,6 +1523,9 @@ function connectSocket() {
+   });
+ 
+   socket.on('chat_cleared', ({ by_id }) => {
++    // Cleared messages no longer count as unread, on any page.
++    updateMessageBadge();
++    refreshChatPartnerBadges();
+     if (currentPage === 'chat' && window.chatState?.with && String(window.chatState.with) === String(by_id)) {
+       loadMessages(window.chatState.with, { force: true }).catch(() => { });
+     }
+@@ -1678,6 +1683,11 @@ function connectSocket() {
+   socket.on('message_deleted', ({ id } = {}) => {
+     if (!id) return;
+     window._chatMessagesMap?.delete(String(id));
++    // The sender may unsend a message before the receiver ever opens the
++    // chat. The server no longer counts it as unread, so re-sync the nav
++    // badge (and the mentor's per-mentee badges) no matter which page is open.
++    updateMessageBadge();
++    refreshChatPartnerBadges();
+     if (currentPage !== 'chat' || !window.chatState?.with) return;
+     // Replies to the deleted message stay in place; their quote just updates.
+     refreshReplyQuotesFor(id, null);
+diff --git a/frontend/styles.css b/frontend/styles.css
+index f818deb..134d458 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -10638,6 +10638,63 @@ input:focus, textarea:focus, select:focus {
+   scroll-padding-bottom: var(--chat-covered, 120px);
+ }
+ 
++/* ─── Chat empty state ─────────────────────────────────────────
++   Shown inside #chatMessages (a flex column) while the conversation has no
++   messages. `margin: auto` centres it both horizontally and vertically in
++   the space above the fixed input row (that space is already reserved by the
++   container's bottom padding), so it sits in the optical middle of the
++   visible area on every screen size and in both themes. */
++.chat-empty {
++  margin: auto;
++  width: 100%;
++  max-width: 300px;
++  padding: 24px 12px;
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  justify-content: center;
++  text-align: center;
++  user-select: none;
++  -webkit-user-select: none;
++  animation: chatEmptyIn .4s ease both;
++}
++.chat-empty-icon {
++  width: 72px;
++  height: 72px;
++  margin-bottom: 18px;
++  border-radius: 50%;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  color: var(--gold);
++  background: radial-gradient(circle at 30% 25%, rgba(201, 168, 76, .22), rgba(201, 168, 76, .07) 70%);
++  border: 1px solid var(--border);
++  box-shadow: var(--shadow-gold);
++}
++.chat-empty-icon svg { width: 30px; height: 30px; display: block; }
++.chat-empty-title {
++  margin: 0 0 6px;
++  font-size: 1.05rem;
++  font-weight: 700;
++  line-height: 1.3;
++  letter-spacing: .01em;
++  color: var(--text);
++}
++.chat-empty-sub {
++  margin: 0;
++  font-size: .86rem;
++  line-height: 1.55;
++  color: var(--text2);
++  text-wrap: balance;
++}
++@keyframes chatEmptyIn {
++  from { opacity: 0; transform: translateY(6px); }
++  to   { opacity: 1; transform: none; }
++}
++@media (prefers-reduced-motion: reduce) {
++  .chat-empty { animation: none; }
++}
++
+ /* Nav tabs share the pill's width equally and shrink their label to fit, so
+    longer labels ("Requests", "Mentees", Amharic) are never cut off. */
+ .bottom-nav { overflow: visible; }
+diff --git a/routes/messages.js b/routes/messages.js
+index 49800dc..123eb86 100644
+--- a/routes/messages.js
++++ b/routes/messages.js
+@@ -292,6 +292,9 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers,
+       .select('id', { count: 'exact', head: true })
+       .eq('to_id', id)
+       .eq('is_read', false)
++      // A message the sender unsent before it was read must not keep the
++      // badge lit. `is_deleted` can be NULL on older rows, so accept both.
++      .or('is_deleted.eq.false,is_deleted.is.null')
+       .in('from_id', partnerIds);
+     if (cErr) throw cErr;
+ 
+@@ -740,7 +743,7 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers,
+       if (error) return res.status(500).json({ error: error.message });
+ 
+       // Notify the partner via socket if online
+-      io.to(userRoom(partner_id)).emit('chat_cleared', { by_id: user_id });
++      io.to([userRoom(partner_id), userRoom(user_id)]).emit('chat_cleared', { by_id: user_id });
+ 
+       if (notifs?.length) {
+         require('../bot').syncNotificationDelete(notifs.map(n => n.message_id)).catch(() => { });
+@@ -766,7 +769,12 @@ module.exports = function messageRoutes(supabase, requireAuth, io, onlineUsers,
+ 
+     if (error) return res.status(500).json({ error: error.message });
+ 
+-    io.to([userRoom(msg.to_id), userRoom(user_id)]).emit('message_deleted', { id: messageId, is_deleted: true });
++    io.to([userRoom(msg.to_id), userRoom(user_id)]).emit('message_deleted', {
++      id: messageId,
++      is_deleted: true,
++      from_id: msg.from_id,
++      to_id: msg.to_id,
++    });
+ 
+     // Also remove the bot's Telegram copy, if one was sent. Fire-and-forget.
+     require('../bot').syncNotificationDelete([messageId]).catch(() => { });
+diff --git a/routes/users.js b/routes/users.js
+index 786bd20..d3d985c 100644
+--- a/routes/users.js
++++ b/routes/users.js
+@@ -240,6 +240,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
+         .select('from_id')
+         .eq('to_id', telegram_id)
+         .eq('is_read', false)
++        .or('is_deleted.eq.false,is_deleted.is.null')
+         .in('from_id', fromIds);
+       const counts = {};
+       (rows || []).forEach(r => { counts[r.from_id] = (counts[r.from_id] || 0) + 1; });
