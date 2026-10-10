@@ -868,7 +868,7 @@ const I18N = {
     "end_reason_note": "ተመካሪዎ ምክንያትዎን በማሳወቂያ ይቀበላል። የውይይት ታሪክዎ ይቆያል።",
     "mentee_label": "ተመካሪ",
     "end_reason_label": "ምክንያትዎ",
-    "end_reason_placeholder": "ለተመካሪዎ ጥቂት ደግና ግልጽ ቃላትን ይጻፉ…",
+    "end_reason_placeholder": "ማንኛውም የሚያቋርጡበትን ምክንያት ይጻፉ",
     "end_reason_hint": "ግዴታ ነው። ቢያንስ 3 ፊደላት።",
     "end_reason_from_mentor": "ለምን እንደተቋረጠ",
     "transfer_note_placeholder": "ተመካሪውን ለመርዳት የሚጠቅም ማንኛውም መረጃ…",
