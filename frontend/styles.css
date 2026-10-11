@@ -4334,14 +4334,14 @@ textarea.form-control {
 }
 
 /* ─── Loading screen ────────────────────────────────────────────
-   Logo motion, "trace and assemble" (intro ≈ 2.2s, then the sweep + glint loop while loading):
-   0.00s  gold outlines draw themselves around the four pieces of the H while the pieces glide in
-   0.42s  the swoosh slides out of the left pillar along its own diagonal
-   0.45s+ each piece fills with the real gold artwork, its outline fades
-   0.95s  wordmark appears letter by letter
-   1.90s  a light band travels along the swoosh and ends in a glint at its tip (repeats)
-   1.70s  progress line fades in and fills as the app boots
-   Exit: stage lifts + fades (.is-leaving), then .hidden removes it. */
+   "Embrace": the swoosh of the H is an arm. Intro ≈ 1.7s, then only a soft light sweep loops while the app boots.
+   0.00s  both pillars rise toward each other as solid stands (the right one has its gap filled); the left one carries the arm,
+          hanging down along its leg
+   0.40s  the arm swings up from the leg (short, so it stays behind the right stand), then stretches through it
+   0.80s  the gap in the right stand opens to let the arm through: the touch, and the H is formed
+   0.90s  the name blooms outward from its centre, left and right in step
+   Exit: the stage lifts and fades (.is-leaving), then .hidden removes it.
+   Proportions: one unit --u (the mark's width). Name = 2u, gap = .26u, all on one centre axis. */
 .loading-screen {
   position: fixed;
   inset: 0;
@@ -4351,76 +4351,79 @@ textarea.form-control {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.55s ease;
+  transition: opacity 0.42s ease;
 }
 .loading-screen.is-leaving { opacity: 0; pointer-events: none; }
 .ld-stage {
+  --u: clamp(104px, 32vw, 136px);
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
-  margin-top: -4vh;
-  transition: transform 0.55s var(--ease-premium), opacity 0.45s ease;
+  margin-top: -3vh;
+  transition: transform 0.42s var(--ease-premium), opacity 0.36s ease;
 }
-.loading-screen.is-leaving .ld-stage { transform: translateY(-8px) scale(1.05); opacity: 0; }
+.loading-screen.is-leaving .ld-stage { transform: translateY(-6px) scale(1.04); opacity: 0; }
 
 /* ── the H ── */
 .ld-mark {
   display: block;
-  width: clamp(96px, 30vw, 132px);
+  width: var(--u);
   height: auto;
   overflow: visible;
 }
-.ld-mark .pc { animation: ldPiece 1.05s var(--ease-premium) var(--d) both; }
-.ld-mark .pc-l { --d: 0s;    --fx: 0px;   --fy: 36px; }
-.ld-mark .pc-u { --d: 0.12s; --fx: 0px;   --fy: -34px; }
-.ld-mark .pc-r { --d: 0.18s; --fx: 10px;  --fy: 40px; }
-.ld-mark .pc-s { --d: 0.42s; --fx: -62px; --fy: 32px; }
+
+/* the pillars rise from equal distances and meet in the middle (the arm's carrier moves exactly like the left pillar) */
+.ld-mark .pc {
+  animation: ldPiece 0.65s var(--ease-premium) var(--d) both;
+  --d: 0s;
+}
+.ld-mark .pc-l, .ld-mark .pc-p, .ld-mark .pc-a { --fx: -9px; --fy: 26px; }
+.ld-mark .pc-u, .ld-mark .pc-r { --fx: 9px;  --fy: 26px; --d: 0.05s; }
 @keyframes ldPiece {
-  from { transform: translate(var(--fx), var(--fy)); }
-  to   { transform: none; }
+  from { opacity: 0; transform: translate(var(--fx), var(--fy)); }
+  35%  { opacity: 1; }
+  to   { opacity: 1; transform: none; }
 }
-.ld-mark .fill { animation: ldFillIn 0.6s ease calc(var(--d) + 0.45s) both; }
-@keyframes ldFillIn { from { opacity: 0; } to { opacity: 1; } }
-.ld-mark .trace {
-  fill: none;
-  stroke: url(#ld-gold);
-  stroke-width: 2.2;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: ldDraw 0.85s cubic-bezier(0.5, 0, 0.2, 1) var(--d) both,
-             ldTraceOut 0.55s ease calc(var(--d) + 1.05s) forwards;
-}
-@keyframes ldDraw { to { stroke-dashoffset: 0; } }
-@keyframes ldTraceOut { to { opacity: 0; } }
+/* the right stand's fill: a patch with straight edges, plus two background-coloured trims where the original pieces stick out past them.
+   They ride with the right stand, then fade out together as the arm arrives, which opens the gap and completes the H. */
+.ld-mark .gapmask { fill: var(--bg); }
+/* (older note) the gap filler rides with the right stand, then fades out as the arm arrives, which opens the gap and completes the H */
+.ld-mark .pc-g { --fx: 9px; --fy: 26px; --d: 0.05s; }
+.ld-mark .gapfill { animation: ldGapOpen 0.16s ease-out 0.8s both; }
+@keyframes ldGapOpen { to { opacity: 0; } }
+/* the clean pillar face fades out as the arm lands, so the swoosh's joint with the pillar closes behind it */
+.ld-mark .wedgefill { animation: ldGapOpen 0.25s ease-in-out 0.95s both; }
 
-/* light band along the swoosh axis + glint at its tip, same 3.2s cycle so they stay in step */
-.ld-sheen-wrap { opacity: 0; animation: ldFadeIn 0.01s linear 1.9s forwards; }
-.ld-sheen { transform: translateX(-150px); animation: ldSweep 3.2s ease-in-out 1.9s infinite; }
+/* the arm: pivots on its root (the shoulder, on the left pillar). Its own axis points ≈ 31° up and to the right.
+   Start: hanging straight down along the leg, slim and unstretched (half length), tucked inside the pillar. Then it swings up, widens and
+   stretches, reaches a touch past the right pillar and settles. The transform list is rotate(swing − 31°) scale(stretch, width) rotate(31°),
+   so the stretch runs along the arm. */
+.ld-mark .arm {
+  transform-origin: 89px 136px;
+  animation: ldSwing 0.8s linear 0.4s both;
+}
+@keyframes ldSwing {
+  from { transform: translate(-26px, 6px) rotate(90deg)  scale(0.5, 0.6)  rotate(31deg); animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1); }
+  40%  { transform: translate(-4px, 1px)  rotate(-12deg) scale(0.66, 0.9) rotate(31deg); animation-timing-function: cubic-bezier(0.3, 0.6, 0.3, 1); }
+  72%  { transform: translate(0, 0)       rotate(-35deg) scale(1.04, 1)   rotate(31deg); animation-timing-function: ease-in-out; }
+  to   { transform: translate(0, 0)       rotate(-31deg) scale(1, 1)      rotate(31deg); }
+}
+
+/* While the app is still booting (a slow start), a soft band of light crosses the mark every 3s. */
+.ld-sheen-wrap { opacity: 0; animation: ldFadeIn 0.01s linear 2s forwards; }
+.ld-sheen { transform: translateX(-150px); animation: ldSweep 3s ease-in-out 1.4s infinite; }
 @keyframes ldSweep {
-  0%        { transform: translateX(-150px); }
-  45%, 100% { transform: translateX(260px); }
-}
-.ld-glint {
-  transform-box: fill-box;
-  transform-origin: center;
-  transform: scale(0);
-  animation: ldGlint 3.2s ease-in-out 1.9s infinite;
-}
-@keyframes ldGlint {
-  0%, 30%  { transform: scale(0) rotate(0deg); }
-  38%      { transform: scale(1.15) rotate(45deg); }
-  50%, 100% { transform: scale(0) rotate(90deg); }
+  0%, 52%   { transform: translateX(-150px); }
+  96%, 100% { transform: translateX(260px); }
 }
 
-/* ── wordmark: letter by letter ── */
+/* ── name: the original lettering; the letters bloom outward from the centre one, left and right in step ── */
 .ld-word {
   position: relative;
-  width: clamp(180px, 56vw, 240px);
+  width: calc(var(--u) * 2);
   aspect-ratio: 440 / 39;
+  margin-top: calc(var(--u) * 0.26);
 }
 .ld-word span {
   position: absolute;
@@ -4428,11 +4431,11 @@ textarea.form-control {
   height: 100%;
   background-image: var(--ld-word);
   background-repeat: no-repeat;
-  animation: ldLetter 0.7s var(--ease-premium) calc(0.95s + var(--i) * 40ms) both;
+  animation: ldLetter 0.6s var(--ease-premium) calc(0.9s + var(--o) * 42ms) both;
 }
 @keyframes ldLetter {
-  from { opacity: 0; transform: translateY(12px); filter: blur(5px); }
-  to   { opacity: 1; transform: none; filter: blur(0); }
+  from { opacity: 0; transform: translateX(calc((6 - var(--i)) * 20%)) scale(0.92); }
+  to   { opacity: 1; transform: none; }
 }
 .ld-word::after {
   content: '';
@@ -4443,61 +4446,26 @@ textarea.form-control {
   background-position: 100% 0;
   -webkit-mask: var(--ld-word) center / contain no-repeat;
           mask: var(--ld-word) center / contain no-repeat;
-  animation: ldSheen 3.2s ease-in-out 2.3s infinite;
+  opacity: 0;
+  animation: ldSheen 3s ease-in-out 2.2s infinite, ldFadeIn 0.01s linear 2.2s forwards;
 }
 @keyframes ldSheen {
-  0%   { background-position: 100% 0; }
+  0%        { background-position: 100% 0; }
   40%, 100% { background-position: 0% 0; }
 }
+@keyframes ldFadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-/* light theme: a white glint / sweep would vanish on cream, so warm the glint and soften the wordmark sweep */
-[data-theme="light"] .ld-glint path { fill: #C9A84C; }
-[data-theme="light"] .ld-glint circle { fill: #E8C96B; }
+/* light theme: a white sweep would vanish on cream, so soften it */
 [data-theme="light"] .ld-word::after {
   background-image: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.5) 50%, transparent 62%);
 }
 
-/* ── progress line ── */
-.ld-bar {
-  position: relative;
-  width: clamp(120px, 38vw, 168px);
-  height: 3px;
-  margin-top: 6px;
-  border-radius: 999px;
-  background: rgba(201, 168, 76, 0.2);
-  overflow: hidden;
-  opacity: 0;
-  animation: ldFadeIn 0.5s ease 1.7s forwards;
-}
-.ld-bar i {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #A87C2A, #EBCD72);
-  transform-origin: left center;
-  transform: scaleX(var(--ld-p, 0));
-  transition: transform 0.4s var(--ease-premium);
-  overflow: hidden;
-}
-.ld-bar i::after {
-  content: '';
-  position: absolute;
-  top: 0; bottom: 0; width: 45%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
-  animation: ldBarShine 1.4s ease-in-out infinite;
-}
-@keyframes ldBarShine {
-  0%   { transform: translateX(-120%); }
-  100% { transform: translateX(260%); }
-}
-@keyframes ldFadeIn { from { opacity: 0; } to { opacity: 1; } }
-
 @media (prefers-reduced-motion: reduce) {
-  .ld-sheen-wrap, .ld-glint, .ld-mark .trace { display: none; }
-  .ld-mark .pc { animation: none; }
-  .ld-mark .fill { animation: ldFadeIn 0.5s ease both; }
+  .ld-sheen-wrap, .ld-mark .pc-g, .ld-mark .pc-p { display: none; }
+  .ld-mark .pc, .ld-mark .arm { animation: none; }
+  .ld-mark .arm { transform: none; }
   .ld-word span { animation: ldFadeIn 0.5s ease 0.2s both; }
-  .ld-word::after, .ld-bar i::after { animation: none; }
+  .ld-word::after { animation: none; }
 }
 
 /* Fallback inline spinner for dynamic lists */

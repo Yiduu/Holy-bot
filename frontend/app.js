@@ -1089,25 +1089,13 @@ function syncTelegramBack() {
 }
 
 // ─── Loading screen controller ────────────────────────────────
-// The intro animation takes ~1.9s. On a fast start the app is ready sooner, so
+// The intro animation takes ~1.8s. On a fast start the app is ready sooner, so
 // hideLoadingScreen() waits until LOADER_MIN_MS has passed since the page began
 // loading (performance.now() counts from navigation start, so a reload gets the
-// full animation too). The progress line eases toward 90% while booting and
-// jumps to 100% right before the screen leaves.
-const LOADER_MIN_MS = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1200 : 2400;
-const LOADER_FILL_MS = 400;     // let the bar visibly reach 100%
-const LOADER_LEAVE_MS = 600;    // matches the .is-leaving fade in styles.css
+// full animation too), then the screen fades out.
+const LOADER_MIN_MS = matchMedia('(prefers-reduced-motion: reduce)').matches ? 900 : 1800;
+const LOADER_LEAVE_MS = 440;    // matches the .is-leaving fade in styles.css
 let __loaderHide = null;
-(function startLoaderProgress() {
-  const el = $('loadingScreen');
-  if (!el) return;
-  (function tick() {
-    if (__loaderHide) return;
-    const t = performance.now() / 1000;
-    el.style.setProperty('--ld-p', (0.9 * (1 - Math.exp(-t / 1.4))).toFixed(3));
-    requestAnimationFrame(tick);
-  })();
-})();
 
 function hideLoadingScreen() {
   if (__loaderHide) return __loaderHide;
@@ -1115,11 +1103,8 @@ function hideLoadingScreen() {
   if (!el || el.classList.contains('hidden')) return Promise.resolve();
   __loaderHide = new Promise(resolve => {
     setTimeout(() => {
-      el.style.setProperty('--ld-p', '1');
-      setTimeout(() => {
-        el.classList.add('is-leaving');
-        setTimeout(() => { el.classList.add('hidden'); resolve(); }, LOADER_LEAVE_MS);
-      }, LOADER_FILL_MS);
+      el.classList.add('is-leaving');
+      setTimeout(() => { el.classList.add('hidden'); resolve(); }, LOADER_LEAVE_MS);
     }, Math.max(0, LOADER_MIN_MS - performance.now()));
   });
   return __loaderHide;
