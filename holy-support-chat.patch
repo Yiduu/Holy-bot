@@ -1,0 +1,824 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index c2c6ef3..e29cbf7 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1642,8 +1642,8 @@ function connectSocket() {
+     updateSupportBadge();
+     if (currentPage === 'support') {
+       loadUserTickets();
+-    } else if (currentPage === 'ticket-detail' && window.activeTicketId === data.ticket_id) {
+-      loadTicketDetail(data.ticket_id);
++    } else if (currentPage === 'ticket-detail' && String(window.activeTicketId) === String(data.ticket_id)) {
++      loadTicketDetail(data.ticket_id, { quiet: true });
+       hideTicketTyping();
+     }
+   });
+@@ -7017,10 +7017,18 @@ async function submitEndToApply() {
+ // ─── Support Tickets ──────────────────────────────────────────
+ window.activeTicketId = null;
+ 
++const TICKET_STATUS_KEYS = { open: 'ticket_status_open', in_progress: 'ticket_status_in_progress', resolved: 'ticket_status_resolved', closed: 'ticket_status_closed' };
++const TICKET_STATUS_ICON = { open: 'chat', in_progress: 'clock', resolved: 'check', closed: 'inbox' };
++function ticketStatusLabel(status) { return t(TICKET_STATUS_KEYS[status] || 'ticket_status_open'); }
++
+ async function loadUserTickets() {
+   const container = $('userTicketsList');
+   if (!container) return;
+-  container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
++  // Only show the spinner when nothing is drawn yet; refreshing a list that is
++  // already on screen shouldn't blank it out first.
++  if (!container.querySelector('.ticket-card-premium')) {
++    container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
++  }
+ 
+   try {
+     const tickets = await apiFetch('/api/support');
+@@ -7028,53 +7036,51 @@ async function loadUserTickets() {
+ 
+     if (!tickets || tickets.length === 0) {
+       container.innerHTML = `
+-        <div class="empty-state card" style="text-align:center;padding:40px 20px;border-radius:18px;background:linear-gradient(135deg, rgba(var(--bg3-rgb),0.5), rgba(var(--bg2-rgb),0.7));border:1px dashed var(--border)">
+-          <div style="color:var(--gold-light);margin-bottom:10px">${ticketIcon('ticket', 42)}</div>
+-          <div class="font-bold text-base mb-4" style="color:var(--text)">${t('no_support_requests_found')}</div>
+-          <p class="text-xs text-dim mb-16" style="max-width:260px;margin-left:auto;margin-right:auto">${t('no_support_requests_desc')}</p>
+-          <button class="ticket-submit-btn" style="max-width:180px;margin:0 auto" onclick="toggleNewTicketModal(true)">
+-            <span>${t('new_request_btn')}</span>
++        <div class="ticket-empty">
++          <span class="ticket-tile ticket-tile-lg">${ticketIcon('ticket', 28)}</span>
++          <div class="ticket-empty-title">${t('no_support_requests_found')}</div>
++          <p class="ticket-empty-desc">${t('no_support_requests_desc')}</p>
++          <button type="button" class="profile-pill sp-new" onclick="toggleNewTicketModal(true)">
++            ${ticketIcon('send', 15)}<span>${t('support_new_pill')}</span>
+           </button>
+         </div>`;
+       return;
+     }
+ 
+-    container.innerHTML = tickets.map(t => {
+-      const status = t.status || 'open';
+-      const replyCount = t.reply_count || 0;
+-      const previewText = t.last_reply_preview ? escapeHtml(t.last_reply_preview) : escapeHtml(t.description);
+-      const lastSenderLabel = t.last_reply_sender === 'admin'
+-        ? `${ticketIcon('shield', 12)} Admin:`
+-        : (t.last_reply_sender === 'user' ? 'You:' : '');
+-      const categoryLabel = t.category
+-        ? `<span class="ticket-cat-label">${escapeHtml(t.category)}</span>`
+-        : '<span></span>';
+-      const resolvedStrip = t.resolved_by === 'user'
+-        ? `<div class="ticket-resolved-strip">${ticketIcon('check', 14)} <span>You marked this solved</span></div>`
++    container.innerHTML = tickets.map(tk => {
++      const status = tk.status || 'open';
++      const replyCount = tk.reply_count || 0;
++      const repliesLabel = replyCount === 1 ? t('ticket_reply_one') : t('ticket_reply_many', { count: replyCount });
++      const who = tk.last_reply_sender === 'admin' ? t('ticket_sender_admin')
++        : (tk.last_reply_sender === 'user' ? t('ticket_sender_you') : '');
++      const snippet = escapeHtml(tk.last_reply_preview || tk.description || '');
++      const preview = who ? `<strong>${who}:</strong> ${snippet}` : snippet;
++      const eyebrow = tk.category ? `<span class="ticket-cat-label">${escapeHtml(tk.category)}</span>` : '';
++      const submitted = escapeHtml(t('ticket_submitted', { time: timeAgo(tk.created_at) }));
++      const solved = tk.resolved_by === 'user'
++        ? `<div class="ticket-resolved-strip">${ticketIcon('check', 14)}<span>${t('ticket_you_solved')}</span></div>`
+         : '';
+ 
+       return `
+-        <div class="ticket-card-premium status-${status}" onclick="openTicketDetail('${t.id}')">
+-          <div class="ticket-card-top">
+-            ${categoryLabel}
+-            <span class="status-pill status-pill-${status}">
+-              <span class="status-dot"></span>
+-              ${status.replace('_', ' ')}
+-            </span>
++        <div class="ticket-card-premium status-${status}" role="button" tabindex="0"
++             onclick="openTicketDetail('${tk.id}')" onkeydown="if(event.key==='Enter')openTicketDetail('${tk.id}')">
++          <div class="ticket-card-head">
++            <span class="ticket-tile">${ticketIcon(TICKET_STATUS_ICON[status] || 'chat', 20)}</span>
++            <div class="ticket-card-heading">
++              ${eyebrow}
++              <h4 class="ticket-card-title">${escapeHtml(tk.subject)}</h4>
++            </div>
+           </div>
+-          <h4 class="ticket-card-title">${escapeHtml(t.subject)}</h4>
+-          <p class="ticket-card-preview">
+-            <strong>${lastSenderLabel}</strong> ${previewText}
+-          </p>
++          <p class="ticket-card-preview">${preview}</p>
+           <div class="ticket-card-meta">
+-            <span class="ticket-meta-item">${ticketIcon('calendar', 12)} Submitted ${timeAgo(t.created_at)}</span>
+-            <span class="ticket-meta-replies">${ticketIcon('chat', 11)} ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
++            <span class="status-pill status-pill-${status}"><span class="status-dot"></span>${escapeHtml(ticketStatusLabel(status))}</span>
++            <span class="ticket-card-info" title="${submitted}">${escapeHtml(timeAgo(tk.created_at))}<i aria-hidden="true">·</i>${ticketIcon('chat', 12)}${repliesLabel}</span>
+           </div>
+-          ${resolvedStrip}
++          ${solved}
+         </div>`;
+     }).join('');
+   } catch (e) {
+-    container.innerHTML = `<div class="card text-center text-sm" style="color:var(--danger)">Error: ${escapeHtml(e.message)}</div>`;
++    container.innerHTML = `<div class="ticket-empty ticket-error">${escapeHtml(e.message)}</div>`;
+   }
+ }
+ 
+@@ -7109,107 +7115,144 @@ function updateSupportBadge(ticketsData) {
+ 
+ function openTicketDetail(ticketId) {
+   window.activeTicketId = ticketId;
++  const box = $('ticketThreadList');
++  if (box) box.innerHTML = '<div class="loading-spinner" style="margin:20px auto"></div>';
+   navigate('ticket-detail');
+   loadTicketDetail(ticketId);
+ }
+ 
+-async function loadTicketDetail(ticketId) {
+-  const threadContainer = $('ticketThreadList');
+-  if (!threadContainer) return;
+-  threadContainer.innerHTML = '<div class="loading-spinner" style="margin:20px auto"></div>';
++// One chat bubble, same markup as the mentor chat: sent = the user (gold, right),
++// received = support (dark, left).
++function ticketBubble(content, time, isSent) {
++  return `
++    <div class="message-bubble ${isSent ? 'sent' : 'received'}">
++      <div class="message-text">${escapeHtml(content)}</div>
++      <div class="message-footer"><span class="message-time">${formatTime(time)}</span></div>
++    </div>`;
++}
++
++// quiet: refresh in place (no spinner, keeps the reading position unless the
++// reader was already at the bottom). Used after sending and for live updates.
++async function loadTicketDetail(ticketId, { quiet = false } = {}) {
++  const box = $('ticketThreadList');
++  if (!box) return;
++  if (!quiet) box.innerHTML = '<div class="loading-spinner" style="margin:20px auto"></div>';
+ 
+   try {
+     const data = await apiFetch(`/api/support/${ticketId}`);
++    if (String(window.activeTicketId) !== String(ticketId)) return;   // moved to another ticket meanwhile
+     const ticket = data.ticket;
+     const replies = data.replies || [];
+-
+-    $('ticketDetailSubject').textContent = ticket.subject;
+-    $('ticketDetailDate').textContent = `Submitted: ${formatDateTime(ticket.created_at)}`;
+-    $('ticketDetailDesc').textContent = ticket.description;
+-
+     const status = ticket.status || 'open';
+-    const statusEl = $('ticketDetailStatus');
+-    statusEl.className = `status-pill status-pill-${status}`;
+-    statusEl.innerHTML = `<span class="status-dot"></span>${status.replace('_', ' ')}`;
+-
+     window.activeTicketStatus = status;
+ 
+-    // Handle closed state input locking
+-    const replyTextarea = $('userTicketReplyText');
+-    const replyBtn = $('sendTicketReplyBtn');
+-
+-    if (ticket.status === 'closed') {
+-      replyTextarea.disabled = true;
+-      replyTextarea.placeholder = 'This support request has been marked as closed.';
+-      replyBtn.disabled = true;
+-      replyBtn.style.opacity = '0.5';
+-    } else {
+-      replyTextarea.disabled = false;
+-      replyTextarea.placeholder = 'Write a follow-up message...';
+-      replyBtn.disabled = false;
+-      replyBtn.style.opacity = '1';
+-    }
++    const statusEl = $('ticketDetailStatus');
++    statusEl.className = `peer-status ticket-status st-${status}`;
++    statusEl.innerHTML = `<span class="st-dot"></span><span class="st-text">${escapeHtml(ticketStatusLabel(status))}</span>`;
++    const typingText = $('ticketTypingText');
++    if (typingText) typingText.textContent = t('ticket_typing');
+ 
++    renderTicketComposer(status);
+     renderTicketResolveBar(status, ticket.resolved_by);
+ 
+-    // Render original ticket message + reply thread as plain speech
+-    // bubbles, matching the main mentor chat: just the text and a
+-    // timestamp, aligned right (gold, "sent") for the user's own messages
+-    // and left (dark, "received") for admin replies. The old card-style
+-    // layout — icon + role label header, wide 92%-width boxes regardless
+-    // of sender, the user's own "Original Issue" message oddly pinned to
+-    // the left — is gone; a reader can now tell the two sides apart by
+-    // position and colour the same way they already do in the mentor chat.
+-    const ticketBubble = (content, time, isSent) => `
+-      <div class="message-bubble ${isSent ? 'sent' : 'received'}">
+-        <div class="message-text">${escapeHtml(content)}</div>
+-        <div class="message-footer">
+-          <span class="message-time">${formatTime(time)}</span>
+-        </div>
++    const wasAtBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 140;
++
++    // The request itself opens the conversation: what it is about, then the
++    // user's first message as a normal sent bubble. (The old page showed the
++    // description twice: once in a card and once as the first bubble.)
++    const category = ticket.category ? `<span class="ticket-cat-label">${escapeHtml(ticket.category)}</span>` : '';
++    let html = `
++      <div class="ticket-req-card">
++        <div class="ticket-req-eyebrow">${ticketIcon('ticket', 13)}<span>${t('ticket_request')}</span></div>
++        <div class="ticket-req-subject">${escapeHtml(ticket.subject)}</div>
++        <div class="ticket-req-meta">${category}<span>${escapeHtml(t('ticket_submitted', { time: formatDateTime(ticket.created_at) }))}</span></div>
+       </div>`;
+ 
+-    let html = ticketBubble(ticket.description, ticket.created_at, true);
+-
++    const items = [{ content: ticket.description, at: ticket.created_at, sent: true }];
+     if (replies.length === 0 && ticket.admin_reply) {
+-      html += ticketBubble(ticket.admin_reply, ticket.updated_at || ticket.created_at, false);
++      items.push({ content: ticket.admin_reply, at: ticket.updated_at || ticket.created_at, sent: false });
+     }
++    replies.forEach(r => items.push({ content: r.content, at: r.created_at, sent: r.sender_type !== 'admin' }));
+ 
+-    replies.forEach(r => {
+-      html += ticketBubble(r.content, r.created_at, r.sender_type !== 'admin');
+-    });
++    let lastDay = '';
++    for (const it of items) {
++      const day = getDateGroupHeader(it.at);
++      if (day !== lastDay) {
++        html += `<div class="chat-date-divider"><span>${escapeHtml(day)}</span></div>`;
++        lastDay = day;
++      }
++      html += ticketBubble(it.content, it.at, it.sent);
++    }
+ 
+-    threadContainer.innerHTML = html;
+-    threadContainer.scrollTop = threadContainer.scrollHeight;
++    box.innerHTML = html;
++    if (!quiet || wasAtBottom) box.scrollTop = box.scrollHeight;
+   } catch (e) {
+-    threadContainer.innerHTML = `<div class="card text-center text-sm" style="color:var(--danger)">Error: ${escapeHtml(e.message)}</div>`;
++    box.innerHTML = `<div class="ticket-empty ticket-error">${escapeHtml(e.message)}</div>`;
+   }
+ }
+ 
+-// Shows "Mark as solved" for an open/in-progress ticket, or a confirmation +
+-// reopen option once it's resolved. Hidden entirely once an admin closes it.
++// Closed requests can't be replied to: swap the composer for a short note and a
++// shortcut to start a new request.
++function renderTicketComposer(status) {
++  const closed = status === 'closed';
++  const box = $('ticketReplyBox');
++  const note = $('ticketClosedNote');
++  if (box) box.style.display = closed ? 'none' : '';
++  if (note) {
++    note.style.display = closed ? '' : 'none';
++    note.innerHTML = closed
++      ? `<span>${t('ticket_closed_note')}</span><button type="button" class="profile-pill sp-new" onclick="toggleNewTicketModal(true)">${ticketIcon('send', 15)}<span>${t('support_new_pill')}</span></button>`
++      : '';
++  }
++}
++
++// Open / in-progress: "Mark as solved" lives in the header ⋯ menu (like the chat's
++// own menu). Resolved: a slim strip above the composer says so and offers "Still
++// need help?". Closed: nothing (the composer is replaced, see above).
+ function renderTicketResolveBar(status, resolvedBy) {
+   const bar = $('ticketResolveBar');
++  const menu = $('ticketHeaderMenu');
++  const btn = $('ticketMenuBtn');
+   if (!bar) return;
++  if (menu) { menu.classList.remove('open'); menu.innerHTML = ''; }
++  if (btn) { btn.style.display = 'none'; btn.setAttribute('aria-label', t('ticket_options')); }
+ 
+-  if (status === 'closed') {
+-    bar.style.display = 'none';
+-    return;
+-  }
+-
+-  bar.style.display = 'flex';
++  if (status === 'closed') { bar.style.display = 'none'; return; }
+ 
+   if (status === 'resolved') {
+-    const byUser = resolvedBy === 'user';
+-    bar.innerHTML = `
+-      <span class="ticket-resolve-note">${ticketIcon('check', 15)} ${byUser ? 'You marked this solved' : 'Support marked this resolved'}</span>
+-      <button class="btn btn-ghost btn-sm ticket-reopen-btn" onclick="toggleTicketResolved(false)">${ticketIcon('reopen', 13)} Still need help?</button>`;
+-  } else {
++    bar.style.display = 'flex';
+     bar.innerHTML = `
+-      <span class="ticket-resolve-note">${ticketIcon('clock', 15)} Still open</span>
+-      <button class="btn btn-sm ticket-resolve-btn" onclick="toggleTicketResolved(true)">${ticketIcon('check', 13)} Mark as solved</button>`;
++      <span class="ticket-resolve-note">${ticketIcon('check', 15)}<span>${t(resolvedBy === 'user' ? 'ticket_you_solved' : 'ticket_support_resolved')}</span></span>
++      <button type="button" class="ticket-pill-btn" onclick="toggleTicketResolved(false)">${ticketIcon('reopen', 13)}<span>${t('ticket_still_help')}</span></button>`;
++    return;
++  }
++
++  bar.style.display = 'none';
++  if (menu && btn) {
++    btn.style.display = '';
++    menu.innerHTML = `<button type="button" class="menu-item" role="menuitem" onclick="closeTicketMenu(); toggleTicketResolved(true)">${ticketIcon('check', 18)}<span>${t('ticket_mark_solved')}</span></button>`;
+   }
+ }
+ 
++function toggleTicketMenu(e) {
++  e.stopPropagation();
++  $('ticketHeaderMenu')?.classList.toggle('open');
++}
++function closeTicketMenu() {
++  $('ticketHeaderMenu')?.classList.remove('open');
++}
++document.addEventListener('click', (e) => {
++  const menu = $('ticketHeaderMenu');
++  if (menu && menu.classList.contains('open') && !menu.contains(e.target)) menu.classList.remove('open');
++});
++
++function autoGrowTicketReply() {
++  const ta = $('userTicketReplyText');
++  if (!ta) return;
++  ta.style.height = 'auto';
++  ta.style.height = Math.min(ta.scrollHeight, 132) + 'px';
++}
++
+ let ticketTypingLastSent = 0;
+ function onTicketReplyTyping() {
+   if (!window.activeTicketId || !socket?.connected) return;
+@@ -7232,8 +7275,8 @@ async function toggleTicketResolved(resolved) {
+       method: 'PATCH',
+       body: { resolved }
+     });
+-    showToast(resolved ? 'Marked as solved — thank you!' : 'Reopened. We\u2019ll take another look.', 'success');
+-    loadTicketDetail(window.activeTicketId);
++    showToast(t(resolved ? 'ticket_toast_solved' : 'ticket_toast_reopened'), 'success');
++    loadTicketDetail(window.activeTicketId, { quiet: true });
+     updateSupportBadge();
+   } catch (e) {
+     haptic('error');
+@@ -7241,16 +7284,20 @@ async function toggleTicketResolved(resolved) {
+   }
+ }
+ 
++let _ticketSending = false;
+ async function submitTicketReply() {
+-  if (!window.activeTicketId) return;
++  if (!window.activeTicketId || _ticketSending) return;
+   const replyInput = $('userTicketReplyText');
++  const sendBtn = $('sendTicketReplyBtn');
+   const content = replyInput.value.trim();
+   if (!content) {
+     haptic('error');
+-    showToast('Please type a reply message', 'error');
++    showToast(t('ticket_err_empty'), 'error');
+     return;
+   }
+ 
++  _ticketSending = true;
++  if (sendBtn) sendBtn.disabled = true;
+   haptic('medium');
+   try {
+     await apiFetch(`/api/support/${window.activeTicketId}/reply`, {
+@@ -7258,13 +7305,18 @@ async function submitTicketReply() {
+       body: { content }
+     });
+     haptic('success');
+-    showToast('Reply sent', 'success');
+     replyInput.value = '';
++    autoGrowTicketReply();
+     updateSupportBadge();
+-    loadTicketDetail(window.activeTicketId);
++    await loadTicketDetail(window.activeTicketId, { quiet: true });
++    const box = $('ticketThreadList');
++    if (box) box.scrollTop = box.scrollHeight;       // your own message is always shown
+   } catch (e) {
+     haptic('error');
+     showToast(e.message, 'error');
++  } finally {
++    _ticketSending = false;
++    if (sendBtn) sendBtn.disabled = false;
+   }
+ }
+ 
+diff --git a/frontend/index.html b/frontend/index.html
+index 5581fc9..503de93 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -1478,81 +1478,79 @@
+ 
+     <!-- ── Page: Support / My Tickets ────────────────────────────── -->
+     <div id="page-support" class="page">
+-      <div class="app-header">
+-        <div class="flex items-center gap-8">
+-          <button class="btn btn-ghost btn-sm" onclick="navigate('settings')" aria-label="Back to profile">
+-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+-              stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+-              <polyline points="15 18 9 12 15 6" />
+-            </svg>
+-          </button>
+-        </div>
+-        <button class="btn btn-sm btn-primary" onclick="toggleNewTicketModal(true)" data-i18n="New Request">+ New
+-          Request</button>
++      <div class="app-header mp-header">
++        <button type="button" class="profile-pill mp-back" onclick="navigate('settings')" aria-label="Back">
++          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++            stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
++          <span data-i18n="btn_back">Back</span>
++        </button>
++        <button type="button" class="profile-pill sp-new" onclick="toggleNewTicketModal(true)">
++          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
++            stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
++          <span data-i18n="support_new_pill">New request</span>
++        </button>
+       </div>
+       <div class="page-content">
+         <div class="page-intro mb-12 stagger-fade">
+           <span class="page-intro-eyebrow" data-i18n="support_eyebrow">Support</span>
+           <p class="page-intro-text" data-i18n="support_intro">Track requests and reply to our team.</p>
+         </div>
+-        <div id="userTicketsList" style="display:flex;flex-direction:column;gap:12px">
++        <div id="userTicketsList" class="ticket-list">
+           <div class="loading-spinner" style="margin:40px auto"></div>
+         </div>
+       </div>
+     </div>
+ 
+-    <!-- ── Page: Ticket Detail ────────────────────────────────────── -->
++    <!-- ── Page: Ticket Detail (a chat with the support team) ─────── -->
+     <div id="page-ticket-detail" class="page">
+-      <div class="app-header">
+-        <div class="flex items-center gap-8">
+-          <button class="btn btn-ghost btn-sm" onclick="navigate('support')">← Back</button>
+-          <h3 id="ticketDetailSubject"
+-            style="margin:0;font-size:var(--fs-base);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px;color:var(--text)">
+-            Support Request</h3>
++      <div class="app-header chat-header ticket-chat-header">
++        <button type="button" class="profile-pill ticket-back" onclick="navigate('support')" aria-label="Back">
++          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++            stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
++        </button>
++        <div class="peer">
++          <div class="avatar ticket-avatar" aria-hidden="true">
++            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
++              stroke-linejoin="round"><path d="M12 2l8 3.2v6c0 5-3.4 8.7-8 10.8-4.6-2.1-8-5.8-8-10.8v-6z" /><path d="m9 12 2 2 4-4" /></svg>
++          </div>
++          <div class="peer-meta">
++            <h2 id="ticketDetailSubject" class="peer-name" data-i18n="support_team">Support team</h2>
++            <div id="ticketDetailStatus" class="peer-status ticket-status st-open"><span class="st-dot"></span><span class="st-text">Open</span></div>
++          </div>
+         </div>
+-        <span id="ticketDetailStatus" class="status-pill status-pill-open"><span class="status-dot"></span>open</span>
+-      </div>
+-      <div class="page-content ticket-detail-content">
+-        <div id="ticketDetailMeta" class="card mb-12"
+-          style="background:linear-gradient(135deg, rgba(var(--bg3-rgb),0.5), rgba(var(--bg2-rgb),0.8));border-radius:14px;border:1px solid rgba(201,168,76,0.18)">
+-          <div class="text-xs text-dim mb-4" id="ticketDetailDate" style="color:var(--gold-light);font-weight:600">
+-            Submitted: --</div>
+-          <div class="text-sm font-semibold" style="color:var(--text);line-height:1.45" id="ticketDetailDesc">--</div>
++        <div class="header-actions">
++          <button type="button" id="ticketMenuBtn" class="icon-btn" onclick="toggleTicketMenu(event)" aria-label="Options" aria-haspopup="menu" style="display:none">
++            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
++          </button>
++          <div class="menu-wrap">
++            <div id="ticketHeaderMenu" class="overflow-menu" role="menu"></div>
++          </div>
+         </div>
++      </div>
+ 
+-        <div class="section-title">Message History</div>
+-        <div id="ticketThreadList" class="ticket-thread-box mb-16" style="flex:1">
+-          <div class="loading-spinner" style="margin:20px auto"></div>
+-        </div>
++      <div id="ticketThreadList" class="ticket-chat-messages">
++        <div class="loading-spinner" style="margin:20px auto"></div>
++      </div>
+ 
+-        <div id="ticketTypingIndicator" class="ticket-typing-row" style="display:none">
+-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+-            stroke-linecap="round" stroke-linejoin="round">
+-            <path d="M12 2l8 3.2v6c0 5-3.4 8.7-8 10.8-4.6-2.1-8-5.8-8-10.8v-6z" />
+-            <path d="m9 12 2 2 4-4" />
+-          </svg>
+-          <span>Support is typing</span>
+-          <span class="typing-dots"><span></span><span></span><span></span></span>
+-        </div>
++      <div id="ticketTypingIndicator" class="ticket-typing-row" style="display:none">
++        <span class="typing-dots"><span></span><span></span><span></span></span>
++        <span id="ticketTypingText">Support is typing</span>
++      </div>
+ 
+-        <div id="ticketResolveBar" class="ticket-resolve-bar" style="display:none"></div>
++      <div id="ticketResolveBar" class="ticket-resolve-bar" style="display:none"></div>
+ 
+-        <div id="ticketReplyBox" class="ticket-reply-panel">
+-          <div class="form-group mb-4">
+-            <textarea id="userTicketReplyText" class="ticket-reply-textarea" rows="3"
+-              placeholder="Write a follow-up message..." data-i18n="ticket_reply_placeholder"
+-              oninput="onTicketReplyTyping()"></textarea>
+-          </div>
+-          <button id="sendTicketReplyBtn" class="ticket-submit-btn" onclick="submitTicketReply()">
+-            <span>Send Reply</span>
+-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+-              stroke-linecap="round" stroke-linejoin="round">
+-              <path d="M22 2 11 13" />
+-              <path d="M22 2 15 22l-4-9-9-4z" />
+-            </svg>
+-          </button>
++      <div id="ticketReplyBox" class="ticket-composer">
++        <div class="ticket-composer-field">
++          <textarea id="userTicketReplyText" class="ticket-composer-input" rows="1" maxlength="2000"
++            placeholder="Write a message…" data-i18n="ticket_composer_ph"
++            oninput="onTicketReplyTyping(); autoGrowTicketReply()"></textarea>
+         </div>
++        <button id="sendTicketReplyBtn" type="button" class="ticket-send-btn" onclick="submitTicketReply()" aria-label="Send">
++          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
++            stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>
++        </button>
+       </div>
++      <div id="ticketClosedNote" class="ticket-closed-note" style="display:none"></div>
+     </div>
+ 
+     <!-- ─── Bottom Navigation ─────────────────────────────────────── -->
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 578c72c..0b0f727 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -427,6 +427,30 @@ const I18N = {
+     "ticket_subject_placeholder": "What do you need help with?",
+     "ticket_desc_placeholder": "Describe your issue in detail...",
+     "ticket_reply_placeholder": "Write a follow-up message...",
++    "support_new_pill": "New request",
++    "support_team": "Support team",
++    "ticket_status_open": "Open",
++    "ticket_status_in_progress": "In progress",
++    "ticket_status_resolved": "Resolved",
++    "ticket_status_closed": "Closed",
++    "ticket_submitted": "Submitted {time}",
++    "ticket_reply_one": "1 reply",
++    "ticket_reply_many": "{count} replies",
++    "ticket_sender_admin": "Admin",
++    "ticket_sender_you": "You",
++    "ticket_you_solved": "You marked this solved",
++    "ticket_support_resolved": "Support marked this resolved",
++    "ticket_still_help": "Still need help?",
++    "ticket_mark_solved": "Mark as solved",
++    "ticket_request": "Request",
++    "ticket_typing": "Support is typing",
++    "ticket_closed_note": "This request is closed. You can start a new one anytime.",
++    "ticket_send": "Send",
++    "ticket_composer_ph": "Write a message…",
++    "ticket_options": "Options",
++    "ticket_toast_solved": "Marked as solved. Thank you!",
++    "ticket_toast_reopened": "Reopened. We will take another look.",
++    "ticket_err_empty": "Please type a reply message",
+     "btn_save": "Save",
+     "Display Name (still anonymous)": "Display Name (still anonymous)",
+     "display_name_placeholder": "Custom nickname…",
+@@ -1244,6 +1268,30 @@ const I18N = {
+     "ticket_subject_placeholder": "ምን እርዳታ ይፈልጋሉ?",
+     "ticket_desc_placeholder": "ችግርዎን በዝርዝር ይግለጹ...",
+     "ticket_reply_placeholder": "ተከታይ መልእክት ይጻፉ...",
++    "support_new_pill": "አዲስ ጥያቄ",
++    "support_team": "የድጋፍ ቡድን",
++    "ticket_status_open": "ክፍት",
++    "ticket_status_in_progress": "በሂደት ላይ",
++    "ticket_status_resolved": "ተፈትቷል",
++    "ticket_status_closed": "ተዘግቷል",
++    "ticket_submitted": "ተልኳል {time}",
++    "ticket_reply_one": "1 ምላሽ",
++    "ticket_reply_many": "{count} ምላሾች",
++    "ticket_sender_admin": "አድሚን",
++    "ticket_sender_you": "እርስዎ",
++    "ticket_you_solved": "እንደተፈታ ምልክት አድርገዋል",
++    "ticket_support_resolved": "የድጋፍ ቡድን እንደተፈታ ምልክት አድርጓል",
++    "ticket_still_help": "አሁንም እርዳታ ይፈልጋሉ?",
++    "ticket_mark_solved": "እንደተፈታ ምልክት አድርግ",
++    "ticket_request": "ጥያቄ",
++    "ticket_typing": "የድጋፍ ቡድን እየጻፈ ነው",
++    "ticket_closed_note": "ይህ ጥያቄ ተዘግቷል። ማንኛውም ጊዜ አዲስ ጥያቄ መጀመር ይችላሉ።",
++    "ticket_send": "ላክ",
++    "ticket_composer_ph": "መልእክት ይጻፉ…",
++    "ticket_options": "አማራጮች",
++    "ticket_toast_solved": "እንደተፈታ ምልክት ተደርጓል። አመሰግናለሁ!",
++    "ticket_toast_reopened": "እንደገና ተከፍቷል። እንደገና እንመለከተዋለን።",
++    "ticket_err_empty": "እባክዎ መልእክት ይጻፉ",
+     "btn_save": "አስቀምጥ",
+     "Display Name (still anonymous)": "ቅጽል ስም",
+     "display_name_placeholder": "የተለየ ቅጽል ስም…",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 165016c..fad4123 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13894,3 +13894,228 @@ textarea.form-control { resize: none; }
+ [data-theme="light"] .ptr-badge { color: #7A5812; border-color: rgba(150, 120, 40, 0.35); box-shadow: 0 8px 18px rgba(30, 25, 15, 0.16); }
+ [data-theme="light"] .ptr.is-armed .ptr-badge { color: #1a1300; }
+ @media (prefers-reduced-motion: reduce) { .ptr.is-refreshing .ptr-ring { animation-duration: 2s; } }
++
++
++/* ═══ Support: request list + chat with the support team ═══════════════════════
++   List: same page header (Back / action pills), card shell and gold icon tiles as
++   Mentors, Mentees and Sessions. Chat: same header, bubbles, date dividers and
++   docked composer as the mentor chat. ═══ */
++
++/* ── request list ── */
++.ticket-list { display: flex; flex-direction: column; gap: 16px; }
++
++.sp-new {
++  color: #1a1300;
++  background: linear-gradient(180deg, #EBCD72, #C9A84C);
++  border-color: rgba(255, 233, 160, 0.55);
++  box-shadow: 0 8px 22px rgba(201, 168, 76, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
++}
++.sp-new svg { color: #1a1300; }
++[data-theme="light"] .sp-new {
++  color: #1a1300;
++  background: linear-gradient(180deg, #EBCD72, #C9A84C);
++  border-color: rgba(255, 233, 160, 0.55);
++  box-shadow: 0 8px 20px rgba(201, 168, 76, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.4);
++}
++
++.ticket-card-premium {
++  display: flex;
++  flex-direction: column;
++  gap: 14px;
++  margin: 0;
++  padding: 18px;
++  border-radius: 26px;
++  border: 1px solid rgba(255, 255, 255, 0.07);
++  background: linear-gradient(160deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015)), #111319;
++  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
++  backdrop-filter: none;
++  -webkit-backdrop-filter: none;
++  transition: transform 0.15s ease, border-color 0.2s ease;
++}
++.ticket-card-premium::before { display: none; }
++.ticket-card-premium:hover { transform: none; border-color: rgba(201, 168, 76, 0.3); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
++.ticket-card-premium:active { transform: scale(0.985); }
++
++.ticket-card-head { display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
++.ticket-tile {
++  width: 46px; height: 46px; flex: none;
++  display: flex; align-items: center; justify-content: center;
++  border-radius: 16px;
++  background: rgba(201, 168, 76, 0.13);
++  color: var(--gold-light);
++  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.24);
++}
++.ticket-tile-lg { width: 64px; height: 64px; border-radius: 22px; }
++.status-in_progress .ticket-tile { background: rgba(91, 142, 255, 0.14); color: #7AA5FF; box-shadow: inset 0 0 0 1px rgba(91, 142, 255, 0.3); }
++.status-resolved .ticket-tile { background: rgba(91, 173, 122, 0.14); color: #72C793; box-shadow: inset 0 0 0 1px rgba(91, 173, 122, 0.3); }
++.status-closed .ticket-tile { background: rgba(255, 255, 255, 0.06); color: var(--text3); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
++
++.ticket-card-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding-top: 2px; }
++.ticket-card-title {
++  margin: 0;
++  font-size: var(--fs-md);
++  font-weight: 800;
++  line-height: 1.3;
++  overflow-wrap: anywhere;
++  display: -webkit-box;
++  -webkit-line-clamp: 2;
++  line-clamp: 2;
++  -webkit-box-orient: vertical;
++  overflow: hidden;
++}
++.ticket-card-preview {
++  margin: 0;
++  padding: 10px 14px;
++  border-radius: 16px;
++  background: rgba(0, 0, 0, 0.22);
++  border: 1px solid rgba(255, 255, 255, 0.05);
++  color: var(--text2);
++  font-size: var(--fs-sm);
++  line-height: 1.45;
++  overflow-wrap: anywhere;
++}
++.ticket-card-preview strong { color: var(--gold-light); font-weight: 700; display: inline; }
++.ticket-card-meta {
++  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
++  gap: 8px 10px; padding: 0; border-top: 0;
++}
++.ticket-card-info { display: inline-flex; align-items: center; gap: 6px; color: var(--text3); font-size: var(--fs-xs); font-weight: 600; }
++.ticket-card-info i { font-style: normal; opacity: 0.6; }
++.ticket-card-info svg { color: var(--gold-light); }
++.ticket-card-premium .ticket-resolved-strip { margin-top: 0; border-radius: 14px; }
++
++.ticket-empty {
++  display: flex; flex-direction: column; align-items: center; gap: 10px;
++  padding: 36px 22px; text-align: center;
++  border-radius: 26px;
++  border: 1px dashed rgba(201, 168, 76, 0.3);
++  background: radial-gradient(120% 140% at 50% 0%, rgba(201, 168, 76, 0.12), transparent 70%), #111319;
++}
++.ticket-empty-title { font-weight: 800; font-size: var(--fs-base); color: var(--text); }
++.ticket-empty-desc { margin: 0 0 6px; max-width: 280px; color: var(--text2); font-size: var(--fs-sm); line-height: 1.5; }
++.ticket-error { color: var(--danger); border-style: solid; border-color: rgba(224, 92, 92, 0.35); font-size: var(--fs-sm); }
++
++[data-theme="light"] .ticket-card-premium { background: linear-gradient(160deg, #fff, #f6f3ea); border-color: rgba(150, 120, 40, 0.2); box-shadow: 0 8px 20px rgba(30, 25, 15, 0.10), inset 0 1px 0 #fff; }
++[data-theme="light"] .ticket-card-preview { background: rgba(255, 255, 255, 0.75); border-color: rgba(150, 120, 40, 0.16); }
++[data-theme="light"] .ticket-card-preview strong, [data-theme="light"] .ticket-cat-label { color: #7A5812; }
++[data-theme="light"] .ticket-tile { background: rgba(201, 168, 76, 0.18); color: #7A5812; }
++[data-theme="light"] .ticket-card-info svg { color: #7A5812; }
++[data-theme="light"] .status-pill-open { color: #7A5812; }
++[data-theme="light"] .status-pill-in_progress { color: #2F5CC4; }
++[data-theme="light"] .status-pill-resolved { color: #2E7D4F; }
++[data-theme="light"] .ticket-empty { background: radial-gradient(120% 140% at 50% 0%, rgba(201, 168, 76, 0.2), transparent 70%), #fffaf0; border-color: rgba(150, 120, 40, 0.35); }
++
++/* ── chat with support ── */
++#page-ticket-detail.active { display: flex; flex-direction: column; background: none; }
++[data-theme="light"] #page-ticket-detail.active { background: none; }
++#page-ticket-detail.active .app-header { background: linear-gradient(180deg, var(--bg2), transparent); border-bottom: 1px solid var(--border-dim); }
++/* keyboard open: the nav hides (app.js), so the page grows to sit on the keyboard */
++body.kb-open #page-ticket-detail.active { flex: 0 0 auto; height: calc(var(--app-height) - var(--kb-inset, 0px)); }
++
++.ticket-chat-header { gap: 10px; }
++.ticket-chat-header .overflow-menu { min-width: 0; top: 38px; }
++.ticket-back { width: 40px; padding: 0; justify-content: center; flex: none; }
++.ticket-avatar svg { width: 20px; height: 20px; }
++.ticket-status { display: flex; align-items: center; gap: 6px; font-weight: 600; }
++.ticket-status .st-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
++.ticket-status.st-open { color: var(--gold-light); }
++.ticket-status.st-in_progress { color: #7AA5FF; }
++.ticket-status.st-resolved { color: #72C793; }
++.ticket-status.st-closed { color: var(--text3); }
++[data-theme="light"] .ticket-status.st-open { color: #7A5812; }
++[data-theme="light"] .ticket-status.st-in_progress { color: #2F5CC4; }
++[data-theme="light"] .ticket-status.st-resolved { color: #2E7D4F; }
++
++.ticket-chat-messages {
++  flex: 1;
++  min-height: 0;
++  overflow-y: auto;
++  padding: 16px 14px 12px;
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++  background: var(--bg);
++  -webkit-overflow-scrolling: touch;
++  overscroll-behavior: contain;
++}
++.ticket-chat-messages .message-text { white-space: pre-wrap; }
++.ticket-chat-messages .chat-date-divider { margin: 6px 0; }
++
++/* what the conversation is about: sits at the top of the thread, like a pinned header */
++.ticket-req-card {
++  align-self: center; width: 100%; max-width: 420px; box-sizing: border-box;
++  display: flex; flex-direction: column; align-items: center; gap: 6px;
++  padding: 14px 16px; text-align: center;
++  border-radius: 22px;
++  border: 1px solid rgba(201, 168, 76, 0.22);
++  background: radial-gradient(120% 140% at 50% 0%, rgba(201, 168, 76, 0.12), rgba(201, 168, 76, 0.03) 70%), rgba(255, 255, 255, 0.02);
++}
++.ticket-req-eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-2xs); font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-light); }
++.ticket-req-subject { font-weight: 800; font-size: var(--fs-md); line-height: 1.35; color: var(--text); overflow-wrap: anywhere; }
++.ticket-req-meta { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 10px; font-size: var(--fs-xs); color: var(--text3); }
++[data-theme="light"] .ticket-req-eyebrow { color: #7A5812; }
++[data-theme="light"] .ticket-req-card { background: radial-gradient(120% 140% at 50% 0%, rgba(201, 168, 76, 0.2), rgba(201, 168, 76, 0.05) 70%), #fffaf0; border-color: rgba(150, 120, 40, 0.3); }
++
++.ticket-typing-row { padding: 4px 18px 8px; background: var(--bg); }
++.ticket-resolve-bar {
++  margin: 0; padding: 10px 14px; gap: 10px; flex-wrap: wrap;
++  background: var(--bg2); border-top: 1px solid var(--border-dim);
++}
++.ticket-resolve-note { color: var(--text2); }
++.ticket-resolve-note svg { color: var(--success); }
++.ticket-pill-btn {
++  display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px;
++  border-radius: 999px; cursor: pointer;
++  background: rgba(201, 168, 76, 0.13); border: 1px solid rgba(201, 168, 76, 0.35);
++  color: var(--gold-light); font: 700 var(--fs-xs) var(--font-body);
++}
++[data-theme="light"] .ticket-pill-btn { color: #7A5812; }
++
++/* composer: same pill + round send button as the mentor chat, docked above the nav */
++.ticket-composer {
++  position: relative;
++  display: flex; align-items: flex-end; gap: 8px; flex-shrink: 0;
++  padding: 10px 12px calc(10px + var(--nav-h) + var(--safe-bottom));
++  background: var(--bg2);
++  border-top: 1px solid var(--border);
++  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.18);
++}
++body.kb-open .ticket-composer { padding-bottom: 10px; }
++.ticket-composer-field {
++  flex: 1 1 auto; min-width: 0;
++  display: flex; align-items: flex-end;
++  min-height: 42px; padding: 0 2px; box-sizing: border-box;
++  background: var(--bg3);
++  border: 1px solid var(--border-dim);
++  border-radius: 22px;
++  transition: border-color var(--transition), box-shadow var(--transition);
++}
++.ticket-composer-field:focus-within { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim); }
++.ticket-composer-input {
++  flex: 1 1 auto; min-width: 0; min-height: 40px; max-height: 132px;
++  padding: 10px 14px; box-sizing: border-box;
++  background: transparent; border: 0; border-radius: 0; box-shadow: none; outline: none;
++  color: var(--text); font-family: inherit; font-size: var(--fs-md); line-height: 1.4;
++  resize: none; overflow-y: auto; scrollbar-width: none;
++}
++.ticket-composer-input::-webkit-scrollbar { display: none; }
++.ticket-composer-input::placeholder { color: var(--text3); }
++.ticket-send-btn {
++  width: 42px; height: 42px; min-width: 42px; flex: none; padding: 0;
++  display: flex; align-items: center; justify-content: center;
++  border: 0; border-radius: 50%; cursor: pointer;
++  background: linear-gradient(145deg, var(--gold), #a07020);
++  box-shadow: 0 3px 12px rgba(201, 168, 76, 0.35);
++  transition: transform 0.15s var(--ease-spring), box-shadow 0.15s, opacity 0.15s;
++}
++.ticket-send-btn svg { width: 19px; height: 19px; stroke: #1a1200; transform: translateX(1px); }
++.ticket-send-btn:active { transform: scale(0.93); }
++.ticket-send-btn:disabled { opacity: 0.5; cursor: default; }
++
++.ticket-closed-note {
++  display: flex;
++  flex-direction: column; align-items: center; gap: 10px; text-align: center; flex-shrink: 0;
++  padding: 14px 16px calc(14px + var(--nav-h) + var(--safe-bottom));
++  background: var(--bg2); border-top: 1px solid var(--border);
++  color: var(--text2); font-size: var(--fs-sm); line-height: 1.45;
++}

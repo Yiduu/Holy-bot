@@ -1642,8 +1642,8 @@ function connectSocket() {
     updateSupportBadge();
     if (currentPage === 'support') {
       loadUserTickets();
-    } else if (currentPage === 'ticket-detail' && window.activeTicketId === data.ticket_id) {
-      loadTicketDetail(data.ticket_id);
+    } else if (currentPage === 'ticket-detail' && String(window.activeTicketId) === String(data.ticket_id)) {
+      loadTicketDetail(data.ticket_id, { quiet: true });
       hideTicketTyping();
     }
   });
@@ -7017,10 +7017,18 @@ async function submitEndToApply() {
 // ─── Support Tickets ──────────────────────────────────────────
 window.activeTicketId = null;
 
+const TICKET_STATUS_KEYS = { open: 'ticket_status_open', in_progress: 'ticket_status_in_progress', resolved: 'ticket_status_resolved', closed: 'ticket_status_closed' };
+const TICKET_STATUS_ICON = { open: 'chat', in_progress: 'clock', resolved: 'check', closed: 'inbox' };
+function ticketStatusLabel(status) { return t(TICKET_STATUS_KEYS[status] || 'ticket_status_open'); }
+
 async function loadUserTickets() {
   const container = $('userTicketsList');
   if (!container) return;
-  container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
+  // Only show the spinner when nothing is drawn yet; refreshing a list that is
+  // already on screen shouldn't blank it out first.
+  if (!container.querySelector('.ticket-card-premium')) {
+    container.innerHTML = '<div class="loading-spinner" style="margin:40px auto"></div>';
+  }
 
   try {
     const tickets = await apiFetch('/api/support');
@@ -7028,53 +7036,51 @@ async function loadUserTickets() {
 
     if (!tickets || tickets.length === 0) {
       container.innerHTML = `
-        <div class="empty-state card" style="text-align:center;padding:40px 20px;border-radius:18px;background:linear-gradient(135deg, rgba(var(--bg3-rgb),0.5), rgba(var(--bg2-rgb),0.7));border:1px dashed var(--border)">
-          <div style="color:var(--gold-light);margin-bottom:10px">${ticketIcon('ticket', 42)}</div>
-          <div class="font-bold text-base mb-4" style="color:var(--text)">${t('no_support_requests_found')}</div>
-          <p class="text-xs text-dim mb-16" style="max-width:260px;margin-left:auto;margin-right:auto">${t('no_support_requests_desc')}</p>
-          <button class="ticket-submit-btn" style="max-width:180px;margin:0 auto" onclick="toggleNewTicketModal(true)">
-            <span>${t('new_request_btn')}</span>
+        <div class="ticket-empty">
+          <span class="ticket-tile ticket-tile-lg">${ticketIcon('ticket', 28)}</span>
+          <div class="ticket-empty-title">${t('no_support_requests_found')}</div>
+          <p class="ticket-empty-desc">${t('no_support_requests_desc')}</p>
+          <button type="button" class="profile-pill sp-new" onclick="toggleNewTicketModal(true)">
+            ${ticketIcon('send', 15)}<span>${t('support_new_pill')}</span>
           </button>
         </div>`;
       return;
     }
 
-    container.innerHTML = tickets.map(t => {
-      const status = t.status || 'open';
-      const replyCount = t.reply_count || 0;
-      const previewText = t.last_reply_preview ? escapeHtml(t.last_reply_preview) : escapeHtml(t.description);
-      const lastSenderLabel = t.last_reply_sender === 'admin'
-        ? `${ticketIcon('shield', 12)} Admin:`
-        : (t.last_reply_sender === 'user' ? 'You:' : '');
-      const categoryLabel = t.category
-        ? `<span class="ticket-cat-label">${escapeHtml(t.category)}</span>`
-        : '<span></span>';
-      const resolvedStrip = t.resolved_by === 'user'
-        ? `<div class="ticket-resolved-strip">${ticketIcon('check', 14)} <span>You marked this solved</span></div>`
+    container.innerHTML = tickets.map(tk => {
+      const status = tk.status || 'open';
+      const replyCount = tk.reply_count || 0;
+      const repliesLabel = replyCount === 1 ? t('ticket_reply_one') : t('ticket_reply_many', { count: replyCount });
+      const who = tk.last_reply_sender === 'admin' ? t('ticket_sender_admin')
+        : (tk.last_reply_sender === 'user' ? t('ticket_sender_you') : '');
+      const snippet = escapeHtml(tk.last_reply_preview || tk.description || '');
+      const preview = who ? `<strong>${who}:</strong> ${snippet}` : snippet;
+      const eyebrow = tk.category ? `<span class="ticket-cat-label">${escapeHtml(tk.category)}</span>` : '';
+      const submitted = escapeHtml(t('ticket_submitted', { time: timeAgo(tk.created_at) }));
+      const solved = tk.resolved_by === 'user'
+        ? `<div class="ticket-resolved-strip">${ticketIcon('check', 14)}<span>${t('ticket_you_solved')}</span></div>`
         : '';
 
       return `
-        <div class="ticket-card-premium status-${status}" onclick="openTicketDetail('${t.id}')">
-          <div class="ticket-card-top">
-            ${categoryLabel}
-            <span class="status-pill status-pill-${status}">
-              <span class="status-dot"></span>
-              ${status.replace('_', ' ')}
-            </span>
+        <div class="ticket-card-premium status-${status}" role="button" tabindex="0"
+             onclick="openTicketDetail('${tk.id}')" onkeydown="if(event.key==='Enter')openTicketDetail('${tk.id}')">
+          <div class="ticket-card-head">
+            <span class="ticket-tile">${ticketIcon(TICKET_STATUS_ICON[status] || 'chat', 20)}</span>
+            <div class="ticket-card-heading">
+              ${eyebrow}
+              <h4 class="ticket-card-title">${escapeHtml(tk.subject)}</h4>
+            </div>
           </div>
-          <h4 class="ticket-card-title">${escapeHtml(t.subject)}</h4>
-          <p class="ticket-card-preview">
-            <strong>${lastSenderLabel}</strong> ${previewText}
-          </p>
+          <p class="ticket-card-preview">${preview}</p>
           <div class="ticket-card-meta">
-            <span class="ticket-meta-item">${ticketIcon('calendar', 12)} Submitted ${timeAgo(t.created_at)}</span>
-            <span class="ticket-meta-replies">${ticketIcon('chat', 11)} ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>
+            <span class="status-pill status-pill-${status}"><span class="status-dot"></span>${escapeHtml(ticketStatusLabel(status))}</span>
+            <span class="ticket-card-info" title="${submitted}">${escapeHtml(timeAgo(tk.created_at))}<i aria-hidden="true">·</i>${ticketIcon('chat', 12)}${repliesLabel}</span>
           </div>
-          ${resolvedStrip}
+          ${solved}
         </div>`;
     }).join('');
   } catch (e) {
-    container.innerHTML = `<div class="card text-center text-sm" style="color:var(--danger)">Error: ${escapeHtml(e.message)}</div>`;
+    container.innerHTML = `<div class="ticket-empty ticket-error">${escapeHtml(e.message)}</div>`;
   }
 }
 
@@ -7109,105 +7115,142 @@ function updateSupportBadge(ticketsData) {
 
 function openTicketDetail(ticketId) {
   window.activeTicketId = ticketId;
+  const box = $('ticketThreadList');
+  if (box) box.innerHTML = '<div class="loading-spinner" style="margin:20px auto"></div>';
   navigate('ticket-detail');
   loadTicketDetail(ticketId);
 }
 
-async function loadTicketDetail(ticketId) {
-  const threadContainer = $('ticketThreadList');
-  if (!threadContainer) return;
-  threadContainer.innerHTML = '<div class="loading-spinner" style="margin:20px auto"></div>';
+// One chat bubble, same markup as the mentor chat: sent = the user (gold, right),
+// received = support (dark, left).
+function ticketBubble(content, time, isSent) {
+  return `
+    <div class="message-bubble ${isSent ? 'sent' : 'received'}">
+      <div class="message-text">${escapeHtml(content)}</div>
+      <div class="message-footer"><span class="message-time">${formatTime(time)}</span></div>
+    </div>`;
+}
+
+// quiet: refresh in place (no spinner, keeps the reading position unless the
+// reader was already at the bottom). Used after sending and for live updates.
+async function loadTicketDetail(ticketId, { quiet = false } = {}) {
+  const box = $('ticketThreadList');
+  if (!box) return;
+  if (!quiet) box.innerHTML = '<div class="loading-spinner" style="margin:20px auto"></div>';
 
   try {
     const data = await apiFetch(`/api/support/${ticketId}`);
+    if (String(window.activeTicketId) !== String(ticketId)) return;   // moved to another ticket meanwhile
     const ticket = data.ticket;
     const replies = data.replies || [];
-
-    $('ticketDetailSubject').textContent = ticket.subject;
-    $('ticketDetailDate').textContent = `Submitted: ${formatDateTime(ticket.created_at)}`;
-    $('ticketDetailDesc').textContent = ticket.description;
-
     const status = ticket.status || 'open';
-    const statusEl = $('ticketDetailStatus');
-    statusEl.className = `status-pill status-pill-${status}`;
-    statusEl.innerHTML = `<span class="status-dot"></span>${status.replace('_', ' ')}`;
-
     window.activeTicketStatus = status;
 
-    // Handle closed state input locking
-    const replyTextarea = $('userTicketReplyText');
-    const replyBtn = $('sendTicketReplyBtn');
+    const statusEl = $('ticketDetailStatus');
+    statusEl.className = `peer-status ticket-status st-${status}`;
+    statusEl.innerHTML = `<span class="st-dot"></span><span class="st-text">${escapeHtml(ticketStatusLabel(status))}</span>`;
+    const typingText = $('ticketTypingText');
+    if (typingText) typingText.textContent = t('ticket_typing');
 
-    if (ticket.status === 'closed') {
-      replyTextarea.disabled = true;
-      replyTextarea.placeholder = 'This support request has been marked as closed.';
-      replyBtn.disabled = true;
-      replyBtn.style.opacity = '0.5';
-    } else {
-      replyTextarea.disabled = false;
-      replyTextarea.placeholder = 'Write a follow-up message...';
-      replyBtn.disabled = false;
-      replyBtn.style.opacity = '1';
-    }
-
+    renderTicketComposer(status);
     renderTicketResolveBar(status, ticket.resolved_by);
 
-    // Render original ticket message + reply thread as plain speech
-    // bubbles, matching the main mentor chat: just the text and a
-    // timestamp, aligned right (gold, "sent") for the user's own messages
-    // and left (dark, "received") for admin replies. The old card-style
-    // layout — icon + role label header, wide 92%-width boxes regardless
-    // of sender, the user's own "Original Issue" message oddly pinned to
-    // the left — is gone; a reader can now tell the two sides apart by
-    // position and colour the same way they already do in the mentor chat.
-    const ticketBubble = (content, time, isSent) => `
-      <div class="message-bubble ${isSent ? 'sent' : 'received'}">
-        <div class="message-text">${escapeHtml(content)}</div>
-        <div class="message-footer">
-          <span class="message-time">${formatTime(time)}</span>
-        </div>
+    const wasAtBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 140;
+
+    // The request itself opens the conversation: what it is about, then the
+    // user's first message as a normal sent bubble. (The old page showed the
+    // description twice: once in a card and once as the first bubble.)
+    const category = ticket.category ? `<span class="ticket-cat-label">${escapeHtml(ticket.category)}</span>` : '';
+    let html = `
+      <div class="ticket-req-card">
+        <div class="ticket-req-eyebrow">${ticketIcon('ticket', 13)}<span>${t('ticket_request')}</span></div>
+        <div class="ticket-req-subject">${escapeHtml(ticket.subject)}</div>
+        <div class="ticket-req-meta">${category}<span>${escapeHtml(t('ticket_submitted', { time: formatDateTime(ticket.created_at) }))}</span></div>
       </div>`;
 
-    let html = ticketBubble(ticket.description, ticket.created_at, true);
-
+    const items = [{ content: ticket.description, at: ticket.created_at, sent: true }];
     if (replies.length === 0 && ticket.admin_reply) {
-      html += ticketBubble(ticket.admin_reply, ticket.updated_at || ticket.created_at, false);
+      items.push({ content: ticket.admin_reply, at: ticket.updated_at || ticket.created_at, sent: false });
+    }
+    replies.forEach(r => items.push({ content: r.content, at: r.created_at, sent: r.sender_type !== 'admin' }));
+
+    let lastDay = '';
+    for (const it of items) {
+      const day = getDateGroupHeader(it.at);
+      if (day !== lastDay) {
+        html += `<div class="chat-date-divider"><span>${escapeHtml(day)}</span></div>`;
+        lastDay = day;
+      }
+      html += ticketBubble(it.content, it.at, it.sent);
     }
 
-    replies.forEach(r => {
-      html += ticketBubble(r.content, r.created_at, r.sender_type !== 'admin');
-    });
-
-    threadContainer.innerHTML = html;
-    threadContainer.scrollTop = threadContainer.scrollHeight;
+    box.innerHTML = html;
+    if (!quiet || wasAtBottom) box.scrollTop = box.scrollHeight;
   } catch (e) {
-    threadContainer.innerHTML = `<div class="card text-center text-sm" style="color:var(--danger)">Error: ${escapeHtml(e.message)}</div>`;
+    box.innerHTML = `<div class="ticket-empty ticket-error">${escapeHtml(e.message)}</div>`;
   }
 }
 
-// Shows "Mark as solved" for an open/in-progress ticket, or a confirmation +
-// reopen option once it's resolved. Hidden entirely once an admin closes it.
+// Closed requests can't be replied to: swap the composer for a short note and a
+// shortcut to start a new request.
+function renderTicketComposer(status) {
+  const closed = status === 'closed';
+  const box = $('ticketReplyBox');
+  const note = $('ticketClosedNote');
+  if (box) box.style.display = closed ? 'none' : '';
+  if (note) {
+    note.style.display = closed ? '' : 'none';
+    note.innerHTML = closed
+      ? `<span>${t('ticket_closed_note')}</span><button type="button" class="profile-pill sp-new" onclick="toggleNewTicketModal(true)">${ticketIcon('send', 15)}<span>${t('support_new_pill')}</span></button>`
+      : '';
+  }
+}
+
+// Open / in-progress: "Mark as solved" lives in the header ⋯ menu (like the chat's
+// own menu). Resolved: a slim strip above the composer says so and offers "Still
+// need help?". Closed: nothing (the composer is replaced, see above).
 function renderTicketResolveBar(status, resolvedBy) {
   const bar = $('ticketResolveBar');
+  const menu = $('ticketHeaderMenu');
+  const btn = $('ticketMenuBtn');
   if (!bar) return;
+  if (menu) { menu.classList.remove('open'); menu.innerHTML = ''; }
+  if (btn) { btn.style.display = 'none'; btn.setAttribute('aria-label', t('ticket_options')); }
 
-  if (status === 'closed') {
-    bar.style.display = 'none';
+  if (status === 'closed') { bar.style.display = 'none'; return; }
+
+  if (status === 'resolved') {
+    bar.style.display = 'flex';
+    bar.innerHTML = `
+      <span class="ticket-resolve-note">${ticketIcon('check', 15)}<span>${t(resolvedBy === 'user' ? 'ticket_you_solved' : 'ticket_support_resolved')}</span></span>
+      <button type="button" class="ticket-pill-btn" onclick="toggleTicketResolved(false)">${ticketIcon('reopen', 13)}<span>${t('ticket_still_help')}</span></button>`;
     return;
   }
 
-  bar.style.display = 'flex';
-
-  if (status === 'resolved') {
-    const byUser = resolvedBy === 'user';
-    bar.innerHTML = `
-      <span class="ticket-resolve-note">${ticketIcon('check', 15)} ${byUser ? 'You marked this solved' : 'Support marked this resolved'}</span>
-      <button class="btn btn-ghost btn-sm ticket-reopen-btn" onclick="toggleTicketResolved(false)">${ticketIcon('reopen', 13)} Still need help?</button>`;
-  } else {
-    bar.innerHTML = `
-      <span class="ticket-resolve-note">${ticketIcon('clock', 15)} Still open</span>
-      <button class="btn btn-sm ticket-resolve-btn" onclick="toggleTicketResolved(true)">${ticketIcon('check', 13)} Mark as solved</button>`;
+  bar.style.display = 'none';
+  if (menu && btn) {
+    btn.style.display = '';
+    menu.innerHTML = `<button type="button" class="menu-item" role="menuitem" onclick="closeTicketMenu(); toggleTicketResolved(true)">${ticketIcon('check', 18)}<span>${t('ticket_mark_solved')}</span></button>`;
   }
+}
+
+function toggleTicketMenu(e) {
+  e.stopPropagation();
+  $('ticketHeaderMenu')?.classList.toggle('open');
+}
+function closeTicketMenu() {
+  $('ticketHeaderMenu')?.classList.remove('open');
+}
+document.addEventListener('click', (e) => {
+  const menu = $('ticketHeaderMenu');
+  if (menu && menu.classList.contains('open') && !menu.contains(e.target)) menu.classList.remove('open');
+});
+
+function autoGrowTicketReply() {
+  const ta = $('userTicketReplyText');
+  if (!ta) return;
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 132) + 'px';
 }
 
 let ticketTypingLastSent = 0;
@@ -7232,8 +7275,8 @@ async function toggleTicketResolved(resolved) {
       method: 'PATCH',
       body: { resolved }
     });
-    showToast(resolved ? 'Marked as solved — thank you!' : 'Reopened. We\u2019ll take another look.', 'success');
-    loadTicketDetail(window.activeTicketId);
+    showToast(t(resolved ? 'ticket_toast_solved' : 'ticket_toast_reopened'), 'success');
+    loadTicketDetail(window.activeTicketId, { quiet: true });
     updateSupportBadge();
   } catch (e) {
     haptic('error');
@@ -7241,16 +7284,20 @@ async function toggleTicketResolved(resolved) {
   }
 }
 
+let _ticketSending = false;
 async function submitTicketReply() {
-  if (!window.activeTicketId) return;
+  if (!window.activeTicketId || _ticketSending) return;
   const replyInput = $('userTicketReplyText');
+  const sendBtn = $('sendTicketReplyBtn');
   const content = replyInput.value.trim();
   if (!content) {
     haptic('error');
-    showToast('Please type a reply message', 'error');
+    showToast(t('ticket_err_empty'), 'error');
     return;
   }
 
+  _ticketSending = true;
+  if (sendBtn) sendBtn.disabled = true;
   haptic('medium');
   try {
     await apiFetch(`/api/support/${window.activeTicketId}/reply`, {
@@ -7258,13 +7305,18 @@ async function submitTicketReply() {
       body: { content }
     });
     haptic('success');
-    showToast('Reply sent', 'success');
     replyInput.value = '';
+    autoGrowTicketReply();
     updateSupportBadge();
-    loadTicketDetail(window.activeTicketId);
+    await loadTicketDetail(window.activeTicketId, { quiet: true });
+    const box = $('ticketThreadList');
+    if (box) box.scrollTop = box.scrollHeight;       // your own message is always shown
   } catch (e) {
     haptic('error');
     showToast(e.message, 'error');
+  } finally {
+    _ticketSending = false;
+    if (sendBtn) sendBtn.disabled = false;
   }
 }
 
