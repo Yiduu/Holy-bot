@@ -298,26 +298,12 @@
       ? sr('start', 'Start session')
       : (hostPresent ? sr('join_now', 'Join now') : sr('waiting', 'Waiting for your mentor…'));
 
-    const initial = String(data.host_name || '?').trim().charAt(0).toUpperCase() || '?';
-    const avatar = isHost
-      ? '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'
-      : esc(initial);
-    const canSharePhone = isHost && isTouchDevice() && !window.supportsScreenShare();
-    const shareRow = canSharePhone ? `
-        <button class="sr-share-row" onclick="SR.shareApp()">
-          <span class="sr-share-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><path d="M8.5 11.5 12 8l3.5 3.5M12 8v6"/></svg></span>
-          <span class="sr-share-txt"><b>${esc(sr('share_phone_short', 'Share your phone screen'))}</b><small>${esc(sr('share_phone_sub', 'Uses the free Jitsi Meet app'))}</small></span>
-          <svg class="sr-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>
-        </button>` : '';
-
     $('sessionLobby').innerHTML = `
-      <div class="sr-card sr-lobby">
-        <div class="sr-eyebrow">${isHost ? esc(sr('hosting_badge', 'You\'re hosting')) : (data.is_group ? esc(sr('group_session_badge', 'Group session')) : esc(sr('1on1_session_badge', '1-on-1 session')))}</div>
-        <div class="sr-presence${(isHost || hostPresent) ? ' is-here' : ''}"><div class="sr-avatar">${avatar}</div></div>
+      <div class="sr-card">
+        <div class="sr-eyebrow">${data.is_group ? esc(sr('group_session_badge', 'Group session')) : esc(sr('1on1_session_badge', '1-on-1 session'))}</div>
         <div class="sr-title">${esc(data.title || sr('live_session_title', 'Live Session'))}</div>
         <div class="sr-sub">${esc(formatDateTime(data.scheduled_at))}${isHost ? '' : ' · ' + esc(data.host_name)}</div>
         ${status}
-        <div class="sr-label">${esc(isHost ? sr('before_start', 'Before you start') : sr('before_join', 'Before you join'))}</div>
         <div class="sr-toggles">
           <button class="sr-toggle ${prefs.mic ? 'on' : ''}" onclick="SR.toggle('mic')" aria-pressed="${prefs.mic}">
             <span class="sr-ico">${ico('mic', !prefs.mic)}</span><span>${prefs.mic ? esc(sr('mic_on', 'Mic on')) : esc(sr('mic_off', 'Mic off'))}</span>
@@ -327,14 +313,12 @@
           </button>
         </div>
         ${prefs.cam ? '' : `<div class="sr-hint">${esc(sr('cam_hint', 'Camera is optional — you can turn it on any time during the call.'))}</div>`}
-        ${shareRow}
         ${unreliable ? `<div class="sr-warn">${esc(sr('unreliable', 'This app may not support video calls reliably. Opening in your phone\'s browser is recommended.'))}</div>` : ''}
-        <div class="sr-actions">
-          <button class="btn btn-primary sr-primary" ${canEnter ? '' : 'disabled'} onclick="SR.start()">${esc(primary)}</button>
-          ${(!isHost && !hostPresent && A.waitedMs > 20000) ? `<button class="btn btn-outline sr-secondary" onclick="SR.start()">${esc(sr('join_anyway', 'Mentor not showing as online? Join anyway'))}</button>` : ''}
-          <button class="${unreliable ? 'btn btn-outline sr-secondary' : 'sr-link sr-link-gold'}" onclick="SR.external()">${esc(sr('open_browser', 'Open in browser instead'))}</button>
-          <button class="sr-link" onclick="SR.cancelLobby()">${esc(sr('not_now', 'Not now'))}</button>
-        </div>
+        <button class="btn btn-primary sr-primary" ${canEnter ? '' : 'disabled'} onclick="SR.start()">${esc(primary)}</button>
+        ${(!isHost && !hostPresent && A.waitedMs > 20000) ? `<button class="btn btn-outline sr-secondary" onclick="SR.start()">${esc(sr('join_anyway', 'Mentor not showing as online? Join anyway'))}</button>` : ''}
+        <button class="btn ${unreliable ? 'btn-primary' : 'btn-outline'} sr-secondary" onclick="SR.external()">${esc(sr('open_browser', 'Open in browser instead'))}</button>
+        ${(isHost && isTouchDevice() && !window.supportsScreenShare()) ? `<button class="btn btn-outline sr-secondary" onclick="SR.shareApp()">${esc(sr('share_phone', 'Share my phone screen (Jitsi Meet app)'))}</button>` : ''}
+        <button class="sr-link" onclick="SR.cancelLobby()">${esc(sr('not_now', 'Not now'))}</button>
       </div>`;
   }
 
@@ -606,15 +590,12 @@
   }
 
   function moreSheet() {
-    const items = [];
-    if (A.isHost) items.push({ label: sr('share_screen_item', 'Share screen'), onClick: () => (window.supportsScreenShare() ? window.toggleScreenShare() : window.SR.shareApp()) });
-    if (isTouchDevice()) items.push({ label: sr('flip_camera', 'Flip camera'), onClick: () => window.SR.flip() });
-    items.push(
+    const items = [
       { label: sr('devices', 'Audio & video settings'), onClick: devicesSheet },
       { label: A.hand ? sr('lower_hand', 'Lower hand') : sr('raise_hand', 'Raise hand'), onClick: () => { A.hand = !A.hand; cmd('toggleRaiseHand'); } },
       { label: sr('participants', 'Participants'), onClick: () => cmd('toggleParticipantsPane', true) },
       { label: A.tiles ? sr('speaker_view', 'Speaker view') : sr('tile_view', 'Grid view'), onClick: () => { A.tiles = !A.tiles; cmd('toggleTileView'); } },
-    );
+    ];
     if (A.isHost) items.push({ label: sr('mute_all', 'Mute everyone'), onClick: () => { cmd('muteEveryone'); showToast(sr('muted_all', 'Everyone has been muted.'), 'success'); } });
     items.push({ label: sr('open_browser', 'Open in browser instead'), onClick: () => window.SR.external() });
     sheet({ title: sr('more', 'More'), actions: items.map(i => ({ ...i, kind: 'ghost' })) });

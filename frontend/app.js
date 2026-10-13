@@ -4847,7 +4847,7 @@ function sessionCardParts(id, scheduledAt, status, { isHost, withBrowser }) {
   if (st.isJoinable) {
     actions = `<div class="sc-buttons">
         <button type="button" class="btn btn-primary sc-join" onclick="joinSession('${id}')">${joinSessionBtnLabel()}</button>
-        ${withBrowser ? `<button type="button" class="btn btn-outline sc-browser" onclick="openSessionInBrowser('${id}')" aria-label="${escapeHtml(t('btn_join_browser') || 'Join via Browser')}">${ICON_JOIN_BROWSER_SVG}<span>${escapeHtml(t('btn_join_browser_link') || 'Trouble with video? Open in browser')}</span></button>` : ''}
+        ${withBrowser ? `<button type="button" class="btn btn-outline sc-browser" onclick="openSessionInBrowser('${id}')" aria-label="${escapeHtml(t('btn_join_browser') || 'Join via Browser')}">${ICON_JOIN_BROWSER_SVG}<span>${escapeHtml(t('btn_join_browser_short') || 'Browser')}</span></button>` : ''}
       </div>`;
   } else if (notYet) {
     actions = `<div class="sc-wait">${ICON_SESSION_CLOCK_SVG}<span>${escapeHtml(t('session_opens_hint') || 'Join opens 5 min before the start')}</span></div>`;
@@ -4861,7 +4861,7 @@ function sessionCardParts(id, scheduledAt, status, { isHost, withBrowser }) {
 function sessionCardHtml(s, { isGroup, withBrowser, title }) {
   const isHost = String(s.host_id) === String(currentUser?.telegram_id);
   const p = sessionCardParts(s.id, s.scheduled_at, s.status, { isHost, withBrowser });
-  const cls = (s.status === 'active' ? ' is-live' : '') + (p.st.isJoinable ? ' is-joinable' : '') + (!p.st.isJoinable && !p.actions ? ' is-done' : '');
+  const cls = (s.status === 'active' ? ' is-live' : '') + (!p.st.isJoinable && !p.actions ? ' is-done' : '');
   return `
     <div class="session-item sc${cls}"
         data-session-id="${s.id}"
@@ -4909,7 +4909,6 @@ function refreshSessionLabels() {
       set('.sc-note', p.note);
       set('.sc-actions', p.actions);
       item.classList.toggle('is-done', !p.st.isJoinable && !p.actions);
-      item.classList.toggle('is-joinable', !!p.st.isJoinable);
     });
   });
   updateSessionsBadge(activeSessionCount);
