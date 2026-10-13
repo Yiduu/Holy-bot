@@ -1,0 +1,253 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index e29cbf7..782906c 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -4847,7 +4847,7 @@ function sessionCardParts(id, scheduledAt, status, { isHost, withBrowser }) {
+   if (st.isJoinable) {
+     actions = `<div class="sc-buttons">
+         <button type="button" class="btn btn-primary sc-join" onclick="joinSession('${id}')">${joinSessionBtnLabel()}</button>
+-        ${withBrowser ? `<button type="button" class="btn btn-outline sc-browser" onclick="openSessionInBrowser('${id}')" aria-label="${escapeHtml(t('btn_join_browser') || 'Join via Browser')}">${ICON_JOIN_BROWSER_SVG}<span>${escapeHtml(t('btn_join_browser_short') || 'Browser')}</span></button>` : ''}
++        ${withBrowser ? `<button type="button" class="btn btn-outline sc-browser" onclick="openSessionInBrowser('${id}')" aria-label="${escapeHtml(t('btn_join_browser') || 'Join via Browser')}">${ICON_JOIN_BROWSER_SVG}<span>${escapeHtml(t('btn_join_browser_link') || 'Trouble with video? Open in browser')}</span></button>` : ''}
+       </div>`;
+   } else if (notYet) {
+     actions = `<div class="sc-wait">${ICON_SESSION_CLOCK_SVG}<span>${escapeHtml(t('session_opens_hint') || 'Join opens 5 min before the start')}</span></div>`;
+@@ -4861,7 +4861,7 @@ function sessionCardParts(id, scheduledAt, status, { isHost, withBrowser }) {
+ function sessionCardHtml(s, { isGroup, withBrowser, title }) {
+   const isHost = String(s.host_id) === String(currentUser?.telegram_id);
+   const p = sessionCardParts(s.id, s.scheduled_at, s.status, { isHost, withBrowser });
+-  const cls = (s.status === 'active' ? ' is-live' : '') + (!p.st.isJoinable && !p.actions ? ' is-done' : '');
++  const cls = (s.status === 'active' ? ' is-live' : '') + (p.st.isJoinable ? ' is-joinable' : '') + (!p.st.isJoinable && !p.actions ? ' is-done' : '');
+   return `
+     <div class="session-item sc${cls}"
+         data-session-id="${s.id}"
+@@ -4909,6 +4909,7 @@ function refreshSessionLabels() {
+       set('.sc-note', p.note);
+       set('.sc-actions', p.actions);
+       item.classList.toggle('is-done', !p.st.isJoinable && !p.actions);
++      item.classList.toggle('is-joinable', !!p.st.isJoinable);
+     });
+   });
+   updateSessionsBadge(activeSessionCount);
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 0b0f727..6b608b9 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -790,6 +790,7 @@ const I18N = {
+     "session_upcoming": "Upcoming",
+     "session_opens_hint": "Join opens 5 min before the start",
+     "btn_join_browser_short": "Browser",
++    "btn_join_browser_link": "Trouble with video? Open in browser",
+     "no_active_sessions": "No active sessions.",
+     "no_upcoming_group_sessions": "No upcoming group sessions.",
+     "no_active_mentees_session": "You don't have any active mentees to schedule a session with.",
+@@ -1608,6 +1609,7 @@ const I18N = {
+     "session_upcoming": "የሚመጣ",
+     "session_opens_hint": "ከመጀመሩ 5 ደቂቃ በፊት መቀላቀል ይከፈታል",
+     "btn_join_browser_short": "ብሮውዘር",
++    "btn_join_browser_link": "ቪዲዮ አልሰራም? በብራውዘር ክፈት",
+     "no_active_sessions": "ምንም  ክፍለ-ጊዜዎች የሉም።",
+     "no_upcoming_group_sessions": "ምንም የሚመጡ የቡድን ክፍለ-ጊዜዎች የሉም።",
+     "no_active_mentees_session": "ክፍለ-ጊዜ የሚያዘጋጁለት ንቁ ተመካሪ የለዎትም።",
+diff --git a/frontend/session-room.js b/frontend/session-room.js
+index e26f2db..3f76238 100644
+--- a/frontend/session-room.js
++++ b/frontend/session-room.js
+@@ -298,12 +298,26 @@
+       ? sr('start', 'Start session')
+       : (hostPresent ? sr('join_now', 'Join now') : sr('waiting', 'Waiting for your mentor…'));
+ 
++    const initial = String(data.host_name || '?').trim().charAt(0).toUpperCase() || '?';
++    const avatar = isHost
++      ? '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'
++      : esc(initial);
++    const canSharePhone = isHost && isTouchDevice() && !window.supportsScreenShare();
++    const shareRow = canSharePhone ? `
++        <button class="sr-share-row" onclick="SR.shareApp()">
++          <span class="sr-share-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><path d="M8.5 11.5 12 8l3.5 3.5M12 8v6"/></svg></span>
++          <span class="sr-share-txt"><b>${esc(sr('share_phone_short', 'Share your phone screen'))}</b><small>${esc(sr('share_phone_sub', 'Uses the free Jitsi Meet app'))}</small></span>
++          <svg class="sr-chev" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>
++        </button>` : '';
++
+     $('sessionLobby').innerHTML = `
+-      <div class="sr-card">
+-        <div class="sr-eyebrow">${data.is_group ? esc(sr('group_session_badge', 'Group session')) : esc(sr('1on1_session_badge', '1-on-1 session'))}</div>
++      <div class="sr-card sr-lobby">
++        <div class="sr-eyebrow">${isHost ? esc(sr('hosting_badge', 'You\'re hosting')) : (data.is_group ? esc(sr('group_session_badge', 'Group session')) : esc(sr('1on1_session_badge', '1-on-1 session')))}</div>
++        <div class="sr-presence${(isHost || hostPresent) ? ' is-here' : ''}"><div class="sr-avatar">${avatar}</div></div>
+         <div class="sr-title">${esc(data.title || sr('live_session_title', 'Live Session'))}</div>
+         <div class="sr-sub">${esc(formatDateTime(data.scheduled_at))}${isHost ? '' : ' · ' + esc(data.host_name)}</div>
+         ${status}
++        <div class="sr-label">${esc(isHost ? sr('before_start', 'Before you start') : sr('before_join', 'Before you join'))}</div>
+         <div class="sr-toggles">
+           <button class="sr-toggle ${prefs.mic ? 'on' : ''}" onclick="SR.toggle('mic')" aria-pressed="${prefs.mic}">
+             <span class="sr-ico">${ico('mic', !prefs.mic)}</span><span>${prefs.mic ? esc(sr('mic_on', 'Mic on')) : esc(sr('mic_off', 'Mic off'))}</span>
+@@ -313,12 +327,14 @@
+           </button>
+         </div>
+         ${prefs.cam ? '' : `<div class="sr-hint">${esc(sr('cam_hint', 'Camera is optional — you can turn it on any time during the call.'))}</div>`}
++        ${shareRow}
+         ${unreliable ? `<div class="sr-warn">${esc(sr('unreliable', 'This app may not support video calls reliably. Opening in your phone\'s browser is recommended.'))}</div>` : ''}
+-        <button class="btn btn-primary sr-primary" ${canEnter ? '' : 'disabled'} onclick="SR.start()">${esc(primary)}</button>
+-        ${(!isHost && !hostPresent && A.waitedMs > 20000) ? `<button class="btn btn-outline sr-secondary" onclick="SR.start()">${esc(sr('join_anyway', 'Mentor not showing as online? Join anyway'))}</button>` : ''}
+-        <button class="btn ${unreliable ? 'btn-primary' : 'btn-outline'} sr-secondary" onclick="SR.external()">${esc(sr('open_browser', 'Open in browser instead'))}</button>
+-        ${(isHost && isTouchDevice() && !window.supportsScreenShare()) ? `<button class="btn btn-outline sr-secondary" onclick="SR.shareApp()">${esc(sr('share_phone', 'Share my phone screen (Jitsi Meet app)'))}</button>` : ''}
+-        <button class="sr-link" onclick="SR.cancelLobby()">${esc(sr('not_now', 'Not now'))}</button>
++        <div class="sr-actions">
++          <button class="btn btn-primary sr-primary" ${canEnter ? '' : 'disabled'} onclick="SR.start()">${esc(primary)}</button>
++          ${(!isHost && !hostPresent && A.waitedMs > 20000) ? `<button class="btn btn-outline sr-secondary" onclick="SR.start()">${esc(sr('join_anyway', 'Mentor not showing as online? Join anyway'))}</button>` : ''}
++          <button class="${unreliable ? 'btn btn-outline sr-secondary' : 'sr-link sr-link-gold'}" onclick="SR.external()">${esc(sr('open_browser', 'Open in browser instead'))}</button>
++          <button class="sr-link" onclick="SR.cancelLobby()">${esc(sr('not_now', 'Not now'))}</button>
++        </div>
+       </div>`;
+   }
+ 
+@@ -590,12 +606,15 @@
+   }
+ 
+   function moreSheet() {
+-    const items = [
++    const items = [];
++    if (A.isHost) items.push({ label: sr('share_screen_item', 'Share screen'), onClick: () => (window.supportsScreenShare() ? window.toggleScreenShare() : window.SR.shareApp()) });
++    if (isTouchDevice()) items.push({ label: sr('flip_camera', 'Flip camera'), onClick: () => window.SR.flip() });
++    items.push(
+       { label: sr('devices', 'Audio & video settings'), onClick: devicesSheet },
+       { label: A.hand ? sr('lower_hand', 'Lower hand') : sr('raise_hand', 'Raise hand'), onClick: () => { A.hand = !A.hand; cmd('toggleRaiseHand'); } },
+       { label: sr('participants', 'Participants'), onClick: () => cmd('toggleParticipantsPane', true) },
+       { label: A.tiles ? sr('speaker_view', 'Speaker view') : sr('tile_view', 'Grid view'), onClick: () => { A.tiles = !A.tiles; cmd('toggleTileView'); } },
+-    ];
++    );
+     if (A.isHost) items.push({ label: sr('mute_all', 'Mute everyone'), onClick: () => { cmd('muteEveryone'); showToast(sr('muted_all', 'Everyone has been muted.'), 'success'); } });
+     items.push({ label: sr('open_browser', 'Open in browser instead'), onClick: () => window.SR.external() });
+     sheet({ title: sr('more', 'More'), actions: items.map(i => ({ ...i, kind: 'ghost' })) });
+diff --git a/frontend/styles.css b/frontend/styles.css
+index fad4123..0255257 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -14119,3 +14119,127 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
+   background: var(--bg2); border-top: 1px solid var(--border);
+   color: var(--text2); font-size: var(--fs-sm); line-height: 1.45;
+ }
++
++/* ═══ Live sessions — premium pass ═══════════════════════════════
++   Live cards, lobby, hand-off guide, call controls. One gold-filled action per
++   screen; everything else is quiet. Overrides the earlier .sc-* / .sr-* /
++   .ctl rules above (kept so nothing else that uses them breaks). ═══ */
++
++/* ── Live page cards ───────────────────────────────────────── */
++.session-item.sc:not(.is-joinable) { padding: 16px; border-radius: 20px; background: var(--bg2); border-color: var(--border-dim); box-shadow: none; }
++.session-item.sc.is-joinable {
++  padding: 22px; gap: 16px; border-radius: 24px;
++  border-color: rgba(201, 168, 76, 0.3);
++  background: linear-gradient(165deg, rgba(201, 168, 76, 0.12), var(--bg2) 58%);
++  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.38), var(--inset-hi);
++}
++.session-item.sc.is-joinable .session-title { font-size: var(--fs-xl); line-height: 1.2; }
++.sc-buttons { flex-direction: column; gap: 6px; }
++.sc-join { min-height: 54px; font-size: var(--fs-base); font-weight: 900; }
++.sc-buttons .btn.sc-browser {
++  flex: none; min-height: 44px; padding: 0; background: none; border: 0; box-shadow: none;
++  color: var(--text2); font-size: var(--fs-sm); font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
++}
++.sc-browser svg { display: none; }
++@media (max-width: 340px) { .sc-browser span { display: inline; } .sc-browser { padding: 0; } }
++
++/* ── Lobby ─────────────────────────────────────────────────── */
++.session-lobby { align-items: stretch; padding: 0 0 calc(24px + var(--safe-bottom)); }
++.sr-card.sr-lobby {
++  max-width: 420px; margin: 0 auto; padding: 4px 4px 0; gap: 0; min-height: 100%;
++  background: none; border: 0; border-radius: 0; align-items: stretch;
++}
++.sr-lobby .sr-eyebrow { text-align: center; letter-spacing: .12em; font-size: var(--fs-xs); color: var(--gold-light); }
++.sr-presence {
++  position: relative; width: 132px; height: 132px; margin: 22px auto 0; display: grid; place-items: center;
++  border-radius: 50%; border: 1px solid rgba(201, 168, 76, .14);
++}
++.sr-presence::before { content: ""; position: absolute; inset: 14px; border-radius: 50%; border: 1px solid rgba(201, 168, 76, .26); }
++.sr-presence.is-here { border-color: rgba(91, 173, 122, .22); }
++.sr-presence.is-here::before { border-color: rgba(91, 173, 122, .4); }
++.sr-avatar {
++  position: relative; width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center;
++  background: var(--espresso-2); border: 2px solid var(--gold); color: var(--gold-light);
++  font-size: 30px; font-weight: 700; box-shadow: 0 0 30px rgba(201, 168, 76, .22);
++}
++.sr-avatar .ico { width: 32px; height: 32px; }
++.sr-lobby .sr-title { margin-top: 20px; font-size: var(--fs-2xl); font-weight: 700; text-align: center; }
++.sr-lobby .sr-sub { margin-top: 6px; font-size: var(--fs-md); opacity: 1; color: var(--text2); text-align: center; }
++.sr-lobby .sr-status {
++  margin-top: 18px; padding: 0; background: none; border-radius: 0;
++  font-size: var(--fs-base); font-weight: 700; color: var(--text2); text-align: center;
++}
++.sr-lobby .sr-status.sr-ok { background: none; color: var(--success); }
++.sr-lobby .sr-status.sr-wait { color: var(--gold-light); }
++.sr-label { margin: 30px 0 10px 4px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--text3); text-align: left; }
++.sr-lobby .sr-toggles { gap: 12px; }
++.sr-lobby .sr-toggle {
++  flex-direction: row; justify-content: flex-start; gap: 12px; min-height: 64px; padding: 0 16px;
++  border-radius: 18px; font-size: var(--fs-md); font-weight: 700; text-align: left;
++  background: var(--bg2); border: 1.5px solid var(--border-dim); color: var(--text2);
++}
++.sr-lobby .sr-toggle .sr-ico { font-size: 0; display: grid; }
++.sr-lobby .sr-toggle.on, .sr-lobby .sr-toggle.on .sr-ico {
++  color: #1a1300;
++}
++.sr-lobby .sr-toggle.on {
++  background: linear-gradient(180deg, #EBCD72, #C9A84C); border-color: transparent; font-weight: 900;
++  box-shadow: 0 8px 22px rgba(201, 168, 76, .3), inset 0 1px 0 rgba(255, 255, 255, .4);
++}
++.sr-lobby .sr-hint { margin: 12px 4px 0; text-align: left; font-size: var(--fs-sm); opacity: 1; color: var(--text3); }
++.sr-share-row {
++  margin-top: 16px; width: 100%; min-height: 72px; display: flex; align-items: center; gap: 14px; padding: 0 16px;
++  border-radius: 20px; background: var(--bg2); border: 1px solid var(--border); color: var(--text);
++  text-align: left; cursor: pointer; font: inherit;
++}
++.sr-share-ico { width: 44px; height: 44px; border-radius: 14px; flex: none; display: grid; place-items: center; background: rgba(201, 168, 76, .12); color: var(--gold-light); }
++.sr-share-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
++.sr-share-txt b { font-size: var(--fs-md); font-weight: 700; }
++.sr-share-txt small { font-size: var(--fs-sm); color: var(--text2); }
++.sr-chev { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--text3); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
++.sr-lobby .sr-warn { margin-top: 16px; }
++.sr-actions { margin-top: auto; padding-top: 24px; display: flex; flex-direction: column; gap: 6px; }
++.sr-actions .sr-primary { min-height: 56px; border-radius: 999px; font-size: var(--fs-lg); font-weight: 900; }
++.sr-actions .sr-primary[disabled] { background: var(--bg3); color: var(--text2); box-shadow: none; border: 1px solid var(--border-dim); opacity: 1; }
++.sr-actions .sr-secondary { border-radius: 999px; min-height: 48px; }
++.sr-actions .sr-link { min-height: 44px; opacity: 1; color: var(--text2); text-decoration: none; font-weight: 700; }
++.sr-actions .sr-link-gold { color: var(--gold-light); text-decoration: underline; text-underline-offset: 3px; }
++
++/* ── Hand-off guide (Jitsi app / browser) ──────────────────── */
++.sr-card:not(.sr-lobby) { background: none; border: 0; padding: 4px 4px 0; gap: 12px; text-align: left; }
++.sr-card:not(.sr-lobby) .sr-eyebrow { text-align: left; font-size: var(--fs-xs); color: var(--gold-light); }
++.sr-card:not(.sr-lobby) .sr-title { font-size: var(--fs-2xl); font-weight: 900; }
++.sr-card:not(.sr-lobby) .sr-sub { font-size: var(--fs-md); opacity: 1; color: var(--text2); line-height: 1.5; }
++.sr-card:not(.sr-lobby) .sr-step { padding: 18px; border-radius: 20px; background: var(--bg2); border: 1px solid var(--border-dim); gap: 12px; }
++.sr-step-head { font-size: var(--fs-base); }
++.sr-step-no { width: 28px; height: 28px; font-size: var(--fs-sm); font-weight: 900; color: #1a1300; background: linear-gradient(180deg, #EBCD72, #C9A84C); }
++.sr-pass { padding: 6px 6px 6px 16px; border-radius: 14px; }
++.sr-pass-row code { font-size: var(--fs-lg); font-weight: 700; }
++.sr-pass .btn { min-height: 44px; border-radius: 999px; }
++.sr-pass .btn-outline { border-color: rgba(201, 168, 76, .4); color: var(--gold-light); }
++.sr-card:not(.sr-lobby) .sr-primary { min-height: 56px; border-radius: 999px; font-weight: 900; }
++.sr-card:not(.sr-lobby) .sr-secondary { border-radius: 999px; min-height: 48px; }
++
++/* ── Bottom sheet ──────────────────────────────────────────── */
++.sr-sheet { border-radius: 28px 28px 0 0; border-top: 1px solid var(--border); }
++.sr-sheet-title { font-size: var(--fs-lg); }
++.sr-sheet-actions { gap: 4px; }
++.sr-sheet-actions .btn { min-height: 56px; }
++.sr-sheet-actions .btn-ghost { justify-content: flex-start; padding: 0 8px; font-size: var(--fs-base); font-weight: 700; border-radius: 14px; }
++
++/* ── In-call: floating pill controls, icons only ───────────── */
++/* Flip + Share move into the More sheet (hosts keep Share there and in the page header). */
++#ctlFlip, #ctlShare { display: none !important; }
++.ctl .ctl-lbl { display: none; }
++.call-stage.in-call .call-status {
++  margin: 8px 16px; padding: 0 16px 0 14px; min-height: 40px; border-radius: 999px; align-self: flex-start;
++  background: rgba(20, 23, 32, .72); border: 1px solid rgba(255, 255, 255, .08);
++}
++.call-stage.in-call .call-controls {
++  margin: 0 16px calc(24px + var(--safe-bottom)); padding: 12px 14px; justify-content: space-between; gap: 0;
++  border-radius: 40px; border: 1px solid rgba(201, 168, 76, .22);
++  background: rgba(20, 23, 32, .92); box-shadow: 0 16px 40px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .07);
++}
++.ctl { flex: none; width: 56px; max-width: none; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; gap: 0; }
++.ctl .ico { width: 24px; height: 24px; }
++.ctl-leave { box-shadow: 0 8px 20px rgba(224, 92, 92, .35); }

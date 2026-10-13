@@ -14119,3 +14119,127 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
   background: var(--bg2); border-top: 1px solid var(--border);
   color: var(--text2); font-size: var(--fs-sm); line-height: 1.45;
 }
+
+/* ═══ Live sessions — premium pass ═══════════════════════════════
+   Live cards, lobby, hand-off guide, call controls. One gold-filled action per
+   screen; everything else is quiet. Overrides the earlier .sc-* / .sr-* /
+   .ctl rules above (kept so nothing else that uses them breaks). ═══ */
+
+/* ── Live page cards ───────────────────────────────────────── */
+.session-item.sc:not(.is-joinable) { padding: 16px; border-radius: 20px; background: var(--bg2); border-color: var(--border-dim); box-shadow: none; }
+.session-item.sc.is-joinable {
+  padding: 22px; gap: 16px; border-radius: 24px;
+  border-color: rgba(201, 168, 76, 0.3);
+  background: linear-gradient(165deg, rgba(201, 168, 76, 0.12), var(--bg2) 58%);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.38), var(--inset-hi);
+}
+.session-item.sc.is-joinable .session-title { font-size: var(--fs-xl); line-height: 1.2; }
+.sc-buttons { flex-direction: column; gap: 6px; }
+.sc-join { min-height: 54px; font-size: var(--fs-base); font-weight: 900; }
+.sc-buttons .btn.sc-browser {
+  flex: none; min-height: 44px; padding: 0; background: none; border: 0; box-shadow: none;
+  color: var(--text2); font-size: var(--fs-sm); font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
+}
+.sc-browser svg { display: none; }
+@media (max-width: 340px) { .sc-browser span { display: inline; } .sc-browser { padding: 0; } }
+
+/* ── Lobby ─────────────────────────────────────────────────── */
+.session-lobby { align-items: stretch; padding: 0 0 calc(24px + var(--safe-bottom)); }
+.sr-card.sr-lobby {
+  max-width: 420px; margin: 0 auto; padding: 4px 4px 0; gap: 0; min-height: 100%;
+  background: none; border: 0; border-radius: 0; align-items: stretch;
+}
+.sr-lobby .sr-eyebrow { text-align: center; letter-spacing: .12em; font-size: var(--fs-xs); color: var(--gold-light); }
+.sr-presence {
+  position: relative; width: 132px; height: 132px; margin: 22px auto 0; display: grid; place-items: center;
+  border-radius: 50%; border: 1px solid rgba(201, 168, 76, .14);
+}
+.sr-presence::before { content: ""; position: absolute; inset: 14px; border-radius: 50%; border: 1px solid rgba(201, 168, 76, .26); }
+.sr-presence.is-here { border-color: rgba(91, 173, 122, .22); }
+.sr-presence.is-here::before { border-color: rgba(91, 173, 122, .4); }
+.sr-avatar {
+  position: relative; width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--espresso-2); border: 2px solid var(--gold); color: var(--gold-light);
+  font-size: 30px; font-weight: 700; box-shadow: 0 0 30px rgba(201, 168, 76, .22);
+}
+.sr-avatar .ico { width: 32px; height: 32px; }
+.sr-lobby .sr-title { margin-top: 20px; font-size: var(--fs-2xl); font-weight: 700; text-align: center; }
+.sr-lobby .sr-sub { margin-top: 6px; font-size: var(--fs-md); opacity: 1; color: var(--text2); text-align: center; }
+.sr-lobby .sr-status {
+  margin-top: 18px; padding: 0; background: none; border-radius: 0;
+  font-size: var(--fs-base); font-weight: 700; color: var(--text2); text-align: center;
+}
+.sr-lobby .sr-status.sr-ok { background: none; color: var(--success); }
+.sr-lobby .sr-status.sr-wait { color: var(--gold-light); }
+.sr-label { margin: 30px 0 10px 4px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--text3); text-align: left; }
+.sr-lobby .sr-toggles { gap: 12px; }
+.sr-lobby .sr-toggle {
+  flex-direction: row; justify-content: flex-start; gap: 12px; min-height: 64px; padding: 0 16px;
+  border-radius: 18px; font-size: var(--fs-md); font-weight: 700; text-align: left;
+  background: var(--bg2); border: 1.5px solid var(--border-dim); color: var(--text2);
+}
+.sr-lobby .sr-toggle .sr-ico { font-size: 0; display: grid; }
+.sr-lobby .sr-toggle.on, .sr-lobby .sr-toggle.on .sr-ico {
+  color: #1a1300;
+}
+.sr-lobby .sr-toggle.on {
+  background: linear-gradient(180deg, #EBCD72, #C9A84C); border-color: transparent; font-weight: 900;
+  box-shadow: 0 8px 22px rgba(201, 168, 76, .3), inset 0 1px 0 rgba(255, 255, 255, .4);
+}
+.sr-lobby .sr-hint { margin: 12px 4px 0; text-align: left; font-size: var(--fs-sm); opacity: 1; color: var(--text3); }
+.sr-share-row {
+  margin-top: 16px; width: 100%; min-height: 72px; display: flex; align-items: center; gap: 14px; padding: 0 16px;
+  border-radius: 20px; background: var(--bg2); border: 1px solid var(--border); color: var(--text);
+  text-align: left; cursor: pointer; font: inherit;
+}
+.sr-share-ico { width: 44px; height: 44px; border-radius: 14px; flex: none; display: grid; place-items: center; background: rgba(201, 168, 76, .12); color: var(--gold-light); }
+.sr-share-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sr-share-txt b { font-size: var(--fs-md); font-weight: 700; }
+.sr-share-txt small { font-size: var(--fs-sm); color: var(--text2); }
+.sr-chev { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--text3); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.sr-lobby .sr-warn { margin-top: 16px; }
+.sr-actions { margin-top: auto; padding-top: 24px; display: flex; flex-direction: column; gap: 6px; }
+.sr-actions .sr-primary { min-height: 56px; border-radius: 999px; font-size: var(--fs-lg); font-weight: 900; }
+.sr-actions .sr-primary[disabled] { background: var(--bg3); color: var(--text2); box-shadow: none; border: 1px solid var(--border-dim); opacity: 1; }
+.sr-actions .sr-secondary { border-radius: 999px; min-height: 48px; }
+.sr-actions .sr-link { min-height: 44px; opacity: 1; color: var(--text2); text-decoration: none; font-weight: 700; }
+.sr-actions .sr-link-gold { color: var(--gold-light); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── Hand-off guide (Jitsi app / browser) ──────────────────── */
+.sr-card:not(.sr-lobby) { background: none; border: 0; padding: 4px 4px 0; gap: 12px; text-align: left; }
+.sr-card:not(.sr-lobby) .sr-eyebrow { text-align: left; font-size: var(--fs-xs); color: var(--gold-light); }
+.sr-card:not(.sr-lobby) .sr-title { font-size: var(--fs-2xl); font-weight: 900; }
+.sr-card:not(.sr-lobby) .sr-sub { font-size: var(--fs-md); opacity: 1; color: var(--text2); line-height: 1.5; }
+.sr-card:not(.sr-lobby) .sr-step { padding: 18px; border-radius: 20px; background: var(--bg2); border: 1px solid var(--border-dim); gap: 12px; }
+.sr-step-head { font-size: var(--fs-base); }
+.sr-step-no { width: 28px; height: 28px; font-size: var(--fs-sm); font-weight: 900; color: #1a1300; background: linear-gradient(180deg, #EBCD72, #C9A84C); }
+.sr-pass { padding: 6px 6px 6px 16px; border-radius: 14px; }
+.sr-pass-row code { font-size: var(--fs-lg); font-weight: 700; }
+.sr-pass .btn { min-height: 44px; border-radius: 999px; }
+.sr-pass .btn-outline { border-color: rgba(201, 168, 76, .4); color: var(--gold-light); }
+.sr-card:not(.sr-lobby) .sr-primary { min-height: 56px; border-radius: 999px; font-weight: 900; }
+.sr-card:not(.sr-lobby) .sr-secondary { border-radius: 999px; min-height: 48px; }
+
+/* ── Bottom sheet ──────────────────────────────────────────── */
+.sr-sheet { border-radius: 28px 28px 0 0; border-top: 1px solid var(--border); }
+.sr-sheet-title { font-size: var(--fs-lg); }
+.sr-sheet-actions { gap: 4px; }
+.sr-sheet-actions .btn { min-height: 56px; }
+.sr-sheet-actions .btn-ghost { justify-content: flex-start; padding: 0 8px; font-size: var(--fs-base); font-weight: 700; border-radius: 14px; }
+
+/* ── In-call: floating pill controls, icons only ───────────── */
+/* Flip + Share move into the More sheet (hosts keep Share there and in the page header). */
+#ctlFlip, #ctlShare { display: none !important; }
+.ctl .ctl-lbl { display: none; }
+.call-stage.in-call .call-status {
+  margin: 8px 16px; padding: 0 16px 0 14px; min-height: 40px; border-radius: 999px; align-self: flex-start;
+  background: rgba(20, 23, 32, .72); border: 1px solid rgba(255, 255, 255, .08);
+}
+.call-stage.in-call .call-controls {
+  margin: 0 16px calc(24px + var(--safe-bottom)); padding: 12px 14px; justify-content: space-between; gap: 0;
+  border-radius: 40px; border: 1px solid rgba(201, 168, 76, .22);
+  background: rgba(20, 23, 32, .92); box-shadow: 0 16px 40px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .07);
+}
+.ctl { flex: none; width: 56px; max-width: none; height: 56px; min-height: 56px; padding: 0; border-radius: 50%; gap: 0; }
+.ctl .ico { width: 24px; height: 24px; }
+.ctl-leave { box-shadow: 0 8px 20px rgba(224, 92, 92, .35); }
