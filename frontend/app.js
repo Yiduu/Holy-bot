@@ -1827,7 +1827,7 @@ function navigate(page) {
   if (currentPage === 'my-mentees' && page !== 'my-mentees') flushMentorNotes();
 
   currentPage = page;
-  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket');
+  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket' || page === 'ticket-detail');   // focused pages: the nav steps aside
   updateChatKeyboard();                    // leaving chat clears the docked-composer state
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
@@ -2045,6 +2045,7 @@ function keyboardScrollParent(el) {
 
 function scrollFieldAboveKeyboard(el) {
   if (!el || !el.isConnected || el !== document.activeElement || !isKeyboardField(el)) return;
+  if (el.closest?.('.ticket-composer')) return;            // docked at the bottom of its page already
   const vv = window.visualViewport;
   const viewTop = vv ? vv.offsetTop : 0;
   const viewBottom = viewTop + (vv ? vv.height : window.innerHeight);
@@ -4017,7 +4018,7 @@ function switchMentorProfileTab(tab) {
 // Switch pages without navigate()'s data loaders: the mentors list stays as it was.
 function showAppPageQuiet(page, navId) {
   currentPage = page;
-  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket');
+  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket' || page === 'ticket-detail');   // focused pages: the nav steps aside
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.nav-item').forEach(nv => nv.classList.remove('active'));
   $(`page-${page}`)?.classList.add('active');
@@ -7301,6 +7302,21 @@ async function toggleTicketResolved(resolved) {
 }
 
 let _ticketSending = false;
+// Support chat: when the keyboard opens (or the field is tapped) keep the newest message in view.
+(function () {
+  const stick = () => {
+    const box = document.getElementById('ticketThreadList');
+    if (box && currentPage === 'ticket-detail') box.scrollTop = box.scrollHeight;
+  };
+  document.addEventListener('focusin', (e) => {
+    if (e.target?.id !== 'userTicketReplyText') return;
+    setTimeout(stick, 120); setTimeout(stick, 380);
+  });
+  window.visualViewport?.addEventListener('resize', () => {
+    if (document.activeElement?.id === 'userTicketReplyText') requestAnimationFrame(stick);
+  });
+})();
+
 async function submitTicketReply() {
   if (!window.activeTicketId || _ticketSending) return;
   const replyInput = $('userTicketReplyText');
