@@ -1097,6 +1097,14 @@ function syncTelegramBack() {
 // the screen fades out. A slow start simply keeps the gentle sweep looping.
 const LOADER_MIN_MS = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1200 : 3400;
 const LOADER_LEAVE_MS = 440;    // matches the .is-leaving fade in styles.css
+// The logo's main motion (pillars, arm, name) is over by ~1.8s. Building the app
+// (dashboard, socket, translating every label) while that plays steals frames on
+// phones, so the app only starts building once the motion has finished. The soft
+// light sweep that follows is cheap and keeps playing while the app loads behind it.
+const LOADER_BOOT_MS = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1000 : 1900;
+function loaderIntroDone() {
+  return new Promise(resolve => setTimeout(resolve, Math.max(0, LOADER_BOOT_MS - performance.now())));
+}
 let __loaderHide = null;
 
 function hideLoadingScreen() {
@@ -1134,6 +1142,7 @@ async function init() {
   let failed = false;
   try {
     const data = await fetchMeWithRetry();
+    await loaderIntroDone();          // let the logo motion run on its own, then build the app
     window.ADMIN_ID = data.admin_id;
     if (!data.registered) {
       showOnboarding();
