@@ -1186,11 +1186,6 @@
         <h2 data-i18n="Requests">Requests</h2>
       </div>
       <div class="page-content">
-        <div class="page-intro mb-12 stagger-fade">
-          <span class="page-intro-eyebrow" data-i18n="Requests">Requests</span>
-          <p id="requestsIntro" class="page-intro-text" data-i18n="req_intro_mentee">People asking you to be their mentor.</p>
-        </div>
-
         <div class="profile-tabs req-tabs" role="tablist">
           <button type="button" id="reqTabMentee" class="profile-tab active" role="tab" aria-selected="true"
             onclick="setRequestsTab('mentee')">
@@ -2412,6 +2407,16 @@
         </div>
         <div id="requestDeclineTitle" class="modal-title" style="text-align:center" data-i18n="req_decline_title">Decline this request?</div>
         <p id="requestDeclineBody" class="hb-text"></p>
+        <div id="requestDeclineReasonWrap" class="req-reason">
+          <label class="req-reason-label" for="requestDeclineReason" data-i18n="req_decline_reason_label">Reason for declining</label>
+          <textarea id="requestDeclineReason" class="form-control" rows="3" maxlength="300" data-i18n="req_decline_reason_placeholder"
+            placeholder="Write a few kind, clear words for the mentee…" enterkeyhint="done" autocapitalize="sentences"
+            oninput="onRequestDeclineInput()"></textarea>
+          <div class="req-reason-foot">
+            <span id="requestDeclineHint" class="req-reason-hint"><i class="req-reason-dot" aria-hidden="true"></i><span data-i18n="req_decline_reason_hint">Required. At least 3 characters.</span></span>
+            <span id="requestDeclineCount" class="req-reason-count">0/300</span>
+          </div>
+        </div>
         <div class="hb-actions">
           <button type="button" class="btn btn-outline" onclick="closeRequestDecline()" data-i18n="btn_cancel">Cancel</button>
           <button type="button" id="requestDeclineYes" class="btn btn-primary" onclick="confirmRequestDecline()" data-i18n="req_decline_yes">Yes, decline</button>

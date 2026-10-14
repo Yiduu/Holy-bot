@@ -79,6 +79,8 @@
   "mentorship_accepted_mentor": "የምክር ጥያቄውን ተቀብለዋል።",
   "mentor_rejected": "ጥያቄዎ ተቀባይነት አላገኘም። እባክዎ ሌላ አማካሪ ይሞክሩ።",
   "reject_confirmed": "ጥያቄው ውድቅ ተደርጓል።",
+  "mentor_reject_reason_prompt": "ጥያቄውን ለምን እንዳልተቀበሉ ለተመካሪው ይንገሩ። ምክንያትዎን አሁን ይጻፉ:",
+  "mentor_reject_reason_short": "እባክዎ ቢያንስ 3 ፊደላት ያለው ምክንያት ይጻፉ:",
   "mentor_at_capacity": "የተመካሪ ቁጥርዎ ሞልቷል። አስቀድመው አንዱን ያጠናቁ።",
   "mentorship_ended": "አማካሪነቱ ተጠናቋል። ለጊዜዎ እናመሰግናለን።",
   "mentorship_ended_by_mentor": "አማካሪዎ {mentor} የምክር አገልግሎቱን አጠናቀዋል።",

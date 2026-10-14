@@ -14380,3 +14380,19 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
   background: var(--bg2); border-top: 1px solid var(--border);
   color: var(--text2); font-size: var(--fs-sm); line-height: 1.45;
 }
+
+
+/* ─── Decline sheet: required reason (same field language as End mentorship) ─── */
+#requestDeclineModal .req-reason { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 6px; text-align: left; }
+#requestDeclineModal .req-reason[hidden] { display: none; }
+#requestDeclineModal .req-reason-label { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--gold-light); }
+[data-theme="light"] #requestDeclineModal .req-reason-label { color: #7A5812; }
+#requestDeclineModal .req-reason textarea { resize: none; min-height: 88px; border-radius: 18px; }
+#requestDeclineModal .req-reason-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--fs-xs); color: var(--text3); }
+#requestDeclineModal .req-reason-hint { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
+#requestDeclineModal .req-reason-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--text3); opacity: .6; transition: background .2s ease, box-shadow .2s ease, opacity .2s ease; }
+#requestDeclineModal .req-reason-hint.is-ok { color: var(--text2); }
+#requestDeclineModal .req-reason-hint.is-ok .req-reason-dot { background: var(--success); opacity: 1; box-shadow: 0 0 10px rgba(91, 173, 122, 0.7); }
+#requestDeclineModal .req-reason-count { flex: none; font-variant-numeric: tabular-nums; font-weight: 700; }
+#requestDeclineModal .req-reason-count.is-near { color: var(--danger); }
+#requestDeclineModal .hb-actions .btn:disabled { opacity: 0.55; box-shadow: none; }

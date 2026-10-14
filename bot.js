@@ -1421,20 +1421,24 @@ async function acceptMentorship(mentorId, userId, topicId) {
   console.log(`[Accept] Assignment created: mentor=${mentorId}, user=${userId}, topic=${topicId}`);
 }
 
-function rejectedCard(lang) {
+function rejectedCard(lang, reason) {
   return {
     icon: '💌',
     title: lang === 'am' ? 'የምክር ጥያቄ ምላሽ' : 'Mentorship Request Update',
     body: tSync(lang, 'mentor_rejected'),
+    fields: [['', tSync(lang, 'mentorship_end_reason_label'), reason]],
     footer: lang === 'am' ? 'ተስፋ አይቁረጡ፤ ሌላ አማካሪ ይጠብቅዎታል 🌱' : 'Another mentor is ready to walk with you 🌱',
   };
 }
 
-async function rejectMentorship(mentorId, userId) {
+async function rejectMentorship(mentorId, userId, reason = '') {
   const mentorLang = await getUserLang(mentorId);
   const userLang = await getUserLang(userId);
-  await supabase.from('mentorship_requests').update({ status: 'rejected' }).eq('mentor_id', mentorId).eq('user_id', userId);
-  await sendCard(userId, rejectedCard(userLang), { label: userLang === 'am' ? 'አማካሪዎችን ይፈልጉ' : 'Find a Mentor', url: `${APP_URL}?start=mentors` });
+  const save = (extra) => supabase.from('mentorship_requests').update({ status: 'rejected', ...extra }).eq('mentor_id', mentorId).eq('user_id', userId);
+  const { error: saveErr } = await save({ reject_reason: reason });
+  // reject_reason column not migrated yet: still reject
+  if (saveErr && /reject_reason/i.test(saveErr.message || '')) await save({});
+  await sendCard(userId, rejectedCard(userLang, reason), { label: userLang === 'am' ? 'አማካሪዎችን ይፈልጉ' : 'Find a Mentor', url: `${APP_URL}?start=mentors` });
   await sendCard(mentorId, {
     icon: '☑️',
     title: mentorLang === 'am' ? 'ጥያቄው ውድቅ ተደርጓል' : 'Request Declined',
@@ -1887,7 +1891,7 @@ async function notifyMentorshipAccepted(userId, mentorName) {
   });
 }
 
-async function notifyMentorshipRejected(userId, mentorName) {
+async function notifyMentorshipRejected(userId, mentorName, reason = '') {
   const lang = await getUserLang(userId);
   const am = lang === 'am';
   const text = card({
@@ -1896,6 +1900,7 @@ async function notifyMentorshipRejected(userId, mentorName) {
     body: am
       ? `ከአማካሪ ${mentorName} ጋር የነበረዎት ጥያቄ በዚህ ወቅት ተቀባይነት አላገኘም። ተስፋ አይቁረጡ፤ ሌላ አማካሪ ይምረጡ።`
       : `${mentorName} wasn't able to take your request at this time. Don't be discouraged. Another mentor is ready to walk with you.`,
+    fields: [['', tSync(lang, 'mentorship_end_reason_label'), reason]],
   });
 
   await safeSend(userId, text, {
@@ -2573,6 +2578,16 @@ bot.on('message', async (msg) => {
       clearState(chatId); return showMainMenu(chatId);
     }
 
+    if (state.step === 'mentor_reject_reason') {
+      const reason = text.trim().replace(/\s+/g, ' ').slice(0, 300);
+      if (reason.length < 3) {
+        return safeSend(chatId, tSync(await getUserLang(chatId), 'mentor_reject_reason_short'));
+      }
+      const { menteeId } = state.tempData;
+      clearState(chatId);
+      return rejectMentorship(chatId, menteeId, reason);
+    }
+
     if (state.step === 'admin_reject_note') {
       const targetId = state.tempData.targetId;
       await supabase.from('mentor_applications').update({
@@ -3035,7 +3050,11 @@ bot.on('callback_query', async (query) => {
     const parts = data.split('_'); // mentor_accept_{uid}_{tid}
     await acceptMentorship(chatId, parts[2], parts[3]);
   } else if (data.startsWith('mentor_reject_')) {
-    await rejectMentorship(chatId, data.split('_')[2]);
+    // Ask for a reason first; the next text message completes the rejection.
+    const menteeId = data.split('_')[2];
+    const lang = await getUserLang(chatId);
+    setState(chatId, 'mentor_reject_reason', null, { menteeId });
+    await safeSend(chatId, tSync(lang, 'mentor_reject_reason_prompt'));
   }
 
   // Rating

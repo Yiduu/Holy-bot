@@ -270,7 +270,9 @@ function viewAvatar(el) {
 }
 
 function timeAgo(dateStr) {
-  const diff = Date.now() - new Date(dateStr).getTime();
+  // A timestamp with no timezone is UTC (Supabase), not local time; and never negative.
+  const iso = typeof dateStr === 'string' && !/([zZ]|[+-]\d\d:?\d\d)$/.test(dateStr) ? dateStr.replace(' ', 'T') + 'Z' : dateStr;
+  const diff = Math.max(0, Date.now() - new Date(iso).getTime());
   if (diff < 60000) return t('time_just_now');
   if (diff < 3600000) return t('time_minutes_ago', { count: Math.floor(diff / 60000) });
   if (diff < 86400000) return t('time_hours_ago', { count: Math.floor(diff / 3600000) });
@@ -4574,7 +4576,6 @@ function reqNoteHTML(label, text) {
 function renderRequestCard(r) {
   const name = reqPersonName(r.user);
   const topic = topicLabel(r.topic) || '';
-  const msg = (r.message || '').trim();
   return `
     <article class="req-card" data-kind="request" data-id="${r.id}" data-name="${escapeHtml(name)}">
       <div class="req-top">
@@ -4586,7 +4587,6 @@ function renderRequestCard(r) {
         <span class="req-pill">${escapeHtml(t('req_new'))}</span>
       </div>
       ${reqChips(r.user, topic)}
-      ${msg ? reqNoteHTML(t('req_message_label'), msg) : ''}
       ${renderRequestActions('request', r.id)}
     </article>`;
 }
@@ -4705,26 +4705,51 @@ function askRequestDecline(kind, id) {
       ? t('req_decline_body_referral', { name, from: `<strong>${escapeHtml(card.dataset.from || '')}</strong>` })
       : t('req_decline_body_request', { name });
   }
-  const yes = $('requestDeclineYes');
-  if (yes) { yes.disabled = false; yes.textContent = t('req_decline_yes'); }
+  // A reason is required for mentee requests (the mentee is told why); referrals just confirm.
+  const needsReason = kind !== 'referral';
+  $('requestDeclineReasonWrap')?.toggleAttribute('hidden', !needsReason);
+  const ta = $('requestDeclineReason');
+  if (ta) ta.value = '';
+  onRequestDeclineInput();
   $('requestDeclineModal')?.classList.add('open');
 }
 
 function closeRequestDecline() {
+  try { $('requestDeclineReason')?.blur(); } catch { }
   $('requestDeclineModal')?.classList.remove('open');
   _declineTarget = null;
+}
+
+const REQ_REASON_MIN = 3, REQ_REASON_MAX = 300;
+function onRequestDeclineInput() {
+  const needsReason = _declineTarget && _declineTarget.kind !== 'referral';
+  const raw = ($('requestDeclineReason')?.value || '').length;
+  const len = ($('requestDeclineReason')?.value || '').trim().length;
+  const count = $('requestDeclineCount');
+  if (count) {
+    count.textContent = `${raw}/${REQ_REASON_MAX}`;
+    count.classList.toggle('is-near', raw >= REQ_REASON_MAX - 30);
+  }
+  $('requestDeclineHint')?.classList.toggle('is-ok', len >= REQ_REASON_MIN);
+  const yes = $('requestDeclineYes');
+  if (yes) {
+    yes.textContent = t('req_decline_yes');
+    yes.disabled = !!needsReason && len < REQ_REASON_MIN;
+  }
 }
 
 async function confirmRequestDecline() {
   const target = _declineTarget;
   if (!target) return;
+  const reason = target.kind === 'referral' ? '' : ($('requestDeclineReason')?.value || '').trim();
+  if (target.kind !== 'referral' && reason.length < REQ_REASON_MIN) { haptic('error'); $('requestDeclineReason')?.focus(); return; }
   const yes = $('requestDeclineYes');
   if (yes) yes.disabled = true;
   closeRequestDecline();
-  await answerRequest(target.kind, target.id, 'rejected');
+  await answerRequest(target.kind, target.id, 'rejected', undefined, reason);
 }
 
-async function answerRequest(kind, id, action, btn) {
+async function answerRequest(kind, id, action, btn, reason = '') {
   const key = `${kind}:${id}`;
   if (_reqBusy.has(key)) return;
   const card = document.querySelector(`.req-card[data-kind="${kind}"][data-id="${id}"]`);
@@ -4735,7 +4760,7 @@ async function answerRequest(kind, id, action, btn) {
   try {
     await apiFetch(kind === 'referral' ? `/api/mentors/referral/${id}` : `/api/mentors/request/${id}`, {
       method: 'PATCH',
-      body: { action },
+      body: reason ? { action, reason } : { action },
     });
     haptic(action === 'accepted' ? 'success' : 'light');
     const name = card?.dataset.name || '';

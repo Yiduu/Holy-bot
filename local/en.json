@@ -79,6 +79,8 @@
     "mentorship_accepted_mentor": "You have accepted the mentorship request.",
     "mentor_rejected": "Your request was not accepted. Please try another mentor.",
     "reject_confirmed": "Request rejected.",
+    "mentor_reject_reason_prompt": "Please tell the mentee why you are declining. Type your reason now:",
+    "mentor_reject_reason_short": "Please write a reason of at least 3 characters:",
     "mentor_at_capacity": "You are at mentee capacity. Please end an existing mentorship first.",
     "mentorship_ended": "Mentorship has ended. Thank you for your time.",
     "mentorship_ended_by_mentor": "Your mentor {mentor} has ended the mentorship.",

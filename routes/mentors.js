@@ -368,17 +368,25 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
         return res.status(409).json({ error: 'Request already pending' });
       }
       // Re‑activate a rejected or accepted request (so we don't cause duplicate key)
-      result = await supabase
+      // created_at is reset too: the mentor's Requests page shows "x ago" from it,
+      // so reusing the first request's timestamp made a fresh request look days old.
+      const nowIso = new Date().toISOString();
+      const reactivate = (extra) => supabase
         .from('mentorship_requests')
         .update({
           status: 'pending',
           message,
           topic_id,
-          updated_at: new Date().toISOString()
+          created_at: nowIso,
+          updated_at: nowIso,
+          ...extra
         })
         .eq('id', existingAny.id)
         .select()
         .single();
+      result = await reactivate({ reject_reason: null });
+      // reject_reason column not migrated yet: retry without it
+      if (result.error && /reject_reason/i.test(result.error.message || '')) result = await reactivate({});
     } else {
       // Insert a completely new request
       result = await supabase
@@ -419,7 +427,8 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       .from('mentorship_requests')
       .select('*, user:user_id(anonymous_id, sex, age_range, user_settings(display_name)), topic:topic_id(name, name_am)')
       .eq('mentor_id', mentor_id)
-      .eq('status', 'pending');
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
     if (error) return res.status(500).json({ error: error.message });
     res.json(data || []);
   });
@@ -430,6 +439,13 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     const { action } = req.body; // 'accepted' | 'rejected'
 
     if (!['accepted', 'rejected'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
+
+    // A decline needs a reason: the mentee is told why.
+    const REJECT_REASON_MIN = 3, REJECT_REASON_MAX = 300;
+    const rejectReason = String(req.body?.reason ?? '').trim().replace(/\s+/g, ' ').slice(0, REJECT_REASON_MAX);
+    if (action === 'rejected' && rejectReason.length < REJECT_REASON_MIN) {
+      return res.status(400).json({ error: 'Please tell the mentee why you are declining.' });
+    }
 
     // First, get the request to ensure it exists and belongs to this mentor
     const { data: reqData, error: fetchErr } = await supabase
@@ -465,11 +481,13 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
         console.error('[mentors] auto-reject error (non-fatal):', rejectErr.message);
       }
     } else {
-      // Reject path stays the same
-      const { error: updateErr } = await supabase
+      const saveReject = (extra) => supabase
         .from('mentorship_requests')
-        .update({ status: action, updated_at: new Date().toISOString() })
+        .update({ status: action, updated_at: new Date().toISOString(), ...extra })
         .eq('id', req.params.id);
+      let { error: updateErr } = await saveReject({ reject_reason: rejectReason });
+      // reject_reason column not migrated yet: still reject, the reason just isn't stored
+      if (updateErr && /reject_reason/i.test(updateErr.message || '')) ({ error: updateErr } = await saveReject({}));
       if (updateErr) return res.status(500).json({ error: updateErr.message });
     }
 
@@ -486,7 +504,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       if (action === 'accepted') {
         await notifyMentorshipAccepted(reqData.user_id, mentorName);
       } else {
-        await notifyMentorshipRejected(reqData.user_id, mentorName);
+        await notifyMentorshipRejected(reqData.user_id, mentorName, rejectReason);
       }
     } catch (notifyErr) {
       console.error('[mentors] notification error (non-fatal):', notifyErr.message);
