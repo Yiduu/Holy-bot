@@ -389,9 +389,9 @@ h3 {
 /* ─── Logo ──────────────────────────────────────────────────── */
 .app-logo {
   display: block;
-  height: 46px;
+  height: 34px;                 /* home header logo (was 46px) */
   width: auto;
-  max-width: 150px;
+  max-width: 112px;
   object-fit: contain;
   flex-shrink: 0;
 }
@@ -4360,7 +4360,7 @@ textarea.form-control {
 .ld-stage { will-change: transform, opacity; }
 .ld-word span { will-change: transform, opacity; backface-visibility: hidden; }
 .ld-stage {
-  --u: clamp(104px, 32vw, 136px);
+  --u: clamp(78px, 24vw, 102px);      /* logo size on the loading screen (was 104-136px) */
   position: relative;
   display: flex;
   flex-direction: column;
@@ -6823,7 +6823,7 @@ textarea.form-control {
   }
 
   .app-logo {
-    max-width: 110px;
+    max-width: 88px;
   }
 
   /* Headers with a title + action buttons (Journal, Support, etc.)
