@@ -383,23 +383,16 @@
       ? sr('open_again', 'Open again')
       : (isApp ? sr('open_app_btn', 'Open Jitsi Meet app') : sr('open_browser_btn', 'Open browser'));
     const copyLabel = A.passCopied ? sr('copied_btn', 'Copied ✓') : sr('copy_pass', 'Copy password');
-    const stepNo = (n) => `<span class="sr-step-no">${n}</span>`;
-
+    // One calm column: icon, title, one line, the password (small), one big button.
+    // No numbered steps and no repeated hints: the button already says what happens next.
     const passStep = pw ? `
-      <div class="sr-step">
-        <div class="sr-step-head">${stepNo(1)}<span>${esc(sr('step_copy', 'Copy the room password'))}</span></div>
-        <div class="sr-pass">
-          <div class="sr-pass-row"><code>${esc(pw)}</code>
-            <button class="sr-copy-btn ${A.passCopied ? 'is-done' : ''}" onclick="SR.copyPass()">${esc(copyLabel)}</button></div>
-          <div class="sr-pass-label">${esc(sr('pass_hint', 'Paste it when the page asks for a password.'))}</div>
-        </div>
+      <div class="sr-pass">
+        <div class="sr-pass-label">${esc(sr('pass_label', 'If you are asked for a password'))}</div>
+        <div class="sr-pass-row"><code>${esc(pw)}</code>
+          <button class="sr-copy-btn ${A.passCopied ? 'is-done' : ''}" onclick="SR.copyPass()">${esc(copyLabel)}</button></div>
       </div>` : '';
 
-    const openStep = `
-      <div class="sr-step">
-        ${pw ? `<div class="sr-step-head">${stepNo(2)}<span>${esc(isApp ? sr('step_open_app', 'Open the Jitsi Meet app') : sr('step_open_browser', 'Open the browser'))}</span></div>` : ''}
-        <button class="btn btn-primary sr-primary" onclick="SR.openHandoff()">${esc(openLabel)}</button>
-      </div>`;
+    const openStep = `<button class="btn btn-primary sr-primary" onclick="SR.openHandoff()">${esc(openLabel)}</button>`;
 
     // App mode: install links (the app is a separate download) + a way to carry on elsewhere.
     const installLinks = isApp ? `
@@ -409,9 +402,7 @@
       </div>
       <button class="sr-link" onclick="SR.copyLink()">${esc(sr('share_copy_link', 'Copy link to open on a computer'))}</button>` : '';
 
-    // Browser mode on a phone: say plainly why there is no Share button there.
     const shareNote = (!isApp && isHost && touch) ? `
-      <div class="sr-warn">${esc(sr('share_phone_note', 'Phone browsers can\'t share your screen. The free Jitsi Meet app can.'))}</div>
       <button class="btn btn-outline sr-secondary" onclick="SR.shareApp()">${esc(sr('share_phone', 'Share my phone screen (Jitsi Meet app)'))}</button>` : '';
     const switchToBrowser = isApp ? `<button class="btn btn-outline sr-secondary" onclick="SR.external()">${esc(sr('open_browser', 'Open in browser instead'))}</button>` : '';
 
@@ -420,7 +411,6 @@
         <div class="sr-ho-icon" aria-hidden="true">${isApp
           ? '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>'
           : '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg>'}</div>
-        <div class="sr-eyebrow">${esc(isApp ? sr('hand_eyebrow_app', 'Share your phone screen') : sr('hand_eyebrow_browser', 'Open in your browser'))}</div>
         <div class="sr-title">${esc(data.title || sr('live_session_title', 'Live Session'))}</div>
         <div class="sr-sub">${esc(opened
           ? sr('ext_sub', 'Your call is running outside this app. Come back here when you\'re done.')
@@ -428,10 +418,10 @@
                 : sr('hand_sub_nopw', 'Tap the button below when you\'re ready.')))}</div>
         ${passStep}
         ${openStep}
-        ${installLinks}
         ${shareNote}
+        ${installLinks}
         ${switchToBrowser}
-        <button class="${opened ? 'btn btn-primary sr-primary' : 'sr-link'}" onclick="SR.leave()">${esc(opened ? sr('im_done', 'I\'m done — leave session') : sr('cancel', 'Cancel'))}</button>
+        <button class="${opened ? 'btn btn-primary sr-primary' : 'btn btn-outline sr-secondary sr-cancel'}" onclick="SR.leave()">${esc(opened ? sr('im_done', 'I\'m done — leave session') : sr('cancel', 'Cancel'))}</button>
       </div>`;
   }
 

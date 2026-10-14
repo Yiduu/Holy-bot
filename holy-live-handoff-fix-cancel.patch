@@ -1,0 +1,129 @@
+diff --git a/frontend/session-room.js b/frontend/session-room.js
+index 66540fd..076e873 100644
+--- a/frontend/session-room.js
++++ b/frontend/session-room.js
+@@ -383,23 +383,16 @@
+       ? sr('open_again', 'Open again')
+       : (isApp ? sr('open_app_btn', 'Open Jitsi Meet app') : sr('open_browser_btn', 'Open browser'));
+     const copyLabel = A.passCopied ? sr('copied_btn', 'Copied ✓') : sr('copy_pass', 'Copy password');
+-    const stepNo = (n) => `<span class="sr-step-no">${n}</span>`;
+-
++    // One calm column: icon, title, one line, the password (small), one big button.
++    // No numbered steps and no repeated hints: the button already says what happens next.
+     const passStep = pw ? `
+-      <div class="sr-step">
+-        <div class="sr-step-head">${stepNo(1)}<span>${esc(sr('step_copy', 'Copy the room password'))}</span></div>
+-        <div class="sr-pass">
+-          <div class="sr-pass-row"><code>${esc(pw)}</code>
+-            <button class="sr-copy-btn ${A.passCopied ? 'is-done' : ''}" onclick="SR.copyPass()">${esc(copyLabel)}</button></div>
+-          <div class="sr-pass-label">${esc(sr('pass_hint', 'Paste it when the page asks for a password.'))}</div>
+-        </div>
++      <div class="sr-pass">
++        <div class="sr-pass-label">${esc(sr('pass_label', 'If you are asked for a password'))}</div>
++        <div class="sr-pass-row"><code>${esc(pw)}</code>
++          <button class="sr-copy-btn ${A.passCopied ? 'is-done' : ''}" onclick="SR.copyPass()">${esc(copyLabel)}</button></div>
+       </div>` : '';
+ 
+-    const openStep = `
+-      <div class="sr-step">
+-        ${pw ? `<div class="sr-step-head">${stepNo(2)}<span>${esc(isApp ? sr('step_open_app', 'Open the Jitsi Meet app') : sr('step_open_browser', 'Open the browser'))}</span></div>` : ''}
+-        <button class="btn btn-primary sr-primary" onclick="SR.openHandoff()">${esc(openLabel)}</button>
+-      </div>`;
++    const openStep = `<button class="btn btn-primary sr-primary" onclick="SR.openHandoff()">${esc(openLabel)}</button>`;
+ 
+     // App mode: install links (the app is a separate download) + a way to carry on elsewhere.
+     const installLinks = isApp ? `
+@@ -409,9 +402,7 @@
+       </div>
+       <button class="sr-link" onclick="SR.copyLink()">${esc(sr('share_copy_link', 'Copy link to open on a computer'))}</button>` : '';
+ 
+-    // Browser mode on a phone: say plainly why there is no Share button there.
+     const shareNote = (!isApp && isHost && touch) ? `
+-      <div class="sr-warn">${esc(sr('share_phone_note', 'Phone browsers can\'t share your screen. The free Jitsi Meet app can.'))}</div>
+       <button class="btn btn-outline sr-secondary" onclick="SR.shareApp()">${esc(sr('share_phone', 'Share my phone screen (Jitsi Meet app)'))}</button>` : '';
+     const switchToBrowser = isApp ? `<button class="btn btn-outline sr-secondary" onclick="SR.external()">${esc(sr('open_browser', 'Open in browser instead'))}</button>` : '';
+ 
+@@ -420,7 +411,6 @@
+         <div class="sr-ho-icon" aria-hidden="true">${isApp
+           ? '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>'
+           : '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg>'}</div>
+-        <div class="sr-eyebrow">${esc(isApp ? sr('hand_eyebrow_app', 'Share your phone screen') : sr('hand_eyebrow_browser', 'Open in your browser'))}</div>
+         <div class="sr-title">${esc(data.title || sr('live_session_title', 'Live Session'))}</div>
+         <div class="sr-sub">${esc(opened
+           ? sr('ext_sub', 'Your call is running outside this app. Come back here when you\'re done.')
+@@ -428,10 +418,10 @@
+                 : sr('hand_sub_nopw', 'Tap the button below when you\'re ready.')))}</div>
+         ${passStep}
+         ${openStep}
+-        ${installLinks}
+         ${shareNote}
++        ${installLinks}
+         ${switchToBrowser}
+-        <button class="${opened ? 'btn btn-primary sr-primary' : 'sr-link'}" onclick="SR.leave()">${esc(opened ? sr('im_done', 'I\'m done — leave session') : sr('cancel', 'Cancel'))}</button>
++        <button class="${opened ? 'btn btn-primary sr-primary' : 'btn btn-outline sr-secondary sr-cancel'}" onclick="SR.leave()">${esc(opened ? sr('im_done', 'I\'m done — leave session') : sr('cancel', 'Cancel'))}</button>
+       </div>`;
+   }
+ 
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 553a34b..be337fd 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -10134,7 +10134,8 @@ textarea.form-control {
+    Live session room — lobby, call stage, sheets  (session-room.js)
+    ═══════════════════════════════════════════════════════════════════════════ */
+ .call-page { display: flex; flex-direction: column; padding-bottom: 0; }
+-.session-lobby { display: flex; flex: 1; align-items: center; justify-content: center; padding: 8px 0 24px; }
++.session-lobby { display: flex; flex: 1; align-items: flex-start; justify-content: center; padding: 8px 0 calc(20px + var(--nav-h) + var(--safe-bottom)); }
++.session-lobby > .sr-card { margin: auto 0; }   /* centred when short, scrolls (never clipped under the nav) when tall */
+ .session-lobby.hidden, .call-stage.hidden { display: none; }
+ 
+ .sr-card {
+@@ -10193,13 +10194,13 @@ textarea.form-control {
+    Scoped to .sr-handoff so the pre-join lobby keeps its own look. The room
+    password is a compact, quiet chip (small mono text), not a headline. ── */
+ .sr-card.sr-handoff {
+-  position: relative; overflow: hidden; gap: 14px; padding: 26px 20px 18px; border-radius: 26px;
++  position: relative; overflow: hidden; gap: 12px; padding: 22px 18px 16px; border-radius: 26px;
+   border-color: rgba(201, 168, 76, 0.28);
+   background: radial-gradient(120% 90% at 50% 0%, rgba(201, 168, 76, 0.18), transparent 62%), var(--bg2, #161922);
+   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+ }
+ .sr-handoff .sr-ho-icon {
+-  align-self: center; width: 60px; height: 60px; display: grid; place-items: center; border-radius: 21px;
++  align-self: center; width: 52px; height: 52px; display: grid; place-items: center; border-radius: 18px;
+   color: var(--gold-light);
+   background: radial-gradient(90% 90% at 50% 0%, rgba(232, 201, 107, 0.26), rgba(201, 168, 76, 0.08)), rgba(201, 168, 76, 0.10);
+   box-shadow: inset 0 0 0 1px rgba(232, 201, 107, 0.34), 0 10px 24px rgba(0, 0, 0, 0.36), 0 0 34px rgba(201, 168, 76, 0.2);
+@@ -10208,7 +10209,7 @@ textarea.form-control {
+   align-self: center; padding: 5px 13px; border-radius: 999px; color: var(--gold-light);
+   background: rgba(201, 168, 76, 0.12); border: 1px solid rgba(201, 168, 76, 0.3);
+ }
+-.sr-handoff .sr-title { font-size: var(--fs-xl); font-weight: 800; letter-spacing: -0.005em; overflow-wrap: anywhere; }
++.sr-handoff .sr-title { font-size: var(--fs-lg); font-weight: 800; letter-spacing: -0.005em; overflow-wrap: anywhere; }
+ .sr-handoff .sr-sub { opacity: 1; color: var(--text2); line-height: 1.5; max-width: 32ch; margin: 0 auto; }
+ 
+ .sr-handoff .sr-step { gap: 10px; padding: 14px; border-radius: 20px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--border-dim); }
+@@ -10219,13 +10220,13 @@ textarea.form-control {
+ }
+ 
+ /* password: small, calm, selectable */
+-.sr-handoff .sr-pass { padding: 8px 8px 8px 12px; border-radius: 14px; background: rgba(0, 0, 0, 0.30); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35); }
++.sr-handoff .sr-pass { padding: 8px 8px 8px 12px; text-align: left; border-radius: 14px; background: rgba(0, 0, 0, 0.30); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35); }
+ .sr-handoff .sr-pass-row { gap: 8px; }
+ .sr-handoff .sr-pass-row code {
+   min-width: 0; font: 600 var(--fs-sm) ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+   letter-spacing: .03em; color: var(--text); text-shadow: none;
+ }
+-.sr-handoff .sr-pass .sr-pass-label { margin: 6px 0 0; font-size: var(--fs-2xs); opacity: .6; }
++.sr-handoff .sr-pass .sr-pass-label { margin: 0 0 6px; font-size: var(--fs-2xs); letter-spacing: .04em; opacity: .6; }
+ .sr-copy-btn {
+   flex: none; min-height: 32px; padding: 0 14px; border-radius: 999px; cursor: pointer;
+   font: 700 var(--fs-xs) var(--font-body); color: #1a1300;
+@@ -10243,6 +10244,7 @@ textarea.form-control {
+ .sr-handoff .sr-secondary { min-height: 46px; border-radius: 999px; }
+ .sr-handoff .sr-warn { border-radius: 14px; line-height: 1.45; }
+ .sr-handoff .sr-link { opacity: .7; text-underline-offset: 3px; }
++.sr-handoff .sr-cancel { min-height: 46px; background: transparent; box-shadow: none; color: var(--text2); }
+ 
+ [data-theme="light"] .sr-card.sr-handoff { background: radial-gradient(120% 90% at 50% 0%, rgba(201, 168, 76, 0.22), transparent 62%), #fffaf0; border-color: rgba(150, 120, 40, 0.3); box-shadow: 0 14px 30px rgba(30, 25, 15, 0.14), inset 0 1px 0 #fff; }
+ [data-theme="light"] .sr-handoff .sr-ho-icon, [data-theme="light"] .sr-handoff .sr-eyebrow { color: #7A5812; }
