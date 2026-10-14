@@ -1,0 +1,88 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 26b1447..a35a7e2 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1827,7 +1827,7 @@ function navigate(page) {
+   if (currentPage === 'my-mentees' && page !== 'my-mentees') flushMentorNotes();
+ 
+   currentPage = page;
+-  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket');
++  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket' || page === 'ticket-detail');   // focused pages: the nav steps aside
+   updateChatKeyboard();                    // leaving chat clears the docked-composer state
+   $$('.page').forEach(p => p.classList.remove('active'));
+   $$('.nav-item').forEach(n => n.classList.remove('active'));
+@@ -2045,6 +2045,7 @@ function keyboardScrollParent(el) {
+ 
+ function scrollFieldAboveKeyboard(el) {
+   if (!el || !el.isConnected || el !== document.activeElement || !isKeyboardField(el)) return;
++  if (el.closest?.('.ticket-composer')) return;            // docked at the bottom of its page already
+   const vv = window.visualViewport;
+   const viewTop = vv ? vv.offsetTop : 0;
+   const viewBottom = viewTop + (vv ? vv.height : window.innerHeight);
+@@ -4017,7 +4018,7 @@ function switchMentorProfileTab(tab) {
+ // Switch pages without navigate()'s data loaders: the mentors list stays as it was.
+ function showAppPageQuiet(page, navId) {
+   currentPage = page;
+-  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket');
++  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket' || page === 'ticket-detail');   // focused pages: the nav steps aside
+   $$('.page').forEach(p => p.classList.remove('active'));
+   $$('.nav-item').forEach(nv => nv.classList.remove('active'));
+   $(`page-${page}`)?.classList.add('active');
+@@ -7301,6 +7302,21 @@ async function toggleTicketResolved(resolved) {
+ }
+ 
+ let _ticketSending = false;
++// Support chat: when the keyboard opens (or the field is tapped) keep the newest message in view.
++(function () {
++  const stick = () => {
++    const box = document.getElementById('ticketThreadList');
++    if (box && currentPage === 'ticket-detail') box.scrollTop = box.scrollHeight;
++  };
++  document.addEventListener('focusin', (e) => {
++    if (e.target?.id !== 'userTicketReplyText') return;
++    setTimeout(stick, 120); setTimeout(stick, 380);
++  });
++  window.visualViewport?.addEventListener('resize', () => {
++    if (document.activeElement?.id === 'userTicketReplyText') requestAnimationFrame(stick);
++  });
++})();
++
+ async function submitTicketReply() {
+   if (!window.activeTicketId || _ticketSending) return;
+   const replyInput = $('userTicketReplyText');
+diff --git a/frontend/styles.css b/frontend/styles.css
+index e5f02fc..38c3827 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -14270,6 +14270,7 @@ body.kb-open #page-new-ticket textarea.nt-input { min-height: 104px; }
+ #page-ticket-detail.active .app-header { background: linear-gradient(180deg, var(--bg2), transparent); border-bottom: 1px solid var(--border-dim); }
+ /* keyboard open: the nav hides (app.js), so the page grows to sit on the keyboard */
+ body.kb-open #page-ticket-detail.active { flex: 0 0 auto; height: calc(var(--app-height) - var(--kb-inset, 0px)); }
++#page-ticket-detail .ticket-chat-messages { overscroll-behavior: contain; }
+ 
+ .ticket-chat-header { gap: 10px; }
+ .ticket-chat-header .overflow-menu { min-width: 0; top: 38px; }
+@@ -14330,11 +14331,12 @@ body.kb-open #page-ticket-detail.active { flex: 0 0 auto; height: calc(var(--app
+ }
+ [data-theme="light"] .ticket-pill-btn { color: #7A5812; }
+ 
+-/* composer: same pill + round send button as the mentor chat, docked above the nav */
++/* composer: same pill + round send button as the mentor chat. The nav is hidden on this page
++   (body.er-page, set in app.js), so the composer sits right on the bottom edge / on the keyboard. */
+ .ticket-composer {
+   position: relative;
+   display: flex; align-items: flex-end; gap: 8px; flex-shrink: 0;
+-  padding: 10px 12px calc(10px + var(--nav-h) + var(--safe-bottom));
++  padding: 10px 12px calc(10px + var(--safe-bottom));
+   background: var(--bg2);
+   border-top: 1px solid var(--border);
+   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.18);
+@@ -14374,7 +14376,7 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
+ .ticket-closed-note {
+   display: flex;
+   flex-direction: column; align-items: center; gap: 10px; text-align: center; flex-shrink: 0;
+-  padding: 14px 16px calc(14px + var(--nav-h) + var(--safe-bottom));
++  padding: 14px 16px calc(14px + var(--safe-bottom));
+   background: var(--bg2); border-top: 1px solid var(--border);
+   color: var(--text2); font-size: var(--fs-sm); line-height: 1.45;
+ }

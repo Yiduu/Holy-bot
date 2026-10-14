@@ -14270,6 +14270,7 @@ body.kb-open #page-new-ticket textarea.nt-input { min-height: 104px; }
 #page-ticket-detail.active .app-header { background: linear-gradient(180deg, var(--bg2), transparent); border-bottom: 1px solid var(--border-dim); }
 /* keyboard open: the nav hides (app.js), so the page grows to sit on the keyboard */
 body.kb-open #page-ticket-detail.active { flex: 0 0 auto; height: calc(var(--app-height) - var(--kb-inset, 0px)); }
+#page-ticket-detail .ticket-chat-messages { overscroll-behavior: contain; }
 
 .ticket-chat-header { gap: 10px; }
 .ticket-chat-header .overflow-menu { min-width: 0; top: 38px; }
@@ -14330,11 +14331,12 @@ body.kb-open #page-ticket-detail.active { flex: 0 0 auto; height: calc(var(--app
 }
 [data-theme="light"] .ticket-pill-btn { color: #7A5812; }
 
-/* composer: same pill + round send button as the mentor chat, docked above the nav */
+/* composer: same pill + round send button as the mentor chat. The nav is hidden on this page
+   (body.er-page, set in app.js), so the composer sits right on the bottom edge / on the keyboard. */
 .ticket-composer {
   position: relative;
   display: flex; align-items: flex-end; gap: 8px; flex-shrink: 0;
-  padding: 10px 12px calc(10px + var(--nav-h) + var(--safe-bottom));
+  padding: 10px 12px calc(10px + var(--safe-bottom));
   background: var(--bg2);
   border-top: 1px solid var(--border);
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.18);
@@ -14374,7 +14376,7 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
 .ticket-closed-note {
   display: flex;
   flex-direction: column; align-items: center; gap: 10px; text-align: center; flex-shrink: 0;
-  padding: 14px 16px calc(14px + var(--nav-h) + var(--safe-bottom));
+  padding: 14px 16px calc(14px + var(--safe-bottom));
   background: var(--bg2); border-top: 1px solid var(--border);
   color: var(--text2); font-size: var(--fs-sm); line-height: 1.45;
 }
