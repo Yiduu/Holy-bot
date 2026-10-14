@@ -1,0 +1,226 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index e29cbf7..3c8a51d 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1813,6 +1813,7 @@ function navigate(page) {
+   if (currentPage === 'my-mentees' && page !== 'my-mentees') flushMentorNotes();
+ 
+   currentPage = page;
++  document.body.classList.toggle('er-page', page === 'end-mentorship');
+   updateChatKeyboard();                    // leaving chat clears the docked-composer state
+   $$('.page').forEach(p => p.classList.remove('active'));
+   $$('.nav-item').forEach(n => n.classList.remove('active'));
+@@ -4002,6 +4003,7 @@ function switchMentorProfileTab(tab) {
+ // Switch pages without navigate()'s data loaders: the mentors list stays as it was.
+ function showAppPageQuiet(page, navId) {
+   currentPage = page;
++  document.body.classList.toggle('er-page', page === 'end-mentorship');
+   $$('.page').forEach(p => p.classList.remove('active'));
+   $$('.nav-item').forEach(nv => nv.classList.remove('active'));
+   $(`page-${page}`)?.classList.add('active');
+@@ -8677,6 +8679,7 @@ function openEndReason(assignId) {
+ function closeEndReason() {
+   if (_endReasonBusy) return;
+   _endReasonAssignId = null;
++  try { $('endReasonText')?.blur(); } catch { }      // drop the keyboard before leaving
+   if (currentPage === 'end-mentorship') showAppPageQuiet('my-mentees', 'nav-my-mentees');
+ }
+ 
+@@ -8684,7 +8687,12 @@ function onEndReasonInput() {
+   const ta = $('endReasonText');
+   const len = (ta?.value || '').trim().length;
+   const count = $('endReasonCount');
+-  if (count) count.textContent = `${(ta?.value || '').length}/${END_REASON_MAX}`;
++  if (count) {
++    const raw = (ta?.value || '').length;
++    count.textContent = `${raw}/${END_REASON_MAX}`;
++    count.classList.toggle('is-near', raw >= END_REASON_MAX - 30);
++  }
++  $('endReasonHint')?.classList.toggle('is-ok', len >= END_REASON_MIN);
+   const yes = $('endReasonYes');
+   if (yes) yes.disabled = _endReasonBusy || len < END_REASON_MIN;
+ }
+diff --git a/frontend/index.html b/frontend/index.html
+index 503de93..ef41f52 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -803,19 +803,34 @@
+           <span data-i18n="btn_back">Back</span>
+         </button>
+       </div>
+-      <div class="page-content">
+-        <div class="page-intro mb-12 stagger-fade">
++      <div class="page-content er-content">
++        <div class="er-hero">
++          <div class="er-hero-icon" aria-hidden="true">
++            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" /></svg>
++          </div>
+           <span class="page-intro-eyebrow" data-i18n="end_reason_eyebrow">End mentorship</span>
+-          <p id="endReasonIntro" class="page-intro-text"></p>
++          <p id="endReasonIntro" class="page-intro-text er-hero-text"></p>
+         </div>
+         <div id="endReasonWho" class="card er-who"></div>
+         <div class="card er-form">
+-          <label class="er-label" for="endReasonText" data-i18n="end_reason_label">Your reason</label>
+-          <textarea id="endReasonText" class="form-control" rows="6" maxlength="300" data-i18n="end_reason_placeholder"
+-            placeholder="Write a few kind, clear words for your mentee…" oninput="onEndReasonInput()"></textarea>
+-          <div class="er-foot"><span data-i18n="end_reason_hint">Required. At least 3 characters.</span><span id="endReasonCount">0/300</span></div>
+-        </div>
+-        <p class="er-note" data-i18n="end_reason_note">Your mentee gets your reason as a notification. Your chat history stays.</p>
++          <label class="er-label" for="endReasonText"><span data-i18n="end_reason_label">Your reason</span></label>
++          <textarea id="endReasonText" class="form-control" rows="5" maxlength="300" data-i18n="end_reason_placeholder"
++            placeholder="Write a few kind, clear words for your mentee…" enterkeyhint="done" autocapitalize="sentences"
++            oninput="onEndReasonInput()"></textarea>
++          <div class="er-foot">
++            <span id="endReasonHint" class="er-hint"><i class="er-hint-dot" aria-hidden="true"></i><span data-i18n="end_reason_hint">Required. At least 3 characters.</span></span>
++            <span id="endReasonCount" class="er-count">0/300</span>
++          </div>
++        </div>
++        <p class="er-note">
++          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"
++            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" /></svg>
++          <span data-i18n="end_reason_note">Your mentee gets your reason as a notification. Your chat history stays.</span>
++        </p>
++      </div>
++      <!-- Buttons live outside the scrolling area, so they stay visible above the keyboard -->
++      <div class="er-actions-bar">
+         <div class="er-actions">
+           <button type="button" class="btn btn-outline" onclick="closeEndReason()" data-i18n="btn_cancel">Cancel</button>
+           <button type="button" id="endReasonYes" class="btn btn-danger" onclick="confirmEndReason()" disabled data-i18n="btn_end">End Mentorship</button>
+diff --git a/frontend/styles.css b/frontend/styles.css
+index fad4123..bd10faf 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13759,23 +13759,116 @@ textarea.form-control { resize: none; }
+ [data-theme="light"] .mentee-note textarea:focus { border-color: #A87C2A; box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
+ 
+ 
+-/* ── End mentorship page (mentor) – same cards, pills and gold accents as the other pages ── */
+-#page-end-mentorship .page-content { display: flex; flex-direction: column; gap: 12px; padding-bottom: calc(28px + var(--nav-h) + var(--safe-bottom)); }
+-#page-end-mentorship .er-who { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+-#page-end-mentorship .er-who .mentor-avatar { width: 48px; height: 48px; flex: none; }
++/* ── End mentorship page (mentor) ─────────────────────────────────────────
++   A focused, premium "write your reason" page: gold glow behind a warm hero, glass
++   cards, gold pills, and an action bar that sits OUTSIDE the scrolling area.
++   Why the field used to disappear: the floating nav (fixed, z-index 9999) stayed
++   on screen above the keyboard and the page kept reserving room for it, so the
++   textarea ended up underneath. On this page the nav steps aside (body.er-page,
++   set in app.js), the page follows the visible height, and the buttons dock at
++   the bottom so the field always has the room that is left. ── */
++#page-end-mentorship.active {
++  background: radial-gradient(120% 420px at 50% 0%, rgba(201, 168, 76, 0.28) 0%, rgba(168, 124, 42, 0.11) 45%, transparent 78%) no-repeat;
++}
++[data-theme="light"] #page-end-mentorship.active {
++  background: radial-gradient(120% 420px at 50% 0%, rgba(201, 168, 76, 0.32) 0%, rgba(201, 168, 76, 0.10) 45%, transparent 78%) no-repeat;
++}
++#page-end-mentorship .app-header { background: transparent; border-bottom-color: transparent; box-shadow: none; }
++
++/* nav steps aside: nothing floats over the field or the buttons */
++body.er-page .bottom-nav { display: none !important; }
++/* keyboard open: grow/shrink with the visible area (also where the WebView does not resize itself) */
++body.kb-open #page-end-mentorship.active { flex: 0 0 auto; height: calc(var(--app-height) - var(--kb-inset, 0px)); }
++
++#page-end-mentorship .page-content.er-content {
++  display: flex; flex-direction: column; gap: 14px; min-height: 0;
++  padding: 2px 16px 24px;
++  overscroll-behavior-y: contain;
++  animation: profilePaneIn 0.3s ease both;
++}
++/* flex children must never be squeezed by the scroll container */
++#page-end-mentorship .er-content > * { flex-shrink: 0; }
++
++/* hero */
++#page-end-mentorship .er-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 2px 6px 2px; }
++#page-end-mentorship .er-hero-icon {
++  width: 64px; height: 64px; display: grid; place-items: center; margin-bottom: 8px;
++  border-radius: 22px; color: var(--gold-light);
++  background: radial-gradient(90% 90% at 50% 0%, rgba(232, 201, 107, 0.26), rgba(201, 168, 76, 0.08)), rgba(201, 168, 76, 0.10);
++  box-shadow: inset 0 0 0 1px rgba(232, 201, 107, 0.34), 0 12px 28px rgba(0, 0, 0, 0.38), 0 0 38px rgba(201, 168, 76, 0.20);
++}
++#page-end-mentorship .er-hero .page-intro-eyebrow { margin-bottom: 2px; }
++#page-end-mentorship .er-hero-text { max-width: 34ch; color: var(--text2); line-height: 1.5; }
++[data-theme="light"] #page-end-mentorship .er-hero-icon { color: #7A5812; box-shadow: inset 0 0 0 1px rgba(150, 120, 40, 0.34), 0 10px 22px rgba(30, 25, 15, 0.14), 0 0 30px rgba(201, 168, 76, 0.24); }
++
++/* who it is for */
++#page-end-mentorship .er-who {
++  display: flex; align-items: center; gap: 14px; padding: 14px 16px;
++  border-color: rgba(201, 168, 76, 0.22);
++  background: radial-gradient(120% 180% at 0% 0%, rgba(201, 168, 76, 0.12), transparent 62%), var(--surface);
++  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.26), var(--inset-hi);
++}
++#page-end-mentorship .er-who .mentor-avatar { width: 52px; height: 52px; flex: none; box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.45), 0 6px 16px rgba(0, 0, 0, 0.35); }
+ #page-end-mentorship .er-who-txt { min-width: 0; }
+ #page-end-mentorship .er-who-name { font: 800 var(--fs-lg) var(--font-body); color: var(--text); line-height: 1.25; overflow-wrap: anywhere; }
+-#page-end-mentorship .er-who-sub { margin-top: 2px; font-size: var(--fs-xs); color: var(--text2); }
+-#page-end-mentorship .er-form { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-color: rgba(201, 168, 76, 0.28); }
+-#page-end-mentorship .er-label { font-size: var(--fs-xs); font-weight: 700; letter-spacing: .04em; color: var(--gold); }
+-#page-end-mentorship textarea { width: 100%; box-sizing: border-box; resize: none; min-height: 140px; border-radius: 16px; scroll-margin-block: 96px; }
+-#page-end-mentorship .er-foot { display: flex; justify-content: space-between; gap: 8px; font-size: var(--fs-2xs); color: var(--text3); }
+-#page-end-mentorship .er-note { margin: 0 4px; font-size: var(--fs-xs); line-height: 1.45; color: var(--text2); }
+-#page-end-mentorship .er-actions { display: flex; gap: 10px; margin-top: 4px; }
+-#page-end-mentorship .er-actions .btn { flex: 1; min-height: 48px; }
+-#page-end-mentorship .er-actions .btn:disabled { opacity: .45; pointer-events: none; }
+-:is(#page-end-mentorship).active .page-content { animation: profilePaneIn 0.3s ease both; }
+-@media (prefers-reduced-motion: reduce) { #page-end-mentorship.active .page-content { animation: none; } }
++#page-end-mentorship .er-who-sub { margin-top: 2px; font-size: var(--fs-xs); font-weight: 600; letter-spacing: .06em; color: var(--gold-light); }
++[data-theme="light"] #page-end-mentorship .er-who { background: radial-gradient(120% 180% at 0% 0%, rgba(201, 168, 76, 0.18), transparent 62%), #fffaf0; border-color: rgba(150, 120, 40, 0.28); box-shadow: 0 8px 20px rgba(30, 25, 15, 0.10), inset 0 1px 0 #fff; }
++[data-theme="light"] #page-end-mentorship .er-who-sub { color: #7A5812; }
++
++/* the writing card */
++#page-end-mentorship .er-form {
++  display: flex; flex-direction: column; gap: 10px; padding: 16px;
++  border-color: rgba(201, 168, 76, 0.28);
++  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28), var(--inset-hi);
++}
++[data-theme="light"] #page-end-mentorship .er-form { background: linear-gradient(160deg, #fff, #f6f3ea); border-color: rgba(150, 120, 40, 0.28); box-shadow: 0 8px 20px rgba(30, 25, 15, 0.10), inset 0 1px 0 #fff; }
++#page-end-mentorship .er-label { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--gold-light); }
++[data-theme="light"] #page-end-mentorship .er-label { color: #7A5812; }
++#page-end-mentorship textarea {
++  display: block; width: 100%; box-sizing: border-box; resize: none;
++  min-height: 132px; max-height: 240px; padding: 14px 16px;
++  border-radius: 18px; font-size: 16px; line-height: 1.55;      /* 16px: no iOS zoom on focus */
++  background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.10);
++  box-shadow: 0 0 0 0 transparent, inset 0 2px 6px rgba(0, 0, 0, 0.35);
++  scroll-margin-block: 96px;
++}
++#page-end-mentorship textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim), inset 0 2px 6px rgba(0, 0, 0, 0.35); }
++[data-theme="light"] #page-end-mentorship textarea { background: rgba(255, 255, 255, 0.92); border-color: rgba(150, 120, 40, 0.25); box-shadow: 0 0 0 0 transparent, inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++[data-theme="light"] #page-end-mentorship textarea:focus { border-color: #A87C2A; box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++
++#page-end-mentorship .er-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--fs-xs); color: var(--text3); }
++#page-end-mentorship .er-hint { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
++#page-end-mentorship .er-hint-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--text3); opacity: .6; transition: background .2s ease, box-shadow .2s ease, opacity .2s ease; }
++#page-end-mentorship .er-hint.is-ok { color: var(--text2); }
++#page-end-mentorship .er-hint.is-ok .er-hint-dot { background: var(--success); opacity: 1; box-shadow: 0 0 10px rgba(91, 173, 122, 0.7); }
++#page-end-mentorship .er-count { flex: none; font-variant-numeric: tabular-nums; font-weight: 700; }
++#page-end-mentorship .er-count.is-near { color: var(--danger); }
++
++#page-end-mentorship .er-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 4px; font-size: var(--fs-xs); line-height: 1.5; color: var(--text2); }
++#page-end-mentorship .er-note svg { flex: none; margin-top: 2px; color: var(--gold-light); }
++[data-theme="light"] #page-end-mentorship .er-note svg { color: #7A5812; }
++
++/* docked action bar: never inside the scroll area, never behind the nav or the keyboard */
++#page-end-mentorship .er-actions-bar {
++  flex: none; padding: 12px 16px calc(14px + var(--safe-bottom));
++  background: linear-gradient(180deg, transparent, var(--bg) 38%);
++  border-top: 1px solid var(--border-dim);
++}
++body.kb-open #page-end-mentorship .er-actions-bar { padding-bottom: 12px; }
++#page-end-mentorship .er-actions { display: flex; gap: 10px; }
++#page-end-mentorship .er-actions .btn { flex: 1; min-height: 50px; }
++#page-end-mentorship .er-actions .btn-danger { flex: 1.25; background: linear-gradient(180deg, rgba(224, 92, 92, 0.30), rgba(224, 92, 92, 0.16)); border-color: rgba(224, 92, 92, 0.5); box-shadow: 0 8px 22px rgba(224, 92, 92, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.10); }
++#page-end-mentorship .er-actions .btn:disabled { opacity: .45; pointer-events: none; box-shadow: none; }
++[data-theme="light"] #page-end-mentorship .er-actions-bar { background: linear-gradient(180deg, transparent, var(--bg) 38%); }
++[data-theme="light"] #page-end-mentorship .er-actions .btn-danger { color: #B03434; }
++
++/* keyboard open: keep only what is needed to write, so the field gets the room */
++body.kb-open #page-end-mentorship .er-hero-icon,
++body.kb-open #page-end-mentorship .er-hero-text,
++body.kb-open #page-end-mentorship .er-note { display: none; }
++body.kb-open #page-end-mentorship textarea { min-height: 112px; }
++
++@media (prefers-reduced-motion: reduce) { #page-end-mentorship .er-content { animation: none; } }
+ .rating-end-reason { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 12px; padding: 10px 12px; text-align: left;
+   border-radius: 14px; background: var(--bg3); border: 1px solid var(--border-dim); }
+ .rating-end-reason b { font-size: var(--fs-2xs); letter-spacing: .04em; color: var(--gold); }
