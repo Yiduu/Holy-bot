@@ -765,20 +765,10 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
         });
       }
 
-      // 2. Telegram Bot notification via safeSend — clean, professional copy
+      // 2. Telegram notification: "Message from Admin" + the reply (see bot.js)
       try {
-        const { sendCard } = require('../bot');
-        const closed = updatedStatus === 'closed';
-        await sendCard(ticket.telegram_id, {
-          icon: closed ? '✅' : '💬',
-          title: closed ? 'Support Request Closed' : 'Support Request Update',
-          body: closed
-            ? 'This request has been closed. Open the app if you need to review the conversation.'
-            : 'Our team has an update for you. Open the app to view the full conversation or send a follow-up.',
-          quote: replyText ? (replyText.length > 300 ? replyText.substring(0, 300) + '…' : replyText) : '',
-          fields: [['📌', 'Subject', ticket.subject], ['🔖', 'Status', statusLabel]],
-          footer: 'We are here to help 🙏',
-        }, { label: 'Open App' });
+        const { notifyUserTicketUpdate } = require('../bot');
+        await notifyUserTicketUpdate(ticket.telegram_id, { reply: replyText, subject: ticket.subject, status: updatedStatus });
       } catch (botErr) {
         console.error('[admin] Failed to send Telegram notification for ticket update:', botErr.message);
       }

@@ -1077,6 +1077,7 @@ function handleTelegramBack() {
   if (document.body.classList.contains('in-call')) return;
   if (currentPage === 'mentor-profile') { closeMentorProfile(); return; }
   if (currentPage === 'end-mentorship') { closeEndReason(); return; }
+  if (currentPage === 'new-ticket') { toggleNewTicketModal(false); return; }
   if (currentPage === 'goal-new' && window.HolyGoals?.back()) return;
   if (currentPage !== 'dashboard') navigate('dashboard');
 }
@@ -1646,9 +1647,11 @@ function connectSocket() {
 
   socket.on('ticket_reply', (data) => {
     haptic('success');
+    // Short and clear: "Message from Admin" + the start of the reply
+    const preview = data.reply ? (data.reply.length > 90 ? data.reply.slice(0, 90) + '…' : data.reply) : '';
     const msg = data.reply
-      ? `Admin replied to your support request: "${data.subject || 'Support'}"`
-      : `Your support request "${data.subject || 'Support'}" is now ${data.status_label || data.status}`;
+      ? `${t('ticket_toast_admin') || 'Message from Admin'}: ${preview}`
+      : `"${data.subject || 'Support'}": ${data.status_label || data.status}`;
     showToast(msg, 'info');
     updateSupportBadge();
     if (currentPage === 'support') {
@@ -1824,7 +1827,7 @@ function navigate(page) {
   if (currentPage === 'my-mentees' && page !== 'my-mentees') flushMentorNotes();
 
   currentPage = page;
-  document.body.classList.toggle('er-page', page === 'end-mentorship');
+  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket');
   updateChatKeyboard();                    // leaving chat clears the docked-composer state
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
@@ -4014,7 +4017,7 @@ function switchMentorProfileTab(tab) {
 // Switch pages without navigate()'s data loaders: the mentors list stays as it was.
 function showAppPageQuiet(page, navId) {
   currentPage = page;
-  document.body.classList.toggle('er-page', page === 'end-mentorship');
+  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket');
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.nav-item').forEach(nv => nv.classList.remove('active'));
   $(`page-${page}`)?.classList.add('active');
@@ -7333,58 +7336,73 @@ async function submitTicketReply() {
   }
 }
 
-function selectTicketCategory(val, text) {
+function selectTicketCategory(val) {
   haptic('selection');
   const input = $('modalTicketCategory');
-  if (input) input.value = val;
-  const label = $('modalTicketCategoryLabel');
-  if (label) label.textContent = text;
-  const menu = $('modalTicketCategoryDropdown')?.querySelector('.premium-dropdown-menu');
-  if (menu) {
-    menu.querySelectorAll('.dropdown-item').forEach(item => {
-      item.classList.toggle('selected', item.dataset.value === val);
-    });
+  if (input) input.value = val || '';
+  document.querySelectorAll('#modalTicketCategoryChips .nt-chip').forEach(chip => {
+    const on = chip.dataset.value === (val || '');
+    chip.classList.toggle('active', on);
+    chip.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+}
+
+// "New request" is a full page now (same family as End mentorship). The old name is
+// kept because the support list, its empty state and the closed-ticket note call it.
+let _newTicketBusy = false;
+function toggleNewTicketModal(show) {
+  haptic('selection');
+  if (show) {
+    _newTicketBusy = false;
+    $('modalTicketSubject').value = '';
+    $('modalTicketDesc').value = '';
+    selectTicketCategory('');
+    onNewTicketInput();
+    showAppPageQuiet('new-ticket', null);
+    const pc = document.querySelector('#page-new-ticket .page-content');
+    if (pc) pc.scrollTop = 0;
+  } else {
+    if (_newTicketBusy) return;
+    try { document.activeElement?.blur?.(); } catch { }        // drop the keyboard before leaving
+    if (currentPage === 'new-ticket') navigate('support');
   }
 }
 
-function toggleNewTicketModal(show) {
-  haptic('selection');
-  const modal = $('newTicketModal');
-  if (!modal) return;
-  modal.style.display = '';
-  modal.classList.toggle('open', show);
-  if (show) {
-    $('modalTicketSubject').value = '';
-    $('modalTicketDesc').value = '';
-    selectTicketCategory('', 'General');
+function onNewTicketInput() {
+  const subject = ($('modalTicketSubject')?.value || '').trim();
+  const desc = $('modalTicketDesc')?.value || '';
+  const count = $('newTicketCount');
+  if (count) {
+    count.textContent = `${desc.length}/1000`;
+    count.classList.toggle('is-near', desc.length >= 970);
   }
+  const btn = $('newTicketSubmit');
+  if (btn) btn.disabled = _newTicketBusy || !subject || !desc.trim();
 }
 
 async function submitModalTicket() {
-  haptic('medium');
+  if (_newTicketBusy) return;
   const subject = $('modalTicketSubject').value.trim();
   const description = $('modalTicketDesc').value.trim();
   const category = $('modalTicketCategory')?.value || '';
   if (!subject || !description) {
     haptic('error');
-    showToast('Fill in all fields', 'error');
+    showToast(t('ticket_fill_all') || 'Fill in all fields', 'error');
     return;
   }
-
+  haptic('medium');
+  _newTicketBusy = true;
+  onNewTicketInput();
   try {
     await apiFetch('/api/support', { method: 'POST', body: { subject, description, category } });
+    _newTicketBusy = false;
     haptic('success');
-    showToast('Support request submitted', 'success');
-    $('modalTicketSubject').value = '';
-    $('modalTicketDesc').value = '';
-    selectTicketCategory('', 'General');
-    toggleNewTicketModal(false);
-    if (currentPage === 'support') {
-      loadUserTickets();
-    } else {
-      navigate('support');
-    }
+    showToast(t('ticket_submitted_toast') || 'Support request submitted', 'success');
+    try { document.activeElement?.blur?.(); } catch { }
+    navigate('support');
   } catch (e) {
+    _newTicketBusy = false;
+    onNewTicketInput();
     haptic('error');
     showToast(e.message, 'error');
   }

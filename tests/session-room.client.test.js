@@ -116,7 +116,7 @@ const base = (o = {}) => ({ session_id: 's1', room_name: 'holy-x', room_password
   await w.joinSession('s1', { external: true }); await sleep(20);
   assert.ok(log.calls[log.calls.length - 1][1].includes('?via=external') || log.calls.some(c => c[1].includes('via=external'))); ok('browser mode registers as external on the server');
   assert.equal(log.opened, undefined); ok('browser mode: the browser is NOT opened automatically (it used to cover the password)');
-  let hp = w.$('sessionLobby'); assert.ok(hp.textContent.includes('PW123') && hp.textContent.includes('Copy the room password')); ok('hand-off page shows the password and "Copy" step before anything opens');
+  let hp = w.$('sessionLobby'); assert.ok(hp.textContent.includes('PW123') && hp.textContent.includes('Copy password')); ok('hand-off page shows the password and a "Copy password" button before anything opens');
   assert.ok(hp.textContent.includes('Open browser')); ok('hand-off page has an "Open browser" button');
   await w.SR.copyPass(); assert.ok(log.toasts.some(t => t[0].includes('Could not copy'))); assert.ok(!w.$('sessionLobby').textContent.includes('Copied')); ok('copy failure is reported (not silently "copied")');
   w.document.execCommand = (c) => { log.execCopy = c; return true; }; // WebView without async clipboard
@@ -128,7 +128,7 @@ const base = (o = {}) => ({ session_id: 's1', room_name: 'holy-x', room_password
   // ── hand-off with no password: still no auto-open, just the button
   ({ w, log } = boot({ isHost: false, api: async () => base({ host_present: true, room_password: null }) }));
   await w.joinSession('s1', { external: true }); await sleep(20);
-  assert.equal(log.opened, undefined); assert.ok(!w.$('sessionLobby').textContent.includes('Copy the room password')); assert.ok(w.$('sessionLobby').textContent.includes('Open browser')); ok('no password → no copy step, button still gates the browser');
+  assert.equal(log.opened, undefined); assert.ok(!w.$('sessionLobby').textContent.includes('Copy password')); assert.ok(w.$('sessionLobby').textContent.includes('Open browser')); ok('no password → no copy button, button still gates the browser');
 
   // ── phone screen share (host): no getDisplayMedia → hand-off to the Jitsi Meet app
   ({ w, log } = boot({ isHost: true, api: async (p) => p.includes('/join') ? base({ is_moderator: true, host_present: true, jitsi_token: 'JWT1' }) : { ended: false, host_present: true, present_count: 2 } }));
@@ -151,7 +151,7 @@ const base = (o = {}) => ({ session_id: 's1', room_name: 'holy-x', room_password
   ({ w, log } = boot({ isHost: true, api: async () => base({ is_moderator: true, host_present: true }) }));
   Object.defineProperty(w.navigator, 'maxTouchPoints', { value: 5 });
   await w.joinSession('s1', { external: true }); await sleep(20);
-  assert.ok(w.$('sessionLobby').textContent.includes("Phone browsers can't share your screen")); assert.ok(w.$('sessionLobby').textContent.includes('Share my phone screen')); ok('browser page on a phone: says why no Share, links to the app');
+  assert.ok(w.$('sessionLobby').textContent.includes('Share my phone screen')); ok('browser page on a phone: offers the Jitsi Meet app button for screen sharing (no extra warning text)');
 
   // ── launcher page (frontend/open-app.html): builds the right link per platform
   const html = fs.readFileSync(require('path').join(__dirname, '..', 'frontend', 'open-app.html'), 'utf8');

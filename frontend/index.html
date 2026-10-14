@@ -1516,6 +1516,69 @@
       </div>
     </div>
 
+    <!-- ── Page: New support request (full page, like End mentorship) ─────── -->
+    <div id="page-new-ticket" class="page">
+      <div class="app-header mp-header">
+        <button type="button" class="profile-pill mp-back" onclick="toggleNewTicketModal(false)" aria-label="Back">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+          <span data-i18n="btn_back">Back</span>
+        </button>
+      </div>
+      <div class="page-content nt-content">
+        <div class="nt-hero">
+          <div class="nt-hero-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><path d="M8 9h8M8 13h5" /></svg>
+          </div>
+          <span class="page-intro-eyebrow" data-i18n="New Support Request">New Support Request</span>
+          <p class="page-intro-text nt-hero-text" data-i18n="new_support_request_desc">Describe your issue or question. Our admin team will respond shortly.</p>
+        </div>
+
+        <div class="card nt-form">
+          <div class="nt-field">
+            <label class="nt-label" for="modalTicketSubject" data-i18n="Subject">Subject</label>
+            <input id="modalTicketSubject" class="form-control nt-input" maxlength="120" autocomplete="off" enterkeyhint="next"
+              placeholder="What do you need help with?" data-i18n="ticket_subject_placeholder" oninput="onNewTicketInput()" />
+          </div>
+
+          <div class="nt-field">
+            <span class="nt-label" data-i18n="Category">Category (optional)</span>
+            <div class="nt-chips" id="modalTicketCategoryChips" role="radiogroup">
+              <button type="button" class="nt-chip active" data-value="" role="radio" aria-checked="true" onclick="selectTicketCategory('')" data-i18n="ticket_cat_general">General</button>
+              <button type="button" class="nt-chip" data-value="account" role="radio" aria-checked="false" onclick="selectTicketCategory('account')" data-i18n="ticket_cat_account">Account</button>
+              <button type="button" class="nt-chip" data-value="technical" role="radio" aria-checked="false" onclick="selectTicketCategory('technical')" data-i18n="ticket_cat_technical">Technical Issue</button>
+              <button type="button" class="nt-chip" data-value="mentorship" role="radio" aria-checked="false" onclick="selectTicketCategory('mentorship')" data-i18n="ticket_cat_mentorship">Mentorship</button>
+              <button type="button" class="nt-chip" data-value="other" role="radio" aria-checked="false" onclick="selectTicketCategory('other')" data-i18n="ticket_cat_other">Other</button>
+            </div>
+            <input type="hidden" id="modalTicketCategory" value="" />
+          </div>
+
+          <div class="nt-field">
+            <label class="nt-label" for="modalTicketDesc" data-i18n="Description">Description</label>
+            <textarea id="modalTicketDesc" class="form-control nt-input" rows="5" maxlength="1000"
+              placeholder="Describe your issue in detail..." data-i18n="ticket_desc_placeholder" oninput="onNewTicketInput()"></textarea>
+            <div class="nt-foot"><span id="newTicketCount" class="nt-count">0/1000</span></div>
+          </div>
+        </div>
+
+        <p class="nt-contact">
+          <span data-i18n="contact_admin_telegram">Or message admin on Telegram:</span>
+          <a href="javascript:void(0)" onclick="contactAdmin()">@YIDIDIYATAMIRUU</a>
+        </p>
+      </div>
+      <!-- Buttons live outside the scrolling area, so they stay visible above the keyboard -->
+      <div class="nt-actions-bar">
+        <div class="nt-actions">
+          <button type="button" class="btn btn-outline" onclick="toggleNewTicketModal(false)" data-i18n="btn_cancel">Cancel</button>
+          <button type="button" id="newTicketSubmit" class="btn btn-primary" onclick="submitModalTicket()" disabled>
+            <span data-i18n="btn_submit_request">Submit Request</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4z" /></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Page: Ticket Detail (a chat with the support team) ─────── -->
     <div id="page-ticket-detail" class="page">
       <div class="app-header chat-header ticket-chat-header">
@@ -1648,64 +1711,6 @@
     </button>
 
   </div><!-- /#app -->
-
-  <!-- ─── New Support Ticket Modal ──────────────────────────────── -->
-  <div id="newTicketModal" class="modal-overlay" onclick="if(event.target===this)toggleNewTicketModal(false)">
-    <div class="modal-sheet">
-      <div class="modal-handle"></div>
-      <div class="modal-title" data-i18n="New Support Request">New Support Request</div>
-      <p class="text-sm text-dim mb-16" data-i18n="new_support_request_desc">Describe your issue or question. Our admin
-        team will respond shortly.</p>
-
-      <div class="form-group">
-        <label class="form-label" data-i18n="Subject">Subject</label>
-        <input id="modalTicketSubject" class="form-control" placeholder="What do you need help with?"
-          data-i18n="ticket_subject_placeholder" />
-      </div>
-      <div class="form-group">
-        <label class="form-label" data-i18n="Category">Category (optional)</label>
-        <div class="premium-dropdown form-dropdown" data-dropdown id="modalTicketCategoryDropdown">
-          <button type="button" class="premium-dropdown-btn" data-dropdown-toggle>
-            <span class="dropdown-label" id="modalTicketCategoryLabel">General</span>
-            <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
-          <div class="premium-dropdown-menu" data-dropdown-menu>
-            <button type="button" class="dropdown-item selected" data-value="" onclick="selectTicketCategory('', 'General')">General</button>
-            <button type="button" class="dropdown-item" data-value="account" onclick="selectTicketCategory('account', 'Account')">Account</button>
-            <button type="button" class="dropdown-item" data-value="technical" onclick="selectTicketCategory('technical', 'Technical Issue')">Technical Issue</button>
-            <button type="button" class="dropdown-item" data-value="mentorship" onclick="selectTicketCategory('mentorship', 'Mentorship')">Mentorship</button>
-            <button type="button" class="dropdown-item" data-value="other" onclick="selectTicketCategory('other', 'Other')">Other</button>
-          </div>
-          <input type="hidden" id="modalTicketCategory" value="" />
-        </div>
-      </div>
-      <div class="form-group mb-12">
-        <label class="form-label" data-i18n="Description">Description</label>
-        <textarea id="modalTicketDesc" class="form-control" rows="4" placeholder="Describe your issue in detail..."
-          data-i18n="ticket_desc_placeholder"></textarea>
-      </div>
-
-      <p class="text-xs text-dim mb-12" style="text-align:center">
-        <span data-i18n="contact_admin_telegram">Or message admin on Telegram:</span>
-        <a href="javascript:void(0)" onclick="contactAdmin()" style="color:var(--gold);font-weight:600">@YIDIDIYATAMIRUU</a>
-      </p>
-
-      <div class="flex gap-8 mt-12">
-        <button class="btn btn-ghost flex-1" onclick="toggleNewTicketModal(false)"
-          data-i18n="btn_cancel">Cancel</button>
-        <button class="ticket-submit-btn flex-1" style="margin-top:0" onclick="submitModalTicket()">
-          <span data-i18n="btn_submit_request">Submit Request</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 2 11 13" />
-            <path d="M22 2 15 22l-4-9-9-4z" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  </div>
 
   <!-- ─── Apply to be Mentor Modal ──────────────────────────────── -->
   <div id="applyModal" class="modal-overlay" onclick="if(event.target===this)closeApplyModal()">

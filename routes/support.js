@@ -36,6 +36,12 @@ module.exports = function supportRoutes(supabase, requireAuth, io, onlineUsers) 
       io.emit('new_ticket', { id: data.id, subject: data.subject, telegram_id, created_at: now });
     }
 
+    // Tell the admins on Telegram too (the socket only reaches an open admin page)
+    try {
+      const { notifyAdminNewTicket } = require('../bot');
+      await notifyAdminNewTicket({ telegram_id, subject, category, description });
+    } catch (e) { console.error('[support] admin notification failed:', e.message); }
+
     res.status(201).json(data);
   });
 
@@ -184,6 +190,11 @@ module.exports = function supportRoutes(supabase, requireAuth, io, onlineUsers) 
         created_at: now
       });
     }
+
+    try {
+      const { notifyAdminNewTicket } = require('../bot');
+      await notifyAdminNewTicket({ telegram_id, subject: ticket.subject, content: content.trim(), isReply: true });
+    } catch (e) { console.error('[support] admin notification failed:', e.message); }
 
     res.status(201).json(reply);
   });

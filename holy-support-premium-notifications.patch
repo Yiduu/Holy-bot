@@ -1,0 +1,600 @@
+diff --git a/bot.js b/bot.js
+index f68d744..ca11955 100644
+--- a/bot.js
++++ b/bot.js
+@@ -1743,6 +1743,70 @@ async function notifyAdminNewMentorApplication(applicantTelegramId, sex, educati
+   }
+ }
+ 
++// ─── Support tickets ──────────────────────────────────────────────────────────
++// Telegram message to every configured admin when a member opens a support request
++// (or writes a follow-up). Until now admins were only pinged through the live socket,
++// so nobody who was not sitting in the admin page ever heard about a new request.
++// Never throws: a failed notification must not fail the member's request.
++async function notifyAdminNewTicket({ telegram_id, subject, category, description, content, isReply = false }) {
++  try {
++    const adminIds = String(process.env.ADMIN_TELEGRAM_ID || process.env.ADMIN_CHAT_ID || '');
++    if (!adminIds.trim()) {
++      console.warn('[Support] ADMIN_TELEGRAM_ID is not set: nobody can be notified about the new request');
++      return;
++    }
++    const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', telegram_id).single();
++    const text = String(isReply ? content : description || '').trim();
++    const msg = card({
++      title: isReply ? 'New Reply on a Support Request' : 'New Support Request',
++      quote: text.length > 300 ? text.substring(0, 300) + '…' : text,
++      fields: [
++        ['👤', 'From', u?.anonymous_id || String(telegram_id)],
++        ['📌', 'Subject', subject],
++        ['🏷', 'Category', isReply ? '' : category],
++      ],
++    });
++    const url = `${APP_URL.replace(/\/+$/, '')}/admin.html`;
++    for (const id of adminIds.split(',').map(x => x.trim()).filter(Boolean)) {
++      await safeSend(id, msg, { ...HTML, reply_markup: goldKeyboard('Open Support', url) });
++    }
++  } catch (e) {
++    console.error('[Support] Failed to notify admins:', e.message);
++  }
++}
++
++// Telegram message to the member when the admin answers (or changes the status of) a
++// request. A reply is just "Message from Admin" with the reply itself: no filler
++// sentence, no subject/status rows. A status change without a reply gets one short line.
++async function notifyUserTicketUpdate(telegram_id, { reply, subject, status }) {
++  try {
++    const lang = await getUserLang(telegram_id);
++    const am = lang === 'am';
++    const text = String(reply || '').trim();
++    let content;
++    if (text) {
++      content = {
++        title: am ? 'መልእክት ከአስተዳዳሪ' : 'Message from Admin',
++        quote: text.length > 500 ? text.substring(0, 500) + '…' : text,
++      };
++    } else {
++      const labels = {
++        resolved: am ? 'ተፈቷል' : 'resolved',
++        closed: am ? 'ተዘግቷል' : 'closed',
++        in_progress: am ? 'በሂደት ላይ ነው' : 'in progress',
++        open: am ? 'እንደገና ተከፍቷል' : 'reopened',
++      };
++      content = {
++        title: am ? 'የድጋፍ ጥያቄ' : 'Support Request',
++        body: am ? `“${subject}” ${labels[status] || status}።` : `“${subject}” is ${labels[status] || status}.`,
++      };
++    }
++    return await sendCard(telegram_id, content, { label: tSync(lang, 'btn_open_app') });
++  } catch (e) {
++    console.error('[Support] Failed to notify member:', e.message);
++  }
++}
++
+ async function notifyMentorshipRequest(mentorId, requesterId, requesterName, requesterSex, requesterAge, topic) {
+   const lang = await getUserLang(mentorId);
+   const am = lang === 'am';
+@@ -3670,6 +3734,8 @@ module.exports = {
+   notifySessionWaiting,
+   notifyMentorshipRequest,
+   notifyAdminNewMentorApplication,
++  notifyAdminNewTicket,
++  notifyUserTicketUpdate,
+   notifyMentorshipAccepted,
+   notifyMentorshipRejected,
+   notifyMenteeReferral,
+diff --git a/frontend/app.js b/frontend/app.js
+index 4247e1c..26b1447 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1077,6 +1077,7 @@ function handleTelegramBack() {
+   if (document.body.classList.contains('in-call')) return;
+   if (currentPage === 'mentor-profile') { closeMentorProfile(); return; }
+   if (currentPage === 'end-mentorship') { closeEndReason(); return; }
++  if (currentPage === 'new-ticket') { toggleNewTicketModal(false); return; }
+   if (currentPage === 'goal-new' && window.HolyGoals?.back()) return;
+   if (currentPage !== 'dashboard') navigate('dashboard');
+ }
+@@ -1646,9 +1647,11 @@ function connectSocket() {
+ 
+   socket.on('ticket_reply', (data) => {
+     haptic('success');
++    // Short and clear: "Message from Admin" + the start of the reply
++    const preview = data.reply ? (data.reply.length > 90 ? data.reply.slice(0, 90) + '…' : data.reply) : '';
+     const msg = data.reply
+-      ? `Admin replied to your support request: "${data.subject || 'Support'}"`
+-      : `Your support request "${data.subject || 'Support'}" is now ${data.status_label || data.status}`;
++      ? `${t('ticket_toast_admin') || 'Message from Admin'}: ${preview}`
++      : `"${data.subject || 'Support'}": ${data.status_label || data.status}`;
+     showToast(msg, 'info');
+     updateSupportBadge();
+     if (currentPage === 'support') {
+@@ -1824,7 +1827,7 @@ function navigate(page) {
+   if (currentPage === 'my-mentees' && page !== 'my-mentees') flushMentorNotes();
+ 
+   currentPage = page;
+-  document.body.classList.toggle('er-page', page === 'end-mentorship');
++  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket');
+   updateChatKeyboard();                    // leaving chat clears the docked-composer state
+   $$('.page').forEach(p => p.classList.remove('active'));
+   $$('.nav-item').forEach(n => n.classList.remove('active'));
+@@ -4014,7 +4017,7 @@ function switchMentorProfileTab(tab) {
+ // Switch pages without navigate()'s data loaders: the mentors list stays as it was.
+ function showAppPageQuiet(page, navId) {
+   currentPage = page;
+-  document.body.classList.toggle('er-page', page === 'end-mentorship');
++  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket');
+   $$('.page').forEach(p => p.classList.remove('active'));
+   $$('.nav-item').forEach(nv => nv.classList.remove('active'));
+   $(`page-${page}`)?.classList.add('active');
+@@ -7333,58 +7336,73 @@ async function submitTicketReply() {
+   }
+ }
+ 
+-function selectTicketCategory(val, text) {
++function selectTicketCategory(val) {
+   haptic('selection');
+   const input = $('modalTicketCategory');
+-  if (input) input.value = val;
+-  const label = $('modalTicketCategoryLabel');
+-  if (label) label.textContent = text;
+-  const menu = $('modalTicketCategoryDropdown')?.querySelector('.premium-dropdown-menu');
+-  if (menu) {
+-    menu.querySelectorAll('.dropdown-item').forEach(item => {
+-      item.classList.toggle('selected', item.dataset.value === val);
+-    });
+-  }
++  if (input) input.value = val || '';
++  document.querySelectorAll('#modalTicketCategoryChips .nt-chip').forEach(chip => {
++    const on = chip.dataset.value === (val || '');
++    chip.classList.toggle('active', on);
++    chip.setAttribute('aria-checked', on ? 'true' : 'false');
++  });
+ }
+ 
++// "New request" is a full page now (same family as End mentorship). The old name is
++// kept because the support list, its empty state and the closed-ticket note call it.
++let _newTicketBusy = false;
+ function toggleNewTicketModal(show) {
+   haptic('selection');
+-  const modal = $('newTicketModal');
+-  if (!modal) return;
+-  modal.style.display = '';
+-  modal.classList.toggle('open', show);
+   if (show) {
++    _newTicketBusy = false;
+     $('modalTicketSubject').value = '';
+     $('modalTicketDesc').value = '';
+-    selectTicketCategory('', 'General');
++    selectTicketCategory('');
++    onNewTicketInput();
++    showAppPageQuiet('new-ticket', null);
++    const pc = document.querySelector('#page-new-ticket .page-content');
++    if (pc) pc.scrollTop = 0;
++  } else {
++    if (_newTicketBusy) return;
++    try { document.activeElement?.blur?.(); } catch { }        // drop the keyboard before leaving
++    if (currentPage === 'new-ticket') navigate('support');
++  }
++}
++
++function onNewTicketInput() {
++  const subject = ($('modalTicketSubject')?.value || '').trim();
++  const desc = $('modalTicketDesc')?.value || '';
++  const count = $('newTicketCount');
++  if (count) {
++    count.textContent = `${desc.length}/1000`;
++    count.classList.toggle('is-near', desc.length >= 970);
+   }
++  const btn = $('newTicketSubmit');
++  if (btn) btn.disabled = _newTicketBusy || !subject || !desc.trim();
+ }
+ 
+ async function submitModalTicket() {
+-  haptic('medium');
++  if (_newTicketBusy) return;
+   const subject = $('modalTicketSubject').value.trim();
+   const description = $('modalTicketDesc').value.trim();
+   const category = $('modalTicketCategory')?.value || '';
+   if (!subject || !description) {
+     haptic('error');
+-    showToast('Fill in all fields', 'error');
++    showToast(t('ticket_fill_all') || 'Fill in all fields', 'error');
+     return;
+   }
+-
++  haptic('medium');
++  _newTicketBusy = true;
++  onNewTicketInput();
+   try {
+     await apiFetch('/api/support', { method: 'POST', body: { subject, description, category } });
++    _newTicketBusy = false;
+     haptic('success');
+-    showToast('Support request submitted', 'success');
+-    $('modalTicketSubject').value = '';
+-    $('modalTicketDesc').value = '';
+-    selectTicketCategory('', 'General');
+-    toggleNewTicketModal(false);
+-    if (currentPage === 'support') {
+-      loadUserTickets();
+-    } else {
+-      navigate('support');
+-    }
++    showToast(t('ticket_submitted_toast') || 'Support request submitted', 'success');
++    try { document.activeElement?.blur?.(); } catch { }
++    navigate('support');
+   } catch (e) {
++    _newTicketBusy = false;
++    onNewTicketInput();
+     haptic('error');
+     showToast(e.message, 'error');
+   }
+diff --git a/frontend/index.html b/frontend/index.html
+index ef41f52..cc6e9cc 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -1516,6 +1516,69 @@
+       </div>
+     </div>
+ 
++    <!-- ── Page: New support request (full page, like End mentorship) ─────── -->
++    <div id="page-new-ticket" class="page">
++      <div class="app-header mp-header">
++        <button type="button" class="profile-pill mp-back" onclick="toggleNewTicketModal(false)" aria-label="Back">
++          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++            stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
++          <span data-i18n="btn_back">Back</span>
++        </button>
++      </div>
++      <div class="page-content nt-content">
++        <div class="nt-hero">
++          <div class="nt-hero-icon" aria-hidden="true">
++            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><path d="M8 9h8M8 13h5" /></svg>
++          </div>
++          <span class="page-intro-eyebrow" data-i18n="New Support Request">New Support Request</span>
++          <p class="page-intro-text nt-hero-text" data-i18n="new_support_request_desc">Describe your issue or question. Our admin team will respond shortly.</p>
++        </div>
++
++        <div class="card nt-form">
++          <div class="nt-field">
++            <label class="nt-label" for="modalTicketSubject" data-i18n="Subject">Subject</label>
++            <input id="modalTicketSubject" class="form-control nt-input" maxlength="120" autocomplete="off" enterkeyhint="next"
++              placeholder="What do you need help with?" data-i18n="ticket_subject_placeholder" oninput="onNewTicketInput()" />
++          </div>
++
++          <div class="nt-field">
++            <span class="nt-label" data-i18n="Category">Category (optional)</span>
++            <div class="nt-chips" id="modalTicketCategoryChips" role="radiogroup">
++              <button type="button" class="nt-chip active" data-value="" role="radio" aria-checked="true" onclick="selectTicketCategory('')" data-i18n="ticket_cat_general">General</button>
++              <button type="button" class="nt-chip" data-value="account" role="radio" aria-checked="false" onclick="selectTicketCategory('account')" data-i18n="ticket_cat_account">Account</button>
++              <button type="button" class="nt-chip" data-value="technical" role="radio" aria-checked="false" onclick="selectTicketCategory('technical')" data-i18n="ticket_cat_technical">Technical Issue</button>
++              <button type="button" class="nt-chip" data-value="mentorship" role="radio" aria-checked="false" onclick="selectTicketCategory('mentorship')" data-i18n="ticket_cat_mentorship">Mentorship</button>
++              <button type="button" class="nt-chip" data-value="other" role="radio" aria-checked="false" onclick="selectTicketCategory('other')" data-i18n="ticket_cat_other">Other</button>
++            </div>
++            <input type="hidden" id="modalTicketCategory" value="" />
++          </div>
++
++          <div class="nt-field">
++            <label class="nt-label" for="modalTicketDesc" data-i18n="Description">Description</label>
++            <textarea id="modalTicketDesc" class="form-control nt-input" rows="5" maxlength="1000"
++              placeholder="Describe your issue in detail..." data-i18n="ticket_desc_placeholder" oninput="onNewTicketInput()"></textarea>
++            <div class="nt-foot"><span id="newTicketCount" class="nt-count">0/1000</span></div>
++          </div>
++        </div>
++
++        <p class="nt-contact">
++          <span data-i18n="contact_admin_telegram">Or message admin on Telegram:</span>
++          <a href="javascript:void(0)" onclick="contactAdmin()">@YIDIDIYATAMIRUU</a>
++        </p>
++      </div>
++      <!-- Buttons live outside the scrolling area, so they stay visible above the keyboard -->
++      <div class="nt-actions-bar">
++        <div class="nt-actions">
++          <button type="button" class="btn btn-outline" onclick="toggleNewTicketModal(false)" data-i18n="btn_cancel">Cancel</button>
++          <button type="button" id="newTicketSubmit" class="btn btn-primary" onclick="submitModalTicket()" disabled>
++            <span data-i18n="btn_submit_request">Submit Request</span>
++            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4z" /></svg>
++          </button>
++        </div>
++      </div>
++    </div>
++
+     <!-- ── Page: Ticket Detail (a chat with the support team) ─────── -->
+     <div id="page-ticket-detail" class="page">
+       <div class="app-header chat-header ticket-chat-header">
+@@ -1649,64 +1712,6 @@
+ 
+   </div><!-- /#app -->
+ 
+-  <!-- ─── New Support Ticket Modal ──────────────────────────────── -->
+-  <div id="newTicketModal" class="modal-overlay" onclick="if(event.target===this)toggleNewTicketModal(false)">
+-    <div class="modal-sheet">
+-      <div class="modal-handle"></div>
+-      <div class="modal-title" data-i18n="New Support Request">New Support Request</div>
+-      <p class="text-sm text-dim mb-16" data-i18n="new_support_request_desc">Describe your issue or question. Our admin
+-        team will respond shortly.</p>
+-
+-      <div class="form-group">
+-        <label class="form-label" data-i18n="Subject">Subject</label>
+-        <input id="modalTicketSubject" class="form-control" placeholder="What do you need help with?"
+-          data-i18n="ticket_subject_placeholder" />
+-      </div>
+-      <div class="form-group">
+-        <label class="form-label" data-i18n="Category">Category (optional)</label>
+-        <div class="premium-dropdown form-dropdown" data-dropdown id="modalTicketCategoryDropdown">
+-          <button type="button" class="premium-dropdown-btn" data-dropdown-toggle>
+-            <span class="dropdown-label" id="modalTicketCategoryLabel">General</span>
+-            <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+-              <polyline points="6 9 12 15 18 9"/>
+-            </svg>
+-          </button>
+-          <div class="premium-dropdown-menu" data-dropdown-menu>
+-            <button type="button" class="dropdown-item selected" data-value="" onclick="selectTicketCategory('', 'General')">General</button>
+-            <button type="button" class="dropdown-item" data-value="account" onclick="selectTicketCategory('account', 'Account')">Account</button>
+-            <button type="button" class="dropdown-item" data-value="technical" onclick="selectTicketCategory('technical', 'Technical Issue')">Technical Issue</button>
+-            <button type="button" class="dropdown-item" data-value="mentorship" onclick="selectTicketCategory('mentorship', 'Mentorship')">Mentorship</button>
+-            <button type="button" class="dropdown-item" data-value="other" onclick="selectTicketCategory('other', 'Other')">Other</button>
+-          </div>
+-          <input type="hidden" id="modalTicketCategory" value="" />
+-        </div>
+-      </div>
+-      <div class="form-group mb-12">
+-        <label class="form-label" data-i18n="Description">Description</label>
+-        <textarea id="modalTicketDesc" class="form-control" rows="4" placeholder="Describe your issue in detail..."
+-          data-i18n="ticket_desc_placeholder"></textarea>
+-      </div>
+-
+-      <p class="text-xs text-dim mb-12" style="text-align:center">
+-        <span data-i18n="contact_admin_telegram">Or message admin on Telegram:</span>
+-        <a href="javascript:void(0)" onclick="contactAdmin()" style="color:var(--gold);font-weight:600">@YIDIDIYATAMIRUU</a>
+-      </p>
+-
+-      <div class="flex gap-8 mt-12">
+-        <button class="btn btn-ghost flex-1" onclick="toggleNewTicketModal(false)"
+-          data-i18n="btn_cancel">Cancel</button>
+-        <button class="ticket-submit-btn flex-1" style="margin-top:0" onclick="submitModalTicket()">
+-          <span data-i18n="btn_submit_request">Submit Request</span>
+-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+-            stroke-linecap="round" stroke-linejoin="round">
+-            <path d="M22 2 11 13" />
+-            <path d="M22 2 15 22l-4-9-9-4z" />
+-          </svg>
+-        </button>
+-      </div>
+-    </div>
+-  </div>
+-
+   <!-- ─── Apply to be Mentor Modal ──────────────────────────────── -->
+   <div id="applyModal" class="modal-overlay" onclick="if(event.target===this)closeApplyModal()">
+     <div class="modal-sheet">
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 0b0f727..2ae5df3 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -428,6 +428,14 @@ const I18N = {
+     "ticket_desc_placeholder": "Describe your issue in detail...",
+     "ticket_reply_placeholder": "Write a follow-up message...",
+     "support_new_pill": "New request",
++    "ticket_cat_general": "General",
++    "ticket_cat_account": "Account",
++    "ticket_cat_technical": "Technical Issue",
++    "ticket_cat_mentorship": "Mentorship",
++    "ticket_cat_other": "Other",
++    "ticket_toast_admin": "Message from Admin",
++    "ticket_fill_all": "Fill in all fields",
++    "ticket_submitted_toast": "Support request submitted",
+     "support_team": "Support team",
+     "ticket_status_open": "Open",
+     "ticket_status_in_progress": "In progress",
+@@ -1269,6 +1277,14 @@ const I18N = {
+     "ticket_desc_placeholder": "ችግርዎን በዝርዝር ይግለጹ...",
+     "ticket_reply_placeholder": "ተከታይ መልእክት ይጻፉ...",
+     "support_new_pill": "አዲስ ጥያቄ",
++    "ticket_cat_general": "ጠቅላላ",
++    "ticket_cat_account": "መለያ",
++    "ticket_cat_technical": "ቴክኒካዊ ችግር",
++    "ticket_cat_mentorship": "አማካሪነት",
++    "ticket_cat_other": "ሌላ",
++    "ticket_toast_admin": "መልእክት ከአስተዳዳሪ",
++    "ticket_fill_all": "ሁሉንም መስኮች ይሙሉ",
++    "ticket_submitted_toast": "የድጋፍ ጥያቄ ተልኳል",
+     "support_team": "የድጋፍ ቡድን",
+     "ticket_status_open": "ክፍት",
+     "ticket_status_in_progress": "በሂደት ላይ",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 10be7cc..e5f02fc 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -13937,6 +13937,104 @@ body.kb-open #page-end-mentorship .er-note { display: none; }
+ body.kb-open #page-end-mentorship textarea { min-height: 112px; }
+ 
+ @media (prefers-reduced-motion: reduce) { #page-end-mentorship .er-content { animation: none; } }
++/* ── New support request page – same family as the End mentorship page ───────
++   Gold glow hero, glass card, pill category chips, docked action bar. The nav steps
++   aside (body.er-page) and the page follows the visible height, so the fields and the
++   buttons are never covered by the nav or the keyboard. ── */
++#page-new-ticket.active {
++  background: radial-gradient(120% 420px at 50% 0%, rgba(201, 168, 76, 0.28) 0%, rgba(168, 124, 42, 0.11) 45%, transparent 78%) no-repeat;
++}
++[data-theme="light"] #page-new-ticket.active {
++  background: radial-gradient(120% 420px at 50% 0%, rgba(201, 168, 76, 0.32) 0%, rgba(201, 168, 76, 0.10) 45%, transparent 78%) no-repeat;
++}
++#page-new-ticket .app-header { background: transparent; border-bottom-color: transparent; box-shadow: none; }
++body.kb-open #page-new-ticket.active { flex: 0 0 auto; height: calc(var(--app-height) - var(--kb-inset, 0px)); }
++
++#page-new-ticket .page-content.nt-content {
++  display: flex; flex-direction: column; gap: 14px; min-height: 0;
++  padding: 2px 16px 24px; overscroll-behavior-y: contain;
++  animation: profilePaneIn 0.3s ease both;
++}
++#page-new-ticket .nt-content > * { flex-shrink: 0; }
++
++#page-new-ticket .nt-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 2px 6px; }
++#page-new-ticket .nt-hero-icon {
++  width: 60px; height: 60px; display: grid; place-items: center; margin-bottom: 8px;
++  border-radius: 21px; color: var(--gold-light);
++  background: radial-gradient(90% 90% at 50% 0%, rgba(232, 201, 107, 0.26), rgba(201, 168, 76, 0.08)), rgba(201, 168, 76, 0.10);
++  box-shadow: inset 0 0 0 1px rgba(232, 201, 107, 0.34), 0 12px 28px rgba(0, 0, 0, 0.38), 0 0 38px rgba(201, 168, 76, 0.20);
++}
++#page-new-ticket .nt-hero .page-intro-eyebrow { margin-bottom: 2px; }
++#page-new-ticket .nt-hero-text { max-width: 34ch; color: var(--text2); line-height: 1.5; }
++[data-theme="light"] #page-new-ticket .nt-hero-icon { color: #7A5812; box-shadow: inset 0 0 0 1px rgba(150, 120, 40, 0.34), 0 10px 22px rgba(30, 25, 15, 0.14), 0 0 30px rgba(201, 168, 76, 0.24); }
++
++#page-new-ticket .nt-form {
++  display: flex; flex-direction: column; gap: 18px; padding: 18px 16px;
++  border-color: rgba(201, 168, 76, 0.28);
++  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28), var(--inset-hi);
++}
++[data-theme="light"] #page-new-ticket .nt-form { background: linear-gradient(160deg, #fff, #f6f3ea); border-color: rgba(150, 120, 40, 0.28); box-shadow: 0 8px 20px rgba(30, 25, 15, 0.10), inset 0 1px 0 #fff; }
++#page-new-ticket .nt-field { display: flex; flex-direction: column; gap: 8px; }
++#page-new-ticket .nt-label { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--gold-light); }
++[data-theme="light"] #page-new-ticket .nt-label { color: #7A5812; }
++
++#page-new-ticket .nt-input {
++  display: block; width: 100%; box-sizing: border-box; padding: 13px 16px;
++  border-radius: 16px; font-size: 16px; line-height: 1.5;      /* 16px: no iOS zoom on focus */
++  background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.10);
++  box-shadow: 0 0 0 0 transparent, inset 0 2px 6px rgba(0, 0, 0, 0.35);
++  scroll-margin-block: 96px;
++}
++#page-new-ticket textarea.nt-input { resize: none; min-height: 128px; max-height: 240px; border-radius: 18px; line-height: 1.55; }
++#page-new-ticket .nt-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim), inset 0 2px 6px rgba(0, 0, 0, 0.35); }
++[data-theme="light"] #page-new-ticket .nt-input { background: rgba(255, 255, 255, 0.92); border-color: rgba(150, 120, 40, 0.25); box-shadow: 0 0 0 0 transparent, inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++[data-theme="light"] #page-new-ticket .nt-input:focus { border-color: #A87C2A; box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++
++/* category: pill chips (no dropdown to get clipped inside the card) */
++#page-new-ticket .nt-chips { display: flex; flex-wrap: wrap; gap: 8px; }
++#page-new-ticket .nt-chip {
++  min-height: 38px; padding: 0 15px; border-radius: 999px; cursor: pointer;
++  font: 700 var(--fs-sm) var(--font-body); color: var(--text2);
++  background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.10);
++  transition: transform .12s ease, background .15s ease, border-color .15s ease, color .15s ease;
++}
++#page-new-ticket .nt-chip:active { transform: scale(0.96); }
++#page-new-ticket .nt-chip.active {
++  color: #1a1300; border-color: transparent;
++  background: linear-gradient(180deg, #EBCD72, #C9A84C);
++  box-shadow: 0 6px 16px rgba(201, 168, 76, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.4);
++}
++[data-theme="light"] #page-new-ticket .nt-chip { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.25); color: #5A5650; }
++[data-theme="light"] #page-new-ticket .nt-chip.active { color: #1a1300; border-color: transparent; background: linear-gradient(180deg, #EBCD72, #C9A84C); }
++
++#page-new-ticket .nt-foot { display: flex; justify-content: flex-end; font-size: var(--fs-xs); color: var(--text3); }
++#page-new-ticket .nt-count { font-variant-numeric: tabular-nums; font-weight: 700; }
++#page-new-ticket .nt-count.is-near { color: var(--danger); }
++
++#page-new-ticket .nt-contact { margin: 0 4px; text-align: center; font-size: var(--fs-xs); line-height: 1.5; color: var(--text2); }
++#page-new-ticket .nt-contact a { color: var(--gold-light); font-weight: 700; text-underline-offset: 3px; }
++[data-theme="light"] #page-new-ticket .nt-contact a { color: #7A5812; }
++
++/* docked action bar: never inside the scroll area, never behind the nav or the keyboard */
++#page-new-ticket .nt-actions-bar {
++  flex: none; padding: 12px 16px calc(14px + var(--safe-bottom));
++  background: linear-gradient(180deg, transparent, var(--bg) 38%);
++  border-top: 1px solid var(--border-dim);
++}
++body.kb-open #page-new-ticket .nt-actions-bar { padding-bottom: 12px; }
++#page-new-ticket .nt-actions { display: flex; gap: 10px; }
++#page-new-ticket .nt-actions .btn { flex: 1; min-height: 50px; }
++#page-new-ticket .nt-actions .btn-primary { flex: 1.4; font-weight: 800; box-shadow: 0 10px 26px rgba(201, 168, 76, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
++#page-new-ticket .nt-actions .btn:disabled { opacity: .45; pointer-events: none; box-shadow: none; }
++
++/* keyboard open: keep only what is needed to write */
++body.kb-open #page-new-ticket .nt-hero-icon,
++body.kb-open #page-new-ticket .nt-hero-text,
++body.kb-open #page-new-ticket .nt-contact { display: none; }
++body.kb-open #page-new-ticket textarea.nt-input { min-height: 104px; }
++
++@media (prefers-reduced-motion: reduce) { #page-new-ticket .nt-content { animation: none; } #page-new-ticket .nt-chip:active { transform: none; } }
++
+ .rating-end-reason { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 12px; padding: 10px 12px; text-align: left;
+   border-radius: 14px; background: var(--bg3); border: 1px solid var(--border-dim); }
+ .rating-end-reason b { font-size: var(--fs-2xs); letter-spacing: .04em; color: var(--gold); }
+diff --git a/routes/admin.js b/routes/admin.js
+index 03a5383..9456545 100644
+--- a/routes/admin.js
++++ b/routes/admin.js
+@@ -765,20 +765,10 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
+         });
+       }
+ 
+-      // 2. Telegram Bot notification via safeSend — clean, professional copy
++      // 2. Telegram notification: "Message from Admin" + the reply (see bot.js)
+       try {
+-        const { sendCard } = require('../bot');
+-        const closed = updatedStatus === 'closed';
+-        await sendCard(ticket.telegram_id, {
+-          icon: closed ? '✅' : '💬',
+-          title: closed ? 'Support Request Closed' : 'Support Request Update',
+-          body: closed
+-            ? 'This request has been closed. Open the app if you need to review the conversation.'
+-            : 'Our team has an update for you. Open the app to view the full conversation or send a follow-up.',
+-          quote: replyText ? (replyText.length > 300 ? replyText.substring(0, 300) + '…' : replyText) : '',
+-          fields: [['📌', 'Subject', ticket.subject], ['🔖', 'Status', statusLabel]],
+-          footer: 'We are here to help 🙏',
+-        }, { label: 'Open App' });
++        const { notifyUserTicketUpdate } = require('../bot');
++        await notifyUserTicketUpdate(ticket.telegram_id, { reply: replyText, subject: ticket.subject, status: updatedStatus });
+       } catch (botErr) {
+         console.error('[admin] Failed to send Telegram notification for ticket update:', botErr.message);
+       }
+diff --git a/routes/support.js b/routes/support.js
+index 7e12f8b..8d9c991 100644
+--- a/routes/support.js
++++ b/routes/support.js
+@@ -36,6 +36,12 @@ module.exports = function supportRoutes(supabase, requireAuth, io, onlineUsers)
+       io.emit('new_ticket', { id: data.id, subject: data.subject, telegram_id, created_at: now });
+     }
+ 
++    // Tell the admins on Telegram too (the socket only reaches an open admin page)
++    try {
++      const { notifyAdminNewTicket } = require('../bot');
++      await notifyAdminNewTicket({ telegram_id, subject, category, description });
++    } catch (e) { console.error('[support] admin notification failed:', e.message); }
++
+     res.status(201).json(data);
+   });
+ 
+@@ -185,6 +191,11 @@ module.exports = function supportRoutes(supabase, requireAuth, io, onlineUsers)
+       });
+     }
+ 
++    try {
++      const { notifyAdminNewTicket } = require('../bot');
++      await notifyAdminNewTicket({ telegram_id, subject: ticket.subject, content: content.trim(), isReply: true });
++    } catch (e) { console.error('[support] admin notification failed:', e.message); }
++
+     res.status(201).json(reply);
+   });
+ 
+diff --git a/tests/session-room.client.test.js b/tests/session-room.client.test.js
+index c6999b0..e7eef08 100644
+--- a/tests/session-room.client.test.js
++++ b/tests/session-room.client.test.js
+@@ -116,7 +116,7 @@ const base = (o = {}) => ({ session_id: 's1', room_name: 'holy-x', room_password
+   await w.joinSession('s1', { external: true }); await sleep(20);
+   assert.ok(log.calls[log.calls.length - 1][1].includes('?via=external') || log.calls.some(c => c[1].includes('via=external'))); ok('browser mode registers as external on the server');
+   assert.equal(log.opened, undefined); ok('browser mode: the browser is NOT opened automatically (it used to cover the password)');
+-  let hp = w.$('sessionLobby'); assert.ok(hp.textContent.includes('PW123') && hp.textContent.includes('Copy the room password')); ok('hand-off page shows the password and "Copy" step before anything opens');
++  let hp = w.$('sessionLobby'); assert.ok(hp.textContent.includes('PW123') && hp.textContent.includes('Copy password')); ok('hand-off page shows the password and a "Copy password" button before anything opens');
+   assert.ok(hp.textContent.includes('Open browser')); ok('hand-off page has an "Open browser" button');
+   await w.SR.copyPass(); assert.ok(log.toasts.some(t => t[0].includes('Could not copy'))); assert.ok(!w.$('sessionLobby').textContent.includes('Copied')); ok('copy failure is reported (not silently "copied")');
+   w.document.execCommand = (c) => { log.execCopy = c; return true; }; // WebView without async clipboard
+@@ -128,7 +128,7 @@ const base = (o = {}) => ({ session_id: 's1', room_name: 'holy-x', room_password
+   // ── hand-off with no password: still no auto-open, just the button
+   ({ w, log } = boot({ isHost: false, api: async () => base({ host_present: true, room_password: null }) }));
+   await w.joinSession('s1', { external: true }); await sleep(20);
+-  assert.equal(log.opened, undefined); assert.ok(!w.$('sessionLobby').textContent.includes('Copy the room password')); assert.ok(w.$('sessionLobby').textContent.includes('Open browser')); ok('no password → no copy step, button still gates the browser');
++  assert.equal(log.opened, undefined); assert.ok(!w.$('sessionLobby').textContent.includes('Copy password')); assert.ok(w.$('sessionLobby').textContent.includes('Open browser')); ok('no password → no copy button, button still gates the browser');
+ 
+   // ── phone screen share (host): no getDisplayMedia → hand-off to the Jitsi Meet app
+   ({ w, log } = boot({ isHost: true, api: async (p) => p.includes('/join') ? base({ is_moderator: true, host_present: true, jitsi_token: 'JWT1' }) : { ended: false, host_present: true, present_count: 2 } }));
+@@ -151,7 +151,7 @@ const base = (o = {}) => ({ session_id: 's1', room_name: 'holy-x', room_password
+   ({ w, log } = boot({ isHost: true, api: async () => base({ is_moderator: true, host_present: true }) }));
+   Object.defineProperty(w.navigator, 'maxTouchPoints', { value: 5 });
+   await w.joinSession('s1', { external: true }); await sleep(20);
+-  assert.ok(w.$('sessionLobby').textContent.includes("Phone browsers can't share your screen")); assert.ok(w.$('sessionLobby').textContent.includes('Share my phone screen')); ok('browser page on a phone: says why no Share, links to the app');
++  assert.ok(w.$('sessionLobby').textContent.includes('Share my phone screen')); ok('browser page on a phone: offers the Jitsi Meet app button for screen sharing (no extra warning text)');
+ 
+   // ── launcher page (frontend/open-app.html): builds the right link per platform
+   const html = fs.readFileSync(require('path').join(__dirname, '..', 'frontend', 'open-app.html'), 'utf8');
