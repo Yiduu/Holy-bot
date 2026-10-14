@@ -390,7 +390,7 @@
         <div class="sr-step-head">${stepNo(1)}<span>${esc(sr('step_copy', 'Copy the room password'))}</span></div>
         <div class="sr-pass">
           <div class="sr-pass-row"><code>${esc(pw)}</code>
-            <button class="btn ${A.passCopied ? 'btn-outline' : 'btn-primary'} btn-sm" onclick="SR.copyPass()">${esc(copyLabel)}</button></div>
+            <button class="sr-copy-btn ${A.passCopied ? 'is-done' : ''}" onclick="SR.copyPass()">${esc(copyLabel)}</button></div>
           <div class="sr-pass-label">${esc(sr('pass_hint', 'Paste it when the page asks for a password.'))}</div>
         </div>
       </div>` : '';
@@ -416,7 +416,10 @@
     const switchToBrowser = isApp ? `<button class="btn btn-outline sr-secondary" onclick="SR.external()">${esc(sr('open_browser', 'Open in browser instead'))}</button>` : '';
 
     $('sessionLobby').innerHTML = `
-      <div class="sr-card">
+      <div class="sr-card sr-handoff">
+        <div class="sr-ho-icon" aria-hidden="true">${isApp
+          ? '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>'
+          : '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg>'}</div>
         <div class="sr-eyebrow">${esc(isApp ? sr('hand_eyebrow_app', 'Share your phone screen') : sr('hand_eyebrow_browser', 'Open in your browser'))}</div>
         <div class="sr-title">${esc(data.title || sr('live_session_title', 'Live Session'))}</div>
         <div class="sr-sub">${esc(opened
