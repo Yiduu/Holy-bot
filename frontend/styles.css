@@ -10189,6 +10189,67 @@ textarea.form-control {
 .sr-install { font-size: var(--fs-sm); opacity: .75; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 8px; }
 .sr-install .sr-link { padding: 4px 6px; opacity: 1; color: var(--gold-light); }
 
+/* ── Hand-off page (Open in browser / Jitsi Meet app): premium finish ──
+   Scoped to .sr-handoff so the pre-join lobby keeps its own look. The room
+   password is a compact, quiet chip (small mono text), not a headline. ── */
+.sr-card.sr-handoff {
+  position: relative; overflow: hidden; gap: 14px; padding: 26px 20px 18px; border-radius: 26px;
+  border-color: rgba(201, 168, 76, 0.28);
+  background: radial-gradient(120% 90% at 50% 0%, rgba(201, 168, 76, 0.18), transparent 62%), var(--bg2, #161922);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+.sr-handoff .sr-ho-icon {
+  align-self: center; width: 60px; height: 60px; display: grid; place-items: center; border-radius: 21px;
+  color: var(--gold-light);
+  background: radial-gradient(90% 90% at 50% 0%, rgba(232, 201, 107, 0.26), rgba(201, 168, 76, 0.08)), rgba(201, 168, 76, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(232, 201, 107, 0.34), 0 10px 24px rgba(0, 0, 0, 0.36), 0 0 34px rgba(201, 168, 76, 0.2);
+}
+.sr-handoff .sr-eyebrow {
+  align-self: center; padding: 5px 13px; border-radius: 999px; color: var(--gold-light);
+  background: rgba(201, 168, 76, 0.12); border: 1px solid rgba(201, 168, 76, 0.3);
+}
+.sr-handoff .sr-title { font-size: var(--fs-xl); font-weight: 800; letter-spacing: -0.005em; overflow-wrap: anywhere; }
+.sr-handoff .sr-sub { opacity: 1; color: var(--text2); line-height: 1.5; max-width: 32ch; margin: 0 auto; }
+
+.sr-handoff .sr-step { gap: 10px; padding: 14px; border-radius: 20px; background: rgba(255, 255, 255, 0.035); border: 1px solid var(--border-dim); }
+.sr-handoff .sr-step-head { font-size: var(--fs-sm); font-weight: 700; }
+.sr-handoff .sr-step-no {
+  width: 24px; height: 24px; color: #1a1300;
+  background: linear-gradient(180deg, #EBCD72, #C9A84C); box-shadow: 0 4px 12px rgba(201, 168, 76, 0.35);
+}
+
+/* password: small, calm, selectable */
+.sr-handoff .sr-pass { padding: 8px 8px 8px 12px; border-radius: 14px; background: rgba(0, 0, 0, 0.30); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35); }
+.sr-handoff .sr-pass-row { gap: 8px; }
+.sr-handoff .sr-pass-row code {
+  min-width: 0; font: 600 var(--fs-sm) ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: .03em; color: var(--text); text-shadow: none;
+}
+.sr-handoff .sr-pass .sr-pass-label { margin: 6px 0 0; font-size: var(--fs-2xs); opacity: .6; }
+.sr-copy-btn {
+  flex: none; min-height: 32px; padding: 0 14px; border-radius: 999px; cursor: pointer;
+  font: 700 var(--fs-xs) var(--font-body); color: #1a1300;
+  background: linear-gradient(180deg, #EBCD72, #C9A84C); border: 0;
+  box-shadow: 0 6px 16px rgba(201, 168, 76, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: transform .12s ease, background .15s ease;
+}
+.sr-copy-btn:active { transform: scale(0.95); }
+.sr-copy-btn.is-done { color: var(--gold-light); background: rgba(201, 168, 76, 0.14); box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.4); }
+
+.sr-handoff .sr-primary {
+  min-height: 52px; border-radius: 999px; font-weight: 800;
+  box-shadow: 0 10px 26px rgba(201, 168, 76, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.sr-handoff .sr-secondary { min-height: 46px; border-radius: 999px; }
+.sr-handoff .sr-warn { border-radius: 14px; line-height: 1.45; }
+.sr-handoff .sr-link { opacity: .7; text-underline-offset: 3px; }
+
+[data-theme="light"] .sr-card.sr-handoff { background: radial-gradient(120% 90% at 50% 0%, rgba(201, 168, 76, 0.22), transparent 62%), #fffaf0; border-color: rgba(150, 120, 40, 0.3); box-shadow: 0 14px 30px rgba(30, 25, 15, 0.14), inset 0 1px 0 #fff; }
+[data-theme="light"] .sr-handoff .sr-ho-icon, [data-theme="light"] .sr-handoff .sr-eyebrow { color: #7A5812; }
+[data-theme="light"] .sr-handoff .sr-step { background: rgba(255, 255, 255, 0.7); border-color: rgba(150, 120, 40, 0.2); }
+[data-theme="light"] .sr-handoff .sr-pass { background: rgba(255, 255, 255, 0.95); border-color: rgba(150, 120, 40, 0.25); box-shadow: inset 0 1px 3px rgba(30, 25, 15, 0.08); }
+[data-theme="light"] .sr-copy-btn.is-done { color: #7A5812; }
+
 /* Call stage: fill the viewport instead of a fixed 55vh strip */
 .call-stage { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 8px; }
 #jitsiContainer {
