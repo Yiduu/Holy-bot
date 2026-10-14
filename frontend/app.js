@@ -1813,6 +1813,7 @@ function navigate(page) {
   if (currentPage === 'my-mentees' && page !== 'my-mentees') flushMentorNotes();
 
   currentPage = page;
+  document.body.classList.toggle('er-page', page === 'end-mentorship');
   updateChatKeyboard();                    // leaving chat clears the docked-composer state
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
@@ -4002,6 +4003,7 @@ function switchMentorProfileTab(tab) {
 // Switch pages without navigate()'s data loaders: the mentors list stays as it was.
 function showAppPageQuiet(page, navId) {
   currentPage = page;
+  document.body.classList.toggle('er-page', page === 'end-mentorship');
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.nav-item').forEach(nv => nv.classList.remove('active'));
   $(`page-${page}`)?.classList.add('active');
@@ -8677,6 +8679,7 @@ function openEndReason(assignId) {
 function closeEndReason() {
   if (_endReasonBusy) return;
   _endReasonAssignId = null;
+  try { $('endReasonText')?.blur(); } catch { }      // drop the keyboard before leaving
   if (currentPage === 'end-mentorship') showAppPageQuiet('my-mentees', 'nav-my-mentees');
 }
 
@@ -8684,9 +8687,27 @@ function onEndReasonInput() {
   const ta = $('endReasonText');
   const len = (ta?.value || '').trim().length;
   const count = $('endReasonCount');
-  if (count) count.textContent = `${(ta?.value || '').length}/${END_REASON_MAX}`;
+  if (count) {
+    const raw = (ta?.value || '').length;
+    count.textContent = `${raw}/${END_REASON_MAX}`;
+    count.classList.toggle('is-near', raw >= END_REASON_MAX - 30);
+  }
+  $('endReasonHint')?.classList.toggle('is-ok', len >= END_REASON_MIN);
   const yes = $('endReasonYes');
   if (yes) yes.disabled = _endReasonBusy || len < END_REASON_MIN;
+}
+
+// Gentle starting sentences: a tap fills (or continues) the reason, the mentor can edit freely.
+function applyEndReasonChip(btn) {
+  const ta = $('endReasonText');
+  const text = (btn?.textContent || '').trim();
+  if (!ta || !text || _endReasonBusy) return;
+  haptic('selection');
+  const cur = ta.value.trim();
+  ta.value = (cur ? `${cur} ${text}` : text).slice(0, END_REASON_MAX);
+  onEndReasonInput();
+  ta.focus();
+  try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch { }
 }
 
 async function confirmEndReason() {
