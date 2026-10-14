@@ -8697,19 +8697,6 @@ function onEndReasonInput() {
   if (yes) yes.disabled = _endReasonBusy || len < END_REASON_MIN;
 }
 
-// Gentle starting sentences: a tap fills (or continues) the reason, the mentor can edit freely.
-function applyEndReasonChip(btn) {
-  const ta = $('endReasonText');
-  const text = (btn?.textContent || '').trim();
-  if (!ta || !text || _endReasonBusy) return;
-  haptic('selection');
-  const cur = ta.value.trim();
-  ta.value = (cur ? `${cur} ${text}` : text).slice(0, END_REASON_MAX);
-  onEndReasonInput();
-  ta.focus();
-  try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch { }
-}
-
 async function confirmEndReason() {
   if (_endReasonBusy || !_endReasonAssignId) return;
   const reason = ($('endReasonText')?.value || '').trim();
