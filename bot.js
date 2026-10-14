@@ -1743,6 +1743,70 @@ async function notifyAdminNewMentorApplication(applicantTelegramId, sex, educati
   }
 }
 
+// ─── Support tickets ──────────────────────────────────────────────────────────
+// Telegram message to every configured admin when a member opens a support request
+// (or writes a follow-up). Until now admins were only pinged through the live socket,
+// so nobody who was not sitting in the admin page ever heard about a new request.
+// Never throws: a failed notification must not fail the member's request.
+async function notifyAdminNewTicket({ telegram_id, subject, category, description, content, isReply = false }) {
+  try {
+    const adminIds = String(process.env.ADMIN_TELEGRAM_ID || process.env.ADMIN_CHAT_ID || '');
+    if (!adminIds.trim()) {
+      console.warn('[Support] ADMIN_TELEGRAM_ID is not set: nobody can be notified about the new request');
+      return;
+    }
+    const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', telegram_id).single();
+    const text = String(isReply ? content : description || '').trim();
+    const msg = card({
+      title: isReply ? 'New Reply on a Support Request' : 'New Support Request',
+      quote: text.length > 300 ? text.substring(0, 300) + '…' : text,
+      fields: [
+        ['👤', 'From', u?.anonymous_id || String(telegram_id)],
+        ['📌', 'Subject', subject],
+        ['🏷', 'Category', isReply ? '' : category],
+      ],
+    });
+    const url = `${APP_URL.replace(/\/+$/, '')}/admin.html`;
+    for (const id of adminIds.split(',').map(x => x.trim()).filter(Boolean)) {
+      await safeSend(id, msg, { ...HTML, reply_markup: goldKeyboard('Open Support', url) });
+    }
+  } catch (e) {
+    console.error('[Support] Failed to notify admins:', e.message);
+  }
+}
+
+// Telegram message to the member when the admin answers (or changes the status of) a
+// request. A reply is just "Message from Admin" with the reply itself: no filler
+// sentence, no subject/status rows. A status change without a reply gets one short line.
+async function notifyUserTicketUpdate(telegram_id, { reply, subject, status }) {
+  try {
+    const lang = await getUserLang(telegram_id);
+    const am = lang === 'am';
+    const text = String(reply || '').trim();
+    let content;
+    if (text) {
+      content = {
+        title: am ? 'መልእክት ከአስተዳዳሪ' : 'Message from Admin',
+        quote: text.length > 500 ? text.substring(0, 500) + '…' : text,
+      };
+    } else {
+      const labels = {
+        resolved: am ? 'ተፈቷል' : 'resolved',
+        closed: am ? 'ተዘግቷል' : 'closed',
+        in_progress: am ? 'በሂደት ላይ ነው' : 'in progress',
+        open: am ? 'እንደገና ተከፍቷል' : 'reopened',
+      };
+      content = {
+        title: am ? 'የድጋፍ ጥያቄ' : 'Support Request',
+        body: am ? `“${subject}” ${labels[status] || status}።` : `“${subject}” is ${labels[status] || status}.`,
+      };
+    }
+    return await sendCard(telegram_id, content, { label: tSync(lang, 'btn_open_app') });
+  } catch (e) {
+    console.error('[Support] Failed to notify member:', e.message);
+  }
+}
+
 async function notifyMentorshipRequest(mentorId, requesterId, requesterName, requesterSex, requesterAge, topic) {
   const lang = await getUserLang(mentorId);
   const am = lang === 'am';
@@ -3670,6 +3734,8 @@ module.exports = {
   notifySessionWaiting,
   notifyMentorshipRequest,
   notifyAdminNewMentorApplication,
+  notifyAdminNewTicket,
+  notifyUserTicketUpdate,
   notifyMentorshipAccepted,
   notifyMentorshipRejected,
   notifyMenteeReferral,
