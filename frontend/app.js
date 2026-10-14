@@ -1089,11 +1089,13 @@ function syncTelegramBack() {
 }
 
 // ─── Loading screen controller ────────────────────────────────
-// The intro animation takes ~1.8s. On a fast start the app is ready sooner, so
-// hideLoadingScreen() waits until LOADER_MIN_MS has passed since the page began
-// loading (performance.now() counts from navigation start, so a reload gets the
-// full animation too), then the screen fades out.
-const LOADER_MIN_MS = matchMedia('(prefers-reduced-motion: reduce)').matches ? 900 : 1800;
+// The full motion takes ~3.4s: the H assembles and the name blooms (~1.8s), the
+// logo rests for a beat, then one soft light sweep crosses the name and ends
+// (~3.4s). On a fast start the app is ready sooner, so hideLoadingScreen() waits
+// until LOADER_MIN_MS has passed since the page began loading (performance.now()
+// counts from navigation start, so a reload gets the full animation too), then
+// the screen fades out. A slow start simply keeps the gentle sweep looping.
+const LOADER_MIN_MS = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1200 : 3400;
 const LOADER_LEAVE_MS = 440;    // matches the .is-leaving fade in styles.css
 let __loaderHide = null;
 
