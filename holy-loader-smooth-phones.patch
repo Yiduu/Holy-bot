@@ -1,0 +1,43 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 71f5afa..4247e1c 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1097,6 +1097,14 @@ function syncTelegramBack() {
+ // the screen fades out. A slow start simply keeps the gentle sweep looping.
+ const LOADER_MIN_MS = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1200 : 3400;
+ const LOADER_LEAVE_MS = 440;    // matches the .is-leaving fade in styles.css
++// The logo's main motion (pillars, arm, name) is over by ~1.8s. Building the app
++// (dashboard, socket, translating every label) while that plays steals frames on
++// phones, so the app only starts building once the motion has finished. The soft
++// light sweep that follows is cheap and keeps playing while the app loads behind it.
++const LOADER_BOOT_MS = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1000 : 1900;
++function loaderIntroDone() {
++  return new Promise(resolve => setTimeout(resolve, Math.max(0, LOADER_BOOT_MS - performance.now())));
++}
+ let __loaderHide = null;
+ 
+ function hideLoadingScreen() {
+@@ -1134,6 +1142,7 @@ async function init() {
+   let failed = false;
+   try {
+     const data = await fetchMeWithRetry();
++    await loaderIntroDone();          // let the logo motion run on its own, then build the app
+     window.ADMIN_ID = data.admin_id;
+     if (!data.registered) {
+       showOnboarding();
+diff --git a/frontend/styles.css b/frontend/styles.css
+index be337fd..ac83787 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -4354,6 +4354,11 @@ textarea.form-control {
+   transition: opacity 0.42s ease;
+ }
+ .loading-screen.is-leaving { opacity: 0; pointer-events: none; }
++/* Phones: give the moving parts their own GPU layers so the motion (and the exit fade)
++   run on the compositor instead of repainting the page every frame. */
++.loading-screen { will-change: opacity; }
++.ld-stage { will-change: transform, opacity; }
++.ld-word span { will-change: transform, opacity; backface-visibility: hidden; }
+ .ld-stage {
+   --u: clamp(104px, 32vw, 136px);
+   position: relative;

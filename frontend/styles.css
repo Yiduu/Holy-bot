@@ -4354,6 +4354,11 @@ textarea.form-control {
   transition: opacity 0.42s ease;
 }
 .loading-screen.is-leaving { opacity: 0; pointer-events: none; }
+/* Phones: give the moving parts their own GPU layers so the motion (and the exit fade)
+   run on the compositor instead of repainting the page every frame. */
+.loading-screen { will-change: opacity; }
+.ld-stage { will-change: transform, opacity; }
+.ld-word span { will-change: transform, opacity; backface-visibility: hidden; }
 .ld-stage {
   --u: clamp(104px, 32vw, 136px);
   position: relative;
