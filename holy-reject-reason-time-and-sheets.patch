@@ -1,0 +1,455 @@
+diff --git a/bot.js b/bot.js
+index ca11955..e19a14a 100644
+--- a/bot.js
++++ b/bot.js
+@@ -1421,20 +1421,24 @@ async function acceptMentorship(mentorId, userId, topicId) {
+   console.log(`[Accept] Assignment created: mentor=${mentorId}, user=${userId}, topic=${topicId}`);
+ }
+ 
+-function rejectedCard(lang) {
++function rejectedCard(lang, reason) {
+   return {
+     icon: '💌',
+     title: lang === 'am' ? 'የምክር ጥያቄ ምላሽ' : 'Mentorship Request Update',
+     body: tSync(lang, 'mentor_rejected'),
++    fields: [['', tSync(lang, 'mentorship_end_reason_label'), reason]],
+     footer: lang === 'am' ? 'ተስፋ አይቁረጡ፤ ሌላ አማካሪ ይጠብቅዎታል 🌱' : 'Another mentor is ready to walk with you 🌱',
+   };
+ }
+ 
+-async function rejectMentorship(mentorId, userId) {
++async function rejectMentorship(mentorId, userId, reason = '') {
+   const mentorLang = await getUserLang(mentorId);
+   const userLang = await getUserLang(userId);
+-  await supabase.from('mentorship_requests').update({ status: 'rejected' }).eq('mentor_id', mentorId).eq('user_id', userId);
+-  await sendCard(userId, rejectedCard(userLang), { label: userLang === 'am' ? 'አማካሪዎችን ይፈልጉ' : 'Find a Mentor', url: `${APP_URL}?start=mentors` });
++  const save = (extra) => supabase.from('mentorship_requests').update({ status: 'rejected', ...extra }).eq('mentor_id', mentorId).eq('user_id', userId);
++  const { error: saveErr } = await save({ reject_reason: reason });
++  // reject_reason column not migrated yet: still reject
++  if (saveErr && /reject_reason/i.test(saveErr.message || '')) await save({});
++  await sendCard(userId, rejectedCard(userLang, reason), { label: userLang === 'am' ? 'አማካሪዎችን ይፈልጉ' : 'Find a Mentor', url: `${APP_URL}?start=mentors` });
+   await sendCard(mentorId, {
+     icon: '☑️',
+     title: mentorLang === 'am' ? 'ጥያቄው ውድቅ ተደርጓል' : 'Request Declined',
+@@ -1887,7 +1891,7 @@ async function notifyMentorshipAccepted(userId, mentorName) {
+   });
+ }
+ 
+-async function notifyMentorshipRejected(userId, mentorName) {
++async function notifyMentorshipRejected(userId, mentorName, reason = '') {
+   const lang = await getUserLang(userId);
+   const am = lang === 'am';
+   const text = card({
+@@ -1896,6 +1900,7 @@ async function notifyMentorshipRejected(userId, mentorName) {
+     body: am
+       ? `ከአማካሪ ${mentorName} ጋር የነበረዎት ጥያቄ በዚህ ወቅት ተቀባይነት አላገኘም። ተስፋ አይቁረጡ፤ ሌላ አማካሪ ይምረጡ።`
+       : `${mentorName} wasn't able to take your request at this time. Don't be discouraged. Another mentor is ready to walk with you.`,
++    fields: [['', tSync(lang, 'mentorship_end_reason_label'), reason]],
+   });
+ 
+   await safeSend(userId, text, {
+@@ -2573,6 +2578,16 @@ bot.on('message', async (msg) => {
+       clearState(chatId); return showMainMenu(chatId);
+     }
+ 
++    if (state.step === 'mentor_reject_reason') {
++      const reason = text.trim().replace(/\s+/g, ' ').slice(0, 300);
++      if (reason.length < 3) {
++        return safeSend(chatId, tSync(await getUserLang(chatId), 'mentor_reject_reason_short'));
++      }
++      const { menteeId } = state.tempData;
++      clearState(chatId);
++      return rejectMentorship(chatId, menteeId, reason);
++    }
++
+     if (state.step === 'admin_reject_note') {
+       const targetId = state.tempData.targetId;
+       await supabase.from('mentor_applications').update({
+@@ -3035,7 +3050,11 @@ bot.on('callback_query', async (query) => {
+     const parts = data.split('_'); // mentor_accept_{uid}_{tid}
+     await acceptMentorship(chatId, parts[2], parts[3]);
+   } else if (data.startsWith('mentor_reject_')) {
+-    await rejectMentorship(chatId, data.split('_')[2]);
++    // Ask for a reason first; the next text message completes the rejection.
++    const menteeId = data.split('_')[2];
++    const lang = await getUserLang(chatId);
++    setState(chatId, 'mentor_reject_reason', null, { menteeId });
++    await safeSend(chatId, tSync(lang, 'mentor_reject_reason_prompt'));
+   }
+ 
+   // Rating
+diff --git a/frontend/app.js b/frontend/app.js
+index a35a7e2..098ea6c 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -270,7 +270,9 @@ function viewAvatar(el) {
+ }
+ 
+ function timeAgo(dateStr) {
+-  const diff = Date.now() - new Date(dateStr).getTime();
++  // A timestamp with no timezone is UTC (Supabase), not local time; and never negative.
++  const iso = typeof dateStr === 'string' && !/([zZ]|[+-]\d\d:?\d\d)$/.test(dateStr) ? dateStr.replace(' ', 'T') + 'Z' : dateStr;
++  const diff = Math.max(0, Date.now() - new Date(iso).getTime());
+   if (diff < 60000) return t('time_just_now');
+   if (diff < 3600000) return t('time_minutes_ago', { count: Math.floor(diff / 60000) });
+   if (diff < 86400000) return t('time_hours_ago', { count: Math.floor(diff / 3600000) });
+@@ -4574,7 +4576,6 @@ function reqNoteHTML(label, text) {
+ function renderRequestCard(r) {
+   const name = reqPersonName(r.user);
+   const topic = topicLabel(r.topic) || '';
+-  const msg = (r.message || '').trim();
+   return `
+     <article class="req-card" data-kind="request" data-id="${r.id}" data-name="${escapeHtml(name)}">
+       <div class="req-top">
+@@ -4586,7 +4587,6 @@ function renderRequestCard(r) {
+         <span class="req-pill">${escapeHtml(t('req_new'))}</span>
+       </div>
+       ${reqChips(r.user, topic)}
+-      ${msg ? reqNoteHTML(t('req_message_label'), msg) : ''}
+       ${renderRequestActions('request', r.id)}
+     </article>`;
+ }
+@@ -4705,26 +4705,51 @@ function askRequestDecline(kind, id) {
+       ? t('req_decline_body_referral', { name, from: `<strong>${escapeHtml(card.dataset.from || '')}</strong>` })
+       : t('req_decline_body_request', { name });
+   }
+-  const yes = $('requestDeclineYes');
+-  if (yes) { yes.disabled = false; yes.textContent = t('req_decline_yes'); }
++  // A reason is required for mentee requests (the mentee is told why); referrals just confirm.
++  const needsReason = kind !== 'referral';
++  $('requestDeclineReasonWrap')?.toggleAttribute('hidden', !needsReason);
++  const ta = $('requestDeclineReason');
++  if (ta) ta.value = '';
++  onRequestDeclineInput();
+   $('requestDeclineModal')?.classList.add('open');
+ }
+ 
+ function closeRequestDecline() {
++  try { $('requestDeclineReason')?.blur(); } catch { }
+   $('requestDeclineModal')?.classList.remove('open');
+   _declineTarget = null;
+ }
+ 
++const REQ_REASON_MIN = 3, REQ_REASON_MAX = 300;
++function onRequestDeclineInput() {
++  const needsReason = _declineTarget && _declineTarget.kind !== 'referral';
++  const raw = ($('requestDeclineReason')?.value || '').length;
++  const len = ($('requestDeclineReason')?.value || '').trim().length;
++  const count = $('requestDeclineCount');
++  if (count) {
++    count.textContent = `${raw}/${REQ_REASON_MAX}`;
++    count.classList.toggle('is-near', raw >= REQ_REASON_MAX - 30);
++  }
++  $('requestDeclineHint')?.classList.toggle('is-ok', len >= REQ_REASON_MIN);
++  const yes = $('requestDeclineYes');
++  if (yes) {
++    yes.textContent = t('req_decline_yes');
++    yes.disabled = !!needsReason && len < REQ_REASON_MIN;
++  }
++}
++
+ async function confirmRequestDecline() {
+   const target = _declineTarget;
+   if (!target) return;
++  const reason = target.kind === 'referral' ? '' : ($('requestDeclineReason')?.value || '').trim();
++  if (target.kind !== 'referral' && reason.length < REQ_REASON_MIN) { haptic('error'); $('requestDeclineReason')?.focus(); return; }
+   const yes = $('requestDeclineYes');
+   if (yes) yes.disabled = true;
+   closeRequestDecline();
+-  await answerRequest(target.kind, target.id, 'rejected');
++  await answerRequest(target.kind, target.id, 'rejected', undefined, reason);
+ }
+ 
+-async function answerRequest(kind, id, action, btn) {
++async function answerRequest(kind, id, action, btn, reason = '') {
+   const key = `${kind}:${id}`;
+   if (_reqBusy.has(key)) return;
+   const card = document.querySelector(`.req-card[data-kind="${kind}"][data-id="${id}"]`);
+@@ -4735,7 +4760,7 @@ async function answerRequest(kind, id, action, btn) {
+   try {
+     await apiFetch(kind === 'referral' ? `/api/mentors/referral/${id}` : `/api/mentors/request/${id}`, {
+       method: 'PATCH',
+-      body: { action },
++      body: reason ? { action, reason } : { action },
+     });
+     haptic(action === 'accepted' ? 'success' : 'light');
+     const name = card?.dataset.name || '';
+@@ -9757,3 +9782,18 @@ document.addEventListener('click', (e) => {
+   }, { passive: true });
+   document.addEventListener('touchcancel', () => { if (pulling) hide(); reset(); }, { passive: true });
+ })();
++
++
++/* ── Page-sheet scroll cue: mark .ps-body[data-more="1"] while content continues below ── */
++(function initPageSheetScrollCue() {
++  const update = (el) => { el.dataset.more = (el.scrollHeight - el.scrollTop - el.clientHeight > 8) ? '1' : '0'; };
++  const wire = () => document.querySelectorAll('.ps-body').forEach((el) => {
++    if (el._psCue) return;
++    el._psCue = true;
++    el.addEventListener('scroll', () => update(el), { passive: true });
++    if ('ResizeObserver' in window) new ResizeObserver(() => update(el)).observe(el);
++    if ('MutationObserver' in window) new MutationObserver(() => update(el)).observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
++    update(el);
++  });
++  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
++})();
+diff --git a/frontend/index.html b/frontend/index.html
+index cc6e9cc..f1476ec 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -1186,11 +1186,6 @@
+         <h2 data-i18n="Requests">Requests</h2>
+       </div>
+       <div class="page-content">
+-        <div class="page-intro mb-12 stagger-fade">
+-          <span class="page-intro-eyebrow" data-i18n="Requests">Requests</span>
+-          <p id="requestsIntro" class="page-intro-text" data-i18n="req_intro_mentee">People asking you to be their mentor.</p>
+-        </div>
+-
+         <div class="profile-tabs req-tabs" role="tablist">
+           <button type="button" id="reqTabMentee" class="profile-tab active" role="tab" aria-selected="true"
+             onclick="setRequestsTab('mentee')">
+@@ -2412,6 +2407,16 @@
+         </div>
+         <div id="requestDeclineTitle" class="modal-title" style="text-align:center" data-i18n="req_decline_title">Decline this request?</div>
+         <p id="requestDeclineBody" class="hb-text"></p>
++        <div id="requestDeclineReasonWrap" class="req-reason">
++          <label class="req-reason-label" for="requestDeclineReason" data-i18n="req_decline_reason_label">Reason for declining</label>
++          <textarea id="requestDeclineReason" class="form-control" rows="3" maxlength="300" data-i18n="req_decline_reason_placeholder"
++            placeholder="Write a few kind, clear words for the mentee…" enterkeyhint="done" autocapitalize="sentences"
++            oninput="onRequestDeclineInput()"></textarea>
++          <div class="req-reason-foot">
++            <span id="requestDeclineHint" class="req-reason-hint"><i class="req-reason-dot" aria-hidden="true"></i><span data-i18n="req_decline_reason_hint">Required. At least 3 characters.</span></span>
++            <span id="requestDeclineCount" class="req-reason-count">0/300</span>
++          </div>
++        </div>
+         <div class="hb-actions">
+           <button type="button" class="btn btn-outline" onclick="closeRequestDecline()" data-i18n="btn_cancel">Cancel</button>
+           <button type="button" id="requestDeclineYes" class="btn btn-primary" onclick="confirmRequestDecline()" data-i18n="req_decline_yes">Yes, decline</button>
+@@ -2427,6 +2432,7 @@
+         <button type="button" class="ps-back" onclick="closeScheduleModal()" aria-label="Back"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+         <h2 id="scheduleModalTitle" class="ps-title modal-title" data-i18n="Schedule Session">Schedule Session</h2>
+       </div>
++      <p class="ps-sub" data-i18n="schedule_modal_subtitle">Pick a date and time. Mentees are reminded before it starts.</p>
+       <div class="ps-body">
+         <div id="groupTitleField" class="ps-card hidden">
+           <label class="ps-label" for="scheduleTitle" data-i18n="session_title_label">Session Title</label>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 2ae5df3..bfc94b2 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -483,6 +483,9 @@ const I18N = {
+     "req_decline_body_request": "{name} will be told you can't take this request.",
+     "req_decline_body_referral": "{name} will stay with {from}, who will be told you declined.",
+     "req_decline_yes": "Yes, decline",
++    "req_decline_reason_label": "Reason for declining",
++    "req_decline_reason_placeholder": "Write a few kind, clear words for the mentee…",
++    "req_decline_reason_hint": "Required. At least 3 characters.",
+     "req_toast_accepted": "Request accepted",
+     "req_toast_declined": "Request declined",
+     "req_toast_referral_accepted": "{name} is now your mentee",
+@@ -570,6 +573,7 @@ const I18N = {
+     "Notifications": "Notifications",
+     "Mentor Profile": "Mentor Profile",
+     "notifications_modal_subtitle": "Customize which alerts and reminders you receive.",
++    "schedule_modal_subtitle": "Pick a date and time. Mentees are reminded before it starts.",
+     "mentor_profile_modal_subtitle": "Configure your mentorship details, availability, and focus areas.",
+     "notif_sub_messages": "Replies from your mentor or mentees",
+     "notif_sub_sessions": "Before each scheduled session",
+@@ -859,6 +863,9 @@ const I18N = {
+     "req_decline_body_request": "{name} ጥያቄው እንዳልተቀበለ ይነገራቸዋል።",
+     "req_decline_body_referral": "{name} ከ{from} ጋር ይቆያል፤ አለመቀበልዎ ለእሳቸው ይነገራል።",
+     "req_decline_yes": "አዎ፣ አልቀበልም",
++    "req_decline_reason_label": "ላለመቀበል ምክንያት",
++    "req_decline_reason_placeholder": "ለተመካሪው ጥቂት ደግ እና ግልጽ ቃላት ይጻፉ…",
++    "req_decline_reason_hint": "አስፈላጊ ነው። ቢያንስ 3 ፊደላት።",
+     "req_toast_accepted": "ጥያቄው ተቀብለዋል",
+     "req_toast_declined": "ጥያቄው አልተቀበለም",
+     "req_toast_referral_accepted": "{name} አሁን ተመካሪዎ ነው",
+@@ -1396,6 +1403,7 @@ const I18N = {
+     "Notifications": "ማሳወቂያዎች",
+     "Mentor Profile": "የአማካሪ መገለጫ",
+     "notifications_modal_subtitle": "የሚደርሱዎትን ማሳወቂያዎች እና ማስታወሻዎች ያስተካክሉ።",
++    "schedule_modal_subtitle": "ቀን እና ሰዓት ይምረጡ። ተመካሪዎች ከመጀመሩ በፊት ማሳሰቢያ ይደርሳቸዋል።",
+     "mentor_profile_modal_subtitle": "የአማካሪነት ዝርዝሮችዎን፣ ዝግጁነትዎን እና ርዕሶቻችሁን አስተካክሉ።",
+     "notif_sub_messages": "ከአማካሪዎ ወይም ከተማሪዎችዎ የሚመጡ መልሶች",
+     "notif_sub_sessions": "ከእያንዳንዱ የታቀደ ክፍለ ጊዜ በፊት",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 38c3827..8407047 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -14380,3 +14380,50 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
+   background: var(--bg2); border-top: 1px solid var(--border);
+   color: var(--text2); font-size: var(--fs-sm); line-height: 1.45;
+ }
++
++
++/* ─── Decline sheet: required reason (same field language as End mentorship) ─── */
++#requestDeclineModal .req-reason { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 6px; text-align: left; }
++#requestDeclineModal .req-reason[hidden] { display: none; }
++#requestDeclineModal .req-reason-label { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--gold-light); }
++[data-theme="light"] #requestDeclineModal .req-reason-label { color: #7A5812; }
++#requestDeclineModal .req-reason textarea { resize: none; min-height: 88px; border-radius: 18px; }
++#requestDeclineModal .req-reason-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--fs-xs); color: var(--text3); }
++#requestDeclineModal .req-reason-hint { display: inline-flex; align-items: center; gap: 7px; min-width: 0; }
++#requestDeclineModal .req-reason-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--text3); opacity: .6; transition: background .2s ease, box-shadow .2s ease, opacity .2s ease; }
++#requestDeclineModal .req-reason-hint.is-ok { color: var(--text2); }
++#requestDeclineModal .req-reason-hint.is-ok .req-reason-dot { background: var(--success); opacity: 1; box-shadow: 0 0 10px rgba(91, 173, 122, 0.7); }
++#requestDeclineModal .req-reason-count { flex: none; font-variant-numeric: tabular-nums; font-weight: 700; }
++#requestDeclineModal .req-reason-count.is-near { color: var(--danger); }
++#requestDeclineModal .hb-actions .btn:disabled { opacity: 0.55; box-shadow: none; }
++
++
++/* ─── Page-sheets: consistent position + visible scroll cue ───────────────
++   Notifications is the reference. Schedule (private AND group) now opens at
++   exactly the same height, so the title never jumps with the content; the
++   participant list scrolls inside instead of growing the sheet. */
++:root { --ps-sheet-h: 620px; }
++.modal-sheet.page-sheet { max-width: 460px; margin: 0 auto; }
++.modal-sheet.notifications-sheet,
++.modal-sheet.sch-sheet {
++  height: min(calc(var(--ps-sheet-h) + var(--safe-bottom)), calc(100% - 12px));
++  max-height: none;
++}
++.modal-sheet.notifications-sheet .ps-body,
++.modal-sheet.sch-sheet .ps-body { flex: 1 1 auto; }
++
++/* Scroll cue: a soft fade + chevron pinned to the bottom of .ps-body while there
++   is more below. app.js sets data-more="1"; it disappears at the end. */
++.ps-body { position: relative; scrollbar-width: thin; }
++.ps-body::after {
++  content: '';
++  position: sticky; bottom: 0;
++  flex: none; height: 56px; margin: -56px -16px 0;
++  pointer-events: none;
++  opacity: 0; transition: opacity 0.2s ease;
++  background:
++    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23E8C96B' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat center bottom 8px / 20px 20px,
++    linear-gradient(180deg, transparent, var(--bg) 80%);
++}
++.ps-body[data-more="1"]::after { opacity: 1; }
++@media (prefers-reduced-motion: reduce) { .ps-body::after { transition: none; } }
+diff --git a/local/am.json b/local/am.json
+index 8e288bd..6c0b262 100644
+--- a/local/am.json
++++ b/local/am.json
+@@ -79,6 +79,8 @@
+   "mentorship_accepted_mentor": "የምክር ጥያቄውን ተቀብለዋል።",
+   "mentor_rejected": "ጥያቄዎ ተቀባይነት አላገኘም። እባክዎ ሌላ አማካሪ ይሞክሩ።",
+   "reject_confirmed": "ጥያቄው ውድቅ ተደርጓል።",
++  "mentor_reject_reason_prompt": "ጥያቄውን ለምን እንዳልተቀበሉ ለተመካሪው ይንገሩ። ምክንያትዎን አሁን ይጻፉ:",
++  "mentor_reject_reason_short": "እባክዎ ቢያንስ 3 ፊደላት ያለው ምክንያት ይጻፉ:",
+   "mentor_at_capacity": "የተመካሪ ቁጥርዎ ሞልቷል። አስቀድመው አንዱን ያጠናቁ።",
+   "mentorship_ended": "አማካሪነቱ ተጠናቋል። ለጊዜዎ እናመሰግናለን።",
+   "mentorship_ended_by_mentor": "አማካሪዎ {mentor} የምክር አገልግሎቱን አጠናቀዋል።",
+diff --git a/local/en.json b/local/en.json
+index 9397327..1bb503a 100644
+--- a/local/en.json
++++ b/local/en.json
+@@ -79,6 +79,8 @@
+     "mentorship_accepted_mentor": "You have accepted the mentorship request.",
+     "mentor_rejected": "Your request was not accepted. Please try another mentor.",
+     "reject_confirmed": "Request rejected.",
++    "mentor_reject_reason_prompt": "Please tell the mentee why you are declining. Type your reason now:",
++    "mentor_reject_reason_short": "Please write a reason of at least 3 characters:",
+     "mentor_at_capacity": "You are at mentee capacity. Please end an existing mentorship first.",
+     "mentorship_ended": "Mentorship has ended. Thank you for your time.",
+     "mentorship_ended_by_mentor": "Your mentor {mentor} has ended the mentorship.",
+diff --git a/migrations/20261014_mentorship_request_reject_reason.sql b/migrations/20261014_mentorship_request_reject_reason.sql
+new file mode 100644
+index 0000000..3fce239
+--- /dev/null
++++ b/migrations/20261014_mentorship_request_reject_reason.sql
+@@ -0,0 +1,10 @@
++BEGIN;
++
++-- Why a mentor declined a mentorship request. Shown to the mentee in the
++-- Telegram notification. Cleared again when the mentee re-requests.
++--
++-- Safe to run more than once. The backend retries without this column if it
++-- has not been run yet, so deploy order does not matter.
++ALTER TABLE mentorship_requests ADD COLUMN IF NOT EXISTS reject_reason TEXT;
++
++COMMIT;
+diff --git a/routes/mentors.js b/routes/mentors.js
+index a375d34..2a8af89 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -368,17 +368,25 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+         return res.status(409).json({ error: 'Request already pending' });
+       }
+       // Re‑activate a rejected or accepted request (so we don't cause duplicate key)
+-      result = await supabase
++      // created_at is reset too: the mentor's Requests page shows "x ago" from it,
++      // so reusing the first request's timestamp made a fresh request look days old.
++      const nowIso = new Date().toISOString();
++      const reactivate = (extra) => supabase
+         .from('mentorship_requests')
+         .update({
+           status: 'pending',
+           message,
+           topic_id,
+-          updated_at: new Date().toISOString()
++          created_at: nowIso,
++          updated_at: nowIso,
++          ...extra
+         })
+         .eq('id', existingAny.id)
+         .select()
+         .single();
++      result = await reactivate({ reject_reason: null });
++      // reject_reason column not migrated yet: retry without it
++      if (result.error && /reject_reason/i.test(result.error.message || '')) result = await reactivate({});
+     } else {
+       // Insert a completely new request
+       result = await supabase
+@@ -419,7 +427,8 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+       .from('mentorship_requests')
+       .select('*, user:user_id(anonymous_id, sex, age_range, user_settings(display_name)), topic:topic_id(name, name_am)')
+       .eq('mentor_id', mentor_id)
+-      .eq('status', 'pending');
++      .eq('status', 'pending')
++      .order('created_at', { ascending: false });
+     if (error) return res.status(500).json({ error: error.message });
+     res.json(data || []);
+   });
+@@ -431,6 +440,13 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+ 
+     if (!['accepted', 'rejected'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
+ 
++    // A decline needs a reason: the mentee is told why.
++    const REJECT_REASON_MIN = 3, REJECT_REASON_MAX = 300;
++    const rejectReason = String(req.body?.reason ?? '').trim().replace(/\s+/g, ' ').slice(0, REJECT_REASON_MAX);
++    if (action === 'rejected' && rejectReason.length < REJECT_REASON_MIN) {
++      return res.status(400).json({ error: 'Please tell the mentee why you are declining.' });
++    }
++
+     // First, get the request to ensure it exists and belongs to this mentor
+     const { data: reqData, error: fetchErr } = await supabase
+       .from('mentorship_requests')
+@@ -465,11 +481,13 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+         console.error('[mentors] auto-reject error (non-fatal):', rejectErr.message);
+       }
+     } else {
+-      // Reject path stays the same
+-      const { error: updateErr } = await supabase
++      const saveReject = (extra) => supabase
+         .from('mentorship_requests')
+-        .update({ status: action, updated_at: new Date().toISOString() })
++        .update({ status: action, updated_at: new Date().toISOString(), ...extra })
+         .eq('id', req.params.id);
++      let { error: updateErr } = await saveReject({ reject_reason: rejectReason });
++      // reject_reason column not migrated yet: still reject, the reason just isn't stored
++      if (updateErr && /reject_reason/i.test(updateErr.message || '')) ({ error: updateErr } = await saveReject({}));
+       if (updateErr) return res.status(500).json({ error: updateErr.message });
+     }
+ 
+@@ -486,7 +504,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+       if (action === 'accepted') {
+         await notifyMentorshipAccepted(reqData.user_id, mentorName);
+       } else {
+-        await notifyMentorshipRejected(reqData.user_id, mentorName);
++        await notifyMentorshipRejected(reqData.user_id, mentorName, rejectReason);
+       }
+     } catch (notifyErr) {
+       console.error('[mentors] notification error (non-fatal):', notifyErr.message);

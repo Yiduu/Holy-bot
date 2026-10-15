@@ -1,0 +1,94 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index a3323c3..098ea6c 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -9782,3 +9782,18 @@ document.addEventListener('click', (e) => {
+   }, { passive: true });
+   document.addEventListener('touchcancel', () => { if (pulling) hide(); reset(); }, { passive: true });
+ })();
++
++
++/* ── Page-sheet scroll cue: mark .ps-body[data-more="1"] while content continues below ── */
++(function initPageSheetScrollCue() {
++  const update = (el) => { el.dataset.more = (el.scrollHeight - el.scrollTop - el.clientHeight > 8) ? '1' : '0'; };
++  const wire = () => document.querySelectorAll('.ps-body').forEach((el) => {
++    if (el._psCue) return;
++    el._psCue = true;
++    el.addEventListener('scroll', () => update(el), { passive: true });
++    if ('ResizeObserver' in window) new ResizeObserver(() => update(el)).observe(el);
++    if ('MutationObserver' in window) new MutationObserver(() => update(el)).observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
++    update(el);
++  });
++  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
++})();
+diff --git a/frontend/index.html b/frontend/index.html
+index c59ac02..f1476ec 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -2432,6 +2432,7 @@
+         <button type="button" class="ps-back" onclick="closeScheduleModal()" aria-label="Back"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+         <h2 id="scheduleModalTitle" class="ps-title modal-title" data-i18n="Schedule Session">Schedule Session</h2>
+       </div>
++      <p class="ps-sub" data-i18n="schedule_modal_subtitle">Pick a date and time. Mentees are reminded before it starts.</p>
+       <div class="ps-body">
+         <div id="groupTitleField" class="ps-card hidden">
+           <label class="ps-label" for="scheduleTitle" data-i18n="session_title_label">Session Title</label>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index f6d9707..bfc94b2 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -573,6 +573,7 @@ const I18N = {
+     "Notifications": "Notifications",
+     "Mentor Profile": "Mentor Profile",
+     "notifications_modal_subtitle": "Customize which alerts and reminders you receive.",
++    "schedule_modal_subtitle": "Pick a date and time. Mentees are reminded before it starts.",
+     "mentor_profile_modal_subtitle": "Configure your mentorship details, availability, and focus areas.",
+     "notif_sub_messages": "Replies from your mentor or mentees",
+     "notif_sub_sessions": "Before each scheduled session",
+@@ -1402,6 +1403,7 @@ const I18N = {
+     "Notifications": "ማሳወቂያዎች",
+     "Mentor Profile": "የአማካሪ መገለጫ",
+     "notifications_modal_subtitle": "የሚደርሱዎትን ማሳወቂያዎች እና ማስታወሻዎች ያስተካክሉ።",
++    "schedule_modal_subtitle": "ቀን እና ሰዓት ይምረጡ። ተመካሪዎች ከመጀመሩ በፊት ማሳሰቢያ ይደርሳቸዋል።",
+     "mentor_profile_modal_subtitle": "የአማካሪነት ዝርዝሮችዎን፣ ዝግጁነትዎን እና ርዕሶቻችሁን አስተካክሉ።",
+     "notif_sub_messages": "ከአማካሪዎ ወይም ከተማሪዎችዎ የሚመጡ መልሶች",
+     "notif_sub_sessions": "ከእያንዳንዱ የታቀደ ክፍለ ጊዜ በፊት",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 300916d..8407047 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -14396,3 +14396,34 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
+ #requestDeclineModal .req-reason-count { flex: none; font-variant-numeric: tabular-nums; font-weight: 700; }
+ #requestDeclineModal .req-reason-count.is-near { color: var(--danger); }
+ #requestDeclineModal .hb-actions .btn:disabled { opacity: 0.55; box-shadow: none; }
++
++
++/* ─── Page-sheets: consistent position + visible scroll cue ───────────────
++   Notifications is the reference. Schedule (private AND group) now opens at
++   exactly the same height, so the title never jumps with the content; the
++   participant list scrolls inside instead of growing the sheet. */
++:root { --ps-sheet-h: 620px; }
++.modal-sheet.page-sheet { max-width: 460px; margin: 0 auto; }
++.modal-sheet.notifications-sheet,
++.modal-sheet.sch-sheet {
++  height: min(calc(var(--ps-sheet-h) + var(--safe-bottom)), calc(100% - 12px));
++  max-height: none;
++}
++.modal-sheet.notifications-sheet .ps-body,
++.modal-sheet.sch-sheet .ps-body { flex: 1 1 auto; }
++
++/* Scroll cue: a soft fade + chevron pinned to the bottom of .ps-body while there
++   is more below. app.js sets data-more="1"; it disappears at the end. */
++.ps-body { position: relative; scrollbar-width: thin; }
++.ps-body::after {
++  content: '';
++  position: sticky; bottom: 0;
++  flex: none; height: 56px; margin: -56px -16px 0;
++  pointer-events: none;
++  opacity: 0; transition: opacity 0.2s ease;
++  background:
++    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23E8C96B' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat center bottom 8px / 20px 20px,
++    linear-gradient(180deg, transparent, var(--bg) 80%);
++}
++.ps-body[data-more="1"]::after { opacity: 1; }
++@media (prefers-reduced-motion: reduce) { .ps-body::after { transition: none; } }

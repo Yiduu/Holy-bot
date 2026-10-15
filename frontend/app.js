@@ -9782,3 +9782,18 @@ document.addEventListener('click', (e) => {
   }, { passive: true });
   document.addEventListener('touchcancel', () => { if (pulling) hide(); reset(); }, { passive: true });
 })();
+
+
+/* ── Page-sheet scroll cue: mark .ps-body[data-more="1"] while content continues below ── */
+(function initPageSheetScrollCue() {
+  const update = (el) => { el.dataset.more = (el.scrollHeight - el.scrollTop - el.clientHeight > 8) ? '1' : '0'; };
+  const wire = () => document.querySelectorAll('.ps-body').forEach((el) => {
+    if (el._psCue) return;
+    el._psCue = true;
+    el.addEventListener('scroll', () => update(el), { passive: true });
+    if ('ResizeObserver' in window) new ResizeObserver(() => update(el)).observe(el);
+    if ('MutationObserver' in window) new MutationObserver(() => update(el)).observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
+    update(el);
+  });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
+})();

@@ -14396,3 +14396,34 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
 #requestDeclineModal .req-reason-count { flex: none; font-variant-numeric: tabular-nums; font-weight: 700; }
 #requestDeclineModal .req-reason-count.is-near { color: var(--danger); }
 #requestDeclineModal .hb-actions .btn:disabled { opacity: 0.55; box-shadow: none; }
+
+
+/* ─── Page-sheets: consistent position + visible scroll cue ───────────────
+   Notifications is the reference. Schedule (private AND group) now opens at
+   exactly the same height, so the title never jumps with the content; the
+   participant list scrolls inside instead of growing the sheet. */
+:root { --ps-sheet-h: 620px; }
+.modal-sheet.page-sheet { max-width: 460px; margin: 0 auto; }
+.modal-sheet.notifications-sheet,
+.modal-sheet.sch-sheet {
+  height: min(calc(var(--ps-sheet-h) + var(--safe-bottom)), calc(100% - 12px));
+  max-height: none;
+}
+.modal-sheet.notifications-sheet .ps-body,
+.modal-sheet.sch-sheet .ps-body { flex: 1 1 auto; }
+
+/* Scroll cue: a soft fade + chevron pinned to the bottom of .ps-body while there
+   is more below. app.js sets data-more="1"; it disappears at the end. */
+.ps-body { position: relative; scrollbar-width: thin; }
+.ps-body::after {
+  content: '';
+  position: sticky; bottom: 0;
+  flex: none; height: 56px; margin: -56px -16px 0;
+  pointer-events: none;
+  opacity: 0; transition: opacity 0.2s ease;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23E8C96B' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat center bottom 8px / 20px 20px,
+    linear-gradient(180deg, transparent, var(--bg) 80%);
+}
+.ps-body[data-more="1"]::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .ps-body::after { transition: none; } }
