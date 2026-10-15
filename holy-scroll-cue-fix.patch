@@ -1,0 +1,95 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 098ea6c..7e38d9b 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -9784,16 +9784,27 @@ document.addEventListener('click', (e) => {
+ })();
+ 
+ 
+-/* ── Page-sheet scroll cue: mark .ps-body[data-more="1"] while content continues below ── */
++/* ── Page-sheet scroll cue: a "Scroll for more" strip after .ps-body while content continues below ── */
+ (function initPageSheetScrollCue() {
+-  const update = (el) => { el.dataset.more = (el.scrollHeight - el.scrollTop - el.clientHeight > 8) ? '1' : '0'; };
++  const chevron = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
++  const label = () => (typeof t === 'function' && t('scroll_for_more')) || 'Scroll for more';
+   const wire = () => document.querySelectorAll('.ps-body').forEach((el) => {
+     if (el._psCue) return;
+-    el._psCue = true;
+-    el.addEventListener('scroll', () => update(el), { passive: true });
+-    if ('ResizeObserver' in window) new ResizeObserver(() => update(el)).observe(el);
+-    if ('MutationObserver' in window) new MutationObserver(() => update(el)).observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
+-    update(el);
++    const cue = el._psCue = document.createElement('div');
++    cue.className = 'ps-more';
++    cue.hidden = true;
++    cue.setAttribute('aria-hidden', 'true');
++    cue.innerHTML = chevron + '<span></span>';
++    el.insertAdjacentElement('afterend', cue);
++    const update = () => {
++      const more = el.scrollHeight - el.scrollTop - el.clientHeight > 8;
++      if (more) cue.lastChild.textContent = label();
++      cue.hidden = !more;
++    };
++    el.addEventListener('scroll', update, { passive: true });
++    if ('ResizeObserver' in window) new ResizeObserver(update).observe(el);
++    if ('MutationObserver' in window) new MutationObserver(update).observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
++    update();
+   });
+   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
+ })();
+diff --git a/frontend/locales.js b/frontend/locales.js
+index bfc94b2..ebec8f5 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -574,6 +574,7 @@ const I18N = {
+     "Mentor Profile": "Mentor Profile",
+     "notifications_modal_subtitle": "Customize which alerts and reminders you receive.",
+     "schedule_modal_subtitle": "Pick a date and time. Mentees are reminded before it starts.",
++    "scroll_for_more": "Scroll for more",
+     "mentor_profile_modal_subtitle": "Configure your mentorship details, availability, and focus areas.",
+     "notif_sub_messages": "Replies from your mentor or mentees",
+     "notif_sub_sessions": "Before each scheduled session",
+@@ -1404,6 +1405,7 @@ const I18N = {
+     "Mentor Profile": "የአማካሪ መገለጫ",
+     "notifications_modal_subtitle": "የሚደርሱዎትን ማሳወቂያዎች እና ማስታወሻዎች ያስተካክሉ።",
+     "schedule_modal_subtitle": "ቀን እና ሰዓት ይምረጡ። ተመካሪዎች ከመጀመሩ በፊት ማሳሰቢያ ይደርሳቸዋል።",
++    "scroll_for_more": "ለተጨማሪ ወደ ታች ይሸብልሉ",
+     "mentor_profile_modal_subtitle": "የአማካሪነት ዝርዝሮችዎን፣ ዝግጁነትዎን እና ርዕሶቻችሁን አስተካክሉ።",
+     "notif_sub_messages": "ከአማካሪዎ ወይም ከተማሪዎችዎ የሚመጡ መልሶች",
+     "notif_sub_sessions": "ከእያንዳንዱ የታቀደ ክፍለ ጊዜ በፊት",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 8407047..d0ef2e5 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -14412,18 +14412,17 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
+ .modal-sheet.notifications-sheet .ps-body,
+ .modal-sheet.sch-sheet .ps-body { flex: 1 1 auto; }
+ 
+-/* Scroll cue: a soft fade + chevron pinned to the bottom of .ps-body while there
+-   is more below. app.js sets data-more="1"; it disappears at the end. */
+-.ps-body { position: relative; scrollbar-width: thin; }
+-.ps-body::after {
+-  content: '';
+-  position: sticky; bottom: 0;
+-  flex: none; height: 56px; margin: -56px -16px 0;
+-  pointer-events: none;
+-  opacity: 0; transition: opacity 0.2s ease;
+-  background:
+-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23E8C96B' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat center bottom 8px / 20px 20px,
+-    linear-gradient(180deg, transparent, var(--bg) 80%);
++/* Scroll cue: a small strip between the content and the button (in the layout, so it
++   never covers text). app.js adds it after each .ps-body and shows it while there is
++   more below; it hides at the end. */
++.ps-body { scrollbar-width: thin; }
++.ps-more {
++  flex: none; display: flex; align-items: center; justify-content: center; gap: 6px;
++  height: 28px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.04em;
++  color: var(--gold-light);
+ }
+-.ps-body[data-more="1"]::after { opacity: 1; }
+-@media (prefers-reduced-motion: reduce) { .ps-body::after { transition: none; } }
++[data-theme="light"] .ps-more { color: #7A5812; }
++.ps-more[hidden] { display: none; }
++.ps-more svg { flex: none; animation: psMoreNudge 1.6s ease-in-out infinite; }
++@keyframes psMoreNudge { 0%, 100% { transform: translateY(-2px); } 50% { transform: translateY(2px); } }
++@media (prefers-reduced-motion: reduce) { .ps-more svg { animation: none; } }

@@ -9784,16 +9784,27 @@ document.addEventListener('click', (e) => {
 })();
 
 
-/* ── Page-sheet scroll cue: mark .ps-body[data-more="1"] while content continues below ── */
+/* ── Page-sheet scroll cue: a "Scroll for more" strip after .ps-body while content continues below ── */
 (function initPageSheetScrollCue() {
-  const update = (el) => { el.dataset.more = (el.scrollHeight - el.scrollTop - el.clientHeight > 8) ? '1' : '0'; };
+  const chevron = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+  const label = () => (typeof t === 'function' && t('scroll_for_more')) || 'Scroll for more';
   const wire = () => document.querySelectorAll('.ps-body').forEach((el) => {
     if (el._psCue) return;
-    el._psCue = true;
-    el.addEventListener('scroll', () => update(el), { passive: true });
-    if ('ResizeObserver' in window) new ResizeObserver(() => update(el)).observe(el);
-    if ('MutationObserver' in window) new MutationObserver(() => update(el)).observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
-    update(el);
+    const cue = el._psCue = document.createElement('div');
+    cue.className = 'ps-more';
+    cue.hidden = true;
+    cue.setAttribute('aria-hidden', 'true');
+    cue.innerHTML = chevron + '<span></span>';
+    el.insertAdjacentElement('afterend', cue);
+    const update = () => {
+      const more = el.scrollHeight - el.scrollTop - el.clientHeight > 8;
+      if (more) cue.lastChild.textContent = label();
+      cue.hidden = !more;
+    };
+    el.addEventListener('scroll', update, { passive: true });
+    if ('ResizeObserver' in window) new ResizeObserver(update).observe(el);
+    if ('MutationObserver' in window) new MutationObserver(update).observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
+    update();
   });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
 })();

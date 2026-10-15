@@ -14412,18 +14412,17 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
 .modal-sheet.notifications-sheet .ps-body,
 .modal-sheet.sch-sheet .ps-body { flex: 1 1 auto; }
 
-/* Scroll cue: a soft fade + chevron pinned to the bottom of .ps-body while there
-   is more below. app.js sets data-more="1"; it disappears at the end. */
-.ps-body { position: relative; scrollbar-width: thin; }
-.ps-body::after {
-  content: '';
-  position: sticky; bottom: 0;
-  flex: none; height: 56px; margin: -56px -16px 0;
-  pointer-events: none;
-  opacity: 0; transition: opacity 0.2s ease;
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23E8C96B' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat center bottom 8px / 20px 20px,
-    linear-gradient(180deg, transparent, var(--bg) 80%);
+/* Scroll cue: a small strip between the content and the button (in the layout, so it
+   never covers text). app.js adds it after each .ps-body and shows it while there is
+   more below; it hides at the end. */
+.ps-body { scrollbar-width: thin; }
+.ps-more {
+  flex: none; display: flex; align-items: center; justify-content: center; gap: 6px;
+  height: 28px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.04em;
+  color: var(--gold-light);
 }
-.ps-body[data-more="1"]::after { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .ps-body::after { transition: none; } }
+[data-theme="light"] .ps-more { color: #7A5812; }
+.ps-more[hidden] { display: none; }
+.ps-more svg { flex: none; animation: psMoreNudge 1.6s ease-in-out infinite; }
+@keyframes psMoreNudge { 0%, 100% { transform: translateY(-2px); } 50% { transform: translateY(2px); } }
+@media (prefers-reduced-motion: reduce) { .ps-more svg { animation: none; } }
