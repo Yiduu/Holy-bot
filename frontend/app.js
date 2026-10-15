@@ -9784,11 +9784,11 @@ document.addEventListener('click', (e) => {
 })();
 
 
-/* ── Page-sheet scroll cue: a "Scroll for more" strip after .ps-body while content continues below ── */
+/* ── Mentor Profile scroll cue: a "Scroll for more" strip after .ps-body while content continues below ── */
 (function initPageSheetScrollCue() {
   const chevron = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
   const label = () => (typeof t === 'function' && t('scroll_for_more')) || 'Scroll for more';
-  const wire = () => document.querySelectorAll('.ps-body').forEach((el) => {
+  const wire = () => document.querySelectorAll('.mentor-profile-sheet .ps-body').forEach((el) => {
     if (el._psCue) return;
     const cue = el._psCue = document.createElement('div');
     cue.className = 'ps-more';

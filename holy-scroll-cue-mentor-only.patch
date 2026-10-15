@@ -1,0 +1,31 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 7e38d9b..80d2834 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -9784,11 +9784,11 @@ document.addEventListener('click', (e) => {
+ })();
+ 
+ 
+-/* ── Page-sheet scroll cue: a "Scroll for more" strip after .ps-body while content continues below ── */
++/* ── Mentor Profile scroll cue: a "Scroll for more" strip after .ps-body while content continues below ── */
+ (function initPageSheetScrollCue() {
+   const chevron = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+   const label = () => (typeof t === 'function' && t('scroll_for_more')) || 'Scroll for more';
+-  const wire = () => document.querySelectorAll('.ps-body').forEach((el) => {
++  const wire = () => document.querySelectorAll('.mentor-profile-sheet .ps-body').forEach((el) => {
+     if (el._psCue) return;
+     const cue = el._psCue = document.createElement('div');
+     cue.className = 'ps-more';
+diff --git a/frontend/locales.js b/frontend/locales.js
+index ebec8f5..18a143d 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -1405,7 +1405,7 @@ const I18N = {
+     "Mentor Profile": "የአማካሪ መገለጫ",
+     "notifications_modal_subtitle": "የሚደርሱዎትን ማሳወቂያዎች እና ማስታወሻዎች ያስተካክሉ።",
+     "schedule_modal_subtitle": "ቀን እና ሰዓት ይምረጡ። ተመካሪዎች ከመጀመሩ በፊት ማሳሰቢያ ይደርሳቸዋል።",
+-    "scroll_for_more": "ለተጨማሪ ወደ ታች ይሸብልሉ",
++    "scroll_for_more": "ለተጨማሪ",
+     "mentor_profile_modal_subtitle": "የአማካሪነት ዝርዝሮችዎን፣ ዝግጁነትዎን እና ርዕሶቻችሁን አስተካክሉ።",
+     "notif_sub_messages": "ከአማካሪዎ ወይም ከተማሪዎችዎ የሚመጡ መልሶች",
+     "notif_sub_sessions": "ከእያንዳንዱ የታቀደ ክፍለ ጊዜ በፊት",

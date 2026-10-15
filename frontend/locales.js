@@ -1405,7 +1405,7 @@ const I18N = {
     "Mentor Profile": "የአማካሪ መገለጫ",
     "notifications_modal_subtitle": "የሚደርሱዎትን ማሳወቂያዎች እና ማስታወሻዎች ያስተካክሉ።",
     "schedule_modal_subtitle": "ቀን እና ሰዓት ይምረጡ። ተመካሪዎች ከመጀመሩ በፊት ማሳሰቢያ ይደርሳቸዋል።",
-    "scroll_for_more": "ለተጨማሪ ወደ ታች ይሸብልሉ",
+    "scroll_for_more": "ለተጨማሪ",
     "mentor_profile_modal_subtitle": "የአማካሪነት ዝርዝሮችዎን፣ ዝግጁነትዎን እና ርዕሶቻችሁን አስተካክሉ።",
     "notif_sub_messages": "ከአማካሪዎ ወይም ከተማሪዎችዎ የሚመጡ መልሶች",
     "notif_sub_sessions": "ከእያንዳንዱ የታቀደ ክፍለ ጊዜ በፊት",
