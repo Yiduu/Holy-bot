@@ -283,27 +283,36 @@
     if (A.lobbyKey === key && $('sessionLobby').firstChild) return;
     A.lobbyKey = key;
 
-    let status;
+    // One calm message, one big button. Everything else lives under "Having trouble?".
+    let tone, headline, line;
     if (isHost) {
-      status = waiting > 0
-        ? `<div class="sr-status sr-ok">${esc(sr('n_waiting', '{n} waiting for you', { n: waiting }))}</div>`
-        : `<div class="sr-status">${esc(sr('host_ready', 'You\'re the host — others will be notified when you start.'))}</div>`;
+      tone = waiting > 0 ? 'ok' : 'wait';
+      headline = waiting > 0 ? sr('n_waiting', '{n} waiting for you', { n: waiting }) : sr('host_ready_title', 'Ready when you are');
+      line = sr('host_ready', 'You\'re the host — others will be notified when you start.');
     } else if (hostPresent) {
-      status = `<div class="sr-status sr-ok">${esc(sr('host_here', '{name} is here. You can join now.', { name: data.host_name }))}</div>`;
+      tone = 'ok';
+      headline = sr('host_here_title', 'Your mentor is here');
+      line = sr('host_here_short', 'Check your mic, then tap Join.');
     } else {
-      status = `<div class="sr-status sr-wait"><span class="sr-spin"></span>${esc(sr('host_wait', 'Waiting for {name} to arrive… we\'ll let you in the moment they do.', { name: data.host_name }))}</div>`;
+      tone = 'wait';
+      headline = sr('host_wait_title', 'Waiting for your mentor');
+      line = sr('host_wait_short', 'You will be let in the moment they arrive. You can keep this screen open.');
     }
+    const heroIcon = tone === 'ok'
+      ? '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12 10 17 19 7"/></svg>'
+      : '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>';
 
     const primary = isHost
       ? sr('start', 'Start session')
-      : (hostPresent ? sr('join_now', 'Join now') : sr('waiting', 'Waiting for your mentor…'));
+      : (hostPresent ? sr('join_now', 'Join now') : sr('join_session', 'Join session'));
+    const badge = data.is_group ? sr('group_session_badge', 'Group session') : sr('1on1_session_badge', '1-on-1 session');
 
     $('sessionLobby').innerHTML = `
-      <div class="sr-card">
-        <div class="sr-eyebrow">${data.is_group ? esc(sr('group_session_badge', 'Group session')) : esc(sr('1on1_session_badge', '1-on-1 session'))}</div>
-        <div class="sr-title">${esc(data.title || sr('live_session_title', 'Live Session'))}</div>
-        <div class="sr-sub">${esc(formatDateTime(data.scheduled_at))}${isHost ? '' : ' · ' + esc(data.host_name)}</div>
-        ${status}
+      <div class="sr-card sr-lobby">
+        <div class="sr-eyebrow">${esc(badge)} · ${esc(formatDateTime(data.scheduled_at))}</div>
+        <div class="sr-hero sr-hero--${tone}" aria-hidden="true"><span class="sr-hero-core">${heroIcon}</span></div>
+        <div class="sr-title" role="status" aria-live="polite">${esc(headline)}</div>
+        <div class="sr-sub">${esc(line)}</div>
         <div class="sr-toggles">
           <button class="sr-toggle ${prefs.mic ? 'on' : ''}" onclick="SR.toggle('mic')" aria-pressed="${prefs.mic}">
             <span class="sr-ico">${ico('mic', !prefs.mic)}</span><span>${prefs.mic ? esc(sr('mic_on', 'Mic on')) : esc(sr('mic_off', 'Mic off'))}</span>
@@ -312,13 +321,11 @@
             <span class="sr-ico">${ico('cam', !prefs.cam)}</span><span>${prefs.cam ? esc(sr('cam_on', 'Camera on')) : esc(sr('cam_off', 'Camera off'))}</span>
           </button>
         </div>
-        ${prefs.cam ? '' : `<div class="sr-hint">${esc(sr('cam_hint', 'Camera is optional — you can turn it on any time during the call.'))}</div>`}
-        ${unreliable ? `<div class="sr-warn">${esc(sr('unreliable', 'This app may not support video calls reliably. Opening in your phone\'s browser is recommended.'))}</div>` : ''}
+        <div class="sr-hint">${esc(sr('cam_hint', 'Camera is optional — you can turn it on any time during the call.'))}</div>
         <button class="btn btn-primary sr-primary" ${canEnter ? '' : 'disabled'} onclick="SR.start()">${esc(primary)}</button>
-        ${(!isHost && !hostPresent && A.waitedMs > 20000) ? `<button class="btn btn-outline sr-secondary" onclick="SR.start()">${esc(sr('join_anyway', 'Mentor not showing as online? Join anyway'))}</button>` : ''}
-        <button class="btn ${unreliable ? 'btn-primary' : 'btn-outline'} sr-secondary" onclick="SR.external()">${esc(sr('open_browser', 'Open in browser instead'))}</button>
-        ${(isHost && isTouchDevice() && !window.supportsScreenShare()) ? `<button class="btn btn-outline sr-secondary" onclick="SR.shareApp()">${esc(sr('share_phone', 'Share my phone screen (Jitsi Meet app)'))}</button>` : ''}
-        <button class="sr-link" onclick="SR.cancelLobby()">${esc(sr('not_now', 'Not now'))}</button>
+        ${unreliable
+          ? `<button class="btn btn-outline sr-secondary" onclick="SR.external()">${esc(sr('open_browser_rec', 'Open in browser (recommended)'))}</button>`
+          : `<button class="sr-link" onclick="SR.trouble()">${esc(sr('having_trouble', 'Having trouble?'))}</button>`}
       </div>`;
   }
 
@@ -389,7 +396,7 @@
       <div class="sr-pass">
         <div class="sr-pass-label">${esc(sr('pass_label', 'If you are asked for a password'))}</div>
         <div class="sr-pass-row"><code>${esc(pw)}</code>
-          <button class="sr-copy-btn ${A.passCopied ? 'is-done' : ''}" onclick="SR.copyPass()">${esc(copyLabel)}</button></div>
+          <button class="btn btn-primary btn-sm sr-copy-btn ${A.passCopied ? 'is-done' : ''}" onclick="SR.copyPass()">${esc(copyLabel)}</button></div>
       </div>` : '';
 
     const openStep = `<button class="btn btn-primary sr-primary" onclick="SR.openHandoff()">${esc(openLabel)}</button>`;
@@ -457,7 +464,6 @@
     showStage('call');
     $('callStage').classList.add('in-call');
     A.micMuted = !A.prefs.mic; A.camMuted = !A.prefs.cam; A.sharing = false; A.hand = false; A.tiles = false;
-    $('ctlFlip').classList.toggle('hidden', !isTouchDevice());
     renderControls();
     setStatus('connecting');
     toggleShareScreenButtonVisibility(A.isHost);
@@ -565,7 +571,7 @@
       const lbl = b.querySelector('.ctl-lbl');
       if (lbl) lbl.textContent = on ? lblOn : lblOff;
     };
-    set('ctlMic', !A.micMuted, sr('mic', 'Mic'), sr('unmute', 'Unmute'));
+    set('ctlMic', !A.micMuted, sr('mute', 'Mute'), sr('unmute', 'Unmute'));
     set('ctlCam', !A.camMuted, sr('camera', 'Camera'), sr('start_video', 'Start'));
     const setLbl = (id, lbl) => { const el = $(id)?.querySelector('.ctl-lbl'); if (el) el.textContent = lbl; };
     setLbl('ctlFlip', sr('flip', 'Flip'));
@@ -590,8 +596,30 @@
       { label: A.tiles ? sr('speaker_view', 'Speaker view') : sr('tile_view', 'Grid view'), onClick: () => { A.tiles = !A.tiles; cmd('toggleTileView'); } },
     ];
     if (A.isHost) items.push({ label: sr('mute_all', 'Mute everyone'), onClick: () => { cmd('muteEveryone'); showToast(sr('muted_all', 'Everyone has been muted.'), 'success'); } });
-    items.push({ label: sr('open_browser', 'Open in browser instead'), onClick: () => window.SR.external() });
+    if (isTouchDevice()) items.unshift({ label: sr('flip_camera', 'Flip camera'), onClick: () => window.SR.flip() });
+    if (A.isHost) items.unshift({ label: A.sharing ? sr('stop_share', 'Stop sharing') : sr('share_screen', 'Share screen'), onClick: () => window.toggleScreenShare() });
+    items.push({ label: sr('having_trouble', 'Having trouble?'), onClick: troubleSheet });
     sheet({ title: sr('more', 'More'), actions: items.map(i => ({ ...i, kind: 'ghost' })) });
+  }
+
+  // "Having trouble?" — every fallback in one place, in the order to try them.
+  function troubleSheet() {
+    if (!A) return;
+    const pw = A.data.room_password;
+    const passHtml = pw ? `
+      <div class="sr-pass sr-trouble-pass">
+        <div class="sr-pass-label">${esc(sr('pass_label', 'If you are asked for a password'))}</div>
+        <div class="sr-pass-row"><code>${esc(pw)}</code>
+          <button class="btn btn-primary btn-sm sr-copy-btn" onclick="SR.copyPass()">${esc(sr('copy_short', 'Copy'))}</button></div>
+      </div>` : '';
+    const actions = [
+      { label: sr('try_again', 'Try again'), onClick: () => window.SR.retry() },
+      { label: sr('open_browser_btn2', 'Open in your browser'), kind: 'ghost', onClick: () => window.SR.external() },
+      { label: sr('use_jitsi_app', 'Use the Jitsi Meet app'), kind: 'ghost', onClick: () => window.SR.shareApp() },
+    ];
+    if (!A.isHost && !A.hostPresent && A.phase === 'lobby') actions.push({ label: sr('join_anyway_short', 'Join anyway'), kind: 'ghost', onClick: () => window.SR.start() });
+    actions.push({ label: sr('close', 'Close'), kind: 'ghost' });
+    sheet({ title: sr('cant_connect', 'Can\'t connect?'), body: esc(sr('try_one', 'Try these, one at a time.')) + passHtml, actions });
   }
 
   // Pick microphone / camera / speaker (Jitsi device list via the IFrame API).
@@ -647,7 +675,7 @@
     dot.className = 'call-dot ' + kind;
     label.textContent = ({
       connecting: sr('connecting', 'Connecting…'),
-      live: sr('live', 'Live'),
+      live: sr('connected', 'Connected'),
       offline: sr('offline', 'You\'re offline — reconnecting…'),
       problem: sr('problem', 'Connection problem'),
     })[kind] || '';
@@ -899,6 +927,15 @@
     },
     chat() { haptic('selection'); cmd('toggleChat'); },
     more() { haptic('light'); if (A) moreSheet(); },
+    trouble() { haptic('light'); troubleSheet(); },
+    retry() {
+      if (!A) return;
+      closeSheet();
+      if (A.phase === 'call') return rejoin();
+      if (A.isHost || A.hostPresent) return startCall();
+      startHeartbeat();
+      showToast(sr('checking_again', 'Checking again…'), 'info');
+    },
     toggle(which) {
       if (!A) return;
       A.prefs[which] = !A.prefs[which]; savePrefs(A.prefs); haptic('selection'); renderLobby();

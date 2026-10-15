@@ -1,0 +1,231 @@
+diff --git a/frontend/index.html b/frontend/index.html
+index 69de110..7d3c460 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -1037,8 +1037,6 @@
+           <div id="callControls" class="call-controls" role="toolbar" aria-label="Call controls">
+             <button id="ctlMic" class="ctl" onclick="SR.mic()" aria-label="Microphone"><span class="ctl-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line class="ico-slash" x1="3" y1="3" x2="21" y2="21"/></svg></span><span class="ctl-lbl" data-i18n="sr_mic">Mic</span></button>
+             <button id="ctlCam" class="ctl" onclick="SR.cam()" aria-label="Camera"><span class="ctl-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/><line class="ico-slash" x1="3" y1="3" x2="21" y2="21"/></svg></span><span class="ctl-lbl" data-i18n="sr_camera">Camera</span></button>
+-            <button id="ctlFlip" class="ctl" onclick="SR.flip()" aria-label="Flip camera"><span class="ctl-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg></span><span class="ctl-lbl" data-i18n="sr_flip">Flip</span></button>
+-            <button id="ctlShare" class="ctl hidden" onclick="toggleScreenShare()" aria-label="Share screen"><span class="ctl-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><path d="M8.5 11.5 12 8l3.5 3.5M12 8v6"/></svg></span><span class="ctl-lbl" data-i18n="sr_share">Share</span></button>
+             <button id="ctlChat" class="ctl" onclick="SR.chat()" aria-label="Chat"><span class="ctl-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span><span class="ctl-lbl" data-i18n="sr_chat">Chat</span></button>
+             <button id="ctlMore" class="ctl" onclick="SR.more()" aria-label="More"><span class="ctl-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg></span><span class="ctl-lbl" data-i18n="sr_more_btn">More</span></button>
+             <button id="ctlLeave" class="ctl ctl-leave" onclick="leaveCurrentSession()" aria-label="Leave"><span class="ctl-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><span class="ctl-lbl" data-i18n="sr_leave_btn">Leave</span></button>
+@@ -2517,7 +2515,7 @@
+   <script src="app.js?v=4.0"></script>
+   <script src="goals.js?v=1.5"></script>
+   <script src="chat-media.js?v=1.0"></script>
+-  <script src="session-room.js?v=1.4"></script>
++  <script src="session-room.js?v=1.5"></script>
+ 
+   <script>
+     /* ── Offline banner ──────────────────────────────────────── */
+diff --git a/frontend/session-room.js b/frontend/session-room.js
+index 076e873..0965ee9 100644
+--- a/frontend/session-room.js
++++ b/frontend/session-room.js
+@@ -283,27 +283,36 @@
+     if (A.lobbyKey === key && $('sessionLobby').firstChild) return;
+     A.lobbyKey = key;
+ 
+-    let status;
++    // One calm message, one big button. Everything else lives under "Having trouble?".
++    let tone, headline, line;
+     if (isHost) {
+-      status = waiting > 0
+-        ? `<div class="sr-status sr-ok">${esc(sr('n_waiting', '{n} waiting for you', { n: waiting }))}</div>`
+-        : `<div class="sr-status">${esc(sr('host_ready', 'You\'re the host — others will be notified when you start.'))}</div>`;
++      tone = waiting > 0 ? 'ok' : 'wait';
++      headline = waiting > 0 ? sr('n_waiting', '{n} waiting for you', { n: waiting }) : sr('host_ready_title', 'Ready when you are');
++      line = sr('host_ready', 'You\'re the host — others will be notified when you start.');
+     } else if (hostPresent) {
+-      status = `<div class="sr-status sr-ok">${esc(sr('host_here', '{name} is here. You can join now.', { name: data.host_name }))}</div>`;
++      tone = 'ok';
++      headline = sr('host_here_title', 'Your mentor is here');
++      line = sr('host_here_short', 'Check your mic, then tap Join.');
+     } else {
+-      status = `<div class="sr-status sr-wait"><span class="sr-spin"></span>${esc(sr('host_wait', 'Waiting for {name} to arrive… we\'ll let you in the moment they do.', { name: data.host_name }))}</div>`;
++      tone = 'wait';
++      headline = sr('host_wait_title', 'Waiting for your mentor');
++      line = sr('host_wait_short', 'You will be let in the moment they arrive. You can keep this screen open.');
+     }
++    const heroIcon = tone === 'ok'
++      ? '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12 10 17 19 7"/></svg>'
++      : '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>';
+ 
+     const primary = isHost
+       ? sr('start', 'Start session')
+-      : (hostPresent ? sr('join_now', 'Join now') : sr('waiting', 'Waiting for your mentor…'));
++      : (hostPresent ? sr('join_now', 'Join now') : sr('join_session', 'Join session'));
++    const badge = data.is_group ? sr('group_session_badge', 'Group session') : sr('1on1_session_badge', '1-on-1 session');
+ 
+     $('sessionLobby').innerHTML = `
+-      <div class="sr-card">
+-        <div class="sr-eyebrow">${data.is_group ? esc(sr('group_session_badge', 'Group session')) : esc(sr('1on1_session_badge', '1-on-1 session'))}</div>
+-        <div class="sr-title">${esc(data.title || sr('live_session_title', 'Live Session'))}</div>
+-        <div class="sr-sub">${esc(formatDateTime(data.scheduled_at))}${isHost ? '' : ' · ' + esc(data.host_name)}</div>
+-        ${status}
++      <div class="sr-card sr-lobby">
++        <div class="sr-eyebrow">${esc(badge)} · ${esc(formatDateTime(data.scheduled_at))}</div>
++        <div class="sr-hero sr-hero--${tone}" aria-hidden="true"><span class="sr-hero-core">${heroIcon}</span></div>
++        <div class="sr-title" role="status" aria-live="polite">${esc(headline)}</div>
++        <div class="sr-sub">${esc(line)}</div>
+         <div class="sr-toggles">
+           <button class="sr-toggle ${prefs.mic ? 'on' : ''}" onclick="SR.toggle('mic')" aria-pressed="${prefs.mic}">
+             <span class="sr-ico">${ico('mic', !prefs.mic)}</span><span>${prefs.mic ? esc(sr('mic_on', 'Mic on')) : esc(sr('mic_off', 'Mic off'))}</span>
+@@ -312,13 +321,11 @@
+             <span class="sr-ico">${ico('cam', !prefs.cam)}</span><span>${prefs.cam ? esc(sr('cam_on', 'Camera on')) : esc(sr('cam_off', 'Camera off'))}</span>
+           </button>
+         </div>
+-        ${prefs.cam ? '' : `<div class="sr-hint">${esc(sr('cam_hint', 'Camera is optional — you can turn it on any time during the call.'))}</div>`}
+-        ${unreliable ? `<div class="sr-warn">${esc(sr('unreliable', 'This app may not support video calls reliably. Opening in your phone\'s browser is recommended.'))}</div>` : ''}
++        <div class="sr-hint">${esc(sr('cam_hint', 'Camera is optional — you can turn it on any time during the call.'))}</div>
+         <button class="btn btn-primary sr-primary" ${canEnter ? '' : 'disabled'} onclick="SR.start()">${esc(primary)}</button>
+-        ${(!isHost && !hostPresent && A.waitedMs > 20000) ? `<button class="btn btn-outline sr-secondary" onclick="SR.start()">${esc(sr('join_anyway', 'Mentor not showing as online? Join anyway'))}</button>` : ''}
+-        <button class="btn ${unreliable ? 'btn-primary' : 'btn-outline'} sr-secondary" onclick="SR.external()">${esc(sr('open_browser', 'Open in browser instead'))}</button>
+-        ${(isHost && isTouchDevice() && !window.supportsScreenShare()) ? `<button class="btn btn-outline sr-secondary" onclick="SR.shareApp()">${esc(sr('share_phone', 'Share my phone screen (Jitsi Meet app)'))}</button>` : ''}
+-        <button class="sr-link" onclick="SR.cancelLobby()">${esc(sr('not_now', 'Not now'))}</button>
++        ${unreliable
++          ? `<button class="btn btn-outline sr-secondary" onclick="SR.external()">${esc(sr('open_browser_rec', 'Open in browser (recommended)'))}</button>`
++          : `<button class="sr-link" onclick="SR.trouble()">${esc(sr('having_trouble', 'Having trouble?'))}</button>`}
+       </div>`;
+   }
+ 
+@@ -389,7 +396,7 @@
+       <div class="sr-pass">
+         <div class="sr-pass-label">${esc(sr('pass_label', 'If you are asked for a password'))}</div>
+         <div class="sr-pass-row"><code>${esc(pw)}</code>
+-          <button class="sr-copy-btn ${A.passCopied ? 'is-done' : ''}" onclick="SR.copyPass()">${esc(copyLabel)}</button></div>
++          <button class="btn btn-primary btn-sm sr-copy-btn ${A.passCopied ? 'is-done' : ''}" onclick="SR.copyPass()">${esc(copyLabel)}</button></div>
+       </div>` : '';
+ 
+     const openStep = `<button class="btn btn-primary sr-primary" onclick="SR.openHandoff()">${esc(openLabel)}</button>`;
+@@ -457,7 +464,6 @@
+     showStage('call');
+     $('callStage').classList.add('in-call');
+     A.micMuted = !A.prefs.mic; A.camMuted = !A.prefs.cam; A.sharing = false; A.hand = false; A.tiles = false;
+-    $('ctlFlip').classList.toggle('hidden', !isTouchDevice());
+     renderControls();
+     setStatus('connecting');
+     toggleShareScreenButtonVisibility(A.isHost);
+@@ -565,7 +571,7 @@
+       const lbl = b.querySelector('.ctl-lbl');
+       if (lbl) lbl.textContent = on ? lblOn : lblOff;
+     };
+-    set('ctlMic', !A.micMuted, sr('mic', 'Mic'), sr('unmute', 'Unmute'));
++    set('ctlMic', !A.micMuted, sr('mute', 'Mute'), sr('unmute', 'Unmute'));
+     set('ctlCam', !A.camMuted, sr('camera', 'Camera'), sr('start_video', 'Start'));
+     const setLbl = (id, lbl) => { const el = $(id)?.querySelector('.ctl-lbl'); if (el) el.textContent = lbl; };
+     setLbl('ctlFlip', sr('flip', 'Flip'));
+@@ -590,10 +596,32 @@
+       { label: A.tiles ? sr('speaker_view', 'Speaker view') : sr('tile_view', 'Grid view'), onClick: () => { A.tiles = !A.tiles; cmd('toggleTileView'); } },
+     ];
+     if (A.isHost) items.push({ label: sr('mute_all', 'Mute everyone'), onClick: () => { cmd('muteEveryone'); showToast(sr('muted_all', 'Everyone has been muted.'), 'success'); } });
+-    items.push({ label: sr('open_browser', 'Open in browser instead'), onClick: () => window.SR.external() });
++    if (isTouchDevice()) items.unshift({ label: sr('flip_camera', 'Flip camera'), onClick: () => window.SR.flip() });
++    if (A.isHost) items.unshift({ label: A.sharing ? sr('stop_share', 'Stop sharing') : sr('share_screen', 'Share screen'), onClick: () => window.toggleScreenShare() });
++    items.push({ label: sr('having_trouble', 'Having trouble?'), onClick: troubleSheet });
+     sheet({ title: sr('more', 'More'), actions: items.map(i => ({ ...i, kind: 'ghost' })) });
+   }
+ 
++  // "Having trouble?" — every fallback in one place, in the order to try them.
++  function troubleSheet() {
++    if (!A) return;
++    const pw = A.data.room_password;
++    const passHtml = pw ? `
++      <div class="sr-pass sr-trouble-pass">
++        <div class="sr-pass-label">${esc(sr('pass_label', 'If you are asked for a password'))}</div>
++        <div class="sr-pass-row"><code>${esc(pw)}</code>
++          <button class="btn btn-primary btn-sm sr-copy-btn" onclick="SR.copyPass()">${esc(sr('copy_short', 'Copy'))}</button></div>
++      </div>` : '';
++    const actions = [
++      { label: sr('try_again', 'Try again'), onClick: () => window.SR.retry() },
++      { label: sr('open_browser_btn2', 'Open in your browser'), kind: 'ghost', onClick: () => window.SR.external() },
++      { label: sr('use_jitsi_app', 'Use the Jitsi Meet app'), kind: 'ghost', onClick: () => window.SR.shareApp() },
++    ];
++    if (!A.isHost && !A.hostPresent && A.phase === 'lobby') actions.push({ label: sr('join_anyway_short', 'Join anyway'), kind: 'ghost', onClick: () => window.SR.start() });
++    actions.push({ label: sr('close', 'Close'), kind: 'ghost' });
++    sheet({ title: sr('cant_connect', 'Can\'t connect?'), body: esc(sr('try_one', 'Try these, one at a time.')) + passHtml, actions });
++  }
++
+   // Pick microphone / camera / speaker (Jitsi device list via the IFrame API).
+   async function devicesSheet() {
+     if (!A?.api) return;
+@@ -647,7 +675,7 @@
+     dot.className = 'call-dot ' + kind;
+     label.textContent = ({
+       connecting: sr('connecting', 'Connecting…'),
+-      live: sr('live', 'Live'),
++      live: sr('connected', 'Connected'),
+       offline: sr('offline', 'You\'re offline — reconnecting…'),
+       problem: sr('problem', 'Connection problem'),
+     })[kind] || '';
+@@ -899,6 +927,15 @@
+     },
+     chat() { haptic('selection'); cmd('toggleChat'); },
+     more() { haptic('light'); if (A) moreSheet(); },
++    trouble() { haptic('light'); troubleSheet(); },
++    retry() {
++      if (!A) return;
++      closeSheet();
++      if (A.phase === 'call') return rejoin();
++      if (A.isHost || A.hostPresent) return startCall();
++      startHeartbeat();
++      showToast(sr('checking_again', 'Checking again…'), 'info');
++    },
+     toggle(which) {
+       if (!A) return;
+       A.prefs[which] = !A.prefs[which]; savePrefs(A.prefs); haptic('selection'); renderLobby();
+diff --git a/frontend/styles.css b/frontend/styles.css
+index efd8244..022aeb5 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -10219,21 +10219,13 @@ textarea.form-control {
+   letter-spacing: .03em; color: var(--text); text-shadow: none;
+ }
+ .sr-handoff .sr-pass .sr-pass-label { margin: 0 0 6px; font-size: var(--fs-2xs); letter-spacing: .04em; opacity: .6; }
+-.sr-copy-btn {
+-  flex: none; min-height: 32px; padding: 0 14px; border-radius: 999px; cursor: pointer;
+-  font: 700 var(--fs-xs) var(--font-body); color: #1a1300;
+-  background: linear-gradient(180deg, #EBCD72, #C9A84C); border: 0;
+-  box-shadow: 0 6px 16px rgba(201, 168, 76, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+-  transition: transform .12s ease, background .15s ease;
+-}
+-.sr-copy-btn:active { transform: scale(0.95); }
+-.sr-copy-btn.is-done { color: var(--gold-light); background: rgba(201, 168, 76, 0.14); box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.4); }
++.sr-copy-btn { flex: none; }
++.sr-copy-btn.is-done { color: var(--gold-light); background: var(--gold-dim); box-shadow: none; }
+ 
+ .sr-handoff .sr-primary {
+-  min-height: 52px; border-radius: 999px; font-weight: 800;
+-  box-shadow: 0 10px 26px rgba(201, 168, 76, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.4);
++  min-height: 52px;
+ }
+-.sr-handoff .sr-secondary { min-height: 46px; border-radius: 999px; }
++.sr-handoff .sr-secondary { min-height: 46px; }
+ .sr-handoff .sr-warn { border-radius: 14px; line-height: 1.45; }
+ .sr-handoff .sr-link { opacity: .7; text-underline-offset: 3px; }
+ .sr-handoff .sr-cancel { min-height: 46px; background: transparent; box-shadow: none; color: var(--text2); }
+@@ -10244,6 +10236,22 @@ textarea.form-control {
+ [data-theme="light"] .sr-handoff .sr-pass { background: rgba(255, 255, 255, 0.95); border-color: rgba(150, 120, 40, 0.25); box-shadow: inset 0 1px 3px rgba(30, 25, 15, 0.08); }
+ [data-theme="light"] .sr-copy-btn.is-done { color: #7A5812; }
+ 
++/* Waiting room: one hero state, compact mic/camera row */
++.sr-lobby { gap: 14px; padding: 22px 20px 16px; }
++.sr-hero {
++  align-self: center; width: 112px; height: 112px; border-radius: 50%; display: grid; place-items: center;
++  border: 1px solid rgba(201, 168, 76, .35); background: rgba(201, 168, 76, .06); color: var(--gold-light); margin: 4px 0;
++}
++.sr-hero-core { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; border: 1px solid rgba(201, 168, 76, .6); background: rgba(201, 168, 76, .1); }
++.sr-hero--ok { border-color: rgba(91, 173, 122, .45); background: rgba(91, 173, 122, .08); color: #7FD39F; }
++.sr-hero--ok .sr-hero-core { border-color: rgba(91, 173, 122, .8); background: rgba(91, 173, 122, .16); }
++.sr-hero--wait .sr-hero-core { animation: srPulse 1.8s ease-in-out infinite; }
++.sr-lobby .sr-title { font-size: var(--fs-xl); font-weight: 800; }
++.sr-lobby .sr-sub { opacity: 1; color: var(--text2); line-height: 1.5; max-width: 30ch; margin: 0 auto; }
++.sr-lobby .sr-toggle { flex-direction: row; justify-content: center; gap: 10px; min-height: 52px; padding: 0 10px; }
++.sr-lobby .sr-hint { margin-top: 0; }
++.sr-trouble-pass { margin-top: 12px; }
++
+ /* Call stage: fill the viewport instead of a fixed 55vh strip */
+ .call-stage { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 8px; }
+ #jitsiContainer {

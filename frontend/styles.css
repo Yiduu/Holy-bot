@@ -10219,21 +10219,13 @@ textarea.form-control {
   letter-spacing: .03em; color: var(--text); text-shadow: none;
 }
 .sr-handoff .sr-pass .sr-pass-label { margin: 0 0 6px; font-size: var(--fs-2xs); letter-spacing: .04em; opacity: .6; }
-.sr-copy-btn {
-  flex: none; min-height: 32px; padding: 0 14px; border-radius: 999px; cursor: pointer;
-  font: 700 var(--fs-xs) var(--font-body); color: #1a1300;
-  background: linear-gradient(180deg, #EBCD72, #C9A84C); border: 0;
-  box-shadow: 0 6px 16px rgba(201, 168, 76, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  transition: transform .12s ease, background .15s ease;
-}
-.sr-copy-btn:active { transform: scale(0.95); }
-.sr-copy-btn.is-done { color: var(--gold-light); background: rgba(201, 168, 76, 0.14); box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.4); }
+.sr-copy-btn { flex: none; }
+.sr-copy-btn.is-done { color: var(--gold-light); background: var(--gold-dim); box-shadow: none; }
 
 .sr-handoff .sr-primary {
-  min-height: 52px; border-radius: 999px; font-weight: 800;
-  box-shadow: 0 10px 26px rgba(201, 168, 76, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  min-height: 52px;
 }
-.sr-handoff .sr-secondary { min-height: 46px; border-radius: 999px; }
+.sr-handoff .sr-secondary { min-height: 46px; }
 .sr-handoff .sr-warn { border-radius: 14px; line-height: 1.45; }
 .sr-handoff .sr-link { opacity: .7; text-underline-offset: 3px; }
 .sr-handoff .sr-cancel { min-height: 46px; background: transparent; box-shadow: none; color: var(--text2); }
@@ -10243,6 +10235,22 @@ textarea.form-control {
 [data-theme="light"] .sr-handoff .sr-step { background: rgba(255, 255, 255, 0.7); border-color: rgba(150, 120, 40, 0.2); }
 [data-theme="light"] .sr-handoff .sr-pass { background: rgba(255, 255, 255, 0.95); border-color: rgba(150, 120, 40, 0.25); box-shadow: inset 0 1px 3px rgba(30, 25, 15, 0.08); }
 [data-theme="light"] .sr-copy-btn.is-done { color: #7A5812; }
+
+/* Waiting room: one hero state, compact mic/camera row */
+.sr-lobby { gap: 14px; padding: 22px 20px 16px; }
+.sr-hero {
+  align-self: center; width: 112px; height: 112px; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid rgba(201, 168, 76, .35); background: rgba(201, 168, 76, .06); color: var(--gold-light); margin: 4px 0;
+}
+.sr-hero-core { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; border: 1px solid rgba(201, 168, 76, .6); background: rgba(201, 168, 76, .1); }
+.sr-hero--ok { border-color: rgba(91, 173, 122, .45); background: rgba(91, 173, 122, .08); color: #7FD39F; }
+.sr-hero--ok .sr-hero-core { border-color: rgba(91, 173, 122, .8); background: rgba(91, 173, 122, .16); }
+.sr-hero--wait .sr-hero-core { animation: srPulse 1.8s ease-in-out infinite; }
+.sr-lobby .sr-title { font-size: var(--fs-xl); font-weight: 800; }
+.sr-lobby .sr-sub { opacity: 1; color: var(--text2); line-height: 1.5; max-width: 30ch; margin: 0 auto; }
+.sr-lobby .sr-toggle { flex-direction: row; justify-content: center; gap: 10px; min-height: 52px; padding: 0 10px; }
+.sr-lobby .sr-hint { margin-top: 0; }
+.sr-trouble-pass { margin-top: 12px; }
 
 /* Call stage: fill the viewport instead of a fixed 55vh strip */
 .call-stage { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 8px; }
