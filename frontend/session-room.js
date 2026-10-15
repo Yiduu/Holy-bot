@@ -619,7 +619,7 @@
     ];
     if (!A.isHost && !A.hostPresent && A.phase === 'lobby') actions.push({ label: sr('join_anyway_short', 'Join anyway'), kind: 'ghost', onClick: () => window.SR.start() });
     actions.push({ label: sr('close', 'Close'), kind: 'ghost' });
-    sheet({ title: sr('cant_connect', 'Can\'t connect?'), body: esc(sr('try_one', 'Try these, one at a time.')) + passHtml, actions });
+    sheet({ title: sr('cant_connect', 'Can\'t connect?'), body: `<span class="sr-trouble-lead">${esc(sr('try_one', 'Try these, one at a time.'))}</span>` + passHtml, actions });
   }
 
   // Pick microphone / camera / speaker (Jitsi device list via the IFrame API).

@@ -10247,10 +10247,12 @@ textarea.form-control {
 .sr-hero--ok .sr-hero-core { border-color: rgba(91, 173, 122, .8); background: rgba(91, 173, 122, .16); }
 .sr-hero--wait .sr-hero-core { animation: srPulse 1.8s ease-in-out infinite; }
 .sr-lobby .sr-title { font-size: var(--fs-xl); font-weight: 800; }
-.sr-lobby .sr-sub { opacity: 1; color: var(--text2); line-height: 1.5; max-width: 30ch; margin: 0 auto; }
+.sr-lobby .sr-sub { font-size: var(--fs-xs); opacity: .85; color: var(--text2); line-height: 1.5; max-width: 32ch; margin: 0 auto; }
+.sr-lobby .sr-hint { font-size: var(--fs-2xs); }
 .sr-lobby .sr-toggle { flex-direction: row; justify-content: center; gap: 10px; min-height: 52px; padding: 0 10px; }
 .sr-lobby .sr-hint { margin-top: 0; }
 .sr-trouble-pass { margin-top: 12px; }
+.sr-trouble-lead { display: block; font-size: var(--fs-xs); }
 
 /* Call stage: fill the viewport instead of a fixed 55vh strip */
 .call-stage { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 8px; }
