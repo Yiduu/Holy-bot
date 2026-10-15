@@ -31,7 +31,9 @@
 .hg-mini-ic { display: inline-flex; align-items: center; justify-content: center; }
 
 /* calendar: one month at a time, compact cells so a month is ~5 short rows on a phone */
-.hg-calwrap { max-width: 320px; margin: 0 auto; }
+/* width:100% matters: inside the planner's flex column, margin:auto would otherwise shrink the
+   calendar to its content, so a 7-day challenge (one month, no arrows) rendered narrower than a 30-day one. */
+.hg-calwrap { width: 100%; max-width: 320px; margin: 0 auto; }
 .hg-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 6px; }
 .hg-month { font-size: var(--fs-sm); font-weight: 700; color: var(--text); text-align: center; flex: 1; }
 .hg-mnav { width: 36px; height: 32px; border: 0; border-radius: 8px; background: var(--bg3); color: var(--text);
@@ -337,3 +339,86 @@ body.hg-typing .hg-root { padding-bottom: 140px; }
 [data-theme="light"] .hg-menu-btn { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); color: #5A5650; }
 [data-theme="light"] .hg-menu-btn:hover, [data-theme="light"] .hg-menu[data-open] .hg-menu-btn { background: var(--gold-dim); border-color: #A87C2A; color: #7A5812; }
 [data-theme="light"] .hg-item-danger, [data-theme="light"] .hg-item-danger:hover { color: #B33927; }
+
+
+/* ═══ Day planner v2 ══════════════════════════════════════════════════════════
+   One clear job per control:
+   · task rows  → number, field, remove (×); one dashed "Add task" row under them
+   · Rest day   → a switch in the day header (it is a state of the day, not an action)
+   · Copy       → one labelled box: "Copy this day's tasks to  [Empty days · n] [All days · n]"
+   · Undo       → appears after a copy, so "All days" is never a leap of faith.
+   Same tokens, pills and gold as the rest of goal setting. ═══ */
+.hg-calwrap { margin-bottom: 2px; }
+.hg-legend { display: flex; justify-content: center; gap: 16px; font-size: var(--fs-2xs); color: var(--text3); }
+.hg-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.hg-legend i { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); }
+.hg-legend i.m { background: transparent; border: 1.5px dashed var(--text3); box-sizing: border-box; }
+.hg-d.rest { background: transparent; border: 1px dashed rgba(255, 255, 255, 0.22); color: var(--text3); box-sizing: border-box; }
+.hg-d.rest svg { margin-top: 2px; }
+
+.hg-dayedit { gap: 14px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.hg-dayhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hg-day-title small { display: block; margin-top: 2px; font: 400 var(--fs-xs) var(--font-body); color: var(--text2); }
+
+/* Rest day switch */
+.hg-rest { flex: none; display: inline-flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 8px 0 14px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.06); color: var(--text2);
+  font: 700 var(--fs-xs) var(--font-body); cursor: pointer; transition: background 0.2s, border-color 0.2s, color 0.2s; }
+.hg-sw { position: relative; width: 34px; height: 20px; flex: none; border-radius: 999px; background: rgba(255, 255, 255, 0.16); transition: background 0.2s; }
+.hg-sw i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform 0.2s; }
+.hg-rest.on { border-color: rgba(201, 168, 76, 0.45); background: var(--gold-dim); color: var(--gold-light); }
+.hg-rest.on .hg-sw { background: linear-gradient(180deg, #EBCD72, #C9A84C); }
+.hg-rest.on .hg-sw i { transform: translateX(14px); background: #1a1300; }
+.hg-restnote { display: flex; align-items: center; gap: 12px; padding: 16px; border-radius: 16px; border: 1.5px dashed rgba(255, 255, 255, 0.18);
+  color: var(--text2); font-size: var(--fs-sm); line-height: 1.4; }
+.hg-restnote svg { flex: none; width: 20px; height: 20px; color: var(--gold-light); }
+
+/* Task rows (planner + "same every day") */
+.hg-tasks, .hg-tpl [data-tpl] { display: flex; flex-direction: column; gap: 10px; }
+.hg-pt { display: flex; align-items: center; gap: 10px; }
+.hg-pt input { flex: 1; min-width: 0; }
+.hg-num { flex: none; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--gold-dim); color: var(--gold-light); font: 700 12px var(--font-body); }
+.hg-x { flex: none; width: 40px; height: 40px; padding: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.06); color: var(--text2); cursor: pointer; transition: transform 0.12s ease, color 0.2s; }
+.hg-x:hover { color: var(--danger); }
+.hg-x:active { transform: scale(0.92); }
+.hg-pt-add { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; padding: 0 14px; border-radius: 16px;
+  border: 1.5px dashed rgba(201, 168, 76, 0.45); background: transparent; color: var(--gold-light);
+  font: 700 var(--fs-sm) var(--font-body); cursor: pointer; transition: background 0.2s; }
+.hg-pt-add:active { background: rgba(201, 168, 76, 0.10); }
+.hg-pt-add em { font-style: normal; font-weight: 400; font-size: var(--fs-xs); color: var(--text3); }
+.hg-pt-max { text-align: center; color: var(--text3); font-size: var(--fs-xs); }
+
+/* Copy box */
+.hg-copy { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.07); }
+.hg-copy-l { display: flex; align-items: center; gap: 8px; color: var(--text2); font-size: var(--fs-xs); font-weight: 700; }
+.hg-copy-l svg { flex: none; color: var(--gold-light); }
+.hg-copy-b { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.hg-cb { min-height: 44px; min-width: 0; padding: 0 10px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid rgba(201, 168, 76, 0.38); background: rgba(201, 168, 76, 0.10); color: var(--gold-light);
+  font: 700 var(--fs-xs) var(--font-body); cursor: pointer; transition: transform 0.12s ease, opacity 0.2s; }
+.hg-cb:active:not(:disabled) { transform: scale(0.96); }
+.hg-cb b { min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 99px; display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(201, 168, 76, 0.24); font-size: 11px; }
+.hg-cb:disabled { opacity: 0.4; cursor: default; }
+.hg-copy-h { color: var(--text3); font-size: var(--fs-xs); line-height: 1.4; }
+.hg-undo { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 6px 4px 14px; border-radius: 14px;
+  background: rgba(91, 173, 122, 0.14); border: 1px solid rgba(91, 173, 122, 0.35); color: var(--success); font-size: var(--fs-xs); font-weight: 700; }
+.hg-undo button { min-height: 40px; padding: 0 12px; border: 0; background: none; color: var(--text); font: 700 var(--fs-xs) var(--font-body); text-decoration: underline; cursor: pointer; }
+
+@media (max-width: 380px) { .hg-dayhead { flex-wrap: wrap; } .hg-cb { padding: 0 6px; } }
+@media (prefers-reduced-motion: reduce) { .hg-sw, .hg-sw i, .hg-cb, .hg-x { transition: none; } }
+
+/* light theme */
+[data-theme="light"] .hg-rest, [data-theme="light"] .hg-x { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); color: #5A5650; }
+[data-theme="light"] .hg-rest.on { background: var(--gold-dim); border-color: #A87C2A; color: #7A5812; }
+[data-theme="light"] .hg-sw { background: rgba(0, 0, 0, 0.18); }
+[data-theme="light"] .hg-dayedit { border-top-color: rgba(150, 120, 40, 0.2); }
+[data-theme="light"] .hg-d.rest, [data-theme="light"] .hg-restnote { border-color: rgba(150, 120, 40, 0.35); }
+[data-theme="light"] .hg-num, [data-theme="light"] .hg-pt-add, [data-theme="light"] .hg-cb, [data-theme="light"] .hg-copy-l svg, [data-theme="light"] .hg-restnote svg { color: #7A5812; }
+[data-theme="light"] .hg-pt-add { border-color: rgba(150, 120, 40, 0.5); }
+[data-theme="light"] .hg-copy { background: rgba(255, 255, 255, 0.7); border-color: rgba(150, 120, 40, 0.2); }
+[data-theme="light"] .hg-cb { border-color: rgba(150, 120, 40, 0.45); background: rgba(201, 168, 76, 0.14); }
+[data-theme="light"] .hg-undo { color: #2F7A4B; }

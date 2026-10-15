@@ -37,7 +37,11 @@
       plan_title: 'Plan each day', planned_n: '{n} of {m} days planned', apply_all: 'Copy to all days',
       apply_empty: 'Copy to empty days', clear_day: 'Clear (rest day)', rest_day: 'Rest day', no_tasks: 'No tasks on this day.',
       prev_month: 'Previous month', next_month: 'Next month', plan_dates_first: 'Pick valid start and end dates first (up to 120 days).',
-      plan_empty: 'Add tasks for at least one day', rename: 'Rename', tick_when_done: 'Tick when finished', actions: 'Actions',
+      plan_empty: 'Add tasks for at least one day',
+      t_add: 'Add task', t_remove: 'Remove task', t_max: 'Up to {n} tasks per day', t_planned: 'Planned',
+      rest_note: 'Rest day. Nothing is assigned. Switch off to add tasks.', copy_to: "Copy this day's tasks to",
+      copy_empty: 'Empty days', copy_all: 'All days', copy_need: 'Add a task to this day first, then you can copy it.',
+      copied_n: 'Copied to {n} days', undo: 'Undo', rename: 'Rename', tick_when_done: 'Tick when finished', actions: 'Actions',
     },
     am: {
       new_goal: 'አዲስ ግብ', type_one: 'ነጠላ ተግባር', type_prog: 'ደረጃ በደረጃ የሚከናወን', type_chal: 'ቻሌንጅ',
@@ -67,7 +71,11 @@
       plan_title: 'የእያንዳንዱን ቀን እቅድ', planned_n: '{n} ከ{m} ቀናት ታቅደዋል', apply_all: 'ለሁሉም ቀናት ቅዳ',
       apply_empty: 'ለባዶ ቀናት ቅዳ', clear_day: 'አጽዳ (የእረፍት ቀን)', rest_day: 'የእረፍት ቀን', no_tasks: 'ለዚህ ቀን ተግባር የለም።',
       prev_month: 'ያለፈው ወር', next_month: 'የሚቀጥለው ወር', plan_dates_first: 'መጀመሪያ ትክክለኛ የመጀመሪያና የመጨረሻ ቀን ይምረጡ (እስከ 120 ቀን)።',
-      plan_empty: 'ቢያንስ ለአንድ ቀን ተግባር ይጨምሩ', rename: 'ስም ቀይር', tick_when_done: 'ሲጨርሱ ምልክት ያድርጉ', actions: 'ተግባራት',
+      plan_empty: 'ቢያንስ ለአንድ ቀን ተግባር ይጨምሩ',
+      t_add: 'ተግባር ጨምር', t_remove: 'ተግባሩን አስወግድ', t_max: 'በቀን እስከ {n} ተግባራት', t_planned: 'የታቀደ',
+      rest_note: 'የእረፍት ቀን ነው። ምንም ተግባር አልተሰጠም። ተግባር ለመጨመር ማብሪያውን ያጥፉ።', copy_to: 'የዚህን ቀን ተግባራት ቅዳ ለ',
+      copy_empty: 'ባዶ ቀናት', copy_all: 'ሁሉም ቀናት', copy_need: 'መጀመሪያ ለዚህ ቀን ተግባር ይጨምሩ፣ ከዚያ መቅዳት ይችላሉ።',
+      copied_n: 'ለ{n} ቀናት ተቀድቷል', undo: 'ቀልብስ', rename: 'ስም ቀይር', tick_when_done: 'ሲጨርሱ ምልክት ያድርጉ', actions: 'ተግባራት',
     },
   };
   const tr = (k, r) => {
@@ -286,7 +294,7 @@
   const newFd = () => {
     const td = today(); return {
       title: '', due: '', target: '5', deadline: '', start: td, end: addDays(td, 29),
-      reminder: '20:00', mode: 'same', same: [''], plan: {}, day: null
+      reminder: '20:00', mode: 'same', same: [''], plan: {}, rest: {}, undo: null, day: null
     };
   };
   const fd = mid => ui.fd[mid] || (ui.fd[mid] = newFd());
@@ -306,32 +314,84 @@
     const same = form.querySelectorAll('[data-tpl] input');
     if (same.length) d.same = [...same].map(i => i.value);
     const ed = form.querySelector('[data-dayedit]');
-    if (ed) d.plan[ed.dataset.dayedit] = [...ed.querySelectorAll('input')].map(i => i.value);
+    const dayIns = ed ? [...ed.querySelectorAll('input')] : [];
+    if (dayIns.length) d.plan[ed.dataset.dayedit] = dayIns.map(i => i.value);
+  }
+
+  // small inline icons for the planner
+  const SV = p => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+  const I_PLUS = SV('<path d="M12 5v14M5 12h14"/>'), I_X = SV('<path d="M6 6l12 12M18 6 6 18"/>');
+  const I_MOON = SV('<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>');
+  const I_COPY = SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>');
+
+  // One task row = number, field, remove. One add button under the list. Used by both modes.
+  const taskRows = (vals, remAct) => vals.map((v, i) => `<div class="hg-pt"><span class="hg-num">${i + 1}</span>
+    <input type="text" maxlength="200" placeholder="${tr('f_daily_ph')}" value="${esc(v)}">
+    ${vals.length > 1 ? `<button type="button" class="hg-x" data-act="${remAct}" data-i="${i}" aria-label="${tr('t_remove')}">${I_X}</button>` : ''}</div>`).join('');
+  const addTask = (act, n) => n < MAX_TASKS
+    ? `<button type="button" class="hg-pt-add" data-act="${act}">${I_PLUS}<span>${tr('t_add')}</span><em>${n}/${MAX_TASKS}</em></button>`
+    : `<div class="hg-pt-max">${tr('t_max', { n: MAX_TASKS })}</div>`;
+  const dayOf = (d, r) => d.day && d.day >= r[0] && d.day <= r[1] ? d.day : r[0];
+
+  function planStats(d, r, sel) {
+    const isRest = x => !!d.rest?.[x], hasTasks = x => !isRest(x) && filled(d.plan[x]).length > 0;
+    let planned = 0, nEmpty = 0, nAll = 0;
+    for (let x = r[0]; x <= r[1]; x = addDays(x, 1)) {
+      if (isRest(x) || hasTasks(x)) planned++;
+      if (x !== sel) { nAll++; if (!isRest(x) && !hasTasks(x)) nEmpty++; }
+    }
+    return { planned, nEmpty, nAll, total: diff(r[0], r[1]) + 1, rest: isRest(sel), hasSel: hasTasks(sel) };
+  }
+  const planLabel = st => `${tr('plan_title')} · ${tr('planned_n', { n: st.planned, m: st.total })}`;
+  const copyBox = st => `<div class="hg-copy">
+          <div class="hg-copy-l">${I_COPY}<span>${tr('copy_to')}</span></div>
+          <div class="hg-copy-b">
+            <button type="button" class="hg-cb" data-act="pfill" data-scope="empty"${st.hasSel && st.nEmpty ? '' : ' disabled'}><span>${tr('copy_empty')}</span><b>${st.nEmpty}</b></button>
+            <button type="button" class="hg-cb" data-act="pfill" data-scope="all"${st.hasSel && st.nAll ? '' : ' disabled'}><span>${tr('copy_all')}</span><b>${st.nAll}</b></button></div>
+          ${st.hasSel || st.rest ? '' : `<div class="hg-copy-h">${tr('copy_need')}</div>`}
+        </div>`;
+
+  // Typing doesn't repaint, so keep the day dot, the "x of y planned" line and the copy box in step with it.
+  function syncPlan(root) {
+    const d = ui.fd[root.dataset.mentee], ed = root.querySelector('[data-dayedit]'), r = d && rangeOf(d);
+    if (!ed || !r) return;
+    const sel = ed.dataset.dayedit, st = planStats(d, r, sel);
+    const cell = root.querySelector('.hg-d.sel');
+    if (cell && !st.rest) { cell.classList.toggle('has', st.hasSel); if (st.hasSel && !cell.querySelector('b')) cell.insertAdjacentHTML('beforeend', '<b></b>'); if (!st.hasSel) cell.querySelector('b')?.remove(); }
+    const eb = root.querySelector('.hg-plan > .hg-eyebrow'); if (eb) eb.textContent = planLabel(st);
+    const box = root.querySelector('.hg-copy'); if (box) box.outerHTML = copyBox(st);
   }
 
   function planner(mid, d) {
     const r = rangeOf(d);
     if (!r) return `<div class="hg-hint">${tr('plan_dates_first')}</div>`;
     const [s, e] = r;
-    const sel = d.day && d.day >= s && d.day <= e ? d.day : s;
+    d.rest = d.rest || {};
+    const sel = dayOf(d, r);
+    const isRest = x => !!d.rest[x], hasTasks = x => !isRest(x) && filled(d.plan[x]).length > 0;
     const cal = grids('form:' + mid, s, e, sel, x => {
-      const has = filled(d.plan[x]).length > 0;
-      return `<button type="button" class="hg-d${has ? ' has' : ''}${x === sel ? ' sel' : ''}" data-act="fday" data-date="${x}" aria-label="${fmt(x, { month: 'long', day: 'numeric' })}"><span>${Number(x.substring(8))}</span>${has ? '<b></b>' : ''}</button>`;
+      const cls = isRest(x) ? ' rest' : hasTasks(x) ? ' has' : '';
+      const mark = isRest(x) ? I_MOON : hasTasks(x) ? '<b></b>' : '';
+      return `<button type="button" class="hg-d${cls}${x === sel ? ' sel' : ''}" data-act="fday" data-date="${x}" aria-label="${fmt(x, { month: 'long', day: 'numeric' })}"><span>${Number(x.substring(8))}</span>${mark}</button>`;
     });
-    const planned = Object.entries(d.plan).filter(([x, v]) => x >= s && x <= e && filled(v).length).length;
+    const st = planStats(d, r, sel);
+    const rest = isRest(sel);
     const list = d.plan[sel]?.length ? d.plan[sel] : [''];
+    const body = rest
+      ? `<div class="hg-restnote">${I_MOON}<span>${tr('rest_note')}</span></div>`
+      : `<div class="hg-tasks">${taskRows(list, 'prem')}</div>${addTask('padd', list.length)}`;
     return `<div class="hg-plan">
-      <div class="hg-eyebrow">${tr('plan_title')} · ${tr('planned_n', { n: planned, m: diff(s, e) + 1 })}</div>
+      <div class="hg-eyebrow">${planLabel(st)}</div>
       <div class="hg-calwrap">${cal}</div>
+      <div class="hg-legend"><span><i></i>${tr('t_planned')}</span><span><i class="m"></i>${tr('rest_day')}</span></div>
       <div class="hg-dayedit" data-dayedit="${sel}">
-        <div class="hg-day-title">${tr('day')} ${diff(s, sel) + 1} · ${fmt(sel, { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-        ${list.map(v => `<input type="text" maxlength="200" placeholder="${tr('f_daily_ph')}" value="${esc(v)}">`).join('')}
-        <div class="hg-plan-actions">
-          ${list.length < MAX_TASKS ? `<button type="button" class="hg-link" data-act="padd">+ ${tr('f_more')}</button>` : ''}
-          <button type="button" class="hg-link" data-act="pclear">${tr('clear_day')}</button></div>
-        <div class="hg-plan-actions">
-          <button type="button" class="hg-link" data-act="pfill" data-scope="empty">${tr('apply_empty')}</button>
-          <button type="button" class="hg-link" data-act="pfill" data-scope="all">${tr('apply_all')}</button></div>
+        <div class="hg-dayhead">
+          <div class="hg-day-title">${tr('day')} ${diff(s, sel) + 1}<small>${fmt(sel, { weekday: 'long', month: 'short', day: 'numeric' })}</small></div>
+          <button type="button" class="hg-rest${rest ? ' on' : ''}" role="switch" aria-checked="${rest}" data-act="prest"><span>${tr('rest_day')}</span><span class="hg-sw"><i></i></span></button>
+        </div>
+        ${body}
+        ${copyBox(st)}
+        ${d.undo ? `<div class="hg-undo" role="status"><span>${tr('copied_n', { n: d.undo.n })}</span><button type="button" data-act="pundo">${tr('undo')}</button></div>` : ''}
       </div></div>`;
   }
 
@@ -365,8 +425,8 @@
     if (type === 'challenge') {
       const len = rangeOf(d) ? diff(d.start, d.end) + 1 : 0;
       const chips = [7, 14, 21, 30, 40].map(n => `<button type="button" class="hg-pill${len === n ? ' on' : ''}" data-act="dur" data-n="${n}">${tr('days_n', { n })}</button>`).join('');
-      const same = `<div class="hg-tpl"><span>${tr('f_daily')}</span><div data-tpl>${(d.same.length ? d.same : ['']).map(v => `<input type="text" maxlength="200" placeholder="${tr('f_daily_ph')}" value="${esc(v)}">`).join('')}</div>
-        <button type="button" class="hg-link" data-act="addtpl">+ ${tr('f_more')}</button></div>`;
+      const sameList = d.same.length ? d.same : [''];
+      const same = `<div class="hg-tpl"><span>${tr('f_daily')}</span><div data-tpl>${taskRows(sameList, 'trem')}</div>${addTask('addtpl', sameList.length)}</div>`;
       fields = `<div class="hg-row2"><label>${tr('f_start')}<input type="date" data-f="start" min="${td}" value="${esc(d.start)}"></label>
         <label>${tr('f_end')}<input type="date" data-f="end" min="${esc(d.start || td)}" value="${esc(d.end)}"></label></div>
         <div class="hg-chips" role="group" aria-label="${tr('f_dur')}">${chips}</div>
@@ -519,7 +579,7 @@
       if (d.mode === 'custom') {
         const r = rangeOf(d);
         const plan = {};
-        if (r) for (const [x, v] of Object.entries(d.plan)) if (x >= r[0] && x <= r[1] && filled(v).length) plan[x] = filled(v);
+        if (r) for (const [x, v] of Object.entries(d.plan)) if (x >= r[0] && x <= r[1] && !d.rest?.[x] && filled(v).length) plan[x] = filled(v);
         if (!Object.keys(plan).length) return { error: tr('plan_empty') };
         body.day_plan = plan;
       } else {
@@ -543,26 +603,53 @@
       case 'back': return back();
       case 'cancel-new': return closePage();
       case 'fmode': fd(mid).mode = el.dataset.mode; return paint(root, true);
-      case 'fday': fd(mid).day = el.dataset.date; delete ui.month['form:' + mid]; return paint(root, true);
+      case 'fday': fd(mid).undo = null; fd(mid).day = el.dataset.date; delete ui.month['form:' + mid]; return paint(root, true);
       case 'dur': { const d = fd(mid); if (isDay(d.start)) d.end = addDays(d.start, Number(el.dataset.n) - 1); return paint(root, true); }
-      case 'addtpl': { const d = fd(mid); if (d.same.length < MAX_TASKS) d.same.push(''); return paint(root, true); }
-      case 'padd': {
-        const d = fd(mid), r = rangeOf(d); if (!r) return;
-        const day = d.day && d.day >= r[0] && d.day <= r[1] ? d.day : r[0];
-        const cur = d.plan[day]?.length ? d.plan[day] : [''];
-        if (cur.length < MAX_TASKS) d.plan[day] = [...cur, ''];
+      case 'addtpl': {
+        const d = fd(mid); if (d.same.length < MAX_TASKS) d.same.push('');
+        paint(root, true);
+        const ins = root.querySelectorAll('[data-tpl] input'); return ins[ins.length - 1]?.focus();
+      }
+      case 'trem': {
+        const d = fd(mid); d.same.splice(Number(el.dataset.i), 1); if (!d.same.length) d.same = [''];
         return paint(root, true);
       }
-      case 'pclear': {
+      case 'padd': {
         const d = fd(mid), r = rangeOf(d); if (!r) return;
-        d.plan[d.day && d.day >= r[0] && d.day <= r[1] ? d.day : r[0]] = [];
-        return paint(root, true);
+        const day = dayOf(d, r), cur = d.plan[day]?.length ? d.plan[day] : [''];
+        if (cur.length < MAX_TASKS) d.plan[day] = [...cur, ''];
+        d.undo = null; paint(root, true);
+        const ins = root.querySelectorAll('[data-dayedit] input'); return ins[ins.length - 1]?.focus();
+      }
+      case 'prem': {
+        const d = fd(mid), r = rangeOf(d); if (!r) return;
+        const day = dayOf(d, r), cur = [...(d.plan[day] || [''])];
+        cur.splice(Number(el.dataset.i), 1); d.plan[day] = cur.length ? cur : [''];
+        d.undo = null; return paint(root, true);
+      }
+      case 'prest': {   // rest day is a switch: tasks typed for the day are kept, just hidden and not sent
+        const d = fd(mid), r = rangeOf(d); if (!r) return;
+        const day = dayOf(d, r); d.rest = d.rest || {};
+        if (d.rest[day]) delete d.rest[day]; else d.rest[day] = true;
+        d.undo = null; return paint(root, true);
       }
       case 'pfill': {
         const d = fd(mid), r = rangeOf(d); if (!r) return;
-        const src = filled(d.plan[d.day && d.day >= r[0] && d.day <= r[1] ? d.day : r[0]]);
+        const day = dayOf(d, r), src = d.rest?.[day] ? [] : filled(d.plan[day]);
         if (!src.length) return;
-        for (let x = r[0]; x <= r[1]; x = addDays(x, 1)) if (el.dataset.scope === 'all' || !filled(d.plan[x]).length) d.plan[x] = [...src];
+        const before = { plan: JSON.parse(JSON.stringify(d.plan)), rest: { ...d.rest } };   // for Undo
+        let n = 0; d.rest = d.rest || {};
+        for (let x = r[0]; x <= r[1]; x = addDays(x, 1)) {
+          if (x === day) continue;
+          if (el.dataset.scope === 'empty' && (d.rest[x] || filled(d.plan[x]).length)) continue;
+          d.plan[x] = [...src]; delete d.rest[x]; n++;
+        }
+        d.undo = n ? { ...before, n } : null;
+        return paint(root, true);
+      }
+      case 'pundo': {
+        const d = fd(mid); if (!d.undo) return;
+        d.plan = d.undo.plan; d.rest = d.undo.rest; d.undo = null;
         return paint(root, true);
       }
       case 'create': {
@@ -685,7 +772,11 @@
     root.addEventListener('focusin', onFieldFocus);
     root.addEventListener('focusout', onFieldBlur);
     root.addEventListener('click', e => { if (e.target.closest('[data-act]') && root.querySelector('.hg-new')) snap(root); onClick(root, e); });
-    root.addEventListener('input', e => { if (e.target.closest('.hg-new')) snap(root); });
+    root.addEventListener('input', e => {
+      if (!e.target.closest('.hg-new')) return;
+      snap(root); syncPlan(root);
+      const d = ui.fd[root.dataset.mentee]; if (d?.undo) { d.undo = null; root.querySelector('.hg-undo')?.remove(); }
+    });
     root.addEventListener('change', e => {
       if (!e.target.closest('.hg-new')) return;
       snap(root);
