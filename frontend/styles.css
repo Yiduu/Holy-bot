@@ -14426,3 +14426,18 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
 .ps-more svg { flex: none; animation: psMoreNudge 1.6s ease-in-out infinite; }
 @keyframes psMoreNudge { 0%, 100% { transform: translateY(-2px); } 50% { transform: translateY(2px); } }
 @media (prefers-reduced-motion: reduce) { .ps-more svg { animation: none; } }
+
+
+/* ─── Schedule sheet: use the free space, one scroll only ─────────────────
+   Opens at the Notifications height (same title position for private and group);
+   if the participant list needs more room the sheet grows to fit it (up to 92%)
+   instead of scrolling inside a small box. */
+.modal-sheet.sch-sheet {
+  height: auto;
+  min-height: min(calc(var(--ps-sheet-h) + var(--safe-bottom)), calc(100% - 12px));
+  max-height: min(92%, calc(100% - 12px));
+}
+.sch-sheet .ps-body { gap: 10px; }
+.sch-sheet .ps-card { padding: 14px 16px; }
+.sch-people { max-height: none; overflow: visible; gap: 6px; padding: 0; }
+.sch-person { min-height: 52px; padding: 8px 12px; }
