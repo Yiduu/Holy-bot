@@ -1,0 +1,74 @@
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 4a01c85..efd8244 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -6437,12 +6437,6 @@ textarea.form-control {
+   transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+ }
+ 
+-[data-theme="light"] .streak-card-hero {
+-  background: radial-gradient(130% 120% at 50% -10%, rgba(201, 168, 76, 0.32) 0%, rgba(255, 252, 245, 0.98) 55%, #F4ECE0 100%);
+-  border-color: rgba(184, 134, 11, 0.45);
+-  box-shadow: 0 10px 30px rgba(180, 130, 30, 0.16), 0 0 20px rgba(201, 168, 76, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.95);
+-}
+-
+ .streak-card-hero::before {
+   content: '';
+   position: absolute;
+@@ -6478,12 +6472,6 @@ textarea.form-control {
+   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+ }
+ 
+-[data-theme="light"] .streak-hero-label {
+-  background: rgba(201, 168, 76, 0.2);
+-  color: #8C6615;
+-  border-color: rgba(184, 134, 11, 0.4);
+-}
+-
+ .streak-hero-label .streak-icon {
+   width: 22px;
+   height: 22px;
+@@ -6513,14 +6501,6 @@ textarea.form-control {
+   letter-spacing: -0.02em;
+ }
+ 
+-[data-theme="light"] .streak-hero-number {
+-  background: linear-gradient(180deg, #A87610 0%, #C9A84C 50%, #7D5708 100%);
+-  -webkit-background-clip: text;
+-  background-clip: text;
+-  -webkit-text-fill-color: transparent;
+-  filter: drop-shadow(0 2px 8px rgba(184, 134, 11, 0.25));
+-}
+-
+ .streak-hero-unit {
+   font-size: var(--fs-lg);
+   font-weight: 700;
+@@ -6529,10 +6509,6 @@ textarea.form-control {
+   text-transform: uppercase;
+ }
+ 
+-[data-theme="light"] .streak-hero-unit {
+-  color: #8C6615;
+-}
+-
+ .streak-hero-sub {
+   font-size: var(--fs-sm);
+   font-weight: 600;
+@@ -8793,6 +8769,17 @@ textarea.form-control {
+   z-index: 1;
+ }
+ 
++/* Light theme keeps the same gold foil as dark (text, badges, dots and button are fixed
++   espresso-on-gold, so they already read well). Only the shadow is softened and warmed:
++   the heavy black one looked dirty on a light page. */
++[data-theme="light"] .streak-card-hero {
++  border-color: rgba(122, 88, 18, 0.32);
++  box-shadow: 0 14px 32px rgba(168, 124, 42, 0.34), 0 2px 6px rgba(30, 25, 15, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.55);
++}
++@media (hover: hover) {
++  [data-theme="light"] .streak-card-hero:hover { box-shadow: 0 18px 40px rgba(168, 124, 42, 0.4), 0 2px 6px rgba(30, 25, 15, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.55); }
++}
++
+ /* ─── Streak card: freeze badge ─────────────────────────────── */
+ .streak-freeze-badge {
+   display: inline-flex;
