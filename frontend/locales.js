@@ -1144,7 +1144,7 @@ const I18N = {
     "sex_prefer_not": "ሁለቱም",
     "sex_both": "ሁለቱም",
     "apply_page_eyebrow": "አማካሪ ሁን",
-    "apply_page_intro": "በእውነት ይመልሱ። የአስተዳዳሪ ቡድናችን እያንዳንዱን ማመልከቻ ይመረምራል።",
+    "apply_page_intro": " የአስተዳዳሪ ቡድናችን እያንዳንዱን ማመልከቻ ይመረምራል።",
     "apply_lbl_sex": "ለማን ምክር መስጠት ይፈልጋሉ?",
     "apply_lbl_edu": "የትምህርት ደረጃ",
     "apply_edu_ph": "ለምሳሌ፦ በስነ-ልቦና የመጀመሪያ ዲግሪ",
