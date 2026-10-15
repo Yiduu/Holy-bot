@@ -1,0 +1,437 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index ea8f30a..3d4a008 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1081,6 +1081,7 @@ function handleTelegramBack() {
+   if (currentPage === 'end-mentorship') { closeEndReason(); return; }
+   if (currentPage === 'chat-history') { chatHistoryBack(); return; }
+   if (currentPage === 'new-ticket') { toggleNewTicketModal(false); return; }
++  if (currentPage === 'apply-mentor') { closeApplyModal(); return; }
+   if (currentPage === 'goal-new' && window.HolyGoals?.back()) return;
+   if (currentPage !== 'dashboard') navigate('dashboard');
+ }
+@@ -1846,7 +1847,7 @@ function navigate(page) {
+   if (currentPage === 'my-mentees' && page !== 'my-mentees') flushMentorNotes();
+ 
+   currentPage = page;
+-  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket' || page === 'ticket-detail');   // focused pages: the nav steps aside
++  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket' || page === 'ticket-detail' || page === 'apply-mentor');   // focused pages: the nav steps aside
+   updateChatKeyboard();                    // leaving chat clears the docked-composer state
+   $$('.page').forEach(p => p.classList.remove('active'));
+   $$('.nav-item').forEach(n => n.classList.remove('active'));
+@@ -4037,7 +4038,7 @@ function switchMentorProfileTab(tab) {
+ // Switch pages without navigate()'s data loaders: the mentors list stays as it was.
+ function showAppPageQuiet(page, navId) {
+   currentPage = page;
+-  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket' || page === 'ticket-detail');   // focused pages: the nav steps aside
++  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket' || page === 'ticket-detail' || page === 'apply-mentor');   // focused pages: the nav steps aside
+   $$('.page').forEach(p => p.classList.remove('active'));
+   $$('.nav-item').forEach(nv => nv.classList.remove('active'));
+   $(`page-${page}`)?.classList.add('active');
+@@ -6917,49 +6918,70 @@ async function openApplyModal() {
+   showApplyForm();
+ }
+ 
++// "Apply to become a mentor" is a full page now (same family as New support request).
++// The old function names are kept: the profile menu, the end-and-rate flow and the
++// ACTIVE_MENTORSHIP retry still call them.
++let _applyFrom = 'dashboard', _applyBusy = false;
++
+ function showApplyForm() {
+-  selectApplySex('', t('Select…') || 'Select…');
++  _applyBusy = false;
++  if (currentPage !== 'apply-mentor') _applyFrom = currentPage || 'dashboard';
++  selectApplySex('', true);
+   $('applyEdu').value = '';
+   $('applyAbout').value = '';
+-  $('applyModal').classList.add('open');
++  onApplyInput();
++  showAppPageQuiet('apply-mentor', null);
++  const pc = document.querySelector('#page-apply-mentor .page-content');
++  if (pc) pc.scrollTop = 0;
+ }
+ 
+-function selectApplySex(val, text, e) {
+-  if (e) {
+-    e.preventDefault();
+-    e.stopPropagation();
+-  }
+-  haptic('selection');
++function selectApplySex(val, silent) {
++  if (!silent) haptic('selection');
+   const input = $('applySex');
+-  if (input) input.value = val;
+-  const btnText = $('applySexSelectedText');
+-  if (btnText) {
+-    const localText = val ? t(val === 'prefer_not' ? 'sex_both' : val === 'M' ? 'sex_male' : 'sex_female') : '';
+-    btnText.textContent = localText || text;
+-  }
+-  const menu = $('applySexDropdownMenu');
+-  if (menu) {
+-    menu.querySelectorAll('.dropdown-item').forEach(item => {
+-      item.classList.toggle('selected', item.dataset.value === val);
+-    });
++  if (input) input.value = val || '';
++  document.querySelectorAll('#applySexChips .ma-chip').forEach(chip => {
++    const on = !!val && chip.dataset.value === val;
++    chip.classList.toggle('active', on);
++    chip.setAttribute('aria-checked', on ? 'true' : 'false');
++  });
++  onApplyInput();
++}
++
++function onApplyInput() {
++  const about = $('applyAbout')?.value || '';
++  const count = $('applyAboutCount');
++  if (count) {
++    count.textContent = `${about.length}/1000`;
++    count.classList.toggle('is-near', about.length >= 970);
+   }
+-  $('applySexDropdown')?.removeAttribute('data-open');
++  const btn = $('applySubmitBtn');
++  if (btn) btn.disabled = _applyBusy || !$('applySex')?.value || !($('applyEdu')?.value || '').trim() || !about.trim();
+ }
++
+ function closeApplyModal() {
++  if (_applyBusy) return;
+   haptic('light');
+-  $('applyModal').classList.remove('open');
++  try { document.activeElement?.blur?.(); } catch { }        // drop the keyboard before leaving
++  if (currentPage === 'apply-mentor') {
++    const back = _applyFrom && _applyFrom !== 'apply-mentor' ? _applyFrom : 'dashboard';
++    showAppPageQuiet(back, `nav-${back}`);
++  }
+ }
++
+ async function submitApplication() {
+-  haptic('medium');
++  if (_applyBusy) return;
+   const sex = $('applySex').value;
+   const edu = $('applyEdu').value.trim();
+   const about = $('applyAbout').value.trim();
+ 
+   if (!sex || !edu || !about) {
+     haptic('error');
+-    showToast('Please answer all questions', 'error');
++    showToast(t('apply_fill_all') || 'Please answer all questions', 'error');
+     return;
+   }
++  haptic('medium');
++  _applyBusy = true;
++  onApplyInput();
+ 
+   try {
+     await apiFetch('/api/users/apply-mentor', {
+@@ -6973,10 +6995,13 @@ async function submitApplication() {
+         answer_q3: about
+       }
+     });
++    _applyBusy = false;
+     haptic('success');
+-    showToast('Application submitted! 🙏', 'success');
++    showToast(t('apply_submitted') || 'Application submitted! 🙏', 'success');
+     closeApplyModal();
+   } catch (e) {
++    _applyBusy = false;
++    onApplyInput();
+     haptic('error');
+     if (e.code === 'ACTIVE_MENTORSHIP') {
+       // Matched with a mentor after the form was opened: send them through
+diff --git a/frontend/index.html b/frontend/index.html
+index 7c5b1f7..69de110 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -15,7 +15,7 @@
+   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
+   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
+-  <link rel="stylesheet" href="styles.css?v=3.6" />
++  <link rel="stylesheet" href="styles.css?v=3.7" />
+   <link rel="stylesheet" href="goals.css?v=1.5" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+@@ -838,6 +838,69 @@
+       </div>
+     </div>
+ 
++    <!-- ── Page: Apply to become a mentor (full page, same family as New support request) ── -->
++    <div id="page-apply-mentor" class="page">
++      <div class="app-header mp-header">
++        <button type="button" class="profile-pill mp-back" onclick="closeApplyModal()" aria-label="Back">
++          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++            stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
++          <span data-i18n="btn_back">Back</span>
++        </button>
++      </div>
++      <div class="page-content ma-content">
++        <div class="ma-hero">
++          <div class="ma-hero-icon" aria-hidden="true">
++            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" /></svg>
++          </div>
++          <span class="page-intro-eyebrow" data-i18n="apply_page_eyebrow">Become a mentor</span>
++          <p class="page-intro-text ma-hero-text" data-i18n="apply_page_intro">Answer honestly. Our admin team reviews every application.</p>
++        </div>
++
++        <div class="card ma-form">
++          <div class="ma-field">
++            <span class="ma-label" data-i18n="apply_lbl_sex">Who would you like to mentor?</span>
++            <div class="ma-chips" id="applySexChips" role="radiogroup">
++              <button type="button" class="ma-chip" data-value="M" role="radio" aria-checked="false" onclick="selectApplySex('M')" data-i18n="sex_male">Male</button>
++              <button type="button" class="ma-chip" data-value="F" role="radio" aria-checked="false" onclick="selectApplySex('F')" data-i18n="sex_female">Female</button>
++              <button type="button" class="ma-chip" data-value="prefer_not" role="radio" aria-checked="false" onclick="selectApplySex('prefer_not')" data-i18n="sex_both">Both</button>
++            </div>
++            <input type="hidden" id="applySex" value="" />
++          </div>
++
++          <div class="ma-field">
++            <label class="ma-label" for="applyEdu" data-i18n="apply_lbl_edu">Educational background</label>
++            <input id="applyEdu" class="form-control ma-input" maxlength="200" autocomplete="off" enterkeyhint="next"
++              placeholder="e.g., Bachelor's in Psychology" data-i18n="apply_edu_ph" oninput="onApplyInput()" />
++          </div>
++
++          <div class="ma-field">
++            <label class="ma-label" for="applyAbout" data-i18n="apply_lbl_about">About you</label>
++            <textarea id="applyAbout" class="form-control ma-input" rows="5" maxlength="1000"
++              placeholder="Your experience, qualifications, and why you want to be a mentor…" data-i18n="apply_about_ph"
++              oninput="onApplyInput()"></textarea>
++            <div class="ma-foot"><span id="applyAboutCount" class="ma-count">0/1000</span></div>
++          </div>
++        </div>
++
++        <p class="ma-note">
++          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"
++            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" /></svg>
++          <span data-i18n="apply_note">Our admin team reviews every application before approving it.</span>
++        </p>
++      </div>
++      <!-- Buttons live outside the scrolling area, so they stay visible above the keyboard -->
++      <div class="ma-actions-bar">
++        <div class="ma-actions">
++          <button type="button" class="btn btn-outline" onclick="closeApplyModal()" data-i18n="btn_cancel">Cancel</button>
++          <button type="button" id="applySubmitBtn" class="btn btn-primary" onclick="submitApplication()" disabled>
++            <span data-i18n="btn_submit_application">Submit Application</span>
++            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4z" /></svg>
++          </button>
++        </div>
++      </div>
++    </div>
++
+     <!-- ── Page: Chat History (mentor: read-only copies of ended mentorships) ── -->
+     <div id="page-chat-history" class="page">
+       <div class="app-header mp-header">
+@@ -1740,52 +1803,6 @@
+ 
+   </div><!-- /#app -->
+ 
+-  <!-- ─── Apply to be Mentor Modal ──────────────────────────────── -->
+-  <div id="applyModal" class="modal-overlay" onclick="if(event.target===this)closeApplyModal()">
+-    <div class="modal-sheet">
+-      <div class="modal-handle"></div>
+-      <div class="modal-title">Apply to Become a Mentor</div>
+-      <p class="text-sm text-dim mb-16">Answer honestly. Admin will review your application.</p>
+-
+-      <div class="form-group">
+-        <label class="form-label" data-i18n="apply_q1">Which type of user you want to give mentorship :</label>
+-        <div class="premium-dropdown form-dropdown" data-dropdown id="applySexDropdown">
+-          <button type="button" id="applySexDropdownBtn" class="premium-dropdown-btn" data-dropdown-toggle>
+-            <span class="dropdown-label" id="applySexSelectedText" data-i18n="Select…">Select…</span>
+-            <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+-              stroke-linecap="round" stroke-linejoin="round">
+-              <polyline points="6 9 12 15 18 9"></polyline>
+-            </svg>
+-          </button>
+-          <div id="applySexDropdownMenu" class="premium-dropdown-menu" data-dropdown-menu>
+-            <button type="button" class="dropdown-item" data-value="M" onclick="selectApplySex('M', 'Male', event)"
+-              data-i18n="sex_male">Male</button>
+-            <button type="button" class="dropdown-item" data-value="F" onclick="selectApplySex('F', 'Female', event)"
+-              data-i18n="sex_female">Female</button>
+-            <button type="button" class="dropdown-item" data-value="prefer_not" onclick="selectApplySex('prefer_not', 'Both', event)"
+-              data-i18n="sex_both">Both</button>
+-          </div>
+-          <input type="hidden" id="applySex" value="" />
+-        </div>
+-      </div>
+-      <div class="form-group">
+-        <label class="form-label" data-i18n="apply_q2">What is your educational background? (e.g., Bachelor's in
+-          Psychology)</label>
+-        <input id="applyEdu" class="form-control" placeholder="Your education background..." />
+-      </div>
+-      <div class="form-group">
+-        <label class="form-label" data-i18n="apply_q3">Tell us about yourself (experience, qualifications, and why you
+-          want to be a mentor):</label>
+-        <textarea id="applyAbout" class="form-control" rows="4" placeholder="Tell us about yourself..."></textarea>
+-      </div>
+-
+-      <div class="flex gap-8">
+-        <button class="btn btn-ghost flex-1" onclick="closeApplyModal()">Cancel</button>
+-        <button class="btn btn-primary flex-1" onclick="submitApplication()">Submit Application</button>
+-      </div>
+-    </div>
+-  </div>
+-
+   <!-- ─── Warning: ending mentorship before becoming a mentor ───── -->
+   <div id="endToApplyWarnModal" class="modal-overlay" onclick="if(event.target===this)closeEndToApplyWarning()">
+     <div class="modal-sheet hb-confirm">
+@@ -2496,8 +2513,8 @@
+     </div>
+   </div>
+ 
+-  <script src="locales.js?v=2.0"></script>
+-  <script src="app.js?v=3.9"></script>
++  <script src="locales.js?v=2.1"></script>
++  <script src="app.js?v=4.0"></script>
+   <script src="goals.js?v=1.5"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="session-room.js?v=1.4"></script>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index b16e505..b3c6a83 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -258,6 +258,17 @@ const I18N = {
+     "sex_female": "Female",
+     "sex_prefer_not": "Both",
+     "sex_both": "Both",
++    "apply_page_eyebrow": "Become a mentor",
++    "apply_page_intro": "Answer honestly. Our admin team reviews every application.",
++    "apply_lbl_sex": "Who would you like to mentor?",
++    "apply_lbl_edu": "Educational background",
++    "apply_edu_ph": "e.g., Bachelor's in Psychology",
++    "apply_lbl_about": "About you",
++    "apply_about_ph": "Your experience, qualifications, and why you want to be a mentor…",
++    "apply_note": "Our admin team reviews every application before approving it.",
++    "apply_fill_all": "Please answer all questions",
++    "apply_submitted": "Application submitted! 🙏",
++    "btn_submit_application": "Submit Application",
+     // ========== ONBOARDING / REGISTRATION (new user sign-up flow) ==========
+     "ob_tagline": "A safe space for your journey",
+     "ob_begin_journey": "Begin My Journey",
+@@ -1132,6 +1143,17 @@ const I18N = {
+     "sex_female": "ሴት",
+     "sex_prefer_not": "ሁለቱም",
+     "sex_both": "ሁለቱም",
++    "apply_page_eyebrow": "አማካሪ ሁን",
++    "apply_page_intro": "በእውነት ይመልሱ። የአስተዳዳሪ ቡድናችን እያንዳንዱን ማመልከቻ ይመረምራል።",
++    "apply_lbl_sex": "ለማን ምክር መስጠት ይፈልጋሉ?",
++    "apply_lbl_edu": "የትምህርት ደረጃ",
++    "apply_edu_ph": "ለምሳሌ፦ በስነ-ልቦና የመጀመሪያ ዲግሪ",
++    "apply_lbl_about": "ስለ እርስዎ",
++    "apply_about_ph": "ልምድዎ፣ ብቃትዎ እና ለምን አማካሪ መሆን እንደሚፈልጉ…",
++    "apply_note": "የአስተዳዳሪ ቡድናችን እያንዳንዱን ማመልከቻ ከማጽደቁ በፊት ይመረምራል።",
++    "apply_fill_all": "እባክዎ ሁሉንም ጥያቄዎች ይመልሱ",
++    "apply_submitted": "ማመልከቻዎ ተልኳል! 🙏",
++    "btn_submit_application": "ማመልከቻ ላክ",
+     // ========== ONBOARDING / REGISTRATION (new user sign-up flow) ==========
+     "ob_tagline": "የጉዞዎ ደህንነቱ የተጠበቀ ቦታ",
+     "ob_begin_journey": "ጉዞዬን ልጀምር",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 581f66b..4a01c85 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -14035,6 +14035,106 @@ body.kb-open #page-new-ticket textarea.nt-input { min-height: 104px; }
+ 
+ @media (prefers-reduced-motion: reduce) { #page-new-ticket .nt-content { animation: none; } #page-new-ticket .nt-chip:active { transform: none; } }
+ 
++/* ── Apply to become a mentor page – same family as New support request / End mentorship ──
++   Gold glow hero, glass card, pill chips (replaces the old dropdown-in-a-sheet), docked action bar.
++   The nav steps aside (body.er-page) and the page follows the visible height, so the fields and
++   the buttons are never covered by the nav or the keyboard. ── */
++#page-apply-mentor.active {
++  background: radial-gradient(120% 420px at 50% 0%, rgba(201, 168, 76, 0.28) 0%, rgba(168, 124, 42, 0.11) 45%, transparent 78%) no-repeat;
++}
++[data-theme="light"] #page-apply-mentor.active {
++  background: radial-gradient(120% 420px at 50% 0%, rgba(201, 168, 76, 0.32) 0%, rgba(201, 168, 76, 0.10) 45%, transparent 78%) no-repeat;
++}
++#page-apply-mentor .app-header { background: transparent; border-bottom-color: transparent; box-shadow: none; }
++body.kb-open #page-apply-mentor.active { flex: 0 0 auto; height: calc(var(--app-height) - var(--kb-inset, 0px)); }
++
++#page-apply-mentor .page-content.ma-content {
++  display: flex; flex-direction: column; gap: 14px; min-height: 0;
++  padding: 2px 16px 24px; overscroll-behavior-y: contain;
++  animation: profilePaneIn 0.3s ease both;
++}
++#page-apply-mentor .ma-content > * { flex-shrink: 0; }
++
++#page-apply-mentor .ma-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 2px 6px; }
++#page-apply-mentor .ma-hero-icon {
++  width: 60px; height: 60px; display: grid; place-items: center; margin-bottom: 8px;
++  border-radius: 21px; color: var(--gold-light);
++  background: radial-gradient(90% 90% at 50% 0%, rgba(232, 201, 107, 0.26), rgba(201, 168, 76, 0.08)), rgba(201, 168, 76, 0.10);
++  box-shadow: inset 0 0 0 1px rgba(232, 201, 107, 0.34), 0 12px 28px rgba(0, 0, 0, 0.38), 0 0 38px rgba(201, 168, 76, 0.20);
++}
++#page-apply-mentor .ma-hero .page-intro-eyebrow { margin-bottom: 2px; }
++#page-apply-mentor .ma-hero-text { max-width: 34ch; color: var(--text2); line-height: 1.5; }
++[data-theme="light"] #page-apply-mentor .ma-hero-icon { color: #7A5812; box-shadow: inset 0 0 0 1px rgba(150, 120, 40, 0.34), 0 10px 22px rgba(30, 25, 15, 0.14), 0 0 30px rgba(201, 168, 76, 0.24); }
++
++#page-apply-mentor .ma-form {
++  display: flex; flex-direction: column; gap: 18px; padding: 18px 16px;
++  border-color: rgba(201, 168, 76, 0.28);
++  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28), var(--inset-hi);
++}
++[data-theme="light"] #page-apply-mentor .ma-form { background: linear-gradient(160deg, #fff, #f6f3ea); border-color: rgba(150, 120, 40, 0.28); box-shadow: 0 8px 20px rgba(30, 25, 15, 0.10), inset 0 1px 0 #fff; }
++#page-apply-mentor .ma-field { display: flex; flex-direction: column; gap: 8px; }
++#page-apply-mentor .ma-label { font-size: var(--fs-xs); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--gold-light); }
++[data-theme="light"] #page-apply-mentor .ma-label { color: #7A5812; }
++
++#page-apply-mentor .ma-input {
++  display: block; width: 100%; box-sizing: border-box; padding: 13px 16px;
++  border-radius: 16px; font-size: 16px; line-height: 1.5;      /* 16px: no iOS zoom on focus */
++  background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.10);
++  box-shadow: 0 0 0 0 transparent, inset 0 2px 6px rgba(0, 0, 0, 0.35);
++  scroll-margin-block: 96px;
++}
++#page-apply-mentor input.ma-input { min-height: 52px; }
++#page-apply-mentor textarea.ma-input { resize: none; min-height: 128px; max-height: 240px; border-radius: 18px; line-height: 1.55; }
++#page-apply-mentor .ma-input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim), inset 0 2px 6px rgba(0, 0, 0, 0.35); }
++[data-theme="light"] #page-apply-mentor .ma-input { background: rgba(255, 255, 255, 0.92); border-color: rgba(150, 120, 40, 0.25); box-shadow: 0 0 0 0 transparent, inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++[data-theme="light"] #page-apply-mentor .ma-input:focus { border-color: #A87C2A; box-shadow: 0 0 0 3px var(--gold-dim), inset 0 1px 3px rgba(30, 25, 15, 0.08); }
++
++/* category: pill chips (no dropdown to get clipped inside the card) */
++#page-apply-mentor .ma-chips { display: flex; flex-wrap: wrap; gap: 8px; }
++#page-apply-mentor .ma-chip {
++  min-height: 38px; padding: 0 15px; border-radius: 999px; cursor: pointer;
++  font: 700 var(--fs-sm) var(--font-body); color: var(--text2);
++  background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.10);
++  transition: transform .12s ease, background .15s ease, border-color .15s ease, color .15s ease;
++}
++#page-apply-mentor .ma-chip { flex: 1 1 0; min-width: 0; }
++#page-apply-mentor .ma-chip:active { transform: scale(0.96); }
++#page-apply-mentor .ma-chip.active {
++  color: #1a1300; border-color: transparent;
++  background: linear-gradient(180deg, #EBCD72, #C9A84C);
++  box-shadow: 0 6px 16px rgba(201, 168, 76, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.4);
++}
++[data-theme="light"] #page-apply-mentor .ma-chip { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.25); color: #5A5650; }
++[data-theme="light"] #page-apply-mentor .ma-chip.active { color: #1a1300; border-color: transparent; background: linear-gradient(180deg, #EBCD72, #C9A84C); }
++
++#page-apply-mentor .ma-foot { display: flex; justify-content: flex-end; font-size: var(--fs-xs); color: var(--text3); }
++#page-apply-mentor .ma-count { font-variant-numeric: tabular-nums; font-weight: 700; }
++#page-apply-mentor .ma-count.is-near { color: var(--danger); }
++
++#page-apply-mentor .ma-note { display: flex; align-items: flex-start; gap: 8px; margin: 0 4px; font-size: var(--fs-xs); line-height: 1.5; color: var(--text2); }
++#page-apply-mentor .ma-note svg { flex: none; margin-top: 2px; color: var(--gold-light); }
++[data-theme="light"] #page-apply-mentor .ma-note svg { color: #7A5812; }
++
++/* docked action bar: never inside the scroll area, never behind the nav or the keyboard */
++#page-apply-mentor .ma-actions-bar {
++  flex: none; padding: 12px 16px calc(14px + var(--safe-bottom));
++  background: linear-gradient(180deg, transparent, var(--bg) 38%);
++  border-top: 1px solid var(--border-dim);
++}
++body.kb-open #page-apply-mentor .ma-actions-bar { padding-bottom: 12px; }
++#page-apply-mentor .ma-actions { display: flex; gap: 10px; }
++#page-apply-mentor .ma-actions .btn { flex: 1; min-height: 50px; }
++#page-apply-mentor .ma-actions .btn-primary { flex: 1.4; font-weight: 800; box-shadow: 0 10px 26px rgba(201, 168, 76, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.4); }
++#page-apply-mentor .ma-actions .btn:disabled { opacity: .45; pointer-events: none; box-shadow: none; }
++
++/* keyboard open: keep only what is needed to write */
++body.kb-open #page-apply-mentor .ma-hero-icon,
++body.kb-open #page-apply-mentor .ma-hero-text,
++body.kb-open #page-apply-mentor .ma-note { display: none; }
++body.kb-open #page-apply-mentor textarea.ma-input { min-height: 104px; }
++
++@media (prefers-reduced-motion: reduce) { #page-apply-mentor .ma-content { animation: none; } #page-apply-mentor .ma-chip:active { transform: none; } }
++
+ .rating-end-reason { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 12px; padding: 10px 12px; text-align: left;
+   border-radius: 14px; background: var(--bg3); border: 1px solid var(--border-dim); }
+ .rating-end-reason b { font-size: var(--fs-2xs); letter-spacing: .04em; color: var(--gold); }

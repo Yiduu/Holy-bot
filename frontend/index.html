@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
-  <link rel="stylesheet" href="styles.css?v=3.6" />
+  <link rel="stylesheet" href="styles.css?v=3.7" />
   <link rel="stylesheet" href="goals.css?v=1.5" />
   <link rel="stylesheet" href="chat-media.css?v=1.0" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -834,6 +834,69 @@
         <div class="er-actions">
           <button type="button" class="btn btn-outline" onclick="closeEndReason()" data-i18n="btn_cancel">Cancel</button>
           <button type="button" id="endReasonYes" class="btn btn-danger" onclick="confirmEndReason()" disabled data-i18n="btn_end">End Mentorship</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Page: Apply to become a mentor (full page, same family as New support request) ── -->
+    <div id="page-apply-mentor" class="page">
+      <div class="app-header mp-header">
+        <button type="button" class="profile-pill mp-back" onclick="closeApplyModal()" aria-label="Back">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+          <span data-i18n="btn_back">Back</span>
+        </button>
+      </div>
+      <div class="page-content ma-content">
+        <div class="ma-hero">
+          <div class="ma-hero-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z" /></svg>
+          </div>
+          <span class="page-intro-eyebrow" data-i18n="apply_page_eyebrow">Become a mentor</span>
+          <p class="page-intro-text ma-hero-text" data-i18n="apply_page_intro">Answer honestly. Our admin team reviews every application.</p>
+        </div>
+
+        <div class="card ma-form">
+          <div class="ma-field">
+            <span class="ma-label" data-i18n="apply_lbl_sex">Who would you like to mentor?</span>
+            <div class="ma-chips" id="applySexChips" role="radiogroup">
+              <button type="button" class="ma-chip" data-value="M" role="radio" aria-checked="false" onclick="selectApplySex('M')" data-i18n="sex_male">Male</button>
+              <button type="button" class="ma-chip" data-value="F" role="radio" aria-checked="false" onclick="selectApplySex('F')" data-i18n="sex_female">Female</button>
+              <button type="button" class="ma-chip" data-value="prefer_not" role="radio" aria-checked="false" onclick="selectApplySex('prefer_not')" data-i18n="sex_both">Both</button>
+            </div>
+            <input type="hidden" id="applySex" value="" />
+          </div>
+
+          <div class="ma-field">
+            <label class="ma-label" for="applyEdu" data-i18n="apply_lbl_edu">Educational background</label>
+            <input id="applyEdu" class="form-control ma-input" maxlength="200" autocomplete="off" enterkeyhint="next"
+              placeholder="e.g., Bachelor's in Psychology" data-i18n="apply_edu_ph" oninput="onApplyInput()" />
+          </div>
+
+          <div class="ma-field">
+            <label class="ma-label" for="applyAbout" data-i18n="apply_lbl_about">About you</label>
+            <textarea id="applyAbout" class="form-control ma-input" rows="5" maxlength="1000"
+              placeholder="Your experience, qualifications, and why you want to be a mentor…" data-i18n="apply_about_ph"
+              oninput="onApplyInput()"></textarea>
+            <div class="ma-foot"><span id="applyAboutCount" class="ma-count">0/1000</span></div>
+          </div>
+        </div>
+
+        <p class="ma-note">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" /></svg>
+          <span data-i18n="apply_note">Our admin team reviews every application before approving it.</span>
+        </p>
+      </div>
+      <!-- Buttons live outside the scrolling area, so they stay visible above the keyboard -->
+      <div class="ma-actions-bar">
+        <div class="ma-actions">
+          <button type="button" class="btn btn-outline" onclick="closeApplyModal()" data-i18n="btn_cancel">Cancel</button>
+          <button type="button" id="applySubmitBtn" class="btn btn-primary" onclick="submitApplication()" disabled>
+            <span data-i18n="btn_submit_application">Submit Application</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4z" /></svg>
+          </button>
         </div>
       </div>
     </div>
@@ -1740,52 +1803,6 @@
 
   </div><!-- /#app -->
 
-  <!-- ─── Apply to be Mentor Modal ──────────────────────────────── -->
-  <div id="applyModal" class="modal-overlay" onclick="if(event.target===this)closeApplyModal()">
-    <div class="modal-sheet">
-      <div class="modal-handle"></div>
-      <div class="modal-title">Apply to Become a Mentor</div>
-      <p class="text-sm text-dim mb-16">Answer honestly. Admin will review your application.</p>
-
-      <div class="form-group">
-        <label class="form-label" data-i18n="apply_q1">Which type of user you want to give mentorship :</label>
-        <div class="premium-dropdown form-dropdown" data-dropdown id="applySexDropdown">
-          <button type="button" id="applySexDropdownBtn" class="premium-dropdown-btn" data-dropdown-toggle>
-            <span class="dropdown-label" id="applySexSelectedText" data-i18n="Select…">Select…</span>
-            <svg class="dropdown-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-              stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </button>
-          <div id="applySexDropdownMenu" class="premium-dropdown-menu" data-dropdown-menu>
-            <button type="button" class="dropdown-item" data-value="M" onclick="selectApplySex('M', 'Male', event)"
-              data-i18n="sex_male">Male</button>
-            <button type="button" class="dropdown-item" data-value="F" onclick="selectApplySex('F', 'Female', event)"
-              data-i18n="sex_female">Female</button>
-            <button type="button" class="dropdown-item" data-value="prefer_not" onclick="selectApplySex('prefer_not', 'Both', event)"
-              data-i18n="sex_both">Both</button>
-          </div>
-          <input type="hidden" id="applySex" value="" />
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label" data-i18n="apply_q2">What is your educational background? (e.g., Bachelor's in
-          Psychology)</label>
-        <input id="applyEdu" class="form-control" placeholder="Your education background..." />
-      </div>
-      <div class="form-group">
-        <label class="form-label" data-i18n="apply_q3">Tell us about yourself (experience, qualifications, and why you
-          want to be a mentor):</label>
-        <textarea id="applyAbout" class="form-control" rows="4" placeholder="Tell us about yourself..."></textarea>
-      </div>
-
-      <div class="flex gap-8">
-        <button class="btn btn-ghost flex-1" onclick="closeApplyModal()">Cancel</button>
-        <button class="btn btn-primary flex-1" onclick="submitApplication()">Submit Application</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ─── Warning: ending mentorship before becoming a mentor ───── -->
   <div id="endToApplyWarnModal" class="modal-overlay" onclick="if(event.target===this)closeEndToApplyWarning()">
     <div class="modal-sheet hb-confirm">
@@ -2496,8 +2513,8 @@
     </div>
   </div>
 
-  <script src="locales.js?v=2.0"></script>
-  <script src="app.js?v=3.9"></script>
+  <script src="locales.js?v=2.1"></script>
+  <script src="app.js?v=4.0"></script>
   <script src="goals.js?v=1.5"></script>
   <script src="chat-media.js?v=1.0"></script>
   <script src="session-room.js?v=1.4"></script>

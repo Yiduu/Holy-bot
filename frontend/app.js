@@ -1081,6 +1081,7 @@ function handleTelegramBack() {
   if (currentPage === 'end-mentorship') { closeEndReason(); return; }
   if (currentPage === 'chat-history') { chatHistoryBack(); return; }
   if (currentPage === 'new-ticket') { toggleNewTicketModal(false); return; }
+  if (currentPage === 'apply-mentor') { closeApplyModal(); return; }
   if (currentPage === 'goal-new' && window.HolyGoals?.back()) return;
   if (currentPage !== 'dashboard') navigate('dashboard');
 }
@@ -1846,7 +1847,7 @@ function navigate(page) {
   if (currentPage === 'my-mentees' && page !== 'my-mentees') flushMentorNotes();
 
   currentPage = page;
-  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket' || page === 'ticket-detail');   // focused pages: the nav steps aside
+  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket' || page === 'ticket-detail' || page === 'apply-mentor');   // focused pages: the nav steps aside
   updateChatKeyboard();                    // leaving chat clears the docked-composer state
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.nav-item').forEach(n => n.classList.remove('active'));
@@ -4037,7 +4038,7 @@ function switchMentorProfileTab(tab) {
 // Switch pages without navigate()'s data loaders: the mentors list stays as it was.
 function showAppPageQuiet(page, navId) {
   currentPage = page;
-  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket' || page === 'ticket-detail');   // focused pages: the nav steps aside
+  document.body.classList.toggle('er-page', page === 'end-mentorship' || page === 'new-ticket' || page === 'ticket-detail' || page === 'apply-mentor');   // focused pages: the nav steps aside
   $$('.page').forEach(p => p.classList.remove('active'));
   $$('.nav-item').forEach(nv => nv.classList.remove('active'));
   $(`page-${page}`)?.classList.add('active');
@@ -6917,49 +6918,70 @@ async function openApplyModal() {
   showApplyForm();
 }
 
+// "Apply to become a mentor" is a full page now (same family as New support request).
+// The old function names are kept: the profile menu, the end-and-rate flow and the
+// ACTIVE_MENTORSHIP retry still call them.
+let _applyFrom = 'dashboard', _applyBusy = false;
+
 function showApplyForm() {
-  selectApplySex('', t('Select…') || 'Select…');
+  _applyBusy = false;
+  if (currentPage !== 'apply-mentor') _applyFrom = currentPage || 'dashboard';
+  selectApplySex('', true);
   $('applyEdu').value = '';
   $('applyAbout').value = '';
-  $('applyModal').classList.add('open');
+  onApplyInput();
+  showAppPageQuiet('apply-mentor', null);
+  const pc = document.querySelector('#page-apply-mentor .page-content');
+  if (pc) pc.scrollTop = 0;
 }
 
-function selectApplySex(val, text, e) {
-  if (e) {
-    e.preventDefault();
-    e.stopPropagation();
-  }
-  haptic('selection');
+function selectApplySex(val, silent) {
+  if (!silent) haptic('selection');
   const input = $('applySex');
-  if (input) input.value = val;
-  const btnText = $('applySexSelectedText');
-  if (btnText) {
-    const localText = val ? t(val === 'prefer_not' ? 'sex_both' : val === 'M' ? 'sex_male' : 'sex_female') : '';
-    btnText.textContent = localText || text;
-  }
-  const menu = $('applySexDropdownMenu');
-  if (menu) {
-    menu.querySelectorAll('.dropdown-item').forEach(item => {
-      item.classList.toggle('selected', item.dataset.value === val);
-    });
-  }
-  $('applySexDropdown')?.removeAttribute('data-open');
+  if (input) input.value = val || '';
+  document.querySelectorAll('#applySexChips .ma-chip').forEach(chip => {
+    const on = !!val && chip.dataset.value === val;
+    chip.classList.toggle('active', on);
+    chip.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+  onApplyInput();
 }
+
+function onApplyInput() {
+  const about = $('applyAbout')?.value || '';
+  const count = $('applyAboutCount');
+  if (count) {
+    count.textContent = `${about.length}/1000`;
+    count.classList.toggle('is-near', about.length >= 970);
+  }
+  const btn = $('applySubmitBtn');
+  if (btn) btn.disabled = _applyBusy || !$('applySex')?.value || !($('applyEdu')?.value || '').trim() || !about.trim();
+}
+
 function closeApplyModal() {
+  if (_applyBusy) return;
   haptic('light');
-  $('applyModal').classList.remove('open');
+  try { document.activeElement?.blur?.(); } catch { }        // drop the keyboard before leaving
+  if (currentPage === 'apply-mentor') {
+    const back = _applyFrom && _applyFrom !== 'apply-mentor' ? _applyFrom : 'dashboard';
+    showAppPageQuiet(back, `nav-${back}`);
+  }
 }
+
 async function submitApplication() {
-  haptic('medium');
+  if (_applyBusy) return;
   const sex = $('applySex').value;
   const edu = $('applyEdu').value.trim();
   const about = $('applyAbout').value.trim();
 
   if (!sex || !edu || !about) {
     haptic('error');
-    showToast('Please answer all questions', 'error');
+    showToast(t('apply_fill_all') || 'Please answer all questions', 'error');
     return;
   }
+  haptic('medium');
+  _applyBusy = true;
+  onApplyInput();
 
   try {
     await apiFetch('/api/users/apply-mentor', {
@@ -6973,10 +6995,13 @@ async function submitApplication() {
         answer_q3: about
       }
     });
+    _applyBusy = false;
     haptic('success');
-    showToast('Application submitted! 🙏', 'success');
+    showToast(t('apply_submitted') || 'Application submitted! 🙏', 'success');
     closeApplyModal();
   } catch (e) {
+    _applyBusy = false;
+    onApplyInput();
     haptic('error');
     if (e.code === 'ACTIVE_MENTORSHIP') {
       // Matched with a mentor after the form was opened: send them through
