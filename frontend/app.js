@@ -1364,10 +1364,7 @@ function openRatingModal(mentorId, mentorName, assignmentId, endReason, historyA
       <div class="rating-modal-sub">${(t('rate_mentor_sub') || 'Your mentorship with {name} just ended. Tap a star to rate your experience.').replace('{name}', escapeHtml(mentorName))}</div>
       ${endReason ? `<div class="rating-end-reason"><b>${escapeHtml(t('end_reason_from_mentor') || 'Why it ended')}</b><span>${escapeHtml(endReason)}</span></div>` : ''}
       <div class="big-stars" id="ratingBigStars"></div>
-      ${assignmentId ? `<div class="rating-privacy">
-        <span class="ps-row-text"><span class="ps-row-title">${escapeHtml(t('history_share_title'))}</span><span class="ps-row-sub">${escapeHtml(t('history_share_sub'))}</span></span>
-        <span class="ps-switch"><input class="ps-switch-input" id="ratingKeepHistory" type="checkbox" /><label class="ps-switch-track" for="ratingKeepHistory" aria-label="${escapeHtml(t('history_share_title'))}"><span class="ps-switch-knob"></span></label></span>
-      </div>` : ''}
+      ${assignmentId ? historyShareRowHTML('ratingKeepHistory') : ''}
       <div class="card-actions" style="display:flex;gap:8px;margin-top:4px;">
         <button class="btn btn-outline btn-sm flex-1" id="ratingSkipBtn">${t('btn_skip') || 'Skip'}</button>
         <button class="btn btn-sm flex-1" id="ratingSubmitBtn" style="background:var(--gold);color:#1a1408;border-color:var(--gold);opacity:0.5;pointer-events:none;">${t('btn_submit') || 'Submit rating'}</button>
@@ -4087,6 +4084,20 @@ function closeMentorSheet() {
   $('mentorSheet')?.classList.remove('open');
 }
 
+// The mentee's "let my mentor keep a copy of our chat" choice: one compact, tappable row.
+// Used in the end-mentorship sheet and the rating pop-up.
+function historyShareRowHTML(id) {
+  const title = escapeHtml(t('history_share_title'));
+  return `
+    <label class="keep-copy" for="${id}">
+      <span class="keep-copy-ico" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+      </span>
+      <span class="keep-copy-text"><span class="keep-copy-title">${title}</span><span class="keep-copy-sub">${escapeHtml(t('history_share_sub'))}</span></span>
+      <span class="ps-switch keep-copy-switch"><input class="ps-switch-input" id="${id}" type="checkbox" checked /><span class="ps-switch-track" aria-hidden="true"><span class="ps-switch-knob"></span></span></span>
+    </label>`;
+}
+
 function confirmEndMentorship() {
   const body = $('mentorSheetBody');
   if (!body || !activeMentorData) return;
@@ -4098,10 +4109,7 @@ function confirmEndMentorship() {
       </div>
       <div class="modal-title">${escapeHtml(t('end_mentorship_title', { name: mentorNameOf(activeMentorData) }))}</div>
       <p class="hb-text">${t('end_mentorship_body')}</p>
-      <div class="hb-privacy">
-        <span class="ps-row-text"><span class="ps-row-title">${escapeHtml(t('history_share_title'))}</span><span class="ps-row-sub">${escapeHtml(t('history_share_sub'))}</span></span>
-        <span class="ps-switch"><input class="ps-switch-input" id="endKeepHistory" type="checkbox" checked /><label class="ps-switch-track" for="endKeepHistory" aria-label="${escapeHtml(t('history_share_title'))}"><span class="ps-switch-knob"></span></label></span>
-      </div>
+      ${historyShareRowHTML('endKeepHistory')}
       <div class="hb-actions">
         <button class="btn btn-outline" onclick="closeMentorSheet()">${t('btn_keep_mentor')}</button>
         <button class="btn btn-danger" onclick="closeMentorSheet();endMentorship(null, true)">${t('btn_end')}</button>

@@ -1,0 +1,110 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 68235b7..ea8f30a 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1364,10 +1364,7 @@ function openRatingModal(mentorId, mentorName, assignmentId, endReason, historyA
+       <div class="rating-modal-sub">${(t('rate_mentor_sub') || 'Your mentorship with {name} just ended. Tap a star to rate your experience.').replace('{name}', escapeHtml(mentorName))}</div>
+       ${endReason ? `<div class="rating-end-reason"><b>${escapeHtml(t('end_reason_from_mentor') || 'Why it ended')}</b><span>${escapeHtml(endReason)}</span></div>` : ''}
+       <div class="big-stars" id="ratingBigStars"></div>
+-      ${assignmentId ? `<div class="rating-privacy">
+-        <span class="ps-row-text"><span class="ps-row-title">${escapeHtml(t('history_share_title'))}</span><span class="ps-row-sub">${escapeHtml(t('history_share_sub'))}</span></span>
+-        <span class="ps-switch"><input class="ps-switch-input" id="ratingKeepHistory" type="checkbox" /><label class="ps-switch-track" for="ratingKeepHistory" aria-label="${escapeHtml(t('history_share_title'))}"><span class="ps-switch-knob"></span></label></span>
+-      </div>` : ''}
++      ${assignmentId ? historyShareRowHTML('ratingKeepHistory') : ''}
+       <div class="card-actions" style="display:flex;gap:8px;margin-top:4px;">
+         <button class="btn btn-outline btn-sm flex-1" id="ratingSkipBtn">${t('btn_skip') || 'Skip'}</button>
+         <button class="btn btn-sm flex-1" id="ratingSubmitBtn" style="background:var(--gold);color:#1a1408;border-color:var(--gold);opacity:0.5;pointer-events:none;">${t('btn_submit') || 'Submit rating'}</button>
+@@ -4087,6 +4084,20 @@ function closeMentorSheet() {
+   $('mentorSheet')?.classList.remove('open');
+ }
+ 
++// The mentee's "let my mentor keep a copy of our chat" choice: one compact, tappable row.
++// Used in the end-mentorship sheet and the rating pop-up.
++function historyShareRowHTML(id) {
++  const title = escapeHtml(t('history_share_title'));
++  return `
++    <label class="keep-copy" for="${id}">
++      <span class="keep-copy-ico" aria-hidden="true">
++        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
++      </span>
++      <span class="keep-copy-text"><span class="keep-copy-title">${title}</span><span class="keep-copy-sub">${escapeHtml(t('history_share_sub'))}</span></span>
++      <span class="ps-switch keep-copy-switch"><input class="ps-switch-input" id="${id}" type="checkbox" checked /><span class="ps-switch-track" aria-hidden="true"><span class="ps-switch-knob"></span></span></span>
++    </label>`;
++}
++
+ function confirmEndMentorship() {
+   const body = $('mentorSheetBody');
+   if (!body || !activeMentorData) return;
+@@ -4098,10 +4109,7 @@ function confirmEndMentorship() {
+       </div>
+       <div class="modal-title">${escapeHtml(t('end_mentorship_title', { name: mentorNameOf(activeMentorData) }))}</div>
+       <p class="hb-text">${t('end_mentorship_body')}</p>
+-      <div class="hb-privacy">
+-        <span class="ps-row-text"><span class="ps-row-title">${escapeHtml(t('history_share_title'))}</span><span class="ps-row-sub">${escapeHtml(t('history_share_sub'))}</span></span>
+-        <span class="ps-switch"><input class="ps-switch-input" id="endKeepHistory" type="checkbox" checked /><label class="ps-switch-track" for="endKeepHistory" aria-label="${escapeHtml(t('history_share_title'))}"><span class="ps-switch-knob"></span></label></span>
+-      </div>
++      ${historyShareRowHTML('endKeepHistory')}
+       <div class="hb-actions">
+         <button class="btn btn-outline" onclick="closeMentorSheet()">${t('btn_keep_mentor')}</button>
+         <button class="btn btn-danger" onclick="closeMentorSheet();endMentorship(null, true)">${t('btn_end')}</button>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 3bee1b9..b16e505 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -588,8 +588,8 @@ const I18N = {
+     "chat_history_load_earlier": "Load earlier messages",
+     "chat_history_confidential": "Read-only copy. Please keep this conversation confidential.",
+     "chat_history_no_messages": "No messages in this chat.",
+-    "history_share_title": "Let my mentor keep a copy of our chat",
+-    "history_share_sub": "Read-only, and only your mentor can see it. Turn off to keep it private.",
++    "history_share_title": "Let my mentor keep a copy",
++    "history_share_sub": "Read-only. Turn off to keep our chat private.",
+     "history_share_failed": "Couldn't save your choice. Try again.",
+     "scroll_for_more": "Scroll for more",
+     "mentor_profile_modal_subtitle": "Configure your mentorship details, availability, and focus areas.",
+@@ -1436,8 +1436,8 @@ const I18N = {
+     "chat_history_load_earlier": "ቀደምት መልዕክቶችን ጫን",
+     "chat_history_confidential": "ለማንበብ ብቻ የተቀመጠ ቅጂ። እባክዎ ይህን ውይይት በሚስጥር ያቆዩት።",
+     "chat_history_no_messages": "በዚህ ውይይት ውስጥ መልዕክት የለም።",
+-    "history_share_title": "አማካሪዬ የውይይታችንን ቅጂ እንዲያስቀምጥ ፍቀድ",
+-    "history_share_sub": "ለማንበብ ብቻ ነው፣ አማካሪዎ ብቻ ያየዋል። በሚስጥር ለማቆየት ያጥፉት።",
++    "history_share_title": "አማካሪዬ ቅጂ እንዲያስቀምጥ ፍቀድ",
++    "history_share_sub": "ለማንበብ ብቻ። ውይይታችንን በሚስጥር ለማቆየት ያጥፉት።",
+     "history_share_failed": "ምርጫዎ አልተቀመጠም። እባክዎ እንደገና ይሞክሩ።",
+     "scroll_for_more": "ለተጨማሪ",
+     "mentor_profile_modal_subtitle": "የአማካሪነት ዝርዝሮችዎን፣ ዝግጁነትዎን እና ርዕሶቻችሁን አስተካክሉ።",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 5a33f14..581f66b 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -14461,9 +14461,25 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
+ .ch-more { align-self: center; }
+ .ch-thread { display: flex; flex-direction: column; gap: 4px; }
+ 
+-.hb-privacy, .rating-privacy {
+-  display: flex; align-items: center; gap: 14px; margin: 6px 0 2px; padding: 12px 14px; text-align: left;
+-  border-radius: 20px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);
++/* The mentee's "let my mentor keep a copy" choice: one compact, tappable row */
++.keep-copy {
++  display: flex; align-items: center; gap: 12px; margin: 8px 0 2px; padding: 10px 12px; text-align: left; cursor: pointer;
++  border-radius: 18px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);
++  transition: background 0.2s ease, border-color 0.2s ease;
+ }
+-.hb-privacy .ps-row-text, .rating-privacy .ps-row-text { flex: 1; min-width: 0; }
+-[data-theme="light"] .hb-privacy, [data-theme="light"] .rating-privacy { background: #fffaf0; border-color: rgba(150, 120, 40, 0.28); }
++.keep-copy:has(input:checked) { background: linear-gradient(160deg, rgba(201, 168, 76, 0.1), rgba(201, 168, 76, 0.03)); border-color: rgba(201, 168, 76, 0.35); }
++.keep-copy:has(input:focus-visible) { outline: 2px solid var(--gold-light); outline-offset: 2px; }
++.keep-copy-ico {
++  flex: none; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
++  background: rgba(255, 255, 255, 0.06); color: var(--text3); transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
++}
++.keep-copy:has(input:checked) .keep-copy-ico { background: rgba(201, 168, 76, 0.18); color: var(--gold-light); box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.3); }
++.keep-copy-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
++.keep-copy-title { font-size: var(--fs-sm); font-weight: 700; line-height: 1.3; color: var(--text); }
++.keep-copy-sub { font-size: var(--fs-xs); line-height: 1.35; color: var(--text2); }
++.keep-copy-switch .ps-switch-track { width: 42px; height: 24px; }
++.keep-copy-switch .ps-switch-knob { width: 18px; height: 18px; }
++.keep-copy-switch .ps-switch-input:checked + .ps-switch-track .ps-switch-knob { transform: translateX(18px); }
++[data-theme="light"] .keep-copy { background: #fffaf0; border-color: rgba(150, 120, 40, 0.28); }
++[data-theme="light"] .keep-copy:has(input:checked) .keep-copy-ico { color: #7A5812; }
++@media (prefers-reduced-motion: reduce) { .keep-copy, .keep-copy-ico { transition: none; } }

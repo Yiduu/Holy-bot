@@ -14461,9 +14461,25 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
 .ch-more { align-self: center; }
 .ch-thread { display: flex; flex-direction: column; gap: 4px; }
 
-.hb-privacy, .rating-privacy {
-  display: flex; align-items: center; gap: 14px; margin: 6px 0 2px; padding: 12px 14px; text-align: left;
-  border-radius: 20px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);
+/* The mentee's "let my mentor keep a copy" choice: one compact, tappable row */
+.keep-copy {
+  display: flex; align-items: center; gap: 12px; margin: 8px 0 2px; padding: 10px 12px; text-align: left; cursor: pointer;
+  border-radius: 18px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
-.hb-privacy .ps-row-text, .rating-privacy .ps-row-text { flex: 1; min-width: 0; }
-[data-theme="light"] .hb-privacy, [data-theme="light"] .rating-privacy { background: #fffaf0; border-color: rgba(150, 120, 40, 0.28); }
+.keep-copy:has(input:checked) { background: linear-gradient(160deg, rgba(201, 168, 76, 0.1), rgba(201, 168, 76, 0.03)); border-color: rgba(201, 168, 76, 0.35); }
+.keep-copy:has(input:focus-visible) { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+.keep-copy-ico {
+  flex: none; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.06); color: var(--text3); transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.keep-copy:has(input:checked) .keep-copy-ico { background: rgba(201, 168, 76, 0.18); color: var(--gold-light); box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.3); }
+.keep-copy-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.keep-copy-title { font-size: var(--fs-sm); font-weight: 700; line-height: 1.3; color: var(--text); }
+.keep-copy-sub { font-size: var(--fs-xs); line-height: 1.35; color: var(--text2); }
+.keep-copy-switch .ps-switch-track { width: 42px; height: 24px; }
+.keep-copy-switch .ps-switch-knob { width: 18px; height: 18px; }
+.keep-copy-switch .ps-switch-input:checked + .ps-switch-track .ps-switch-knob { transform: translateX(18px); }
+[data-theme="light"] .keep-copy { background: #fffaf0; border-color: rgba(150, 120, 40, 0.28); }
+[data-theme="light"] .keep-copy:has(input:checked) .keep-copy-ico { color: #7A5812; }
+@media (prefers-reduced-motion: reduce) { .keep-copy, .keep-copy-ico { transition: none; } }
