@@ -1079,6 +1079,7 @@ function handleTelegramBack() {
   if (document.body.classList.contains('in-call')) return;
   if (currentPage === 'mentor-profile') { closeMentorProfile(); return; }
   if (currentPage === 'end-mentorship') { closeEndReason(); return; }
+  if (currentPage === 'chat-history') { chatHistoryBack(); return; }
   if (currentPage === 'new-ticket') { toggleNewTicketModal(false); return; }
   if (currentPage === 'goal-new' && window.HolyGoals?.back()) return;
   if (currentPage !== 'dashboard') navigate('dashboard');
@@ -1318,7 +1319,7 @@ async function checkPendingRating() {
   try {
     const pending = await apiFetch('/api/users/pending-rating');
     if (pending && pending.mentor_id) {
-      openRatingModal(pending.mentor_id, pending.display_name, pending.assignment_id, pending.end_reason);
+      openRatingModal(pending.mentor_id, pending.display_name, pending.assignment_id, pending.end_reason, pending.history_allowed !== false);
     }
   } catch (e) { /* silent — non-critical */ }
 }
@@ -1343,7 +1344,7 @@ function renderStars(rating, count, size = 11) {
   return `<div class="rating-row"><span class="stars">${svgs}</span><span class="rating-num">${r.toFixed(1)}</span><span class="rating-count">(${count})</span></div>`;
 }
 
-function openRatingModal(mentorId, mentorName, assignmentId, endReason) {
+function openRatingModal(mentorId, mentorName, assignmentId, endReason, historyAllowed = true) {
   ratingModalOpen = true;
   let selected = 0;
   const overlay = document.createElement('div');
@@ -1363,6 +1364,10 @@ function openRatingModal(mentorId, mentorName, assignmentId, endReason) {
       <div class="rating-modal-sub">${(t('rate_mentor_sub') || 'Your mentorship with {name} just ended. Tap a star to rate your experience.').replace('{name}', escapeHtml(mentorName))}</div>
       ${endReason ? `<div class="rating-end-reason"><b>${escapeHtml(t('end_reason_from_mentor') || 'Why it ended')}</b><span>${escapeHtml(endReason)}</span></div>` : ''}
       <div class="big-stars" id="ratingBigStars"></div>
+      ${assignmentId ? `<div class="rating-privacy">
+        <span class="ps-row-text"><span class="ps-row-title">${escapeHtml(t('history_share_title'))}</span><span class="ps-row-sub">${escapeHtml(t('history_share_sub'))}</span></span>
+        <span class="ps-switch"><input class="ps-switch-input" id="ratingKeepHistory" type="checkbox" /><label class="ps-switch-track" for="ratingKeepHistory" aria-label="${escapeHtml(t('history_share_title'))}"><span class="ps-switch-knob"></span></label></span>
+      </div>` : ''}
       <div class="card-actions" style="display:flex;gap:8px;margin-top:4px;">
         <button class="btn btn-outline btn-sm flex-1" id="ratingSkipBtn">${t('btn_skip') || 'Skip'}</button>
         <button class="btn btn-sm flex-1" id="ratingSubmitBtn" style="background:var(--gold);color:#1a1408;border-color:var(--gold);opacity:0.5;pointer-events:none;">${t('btn_submit') || 'Submit rating'}</button>
@@ -1380,6 +1385,21 @@ function openRatingModal(mentorId, mentorName, assignmentId, endReason) {
   // never persisted — the popup would then reappear next load. Passing
   // the value directly through a closure sidesteps string-escaping
   // entirely, so this works for UUIDs, numbers, or anything else.
+  const keepHistory = overlay.querySelector('#ratingKeepHistory');
+  if (keepHistory) {
+    keepHistory.checked = historyAllowed !== false;
+    keepHistory.addEventListener('change', async () => {
+      const want = keepHistory.checked;
+      try {
+        await apiFetch(`/api/users/history-consent/${encodeURIComponent(assignmentId)}`, { method: 'PATCH', body: { allowed: want } });
+        haptic('light');
+      } catch (e) {
+        keepHistory.checked = !want;
+        haptic('error');
+        showToast(t('history_share_failed'), 'error');
+      }
+    });
+  }
   overlay.querySelector('#ratingSkipBtn').addEventListener('click', () => skipRating(assignmentId));
   overlay.querySelector('#ratingSubmitBtn').addEventListener('click', () => submitMentorRating(mentorId));
 
@@ -4078,6 +4098,10 @@ function confirmEndMentorship() {
       </div>
       <div class="modal-title">${escapeHtml(t('end_mentorship_title', { name: mentorNameOf(activeMentorData) }))}</div>
       <p class="hb-text">${t('end_mentorship_body')}</p>
+      <div class="hb-privacy">
+        <span class="ps-row-text"><span class="ps-row-title">${escapeHtml(t('history_share_title'))}</span><span class="ps-row-sub">${escapeHtml(t('history_share_sub'))}</span></span>
+        <span class="ps-switch"><input class="ps-switch-input" id="endKeepHistory" type="checkbox" checked /><label class="ps-switch-track" for="endKeepHistory" aria-label="${escapeHtml(t('history_share_title'))}"><span class="ps-switch-knob"></span></label></span>
+      </div>
       <div class="hb-actions">
         <button class="btn btn-outline" onclick="closeMentorSheet()">${t('btn_keep_mentor')}</button>
         <button class="btn btn-danger" onclick="closeMentorSheet();endMentorship(null, true)">${t('btn_end')}</button>
@@ -6284,6 +6308,7 @@ async function loadSettings() {
 
     if (currentUser?.role === 'mentor') {
       $('settingsNavMentor')?.classList.remove('hidden');
+      $('settingsNavChatHistory')?.classList.remove('hidden');
       if ($('settingBio')) $('settingBio').value = s.bio || '';
       renderBioDisplay(s.bio || '');
       if ($('settingSpecialization')) $('settingSpecialization').value = s.specialization || '';
@@ -8800,21 +8825,182 @@ async function endMentorship(assignId, skipConfirm = false) {
     // Mentee Flow (from Mentors Page)
     if (!skipConfirm && !confirm(t('confirm_end_mentorship'))) return;
     haptic('medium');
+    // The mentee's "let my mentor keep a copy" choice, only read when it came from the confirm sheet
+    const keepEl = skipConfirm ? $('endKeepHistory') : null;
     try {
-      const result = await apiFetch('/api/users/end-mentorship', { method: 'POST' });
+      const result = await apiFetch('/api/users/end-mentorship', { method: 'POST', body: keepEl ? { history_allowed: !!keepEl.checked } : undefined });
       haptic('success');
       showToast(t('mentorship_ended'), 'success');
       // Refresh the badge — messages from this ended pairing no longer count.
       updateMessageBadge();
       navigate('dashboard');
       if (result?.mentor?.telegram_id) {
-        openRatingModal(result.mentor.telegram_id, result.mentor.display_name, result.assignment_id);
+        openRatingModal(result.mentor.telegram_id, result.mentor.display_name, result.assignment_id, undefined, result.history_allowed !== false);
       }
     } catch (e) {
       haptic('error');
       showToast(e.message, 'error');
     }
   }
+}
+
+// ─── Mentor: Chat History (read-only copies of ended mentorships) ─────────
+// Mentees first, then each of their chats (one per mentorship), then the chat.
+// The server only returns chats the mentee allows (history_allowed).
+let _chData = [], _chView = 'mentees', _chMentee = null, _chChat = null, _chMsgs = [], _chHasMore = false, _chBusy = false;
+const CH_CHEVRON = '<svg class="ch-chev" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
+const CH_ICON_CHAT = '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
+
+function chName(u) { return u?.user_settings?.display_name || u?.anonymous_id || t('mentee_label'); }
+function chDate(iso) {
+  try { return new Date(iso).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric', timeZone: getUserTimezone() }); }
+  catch { return new Date(iso).toLocaleDateString(); }
+}
+function chCount(n, one, many) { return n === 1 ? t(one) : t(many, { count: n }); }
+function chEndedBy(by) { return t(by === 'mentor' ? 'chat_history_ended_by_you' : by === 'mentee' ? 'chat_history_ended_by_mentee' : 'chat_history_ended_other'); }
+function chPageContent() { return document.querySelector('#page-chat-history .page-content'); }
+
+async function openChatHistory() {
+  haptic('light');
+  _chView = 'mentees'; _chMentee = null; _chChat = null; _chMsgs = [];
+  showAppPageQuiet('chat-history', 'nav-settings');
+  const pc = chPageContent(); if (pc) pc.scrollTop = 0;
+  const body = $('chHistoryBody');
+  if (body) body.innerHTML = '<div class="loading-spinner" style="margin:28px auto"></div>';
+  try { _chData = await apiFetch('/api/mentors/chat-history'); }
+  catch (e) { _chData = []; showToast(e.message, 'error'); }
+  renderChatHistory();
+}
+
+function chatHistoryBack() {
+  haptic('light');
+  if (_chView === 'chat') { _chView = 'chats'; _chChat = null; renderChatHistory(); return; }
+  if (_chView === 'chats') { _chView = 'mentees'; _chMentee = null; renderChatHistory(); return; }
+  showAppPageQuiet('settings', 'nav-settings');
+}
+
+function openChatHistoryMentee(menteeId) {
+  const g = _chData.find(x => String(x.mentee?.telegram_id) === String(menteeId));
+  if (!g) return;
+  haptic('selection');
+  _chMentee = g; _chView = 'chats';
+  renderChatHistory();
+  const pc = chPageContent(); if (pc) pc.scrollTop = 0;
+}
+
+async function openChatHistoryChat(assignmentId) {
+  const chat = _chMentee?.chats.find(c => c.id === assignmentId);
+  if (!chat || _chBusy) return;
+  haptic('selection');
+  _chBusy = true; _chChat = chat; _chView = 'chat'; _chMsgs = []; _chHasMore = false;
+  renderChatHistory();
+  const body = $('chHistoryBody');
+  if (body) body.innerHTML = '<div class="loading-spinner" style="margin:28px auto"></div>';
+  try {
+    const res = await apiFetch(`/api/mentors/chat-history/${encodeURIComponent(assignmentId)}`);
+    _chMsgs = res.messages || []; _chHasMore = !!res.has_more;
+    _chBusy = false;
+    renderChatHistory();
+    const pc = chPageContent(); if (pc) pc.scrollTop = pc.scrollHeight;   // start at the latest message, like Chat
+  } catch (e) {
+    _chBusy = false;
+    showToast(e.message, 'error');
+    _chView = 'chats'; _chChat = null;
+    renderChatHistory();
+  }
+}
+
+async function chLoadEarlier() {
+  if (_chBusy || !_chChat || !_chMsgs.length) return;
+  _chBusy = true;
+  const pc = chPageContent();
+  const prevH = pc ? pc.scrollHeight : 0, prevTop = pc ? pc.scrollTop : 0;
+  try {
+    const res = await apiFetch(`/api/mentors/chat-history/${encodeURIComponent(_chChat.id)}?before=${encodeURIComponent(_chMsgs[0].created_at)}`);
+    _chMsgs = [...(res.messages || []), ..._chMsgs]; _chHasMore = !!res.has_more;
+    _chBusy = false;
+    renderChatHistory();
+    if (pc) pc.scrollTop = prevTop + (pc.scrollHeight - prevH);          // keep what you were reading in place
+  } catch (e) { _chBusy = false; showToast(e.message, 'error'); }
+}
+
+function renderArchiveThread(msgs) {
+  let html = '', last = '';
+  for (const msg of msgs) {
+    const header = getDateGroupHeader(msg.created_at);
+    if (header !== last) { html += `<div class="chat-date-divider"><span>${escapeHtml(header)}</span></div>`; last = header; }
+    const sent = msg.from_id === currentUser?.telegram_id;
+    html += `
+      <div class="message-thread ${sent ? 'thread-sent' : 'thread-received'}">
+        <div class="message-bubble ${sent ? 'sent' : 'received'}${msg.file_type ? ' has-media' : ''}">
+          <div class="message-text">${msg.file_type ? renderFileAttachment(msg) : ''}${msg.content ? `<div class="${msg.file_type ? 'message-caption' : ''}">${escapeHtml(msg.content)}</div>` : ''}</div>
+          <div class="message-footer"><span class="message-time">${formatTime(msg.created_at)}</span></div>
+        </div>
+      </div>`;
+  }
+  return html;
+}
+
+function renderChatHistory() {
+  const title = $('chHistoryTitle'), sub = $('chHistorySub'), body = $('chHistoryBody');
+  if (!title || !sub || !body) return;
+
+  if (_chView === 'mentees') {
+    title.textContent = t('chat_history_title');
+    sub.textContent = t('chat_history_sub');
+    if (!_chData.length) {
+      body.innerHTML = `
+        <div class="ch-empty">
+          <span class="ps-tile ch-empty-icon">${CH_ICON_CHAT}</span>
+          <div class="ch-empty-title">${escapeHtml(t('chat_history_empty_title'))}</div>
+          <p>${escapeHtml(t('chat_history_empty'))}</p>
+        </div>`;
+      return;
+    }
+    body.innerHTML = _chData.map(g => {
+      const u = g.mentee || {};
+      const name = chName(u);
+      const msgs = g.chats.reduce((n, c) => n + c.message_count, 0);
+      return `
+        <button type="button" class="ps-card ps-row ch-row" onclick="openChatHistoryMentee('${u.telegram_id}')">
+          ${renderAvatar(u, (name || '?').charAt(0).toUpperCase())}
+          <span class="ps-row-text">
+            <span class="ps-row-title">${escapeHtml(name)}</span>
+            <span class="ps-row-sub">${escapeHtml(chCount(g.chats.length, 'chat_history_one_chat', 'chat_history_n_chats'))} · ${escapeHtml(chCount(msgs, 'chat_history_one_message', 'chat_history_n_messages'))}</span>
+          </span>
+          ${CH_CHEVRON}
+        </button>`;
+    }).join('');
+    return;
+  }
+
+  const name = chName(_chMentee?.mentee);
+  if (_chView === 'chats') {
+    title.textContent = name;
+    sub.textContent = t('chat_history_last', { date: chDate(_chMentee.last_ended_at) });
+    body.innerHTML = _chMentee.chats.map(c => `
+      <button type="button" class="ps-card ps-row ch-row" onclick="openChatHistoryChat('${c.id}')">
+        <span class="ps-tile">${CH_ICON_CHAT}</span>
+        <span class="ps-row-text">
+          <span class="ps-row-title">${escapeHtml(chDate(c.assigned_at))} – ${escapeHtml(chDate(c.ended_at))}</span>
+          <span class="ps-row-sub">${escapeHtml(chCount(c.message_count, 'chat_history_one_message', 'chat_history_n_messages'))} · ${escapeHtml(chEndedBy(c.ended_by))}</span>
+        </span>
+        ${CH_CHEVRON}
+      </button>`).join('');
+    return;
+  }
+
+  // one chat, read-only
+  title.textContent = name;
+  sub.textContent = `${chDate(_chChat.assigned_at)} – ${chDate(_chChat.ended_at)}`;
+  body.innerHTML = `
+    <p class="ch-note">
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+      <span>${escapeHtml(t('chat_history_confidential'))}</span>
+    </p>
+    ${_chHasMore ? `<button type="button" class="btn btn-outline btn-sm ch-more" onclick="chLoadEarlier()">${escapeHtml(t('chat_history_load_earlier'))}</button>` : ''}
+    <div class="ch-thread">${_chMsgs.length ? renderArchiveThread(_chMsgs) : `<p class="ch-note">${escapeHtml(t('chat_history_no_messages'))}</p>`}</div>`;
+  if (typeof hydratePhotoMessages === 'function') hydratePhotoMessages(body);
 }
 
 // ─── Topics ───────────────────────────────────────────────────

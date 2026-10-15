@@ -352,8 +352,12 @@ module.exports = function userRoutes(supabase, requireAuth) {
         .eq('telegram_id', assignment.mentor_id)
         .single();
 
+      // The mentee's "let my mentor keep a copy of our chat" choice. Left out
+      // by older clients: then the default (allowed) stands.
+      const historyAllowed = typeof req.body?.history_allowed === 'boolean' ? req.body.history_allowed : null;
+
       // Update assignment (also records that the mentee ended it)
-      const updateErr = await closeAssignment(supabase, assignment.id, { endedBy: 'mentee' });
+      const updateErr = await closeAssignment(supabase, assignment.id, { endedBy: 'mentee', historyAllowed });
 
       if (updateErr) {
         return res.status(500).json({ error: updateErr.message });
@@ -366,6 +370,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
       res.json({
         success: true,
         assignment_id: assignment.id,
+        history_allowed: historyAllowed !== false,
         mentor: {
           telegram_id: assignment.mentor_id,
           display_name: mentor?.user_settings?.display_name || mentor?.anonymous_id || 'Your mentor'
@@ -449,6 +454,23 @@ module.exports = function userRoutes(supabase, requireAuth) {
     }
   });
 
+  // PATCH /api/users/history-consent/:assignment_id  { allowed: boolean }
+  // The mentee decides whether their (former) mentor may keep a read-only copy
+  // of the chat. Only the mentee of that mentorship can change it.
+  router.patch('/history-consent/:assignment_id', requireAuth, async (req, res) => {
+    const { id: telegram_id } = req.telegramUser;
+    if (typeof req.body?.allowed !== 'boolean') return res.status(400).json({ error: 'allowed must be true or false' });
+    const { data, error } = await supabase
+      .from('mentorship_assignments')
+      .update({ history_allowed: req.body.allowed })
+      .eq('id', req.params.assignment_id)
+      .eq('user_id', telegram_id)
+      .select('id');
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data || !data.length) return res.status(404).json({ error: 'Mentorship not found' });
+    res.json({ success: true, allowed: req.body.allowed });
+  });
+
   // GET /api/users/pending-rating – checks whether the caller has a recently
   // ended mentorship (ended by the mentor) that they haven't rated yet, so the
   // mini app can pop the rating modal open as soon as they next load it.
@@ -487,12 +509,20 @@ module.exports = function userRoutes(supabase, requireAuth) {
       if (why?.ended_by === 'mentor' && why.end_reason) end_reason = why.end_reason;
     } catch (_) { /* optional */ }
 
+    // The mentee's current "let my mentor keep a copy" choice (default: allowed).
+    let history_allowed = true;
+    try {
+      const { data: h } = await supabase.from('mentorship_assignments').select('history_allowed').eq('id', assignment.id).maybeSingle();
+      if (h && h.history_allowed === false) history_allowed = false;
+    } catch (_) { /* optional */ }
+
     const m = assignment.mentor;
     res.json({
       assignment_id: assignment.id,
       mentor_id: assignment.mentor_id,
       display_name: m?.user_settings?.display_name || m?.anonymous_id || 'Your mentor',
-      end_reason
+      end_reason,
+      history_allowed
     });
   });
 

@@ -96,7 +96,7 @@ function emitToUser(telegram_id, event, payload) {
  * @param {{reason?: string, endedBy?: 'mentee'|'mentor'|'admin'|'system'}} [opts]
  * @returns {Promise<object|null>} the Supabase error, or null on success
  */
-async function closeAssignment(supabase, assignmentId, { reason = null, endedBy = null } = {}) {
+async function closeAssignment(supabase, assignmentId, { reason = null, endedBy = null, historyAllowed = null } = {}) {
   // Remember whose spot this frees so the waitlist can be told afterwards.
   let mentorId = null;
   try {
@@ -104,10 +104,17 @@ async function closeAssignment(supabase, assignmentId, { reason = null, endedBy 
     mentorId = data?.mentor_id ?? null;
   } catch (_) { /* best effort */ }
   const endedAt = new Date().toISOString();
+  // history_allowed = the mentee's "let my mentor keep a copy of our chat" choice
+  // (only sent when the caller decided). If that column isn't migrated yet, retry
+  // without it so ending a mentorship never fails because of it.
+  const base = { is_active: false, ended_at: endedAt, end_reason: reason, ended_by: endedBy };
   let { error } = await supabase
     .from('mentorship_assignments')
-    .update({ is_active: false, ended_at: endedAt, end_reason: reason, ended_by: endedBy })
+    .update(typeof historyAllowed === 'boolean' ? { ...base, history_allowed: historyAllowed } : base)
     .eq('id', assignmentId);
+  if (error && /history_allowed/i.test(error.message || '')) {
+    ({ error } = await supabase.from('mentorship_assignments').update(base).eq('id', assignmentId));
+  }
   if (error && /end_reason|ended_by/i.test(error.message || '')) {
     ({ error } = await supabase
       .from('mentorship_assignments')

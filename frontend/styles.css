@@ -14441,3 +14441,29 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
 .sch-sheet .ps-card { padding: 14px 16px; }
 .sch-people { max-height: none; overflow: visible; gap: 6px; padding: 0; }
 .sch-person { min-height: 52px; padding: 8px 12px; }
+
+
+/* ─── Chat History (mentor) + the mentee's "keep a copy" choice ─────────── */
+#page-chat-history .ch-content { display: flex; flex-direction: column; gap: 12px; }
+.ch-head .ps-title { margin: 0; overflow-wrap: anywhere; }
+.ch-sub { margin: 6px 0 2px; }
+.ch-body { display: flex; flex-direction: column; gap: 12px; }
+.ch-row { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; gap: 14px; transition: transform 0.15s ease, border-color 0.2s ease; }
+.ch-row:active { transform: scale(0.985); }
+.ch-row:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+.ch-row .ps-row-title { overflow-wrap: anywhere; }
+.ch-chev { flex: none; color: var(--text3); }
+.ch-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 18px; text-align: center; color: var(--text2); }
+.ch-empty-title { font-size: var(--fs-base); font-weight: 700; color: var(--text); }
+.ch-empty p { margin: 0; max-width: 30ch; font-size: var(--fs-sm); line-height: 1.5; }
+.ch-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 2px 4px; font-size: var(--fs-xs); line-height: 1.5; color: var(--text3); }
+.ch-note svg { flex: none; margin-top: 2px; color: var(--gold-light); }
+.ch-more { align-self: center; }
+.ch-thread { display: flex; flex-direction: column; gap: 4px; }
+
+.hb-privacy, .rating-privacy {
+  display: flex; align-items: center; gap: 14px; margin: 6px 0 2px; padding: 12px 14px; text-align: left;
+  border-radius: 20px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.hb-privacy .ps-row-text, .rating-privacy .ps-row-text { flex: 1; min-width: 0; }
+[data-theme="light"] .hb-privacy, [data-theme="light"] .rating-privacy { background: #fffaf0; border-color: rgba(150, 120, 40, 0.28); }

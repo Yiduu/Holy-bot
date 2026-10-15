@@ -1,0 +1,783 @@
+diff --git a/frontend/app.js b/frontend/app.js
+index 80d2834..68235b7 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -1079,6 +1079,7 @@ function handleTelegramBack() {
+   if (document.body.classList.contains('in-call')) return;
+   if (currentPage === 'mentor-profile') { closeMentorProfile(); return; }
+   if (currentPage === 'end-mentorship') { closeEndReason(); return; }
++  if (currentPage === 'chat-history') { chatHistoryBack(); return; }
+   if (currentPage === 'new-ticket') { toggleNewTicketModal(false); return; }
+   if (currentPage === 'goal-new' && window.HolyGoals?.back()) return;
+   if (currentPage !== 'dashboard') navigate('dashboard');
+@@ -1318,7 +1319,7 @@ async function checkPendingRating() {
+   try {
+     const pending = await apiFetch('/api/users/pending-rating');
+     if (pending && pending.mentor_id) {
+-      openRatingModal(pending.mentor_id, pending.display_name, pending.assignment_id, pending.end_reason);
++      openRatingModal(pending.mentor_id, pending.display_name, pending.assignment_id, pending.end_reason, pending.history_allowed !== false);
+     }
+   } catch (e) { /* silent — non-critical */ }
+ }
+@@ -1343,7 +1344,7 @@ function renderStars(rating, count, size = 11) {
+   return `<div class="rating-row"><span class="stars">${svgs}</span><span class="rating-num">${r.toFixed(1)}</span><span class="rating-count">(${count})</span></div>`;
+ }
+ 
+-function openRatingModal(mentorId, mentorName, assignmentId, endReason) {
++function openRatingModal(mentorId, mentorName, assignmentId, endReason, historyAllowed = true) {
+   ratingModalOpen = true;
+   let selected = 0;
+   const overlay = document.createElement('div');
+@@ -1363,6 +1364,10 @@ function openRatingModal(mentorId, mentorName, assignmentId, endReason) {
+       <div class="rating-modal-sub">${(t('rate_mentor_sub') || 'Your mentorship with {name} just ended. Tap a star to rate your experience.').replace('{name}', escapeHtml(mentorName))}</div>
+       ${endReason ? `<div class="rating-end-reason"><b>${escapeHtml(t('end_reason_from_mentor') || 'Why it ended')}</b><span>${escapeHtml(endReason)}</span></div>` : ''}
+       <div class="big-stars" id="ratingBigStars"></div>
++      ${assignmentId ? `<div class="rating-privacy">
++        <span class="ps-row-text"><span class="ps-row-title">${escapeHtml(t('history_share_title'))}</span><span class="ps-row-sub">${escapeHtml(t('history_share_sub'))}</span></span>
++        <span class="ps-switch"><input class="ps-switch-input" id="ratingKeepHistory" type="checkbox" /><label class="ps-switch-track" for="ratingKeepHistory" aria-label="${escapeHtml(t('history_share_title'))}"><span class="ps-switch-knob"></span></label></span>
++      </div>` : ''}
+       <div class="card-actions" style="display:flex;gap:8px;margin-top:4px;">
+         <button class="btn btn-outline btn-sm flex-1" id="ratingSkipBtn">${t('btn_skip') || 'Skip'}</button>
+         <button class="btn btn-sm flex-1" id="ratingSubmitBtn" style="background:var(--gold);color:#1a1408;border-color:var(--gold);opacity:0.5;pointer-events:none;">${t('btn_submit') || 'Submit rating'}</button>
+@@ -1380,6 +1385,21 @@ function openRatingModal(mentorId, mentorName, assignmentId, endReason) {
+   // never persisted — the popup would then reappear next load. Passing
+   // the value directly through a closure sidesteps string-escaping
+   // entirely, so this works for UUIDs, numbers, or anything else.
++  const keepHistory = overlay.querySelector('#ratingKeepHistory');
++  if (keepHistory) {
++    keepHistory.checked = historyAllowed !== false;
++    keepHistory.addEventListener('change', async () => {
++      const want = keepHistory.checked;
++      try {
++        await apiFetch(`/api/users/history-consent/${encodeURIComponent(assignmentId)}`, { method: 'PATCH', body: { allowed: want } });
++        haptic('light');
++      } catch (e) {
++        keepHistory.checked = !want;
++        haptic('error');
++        showToast(t('history_share_failed'), 'error');
++      }
++    });
++  }
+   overlay.querySelector('#ratingSkipBtn').addEventListener('click', () => skipRating(assignmentId));
+   overlay.querySelector('#ratingSubmitBtn').addEventListener('click', () => submitMentorRating(mentorId));
+ 
+@@ -4078,6 +4098,10 @@ function confirmEndMentorship() {
+       </div>
+       <div class="modal-title">${escapeHtml(t('end_mentorship_title', { name: mentorNameOf(activeMentorData) }))}</div>
+       <p class="hb-text">${t('end_mentorship_body')}</p>
++      <div class="hb-privacy">
++        <span class="ps-row-text"><span class="ps-row-title">${escapeHtml(t('history_share_title'))}</span><span class="ps-row-sub">${escapeHtml(t('history_share_sub'))}</span></span>
++        <span class="ps-switch"><input class="ps-switch-input" id="endKeepHistory" type="checkbox" checked /><label class="ps-switch-track" for="endKeepHistory" aria-label="${escapeHtml(t('history_share_title'))}"><span class="ps-switch-knob"></span></label></span>
++      </div>
+       <div class="hb-actions">
+         <button class="btn btn-outline" onclick="closeMentorSheet()">${t('btn_keep_mentor')}</button>
+         <button class="btn btn-danger" onclick="closeMentorSheet();endMentorship(null, true)">${t('btn_end')}</button>
+@@ -6284,6 +6308,7 @@ async function loadSettings() {
+ 
+     if (currentUser?.role === 'mentor') {
+       $('settingsNavMentor')?.classList.remove('hidden');
++      $('settingsNavChatHistory')?.classList.remove('hidden');
+       if ($('settingBio')) $('settingBio').value = s.bio || '';
+       renderBioDisplay(s.bio || '');
+       if ($('settingSpecialization')) $('settingSpecialization').value = s.specialization || '';
+@@ -8800,15 +8825,17 @@ async function endMentorship(assignId, skipConfirm = false) {
+     // Mentee Flow (from Mentors Page)
+     if (!skipConfirm && !confirm(t('confirm_end_mentorship'))) return;
+     haptic('medium');
++    // The mentee's "let my mentor keep a copy" choice, only read when it came from the confirm sheet
++    const keepEl = skipConfirm ? $('endKeepHistory') : null;
+     try {
+-      const result = await apiFetch('/api/users/end-mentorship', { method: 'POST' });
++      const result = await apiFetch('/api/users/end-mentorship', { method: 'POST', body: keepEl ? { history_allowed: !!keepEl.checked } : undefined });
+       haptic('success');
+       showToast(t('mentorship_ended'), 'success');
+       // Refresh the badge — messages from this ended pairing no longer count.
+       updateMessageBadge();
+       navigate('dashboard');
+       if (result?.mentor?.telegram_id) {
+-        openRatingModal(result.mentor.telegram_id, result.mentor.display_name, result.assignment_id);
++        openRatingModal(result.mentor.telegram_id, result.mentor.display_name, result.assignment_id, undefined, result.history_allowed !== false);
+       }
+     } catch (e) {
+       haptic('error');
+@@ -8817,6 +8844,165 @@ async function endMentorship(assignId, skipConfirm = false) {
+   }
+ }
+ 
++// ─── Mentor: Chat History (read-only copies of ended mentorships) ─────────
++// Mentees first, then each of their chats (one per mentorship), then the chat.
++// The server only returns chats the mentee allows (history_allowed).
++let _chData = [], _chView = 'mentees', _chMentee = null, _chChat = null, _chMsgs = [], _chHasMore = false, _chBusy = false;
++const CH_CHEVRON = '<svg class="ch-chev" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>';
++const CH_ICON_CHAT = '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
++
++function chName(u) { return u?.user_settings?.display_name || u?.anonymous_id || t('mentee_label'); }
++function chDate(iso) {
++  try { return new Date(iso).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric', timeZone: getUserTimezone() }); }
++  catch { return new Date(iso).toLocaleDateString(); }
++}
++function chCount(n, one, many) { return n === 1 ? t(one) : t(many, { count: n }); }
++function chEndedBy(by) { return t(by === 'mentor' ? 'chat_history_ended_by_you' : by === 'mentee' ? 'chat_history_ended_by_mentee' : 'chat_history_ended_other'); }
++function chPageContent() { return document.querySelector('#page-chat-history .page-content'); }
++
++async function openChatHistory() {
++  haptic('light');
++  _chView = 'mentees'; _chMentee = null; _chChat = null; _chMsgs = [];
++  showAppPageQuiet('chat-history', 'nav-settings');
++  const pc = chPageContent(); if (pc) pc.scrollTop = 0;
++  const body = $('chHistoryBody');
++  if (body) body.innerHTML = '<div class="loading-spinner" style="margin:28px auto"></div>';
++  try { _chData = await apiFetch('/api/mentors/chat-history'); }
++  catch (e) { _chData = []; showToast(e.message, 'error'); }
++  renderChatHistory();
++}
++
++function chatHistoryBack() {
++  haptic('light');
++  if (_chView === 'chat') { _chView = 'chats'; _chChat = null; renderChatHistory(); return; }
++  if (_chView === 'chats') { _chView = 'mentees'; _chMentee = null; renderChatHistory(); return; }
++  showAppPageQuiet('settings', 'nav-settings');
++}
++
++function openChatHistoryMentee(menteeId) {
++  const g = _chData.find(x => String(x.mentee?.telegram_id) === String(menteeId));
++  if (!g) return;
++  haptic('selection');
++  _chMentee = g; _chView = 'chats';
++  renderChatHistory();
++  const pc = chPageContent(); if (pc) pc.scrollTop = 0;
++}
++
++async function openChatHistoryChat(assignmentId) {
++  const chat = _chMentee?.chats.find(c => c.id === assignmentId);
++  if (!chat || _chBusy) return;
++  haptic('selection');
++  _chBusy = true; _chChat = chat; _chView = 'chat'; _chMsgs = []; _chHasMore = false;
++  renderChatHistory();
++  const body = $('chHistoryBody');
++  if (body) body.innerHTML = '<div class="loading-spinner" style="margin:28px auto"></div>';
++  try {
++    const res = await apiFetch(`/api/mentors/chat-history/${encodeURIComponent(assignmentId)}`);
++    _chMsgs = res.messages || []; _chHasMore = !!res.has_more;
++    _chBusy = false;
++    renderChatHistory();
++    const pc = chPageContent(); if (pc) pc.scrollTop = pc.scrollHeight;   // start at the latest message, like Chat
++  } catch (e) {
++    _chBusy = false;
++    showToast(e.message, 'error');
++    _chView = 'chats'; _chChat = null;
++    renderChatHistory();
++  }
++}
++
++async function chLoadEarlier() {
++  if (_chBusy || !_chChat || !_chMsgs.length) return;
++  _chBusy = true;
++  const pc = chPageContent();
++  const prevH = pc ? pc.scrollHeight : 0, prevTop = pc ? pc.scrollTop : 0;
++  try {
++    const res = await apiFetch(`/api/mentors/chat-history/${encodeURIComponent(_chChat.id)}?before=${encodeURIComponent(_chMsgs[0].created_at)}`);
++    _chMsgs = [...(res.messages || []), ..._chMsgs]; _chHasMore = !!res.has_more;
++    _chBusy = false;
++    renderChatHistory();
++    if (pc) pc.scrollTop = prevTop + (pc.scrollHeight - prevH);          // keep what you were reading in place
++  } catch (e) { _chBusy = false; showToast(e.message, 'error'); }
++}
++
++function renderArchiveThread(msgs) {
++  let html = '', last = '';
++  for (const msg of msgs) {
++    const header = getDateGroupHeader(msg.created_at);
++    if (header !== last) { html += `<div class="chat-date-divider"><span>${escapeHtml(header)}</span></div>`; last = header; }
++    const sent = msg.from_id === currentUser?.telegram_id;
++    html += `
++      <div class="message-thread ${sent ? 'thread-sent' : 'thread-received'}">
++        <div class="message-bubble ${sent ? 'sent' : 'received'}${msg.file_type ? ' has-media' : ''}">
++          <div class="message-text">${msg.file_type ? renderFileAttachment(msg) : ''}${msg.content ? `<div class="${msg.file_type ? 'message-caption' : ''}">${escapeHtml(msg.content)}</div>` : ''}</div>
++          <div class="message-footer"><span class="message-time">${formatTime(msg.created_at)}</span></div>
++        </div>
++      </div>`;
++  }
++  return html;
++}
++
++function renderChatHistory() {
++  const title = $('chHistoryTitle'), sub = $('chHistorySub'), body = $('chHistoryBody');
++  if (!title || !sub || !body) return;
++
++  if (_chView === 'mentees') {
++    title.textContent = t('chat_history_title');
++    sub.textContent = t('chat_history_sub');
++    if (!_chData.length) {
++      body.innerHTML = `
++        <div class="ch-empty">
++          <span class="ps-tile ch-empty-icon">${CH_ICON_CHAT}</span>
++          <div class="ch-empty-title">${escapeHtml(t('chat_history_empty_title'))}</div>
++          <p>${escapeHtml(t('chat_history_empty'))}</p>
++        </div>`;
++      return;
++    }
++    body.innerHTML = _chData.map(g => {
++      const u = g.mentee || {};
++      const name = chName(u);
++      const msgs = g.chats.reduce((n, c) => n + c.message_count, 0);
++      return `
++        <button type="button" class="ps-card ps-row ch-row" onclick="openChatHistoryMentee('${u.telegram_id}')">
++          ${renderAvatar(u, (name || '?').charAt(0).toUpperCase())}
++          <span class="ps-row-text">
++            <span class="ps-row-title">${escapeHtml(name)}</span>
++            <span class="ps-row-sub">${escapeHtml(chCount(g.chats.length, 'chat_history_one_chat', 'chat_history_n_chats'))} · ${escapeHtml(chCount(msgs, 'chat_history_one_message', 'chat_history_n_messages'))}</span>
++          </span>
++          ${CH_CHEVRON}
++        </button>`;
++    }).join('');
++    return;
++  }
++
++  const name = chName(_chMentee?.mentee);
++  if (_chView === 'chats') {
++    title.textContent = name;
++    sub.textContent = t('chat_history_last', { date: chDate(_chMentee.last_ended_at) });
++    body.innerHTML = _chMentee.chats.map(c => `
++      <button type="button" class="ps-card ps-row ch-row" onclick="openChatHistoryChat('${c.id}')">
++        <span class="ps-tile">${CH_ICON_CHAT}</span>
++        <span class="ps-row-text">
++          <span class="ps-row-title">${escapeHtml(chDate(c.assigned_at))} – ${escapeHtml(chDate(c.ended_at))}</span>
++          <span class="ps-row-sub">${escapeHtml(chCount(c.message_count, 'chat_history_one_message', 'chat_history_n_messages'))} · ${escapeHtml(chEndedBy(c.ended_by))}</span>
++        </span>
++        ${CH_CHEVRON}
++      </button>`).join('');
++    return;
++  }
++
++  // one chat, read-only
++  title.textContent = name;
++  sub.textContent = `${chDate(_chChat.assigned_at)} – ${chDate(_chChat.ended_at)}`;
++  body.innerHTML = `
++    <p class="ch-note">
++      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
++      <span>${escapeHtml(t('chat_history_confidential'))}</span>
++    </p>
++    ${_chHasMore ? `<button type="button" class="btn btn-outline btn-sm ch-more" onclick="chLoadEarlier()">${escapeHtml(t('chat_history_load_earlier'))}</button>` : ''}
++    <div class="ch-thread">${_chMsgs.length ? renderArchiveThread(_chMsgs) : `<p class="ch-note">${escapeHtml(t('chat_history_no_messages'))}</p>`}</div>`;
++  if (typeof hydratePhotoMessages === 'function') hydratePhotoMessages(body);
++}
++
+ // ─── Topics ───────────────────────────────────────────────────
+ window.selectedTopics = [];
+ window.isTopicModalExpertise = false;
+diff --git a/frontend/index.html b/frontend/index.html
+index 89aaafc..7c5b1f7 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -838,6 +838,24 @@
+       </div>
+     </div>
+ 
++    <!-- ── Page: Chat History (mentor: read-only copies of ended mentorships) ── -->
++    <div id="page-chat-history" class="page">
++      <div class="app-header mp-header">
++        <button type="button" class="profile-pill mp-back" onclick="chatHistoryBack()" aria-label="Back">
++          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
++            stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
++          <span data-i18n="btn_back">Back</span>
++        </button>
++      </div>
++      <div class="page-content ch-content">
++        <div class="ch-head">
++          <h2 id="chHistoryTitle" class="ps-title"></h2>
++          <p id="chHistorySub" class="ps-sub ch-sub"></p>
++        </div>
++        <div id="chHistoryBody" class="ch-body"></div>
++      </div>
++    </div>
++
+     <!-- ── Page: Sessions ────────────────────────────────────────── -->
+     <div id="page-sessions" class="page">
+       <div class="app-header">
+@@ -1402,6 +1420,22 @@
+             </svg>
+           </button>
+ 
++          <button type="button" id="settingsNavChatHistory" class="profile-menu-item hidden" onclick="openChatHistory()">
++            <span class="profile-menu-icon">
++              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
++                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++                <path d="M3 12a9 9 0 1 0 3-6.7" />
++                <path d="M3 4v5h5" />
++                <path d="M12 7.5V12l3 2" />
++              </svg>
++            </span>
++            <span class="profile-menu-label" data-i18n="chat_history_title">Chat History</span>
++            <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
++              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
++              <polyline points="9 6 15 12 9 18" />
++            </svg>
++          </button>
++
+           <button type="button" class="profile-menu-item" onclick="toggleLanguage()">
+             <span class="profile-menu-icon">
+               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 0f8ba7a..3bee1b9 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -53,7 +53,7 @@ const I18N = {
+     "end_reason_body": "Tell {name} why you are ending this mentorship. They will see your reason in their notification.",
+     "end_reason_body_noname": "Tell your mentee why you are ending this mentorship. They will see your reason in their notification.",
+     "end_reason_eyebrow": "End mentorship",
+-    "end_reason_note": "Your mentee gets your reason as a notification. Your chat history stays.",
++    "end_reason_note": "Your mentee gets your reason as a notification. The chat is kept in Chat History if they allow it.",
+     "mentee_label": "Mentee",
+     "end_reason_label": "Your reason",
+     "end_reason_placeholder": "Write a few kind, clear words for your mentee…",
+@@ -573,6 +573,24 @@ const I18N = {
+     "Notifications": "Notifications",
+     "Mentor Profile": "Mentor Profile",
+     "notifications_modal_subtitle": "Customize which alerts and reminders you receive.",
++    "chat_history_title": "Chat History",
++    "chat_history_sub": "Read-only copies of chats from mentorships that have ended.",
++    "chat_history_empty_title": "No saved chats yet",
++    "chat_history_empty": "When a mentorship ends and your mentee allows it, the conversation is kept here.",
++    "chat_history_one_chat": "1 chat",
++    "chat_history_n_chats": "{count} chats",
++    "chat_history_one_message": "1 message",
++    "chat_history_n_messages": "{count} messages",
++    "chat_history_last": "Last: {date}",
++    "chat_history_ended_by_you": "Ended by you",
++    "chat_history_ended_by_mentee": "Ended by mentee",
++    "chat_history_ended_other": "Ended",
++    "chat_history_load_earlier": "Load earlier messages",
++    "chat_history_confidential": "Read-only copy. Please keep this conversation confidential.",
++    "chat_history_no_messages": "No messages in this chat.",
++    "history_share_title": "Let my mentor keep a copy of our chat",
++    "history_share_sub": "Read-only, and only your mentor can see it. Turn off to keep it private.",
++    "history_share_failed": "Couldn't save your choice. Try again.",
+     "scroll_for_more": "Scroll for more",
+     "mentor_profile_modal_subtitle": "Configure your mentorship details, availability, and focus areas.",
+     "notif_sub_messages": "Replies from your mentor or mentees",
+@@ -913,7 +931,7 @@ const I18N = {
+     "end_reason_body": "ይህን አማካሪነት ለምን እንደሚያቋርጡ ለ{name} ይንገሩ። ምክንያትዎን በማሳወቂያው ላይ ያያሉ።",
+     "end_reason_body_noname": "ይህን አማካሪነት ለምን እንደሚያቋርጡ ለተመካሪዎ ይንገሩ። ምክንያትዎን በማሳወቂያው ላይ ያያሉ።",
+     "end_reason_eyebrow": "አማካሪነትን ማቋረጥ",
+-    "end_reason_note": "ተመካሪዎ ምክንያትዎን በማሳወቂያ ይቀበላል። የውይይት ታሪክዎ ይቆያል።",
++    "end_reason_note": "ተመካሪዎ ምክንያትዎን በማሳወቂያ ይቀበላል። ተመካሪው ከፈቀደ ውይይቱ በውይይት ታሪክ ውስጥ ይቀመጣል።",
+     "mentee_label": "ተመካሪ",
+     "end_reason_label": "ምክንያትዎ",
+     "end_reason_placeholder": "ማንኛውም የሚያቋርጡበትን ምክንያት ይጻፉ",
+@@ -1403,6 +1421,24 @@ const I18N = {
+     "Notifications": "ማሳወቂያዎች",
+     "Mentor Profile": "የአማካሪ መገለጫ",
+     "notifications_modal_subtitle": "የሚደርሱዎትን ማሳወቂያዎች እና ማስታወሻዎች ያስተካክሉ።",
++    "chat_history_title": "የውይይት ታሪክ",
++    "chat_history_sub": "ያበቁ የምክር ግንኙነቶች ውይይቶች ለማንበብ ብቻ የተቀመጡ ቅጂዎች።",
++    "chat_history_empty_title": "እስካሁን የተቀመጠ ውይይት የለም",
++    "chat_history_empty": "የምክር ግንኙነት ሲያበቃ እና ተመካሪዎ ሲፈቅድ ውይይቱ እዚህ ይቀመጣል።",
++    "chat_history_one_chat": "1 ውይይት",
++    "chat_history_n_chats": "{count} ውይይቶች",
++    "chat_history_one_message": "1 መልዕክት",
++    "chat_history_n_messages": "{count} መልዕክቶች",
++    "chat_history_last": "የመጨረሻ: {date}",
++    "chat_history_ended_by_you": "እርስዎ አብቅተውታል",
++    "chat_history_ended_by_mentee": "ተመካሪው አብቅቶታል",
++    "chat_history_ended_other": "አብቅቷል",
++    "chat_history_load_earlier": "ቀደምት መልዕክቶችን ጫን",
++    "chat_history_confidential": "ለማንበብ ብቻ የተቀመጠ ቅጂ። እባክዎ ይህን ውይይት በሚስጥር ያቆዩት።",
++    "chat_history_no_messages": "በዚህ ውይይት ውስጥ መልዕክት የለም።",
++    "history_share_title": "አማካሪዬ የውይይታችንን ቅጂ እንዲያስቀምጥ ፍቀድ",
++    "history_share_sub": "ለማንበብ ብቻ ነው፣ አማካሪዎ ብቻ ያየዋል። በሚስጥር ለማቆየት ያጥፉት።",
++    "history_share_failed": "ምርጫዎ አልተቀመጠም። እባክዎ እንደገና ይሞክሩ።",
+     "scroll_for_more": "ለተጨማሪ",
+     "mentor_profile_modal_subtitle": "የአማካሪነት ዝርዝሮችዎን፣ ዝግጁነትዎን እና ርዕሶቻችሁን አስተካክሉ።",
+     "notif_sub_messages": "ከአማካሪዎ ወይም ከተማሪዎችዎ የሚመጡ መልሶች",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index 1597211..5a33f14 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -14441,3 +14441,29 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
+ .sch-sheet .ps-card { padding: 14px 16px; }
+ .sch-people { max-height: none; overflow: visible; gap: 6px; padding: 0; }
+ .sch-person { min-height: 52px; padding: 8px 12px; }
++
++
++/* ─── Chat History (mentor) + the mentee's "keep a copy" choice ─────────── */
++#page-chat-history .ch-content { display: flex; flex-direction: column; gap: 12px; }
++.ch-head .ps-title { margin: 0; overflow-wrap: anywhere; }
++.ch-sub { margin: 6px 0 2px; }
++.ch-body { display: flex; flex-direction: column; gap: 12px; }
++.ch-row { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; gap: 14px; transition: transform 0.15s ease, border-color 0.2s ease; }
++.ch-row:active { transform: scale(0.985); }
++.ch-row:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
++.ch-row .ps-row-title { overflow-wrap: anywhere; }
++.ch-chev { flex: none; color: var(--text3); }
++.ch-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 40px 18px; text-align: center; color: var(--text2); }
++.ch-empty-title { font-size: var(--fs-base); font-weight: 700; color: var(--text); }
++.ch-empty p { margin: 0; max-width: 30ch; font-size: var(--fs-sm); line-height: 1.5; }
++.ch-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 2px 4px; font-size: var(--fs-xs); line-height: 1.5; color: var(--text3); }
++.ch-note svg { flex: none; margin-top: 2px; color: var(--gold-light); }
++.ch-more { align-self: center; }
++.ch-thread { display: flex; flex-direction: column; gap: 4px; }
++
++.hb-privacy, .rating-privacy {
++  display: flex; align-items: center; gap: 14px; margin: 6px 0 2px; padding: 12px 14px; text-align: left;
++  border-radius: 20px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);
++}
++.hb-privacy .ps-row-text, .rating-privacy .ps-row-text { flex: 1; min-width: 0; }
++[data-theme="light"] .hb-privacy, [data-theme="light"] .rating-privacy { background: #fffaf0; border-color: rgba(150, 120, 40, 0.28); }
+diff --git a/migrations/20261015_chat_history_archive.sql b/migrations/20261015_chat_history_archive.sql
+new file mode 100644
+index 0000000..6fb698f
+--- /dev/null
++++ b/migrations/20261015_chat_history_archive.sql
+@@ -0,0 +1,15 @@
++BEGIN;
++
++-- Chat History: after a mentorship ends the mentor can keep reading a read-only
++-- copy of the conversation, unless the MENTEE switched it off ("Let my mentor
++-- keep a copy of our chat") when ending, or later from the rating pop-up.
++--
++-- true  = mentor may keep the copy (default, so nothing changes for old rows
++--         except that mentors can now read what they already took part in)
++-- false = the mentee keeps it private; the mentor never sees it.
++--
++-- Safe to run more than once. Until it is run the Chat History page is simply
++-- empty (the backend treats a missing column as "not shared").
++ALTER TABLE mentorship_assignments ADD COLUMN IF NOT EXISTS history_allowed BOOLEAN NOT NULL DEFAULT true;
++
++COMMIT;
+diff --git a/routes/mentors.js b/routes/mentors.js
+index 2a8af89..3a5751c 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -524,6 +524,99 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+     res.json({ success: true, status: action });
+   });
+ 
++  // ─── Chat history (mentor, read-only) ────────────────────────────────────
++  // Once a mentorship ends the chat disappears from Chat. The mentor can keep
++  // reading it here, unless the mentee switched "let my mentor keep a copy" off
++  // (mentorship_assignments.history_allowed = false). A chat is one mentorship:
++  // only messages between assigned_at and ended_at are returned.
++  const HISTORY_PAGE = 100;
++  const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
++  const pairFilter = (a, b) => `and(from_id.eq.${a},to_id.eq.${b}),and(from_id.eq.${b},to_id.eq.${a})`;
++
++  // GET /api/mentors/chat-history – mentees first, each with their saved chats
++  router.get('/chat-history', requireAuth, async (req, res) => {
++    const { id: mentor_id } = req.telegramUser;
++    const { data, error } = await supabase
++      .from('mentorship_assignments')
++      .select('id, user_id, assigned_at, ended_at, ended_by, history_allowed, user:user_id(telegram_id, anonymous_id, last_active, photo_file_id, photo_updated_at, user_settings(display_name))')
++      .eq('mentor_id', mentor_id)
++      .eq('is_active', false)
++      .not('ended_at', 'is', null)
++      .order('ended_at', { ascending: false })
++      .limit(300);
++    if (error) {
++      // history_allowed not migrated yet: nothing is shared (the privacy-safe default)
++      if (/history_allowed/i.test(error.message || '')) return res.json([]);
++      return res.status(500).json({ error: error.message });
++    }
++    const shared = (data || []).filter(a => a.history_allowed !== false);
++
++    // Message count per chat, a few at a time
++    const counts = new Map();
++    for (let i = 0; i < shared.length; i += 10) {
++      await Promise.all(shared.slice(i, i + 10).map(async (a) => {
++        const { count } = await supabase
++          .from('messages')
++          .select('id', { count: 'exact', head: true })
++          .or(pairFilter(mentor_id, a.user_id))
++          .gte('created_at', a.assigned_at)
++          .lte('created_at', a.ended_at)
++          .or('is_deleted.eq.false,is_deleted.is.null');
++        counts.set(a.id, count || 0);
++      }));
++    }
++
++    const byMentee = new Map();
++    for (const a of shared) {
++      const n = counts.get(a.id) || 0;
++      if (!n) continue;   // nothing was ever said: nothing to keep
++      let g = byMentee.get(a.user_id);
++      if (!g) { g = { mentee: a.user, last_ended_at: a.ended_at, chats: [] }; byMentee.set(a.user_id, g); }
++      g.chats.push({ id: a.id, assigned_at: a.assigned_at, ended_at: a.ended_at, ended_by: a.ended_by || null, message_count: n });
++    }
++    res.json([...byMentee.values()]);
++  });
++
++  // GET /api/mentors/chat-history/:assignment_id?before=<iso> – one saved chat
++  // Newest HISTORY_PAGE messages first-fetched, returned oldest to newest.
++  router.get('/chat-history/:assignment_id', requireAuth, async (req, res) => {
++    const { id: mentor_id } = req.telegramUser;
++    const assignmentId = String(req.params.assignment_id || '');
++    if (!UUID_RE.test(assignmentId)) return res.status(400).json({ error: 'Invalid chat' });
++    const before = req.query.before ? String(req.query.before) : null;
++    if (before && Number.isNaN(Date.parse(before))) return res.status(400).json({ error: 'Invalid cursor' });
++
++    const { data: a, error: aErr } = await supabase
++      .from('mentorship_assignments')
++      .select('id, user_id, assigned_at, ended_at, history_allowed')
++      .eq('id', assignmentId)
++      .eq('mentor_id', mentor_id)
++      .eq('is_active', false)
++      .maybeSingle();
++    if (aErr) {
++      if (/history_allowed/i.test(aErr.message || '')) return res.status(403).json({ error: 'Chat history is not available yet.', code: 'HISTORY_PRIVATE' });
++      return res.status(500).json({ error: aErr.message });
++    }
++    if (!a || !a.ended_at) return res.status(404).json({ error: 'Chat not found' });
++    if (a.history_allowed === false) {
++      return res.status(403).json({ error: 'This mentee keeps this chat private.', code: 'HISTORY_PRIVATE' });
++    }
++
++    let q = supabase
++      .from('messages')
++      .select('*')
++      .or(pairFilter(mentor_id, a.user_id))
++      .gte('created_at', a.assigned_at)
++      .lte('created_at', a.ended_at)
++      .or('is_deleted.eq.false,is_deleted.is.null');
++    if (before) q = q.lt('created_at', before);
++    const { data: rows, error: mErr } = await q.order('created_at', { ascending: false }).limit(HISTORY_PAGE + 1);
++    if (mErr) return res.status(500).json({ error: mErr.message });
++    const has_more = (rows || []).length > HISTORY_PAGE;
++    const messages = (rows || []).slice(0, HISTORY_PAGE).reverse();
++    res.json({ messages, has_more });
++  });
++
+   // GET /api/mentors/my-mentees – list active mentees
+   router.get('/my-mentees', requireAuth, async (req, res) => {
+     const { id: mentor_id } = req.telegramUser;
+diff --git a/routes/users.js b/routes/users.js
+index 81c1973..2c6f24f 100644
+--- a/routes/users.js
++++ b/routes/users.js
+@@ -352,8 +352,12 @@ module.exports = function userRoutes(supabase, requireAuth) {
+         .eq('telegram_id', assignment.mentor_id)
+         .single();
+ 
++      // The mentee's "let my mentor keep a copy of our chat" choice. Left out
++      // by older clients: then the default (allowed) stands.
++      const historyAllowed = typeof req.body?.history_allowed === 'boolean' ? req.body.history_allowed : null;
++
+       // Update assignment (also records that the mentee ended it)
+-      const updateErr = await closeAssignment(supabase, assignment.id, { endedBy: 'mentee' });
++      const updateErr = await closeAssignment(supabase, assignment.id, { endedBy: 'mentee', historyAllowed });
+ 
+       if (updateErr) {
+         return res.status(500).json({ error: updateErr.message });
+@@ -366,6 +370,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
+       res.json({
+         success: true,
+         assignment_id: assignment.id,
++        history_allowed: historyAllowed !== false,
+         mentor: {
+           telegram_id: assignment.mentor_id,
+           display_name: mentor?.user_settings?.display_name || mentor?.anonymous_id || 'Your mentor'
+@@ -449,6 +454,23 @@ module.exports = function userRoutes(supabase, requireAuth) {
+     }
+   });
+ 
++  // PATCH /api/users/history-consent/:assignment_id  { allowed: boolean }
++  // The mentee decides whether their (former) mentor may keep a read-only copy
++  // of the chat. Only the mentee of that mentorship can change it.
++  router.patch('/history-consent/:assignment_id', requireAuth, async (req, res) => {
++    const { id: telegram_id } = req.telegramUser;
++    if (typeof req.body?.allowed !== 'boolean') return res.status(400).json({ error: 'allowed must be true or false' });
++    const { data, error } = await supabase
++      .from('mentorship_assignments')
++      .update({ history_allowed: req.body.allowed })
++      .eq('id', req.params.assignment_id)
++      .eq('user_id', telegram_id)
++      .select('id');
++    if (error) return res.status(500).json({ error: error.message });
++    if (!data || !data.length) return res.status(404).json({ error: 'Mentorship not found' });
++    res.json({ success: true, allowed: req.body.allowed });
++  });
++
+   // GET /api/users/pending-rating – checks whether the caller has a recently
+   // ended mentorship (ended by the mentor) that they haven't rated yet, so the
+   // mini app can pop the rating modal open as soon as they next load it.
+@@ -487,12 +509,20 @@ module.exports = function userRoutes(supabase, requireAuth) {
+       if (why?.ended_by === 'mentor' && why.end_reason) end_reason = why.end_reason;
+     } catch (_) { /* optional */ }
+ 
++    // The mentee's current "let my mentor keep a copy" choice (default: allowed).
++    let history_allowed = true;
++    try {
++      const { data: h } = await supabase.from('mentorship_assignments').select('history_allowed').eq('id', assignment.id).maybeSingle();
++      if (h && h.history_allowed === false) history_allowed = false;
++    } catch (_) { /* optional */ }
++
+     const m = assignment.mentor;
+     res.json({
+       assignment_id: assignment.id,
+       mentor_id: assignment.mentor_id,
+       display_name: m?.user_settings?.display_name || m?.anonymous_id || 'Your mentor',
+-      end_reason
++      end_reason,
++      history_allowed
+     });
+   });
+ 
+diff --git a/tests/chat-history.test.js b/tests/chat-history.test.js
+new file mode 100644
+index 0000000..a93d12d
+--- /dev/null
++++ b/tests/chat-history.test.js
+@@ -0,0 +1,122 @@
++'use strict';
++// Chat History (mentor, read-only): the privacy rules.
++//   node tests/chat-history.test.js
++const assert = require('assert');
++const http = require('http');
++const express = require('express');
++const mentorRoutes = require('../routes/mentors');
++
++// Minimal chainable stand-in for the supabase client: every builder call returns
++// itself, and awaiting it resolves with whatever `respond(table, calls)` says.
++function fakeSupabase(respond) {
++  const log = [];
++  return {
++    log,
++    from(table) {
++      const calls = [];
++      const b = new Proxy({}, {
++        get(_, prop) {
++          if (prop === 'then') {
++            return (ok, bad) => {
++              log.push({ table, calls });
++              return Promise.resolve(respond(table, calls)).then(ok, bad);
++            };
++          }
++          return (...args) => { calls.push([String(prop), ...args]); return b; };
++        },
++      });
++      return b;
++    },
++  };
++}
++
++async function serve(supabase) {
++  const app = express();
++  app.use(express.json());
++  const requireAuth = (req, _res, next) => { req.telegramUser = { id: 100 }; next(); };
++  app.use('/api/mentors', mentorRoutes(supabase, requireAuth, { to() { return { emit() {} }; } }, new Map()));
++  const server = await new Promise(r => { const s = http.createServer(app).listen(0, () => r(s)); });
++  const base = `http://127.0.0.1:${server.address().port}/api/mentors`;
++  return { base, close: () => server.close() };
++}
++
++const A1 = '11111111-1111-4111-8111-111111111111';
++const A2 = '22222222-2222-4222-8222-222222222222';
++const A3 = '33333333-3333-4333-8333-333333333333';
++const user = (id) => ({ telegram_id: id, anonymous_id: 'U' + id, user_settings: { display_name: 'Mentee ' + id } });
++const asg = (id, uid, allowed) => ({ id, user_id: uid, assigned_at: '2026-01-01T00:00:00Z', ended_at: '2026-02-01T00:00:00Z', ended_by: 'mentor', history_allowed: allowed, user: user(uid) });
++
++(async () => {
++  // 1) list: private chats are hidden, empty chats are skipped, chats group under their mentee
++  {
++    const sb = fakeSupabase((table, calls) => {
++      if (table === 'mentorship_assignments') return { data: [asg(A1, 7, true), asg(A2, 7, true), asg(A3, 8, false)], error: null };
++      // messages count: A1 has 5, A2 has none
++      const gte = calls.find(c => c[0] === 'gte');
++      return { count: 5, error: null, _gte: gte };
++    });
++    // make A2 empty: respond by call order instead (A1 then A2)
++    let n = 0;
++    const sb2 = fakeSupabase((table) => {
++      if (table === 'mentorship_assignments') return { data: [asg(A1, 7, true), asg(A2, 7, true), asg(A3, 8, false)], error: null };
++      n += 1;
++      return { count: n === 1 ? 5 : 0, error: null };
++    });
++    const s = await serve(sb2);
++    const body = await (await fetch(s.base + '/chat-history')).json();
++    assert.strictEqual(body.length, 1, 'only the mentee with a shared, non-empty chat');
++    assert.strictEqual(body[0].mentee.telegram_id, 7);
++    assert.deepStrictEqual(body[0].chats.map(c => c.id), [A1]);
++    assert.strictEqual(body[0].chats[0].message_count, 5);
++    assert.strictEqual(sb2.log.filter(l => l.table === 'messages').length, 2, 'the private chat (A3) is never even counted');
++    s.close(); void sb;
++  }
++
++  // 2) column not migrated yet: nothing is shared
++  {
++    const sb = fakeSupabase(() => ({ data: null, error: { message: 'column mentorship_assignments.history_allowed does not exist' } }));
++    const s = await serve(sb);
++    assert.deepStrictEqual(await (await fetch(s.base + '/chat-history')).json(), []);
++    s.close();
++  }
++
++  // 3) one chat: the mentee switched it off -> 403 and the messages are never read
++  {
++    const sb = fakeSupabase((table) => table === 'mentorship_assignments'
++      ? { data: asg(A1, 7, false), error: null } : { data: [], error: null });
++    const s = await serve(sb);
++    const r = await fetch(`${s.base}/chat-history/${A1}`);
++    assert.strictEqual(r.status, 403);
++    assert.strictEqual((await r.json()).code, 'HISTORY_PRIVATE');
++    assert.strictEqual(sb.log.filter(l => l.table === 'messages').length, 0, 'no message query for a private chat');
++    s.close();
++  }
++
++  // 4) not the caller's mentorship / still active -> 404; bad id -> 400; bad cursor -> 400
++  {
++    const sb = fakeSupabase(() => ({ data: null, error: null }));
++    const s = await serve(sb);
++    assert.strictEqual((await fetch(`${s.base}/chat-history/${A1}`)).status, 404);
++    assert.strictEqual((await fetch(`${s.base}/chat-history/not-a-uuid`)).status, 400);
++    assert.strictEqual((await fetch(`${s.base}/chat-history/${A1}?before=nope`)).status, 400);
++    s.close();
++  }
++
++  // 5) allowed chat: oldest -> newest, has_more when there is another page
++  {
++    const rows = Array.from({ length: 101 }, (_, i) => ({ id: 'm' + i, created_at: new Date(Date.UTC(2026, 0, 2, 0, 0, 200 - i)).toISOString(), content: 'x' + i }));
++    const sb = fakeSupabase((table) => table === 'mentorship_assignments'
++      ? { data: asg(A1, 7, true), error: null } : { data: rows, error: null });
++    const s = await serve(sb);
++    const body = await (await fetch(`${s.base}/chat-history/${A1}`)).json();
++    assert.strictEqual(body.messages.length, 100);
++    assert.strictEqual(body.has_more, true);
++    assert.ok(body.messages[0].created_at < body.messages[99].created_at, 'oldest first');
++    const q = sb.log.find(l => l.table === 'messages').calls;
++    assert.ok(q.some(c => c[0] === 'gte') && q.some(c => c[0] === 'lte'), 'limited to the mentorship window');
++    s.close();
++  }
++
++  console.log('chat-history: ok');
++  process.exit(0);
++})().catch(e => { console.error(e); process.exit(1); });
+diff --git a/utils/index.js b/utils/index.js
+index f690527..398f29b 100644
+--- a/utils/index.js
++++ b/utils/index.js
+@@ -96,7 +96,7 @@ function emitToUser(telegram_id, event, payload) {
+  * @param {{reason?: string, endedBy?: 'mentee'|'mentor'|'admin'|'system'}} [opts]
+  * @returns {Promise<object|null>} the Supabase error, or null on success
+  */
+-async function closeAssignment(supabase, assignmentId, { reason = null, endedBy = null } = {}) {
++async function closeAssignment(supabase, assignmentId, { reason = null, endedBy = null, historyAllowed = null } = {}) {
+   // Remember whose spot this frees so the waitlist can be told afterwards.
+   let mentorId = null;
+   try {
+@@ -104,10 +104,17 @@ async function closeAssignment(supabase, assignmentId, { reason = null, endedBy
+     mentorId = data?.mentor_id ?? null;
+   } catch (_) { /* best effort */ }
+   const endedAt = new Date().toISOString();
++  // history_allowed = the mentee's "let my mentor keep a copy of our chat" choice
++  // (only sent when the caller decided). If that column isn't migrated yet, retry
++  // without it so ending a mentorship never fails because of it.
++  const base = { is_active: false, ended_at: endedAt, end_reason: reason, ended_by: endedBy };
+   let { error } = await supabase
+     .from('mentorship_assignments')
+-    .update({ is_active: false, ended_at: endedAt, end_reason: reason, ended_by: endedBy })
++    .update(typeof historyAllowed === 'boolean' ? { ...base, history_allowed: historyAllowed } : base)
+     .eq('id', assignmentId);
++  if (error && /history_allowed/i.test(error.message || '')) {
++    ({ error } = await supabase.from('mentorship_assignments').update(base).eq('id', assignmentId));
++  }
+   if (error && /end_reason|ended_by/i.test(error.message || '')) {
+     ({ error } = await supabase
+       .from('mentorship_assignments')

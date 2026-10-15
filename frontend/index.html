@@ -838,6 +838,24 @@
       </div>
     </div>
 
+    <!-- ── Page: Chat History (mentor: read-only copies of ended mentorships) ── -->
+    <div id="page-chat-history" class="page">
+      <div class="app-header mp-header">
+        <button type="button" class="profile-pill mp-back" onclick="chatHistoryBack()" aria-label="Back">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+          <span data-i18n="btn_back">Back</span>
+        </button>
+      </div>
+      <div class="page-content ch-content">
+        <div class="ch-head">
+          <h2 id="chHistoryTitle" class="ps-title"></h2>
+          <p id="chHistorySub" class="ps-sub ch-sub"></p>
+        </div>
+        <div id="chHistoryBody" class="ch-body"></div>
+      </div>
+    </div>
+
     <!-- ── Page: Sessions ────────────────────────────────────────── -->
     <div id="page-sessions" class="page">
       <div class="app-header">
@@ -1396,6 +1414,22 @@
               </svg>
             </span>
             <span class="profile-menu-label" data-i18n="Mentor Profile">Mentor Profile</span>
+            <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 6 15 12 9 18" />
+            </svg>
+          </button>
+
+          <button type="button" id="settingsNavChatHistory" class="profile-menu-item hidden" onclick="openChatHistory()">
+            <span class="profile-menu-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 3-6.7" />
+                <path d="M3 4v5h5" />
+                <path d="M12 7.5V12l3 2" />
+              </svg>
+            </span>
+            <span class="profile-menu-label" data-i18n="chat_history_title">Chat History</span>
             <svg class="profile-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="9 6 15 12 9 18" />

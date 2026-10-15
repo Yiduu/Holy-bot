@@ -524,6 +524,99 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     res.json({ success: true, status: action });
   });
 
+  // ─── Chat history (mentor, read-only) ────────────────────────────────────
+  // Once a mentorship ends the chat disappears from Chat. The mentor can keep
+  // reading it here, unless the mentee switched "let my mentor keep a copy" off
+  // (mentorship_assignments.history_allowed = false). A chat is one mentorship:
+  // only messages between assigned_at and ended_at are returned.
+  const HISTORY_PAGE = 100;
+  const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+  const pairFilter = (a, b) => `and(from_id.eq.${a},to_id.eq.${b}),and(from_id.eq.${b},to_id.eq.${a})`;
+
+  // GET /api/mentors/chat-history – mentees first, each with their saved chats
+  router.get('/chat-history', requireAuth, async (req, res) => {
+    const { id: mentor_id } = req.telegramUser;
+    const { data, error } = await supabase
+      .from('mentorship_assignments')
+      .select('id, user_id, assigned_at, ended_at, ended_by, history_allowed, user:user_id(telegram_id, anonymous_id, last_active, photo_file_id, photo_updated_at, user_settings(display_name))')
+      .eq('mentor_id', mentor_id)
+      .eq('is_active', false)
+      .not('ended_at', 'is', null)
+      .order('ended_at', { ascending: false })
+      .limit(300);
+    if (error) {
+      // history_allowed not migrated yet: nothing is shared (the privacy-safe default)
+      if (/history_allowed/i.test(error.message || '')) return res.json([]);
+      return res.status(500).json({ error: error.message });
+    }
+    const shared = (data || []).filter(a => a.history_allowed !== false);
+
+    // Message count per chat, a few at a time
+    const counts = new Map();
+    for (let i = 0; i < shared.length; i += 10) {
+      await Promise.all(shared.slice(i, i + 10).map(async (a) => {
+        const { count } = await supabase
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .or(pairFilter(mentor_id, a.user_id))
+          .gte('created_at', a.assigned_at)
+          .lte('created_at', a.ended_at)
+          .or('is_deleted.eq.false,is_deleted.is.null');
+        counts.set(a.id, count || 0);
+      }));
+    }
+
+    const byMentee = new Map();
+    for (const a of shared) {
+      const n = counts.get(a.id) || 0;
+      if (!n) continue;   // nothing was ever said: nothing to keep
+      let g = byMentee.get(a.user_id);
+      if (!g) { g = { mentee: a.user, last_ended_at: a.ended_at, chats: [] }; byMentee.set(a.user_id, g); }
+      g.chats.push({ id: a.id, assigned_at: a.assigned_at, ended_at: a.ended_at, ended_by: a.ended_by || null, message_count: n });
+    }
+    res.json([...byMentee.values()]);
+  });
+
+  // GET /api/mentors/chat-history/:assignment_id?before=<iso> – one saved chat
+  // Newest HISTORY_PAGE messages first-fetched, returned oldest to newest.
+  router.get('/chat-history/:assignment_id', requireAuth, async (req, res) => {
+    const { id: mentor_id } = req.telegramUser;
+    const assignmentId = String(req.params.assignment_id || '');
+    if (!UUID_RE.test(assignmentId)) return res.status(400).json({ error: 'Invalid chat' });
+    const before = req.query.before ? String(req.query.before) : null;
+    if (before && Number.isNaN(Date.parse(before))) return res.status(400).json({ error: 'Invalid cursor' });
+
+    const { data: a, error: aErr } = await supabase
+      .from('mentorship_assignments')
+      .select('id, user_id, assigned_at, ended_at, history_allowed')
+      .eq('id', assignmentId)
+      .eq('mentor_id', mentor_id)
+      .eq('is_active', false)
+      .maybeSingle();
+    if (aErr) {
+      if (/history_allowed/i.test(aErr.message || '')) return res.status(403).json({ error: 'Chat history is not available yet.', code: 'HISTORY_PRIVATE' });
+      return res.status(500).json({ error: aErr.message });
+    }
+    if (!a || !a.ended_at) return res.status(404).json({ error: 'Chat not found' });
+    if (a.history_allowed === false) {
+      return res.status(403).json({ error: 'This mentee keeps this chat private.', code: 'HISTORY_PRIVATE' });
+    }
+
+    let q = supabase
+      .from('messages')
+      .select('*')
+      .or(pairFilter(mentor_id, a.user_id))
+      .gte('created_at', a.assigned_at)
+      .lte('created_at', a.ended_at)
+      .or('is_deleted.eq.false,is_deleted.is.null');
+    if (before) q = q.lt('created_at', before);
+    const { data: rows, error: mErr } = await q.order('created_at', { ascending: false }).limit(HISTORY_PAGE + 1);
+    if (mErr) return res.status(500).json({ error: mErr.message });
+    const has_more = (rows || []).length > HISTORY_PAGE;
+    const messages = (rows || []).slice(0, HISTORY_PAGE).reverse();
+    res.json({ messages, has_more });
+  });
+
   // GET /api/mentors/my-mentees – list active mentees
   router.get('/my-mentees', requireAuth, async (req, res) => {
     const { id: mentor_id } = req.telegramUser;
