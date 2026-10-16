@@ -14580,3 +14580,13 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
 [data-theme="light"] .keep-copy { background: #fffaf0; border-color: rgba(150, 120, 40, 0.28); }
 [data-theme="light"] .keep-copy:has(input:checked) .keep-copy-ico { color: #7A5812; }
 @media (prefers-reduced-motion: reduce) { .keep-copy, .keep-copy-ico { transition: none; } }
+
+/* ─── Schedule sheet: dock to the bottom and fit its content ─────────────
+   An old #scheduleModal rule centred the overlay (so on phones the sheet floated
+   up near the top), and a fixed minimum height left a big empty gap between the
+   date/time card and the Cancel / Schedule buttons. Now it sits on the bottom edge
+   like the other sheets, is only as tall as its content, and long group lists
+   scroll inside .ps-body. ───────────────────────────────────────────────── */
+#scheduleModal.ps-overlay { align-items: flex-end; padding: 0 0 var(--kb-inset, 0px); }
+#scheduleModal .modal-sheet.sch-sheet { height: auto; min-height: 0; max-height: min(92%, calc(100% - 12px)); }
+#scheduleModal .sch-sheet .ps-body { flex: 0 1 auto; }
