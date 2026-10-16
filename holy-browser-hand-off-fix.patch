@@ -1,0 +1,89 @@
+diff --git a/frontend/index.html b/frontend/index.html
+index 7d3c460..b8796b6 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -2515,7 +2515,7 @@
+   <script src="app.js?v=4.0"></script>
+   <script src="goals.js?v=1.5"></script>
+   <script src="chat-media.js?v=1.0"></script>
+-  <script src="session-room.js?v=1.5"></script>
++  <script src="session-room.js?v=1.6"></script>
+ 
+   <script>
+     /* ── Offline banner ──────────────────────────────────────── */
+diff --git a/frontend/session-room.js b/frontend/session-room.js
+index e9bca28..6599a78 100644
+--- a/frontend/session-room.js
++++ b/frontend/session-room.js
+@@ -411,6 +411,11 @@
+ 
+     const shareNote = (!isApp && isHost && touch) ? `
+       <button class="btn btn-outline sr-secondary" onclick="SR.shareApp()">${esc(sr('share_phone', 'Share my phone screen (Jitsi Meet app)'))}</button>` : '';
++    // Telegram sometimes opens the link in its own built-in browser, which Jitsi calls "a browser
++    // we don't fully support" (no reliable microphone). A real browser fixes it, so make that one tap away.
++    const browserHelp = !isApp ? `
++      <div class="sr-hint">${esc(sr('browser_help', 'Seeing "browser we don\'t fully support"? Copy the link and open it in Chrome or Safari.'))}</div>
++      <button class="sr-link" onclick="SR.copyLink()">${esc(sr('copy_link_browser', 'Copy link for Chrome or Safari'))}</button>` : '';
+     const switchToBrowser = isApp ? `<button class="btn btn-outline sr-secondary" onclick="SR.external()">${esc(sr('open_browser', 'Open in browser instead'))}</button>` : '';
+ 
+     $('sessionLobby').innerHTML = `
+@@ -420,7 +425,7 @@
+           : '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg>'}</div>
+         <div class="sr-title">${esc(data.title || sr('live_session_title', 'Live Session'))}</div>
+         <div class="sr-sub">${esc(opened
+-          ? sr('ext_sub', 'Your call is running outside this app. Come back here when you\'re done.')
++          ? sr('ext_sub', 'Tap Join on the page that opened. Come back here when you\'re done.')
+           : (pw ? sr('hand_sub_pw', 'Copy the password first — it won\'t be visible once the next app opens.')
+                 : sr('hand_sub_nopw', 'Tap the button below when you\'re ready.')))}</div>
+         ${passStep}
+@@ -428,6 +433,7 @@
+         ${shareNote}
+         ${installLinks}
+         ${switchToBrowser}
++        ${browserHelp}
+         <button class="${opened ? 'btn btn-primary sr-primary' : 'btn btn-outline sr-secondary sr-cancel'}" onclick="SR.leave()">${esc(opened ? sr('im_done', 'I\'m done — leave session') : sr('cancel', 'Cancel'))}</button>
+       </div>`;
+   }
+@@ -537,6 +543,15 @@
+       startTick();
+       haptic('success');
+       if (isHost && data.room_password) { try { api.executeCommand('password', data.room_password); } catch (_) { /* best effort */ } }
++      // The lobby said "Mic on", but the room can start people muted (a moderator's
++      // "everyone starts muted" setting). Check once, after the server's policy has
++      // been applied, and unmute so nobody sits silent without knowing.
++      if (prefs.mic) {
++        setTimeout(async () => {
++          if (!A || A.api !== api || A.micTouched) return;
++          try { if (await api.isAudioMuted()) api.executeCommand('toggleAudio'); } catch (_) { /* ignore */ }
++        }, 1500);
++      }
+     });
+     api.addEventListener('audioMuteStatusChanged', (e) => { A.micMuted = !!e.muted; renderControls(); });
+     api.addEventListener('videoMuteStatusChanged', (e) => { A.camMuted = !!e.muted; renderControls(); });
+@@ -547,7 +562,16 @@
+     api.addEventListener('participantJoined', () => { refreshPeers(); hideBanner(); });
+     api.addEventListener('participantLeft', refreshPeers);
+     api.addEventListener('cameraError', () => showToast(sr('cam_err', 'Camera unavailable — you can continue with audio only.'), 'info'));
+-    api.addEventListener('micError', () => showToast(sr('mic_err', 'Microphone unavailable — check your permissions.'), 'error'));
++    // A dead microphone used to fail quietly. Say it, and offer the browser, which
++    // handles microphone permission far better than a phone's in-app WebView.
++    const micTrouble = () => banner({
++      text: sr('mic_dead', 'Your microphone isn\'t working here, so others can\'t hear you.'),
++      actionLabel: sr('open_browser_short', 'Open in browser'),
++      onAction: () => window.SR.external(),
++      ttl: 30000,
++    });
++    api.addEventListener('micError', micTrouble);
++    api.addEventListener('noAudioInputDetected', micTrouble);
+     api.addEventListener('errorOccurred', (err) => {
+       console.error('[Jitsi] errorOccurred:', err);
+       if (err?.error?.isFatal) setStatus('problem');
+@@ -919,7 +943,7 @@
+ 
+   // ── handlers for inline onclick in the lobby ───────────────────────────────
+   window.SR = {
+-    mic() { haptic('selection'); if (!cmd('toggleAudio')) showToast(sr('ctl_fail', 'Controls are not ready yet.'), 'info'); },
++    mic() { haptic('selection'); if (A) A.micTouched = true; if (!cmd('toggleAudio')) showToast(sr('ctl_fail', 'Controls are not ready yet.'), 'info'); },
+     cam() { haptic('selection'); if (!cmd('toggleVideo')) showToast(sr('ctl_fail', 'Controls are not ready yet.'), 'info'); },
+     flip() {
+       haptic('selection');
