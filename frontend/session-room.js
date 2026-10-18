@@ -287,19 +287,16 @@
     A.lobbyKey = key;
 
     // One calm message, one big button. Everything else lives under "Having trouble?".
-    let tone, headline, line;
+    let tone, headline;
     if (isHost) {
       tone = waiting > 0 ? 'ok' : 'wait';
       headline = waiting > 0 ? sr('n_waiting', '{n} waiting for you', { n: waiting }) : sr('host_ready_title', 'Ready when you are');
-      line = sr('host_ready', 'You\'re the host — others will be notified when you start.');
     } else if (hostPresent) {
       tone = 'ok';
       headline = sr('host_here_title', 'Your mentor is here');
-      line = sr('host_here_short', 'Check your mic, then tap Join.');
     } else {
       tone = 'wait';
       headline = sr('host_wait_title', 'Waiting for your mentor');
-      line = sr('host_wait_short', 'You will be let in the moment they arrive. You can keep this screen open.');
     }
     const heroIcon = tone === 'ok'
       ? '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12 10 17 19 7"/></svg>'
@@ -316,7 +313,6 @@
         <div class="sr-eyebrow">${esc(badge)} · ${esc(formatDateTime(data.scheduled_at))}</div>
         <div class="sr-hero sr-hero--${tone}" aria-hidden="true"><span class="sr-hero-core">${heroIcon}</span></div>
         <div class="sr-title" role="status" aria-live="polite">${esc(headline)}</div>
-        <div class="sr-sub">${esc(line)}</div>
         <div class="sr-toggles">
           <button class="sr-toggle ${prefs.mic ? 'on' : ''}" onclick="SR.toggle('mic')" aria-pressed="${prefs.mic}">
             <span class="sr-ico">${ico('mic', !prefs.mic)}</span><span>${prefs.mic ? esc(sr('mic_on', 'Mic on')) : esc(sr('mic_off', 'Mic off'))}</span>
@@ -325,7 +321,6 @@
             <span class="sr-ico">${ico('cam', !prefs.cam)}</span><span>${prefs.cam ? esc(sr('cam_on', 'Camera on')) : esc(sr('cam_off', 'Camera off'))}</span>
           </button>`}
         </div>
-        <div class="sr-hint">${esc(audioMode ? sr('audio_hint', 'This is an audio call — no camera needed.') : sr('cam_hint', 'Camera is optional — you can turn it on any time during the call.'))}</div>
         <button class="btn btn-primary sr-primary" ${canEnter ? '' : 'disabled'} onclick="SR.start()">${esc(primary)}</button>
         ${canAudio ? `<button class="btn btn-outline sr-secondary" onclick="SR.startAudio()">${esc(sr('start_audio', 'Start audio call'))}</button>` : ''}
         ${unreliable
