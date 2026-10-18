@@ -544,7 +544,30 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
     const has_more = messages.length > limit;
     const sliced = messages.slice(0, limit);
 
+    // Replies carry a quote of the message they answer. When that original is
+    // older than this page, look it up (this conversation only) so the quote
+    // can still be drawn, same as the mini-app does for its history window.
+    const inPage = new Set(sliced.map(m => String(m.id)));
+    const missingParents = [...new Set(sliced
+      .filter(m => m.parent_id && !inPage.has(String(m.parent_id)))
+      .map(m => String(m.parent_id)))];
+    const parentMap = new Map();
+    if (missingParents.length) {
+      const { data: parents } = await supabase
+        .from('messages')
+        .select('id, from_id, content, file_type, is_deleted')
+        .in('id', missingParents)
+        .or(`and(from_id.eq.${mentor_id},to_id.eq.${mentee_id}),and(from_id.eq.${mentee_id},to_id.eq.${mentor_id})`);
+      (parents || []).forEach(p => parentMap.set(String(p.id), {
+        id: p.id, from_id: p.from_id, content: p.content,
+        file_type: p.file_type || null, is_deleted: !!p.is_deleted
+      }));
+    }
+
     const responseMessages = sliced.map(m => ({
+      parent_id: m.parent_id || null,
+      parent_preview: m.parent_id ? (parentMap.get(String(m.parent_id)) || null) : null,
+      read_at: m.read_at || null,
       id: m.id,
       from_id: m.from_id,
       to_id: m.to_id,
