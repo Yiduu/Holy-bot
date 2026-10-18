@@ -44,6 +44,15 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
   // durations, plus the session's total duration and who ended it.
   // `adminEndedIds` is a Set of session ids known (from audit_logs) to have been
   // force-ended by an admin rather than by the host mentor.
+  // call_type arrives with migrations/20261018_session_call_type.sql. Until that
+  // is applied, a query that names the column fails; retry once without it so the
+  // admin session pages keep working (every session then reads as "type unknown").
+  async function withCallType(build) {
+    const first = await build(true);
+    if (first.error && /call_type/i.test(first.error.message || '')) return build(false);
+    return first;
+  }
+
   function formatSessionDetail(s, adminEndedIds = new Set()) {
     const now = Date.now();
     const endedAtMs = s.ended_at ? new Date(s.ended_at).getTime() : null;
@@ -77,6 +86,7 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       id: s.id,
       title: s.title,
       is_group: s.is_group,
+      call_type: s.call_type === 'video' || s.call_type === 'audio' ? s.call_type : null,
       status: s.status,
       host: s.host?.anonymous_id || 'Unknown',
       host_id: s.host?.telegram_id || null,
@@ -183,15 +193,15 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
 
   router.get('/users/:id/sessions', async (req, res) => {
     const { id } = req.params;
-    const { data: sessions, error } = await supabase
+    const { data: sessions, error } = await withCallType(typed => supabase
       .from('video_sessions')
       .select(`
-        id, room_name, title, is_group, status, scheduled_at, started_at, ended_at,
+        id, room_name, title, is_group, ${typed ? 'call_type,' : ''} status, scheduled_at, started_at, ended_at,
         host:host_id(telegram_id, anonymous_id),
         session_participants(telegram_id, joined_at, left_at, user:telegram_id(anonymous_id))
       `)
       .eq('host_id', id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }));
 
     if (error) return res.status(500).json({ error: error.message });
 
@@ -1005,15 +1015,15 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
   // this server, so it can't be "watched" from this endpoint.
   router.get('/sessions/live', async (req, res) => {
     try {
-      const { data: sessions, error } = await supabase
+      const { data: sessions, error } = await withCallType(typed => supabase
         .from('video_sessions')
         .select(`
-          id, room_name, title, is_group, status, scheduled_at, started_at, ended_at,
+          id, room_name, title, is_group, ${typed ? 'call_type,' : ''} status, scheduled_at, started_at, ended_at,
           host:host_id(telegram_id, anonymous_id),
           session_participants(telegram_id, joined_at, left_at, user:telegram_id(anonymous_id))
         `)
         .eq('status', 'active')
-        .order('started_at', { ascending: false });
+        .order('started_at', { ascending: false }));
 
       if (error) return res.status(500).json({ error: error.message });
 
@@ -1076,20 +1086,25 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       const offset = (page - 1) * limit;
       const status = req.query.status || null;
 
-      let query = supabase
-        .from('video_sessions')
-        .select(`
-          id, room_name, title, is_group, status, scheduled_at, started_at, ended_at,
-          host:host_id(telegram_id, anonymous_id),
-          session_participants(telegram_id, joined_at, left_at, user:telegram_id(anonymous_id))
-        `, { count: 'exact' });
+      const callType = ['audio', 'video'].includes(req.query.call_type) ? req.query.call_type : null;
 
-      query = status ? query.eq('status', status) : query.neq('status', 'scheduled');
-      if (req.query.host_id) query = query.eq('host_id', parseInt(req.query.host_id));
+      const { data: sessions, count, error } = await withCallType(typed => {
+        let query = supabase
+          .from('video_sessions')
+          .select(`
+            id, room_name, title, is_group, ${typed ? 'call_type,' : ''} status, scheduled_at, started_at, ended_at,
+            host:host_id(telegram_id, anonymous_id),
+            session_participants(telegram_id, joined_at, left_at, user:telegram_id(anonymous_id))
+          `, { count: 'exact' });
 
-      const { data: sessions, count, error } = await query
-        .order('started_at', { ascending: false, nullsFirst: false })
-        .range(offset, offset + limit - 1);
+        query = status ? query.eq('status', status) : query.neq('status', 'scheduled');
+        if (req.query.host_id) query = query.eq('host_id', parseInt(req.query.host_id));
+        if (typed && callType) query = query.eq('call_type', callType);
+
+        return query
+          .order('started_at', { ascending: false, nullsFirst: false })
+          .range(offset, offset + limit - 1);
+      });
 
       if (error) return res.status(500).json({ error: error.message });
 

@@ -474,6 +474,7 @@
     A.micMuted = !A.prefs.mic; A.camMuted = !A.prefs.cam; A.sharing = false; A.hand = false; A.tiles = false;
     renderControls();
     setStatus('connecting');
+    reportHostCam();
     toggleShareScreenButtonVisibility(A.isHost && A.data.call_mode !== 'audio');
     acquireWakeLock();
     if (A.data.call_mode === 'audio' && window.HolyAudioCall) return startAudio();
@@ -557,7 +558,7 @@
       }
     });
     api.addEventListener('audioMuteStatusChanged', (e) => { A.micMuted = !!e.muted; renderControls(); });
-    api.addEventListener('videoMuteStatusChanged', (e) => { A.camMuted = !!e.muted; renderControls(); });
+    api.addEventListener('videoMuteStatusChanged', (e) => { A.camMuted = !!e.muted; renderControls(); reportHostCam(); });
     api.addEventListener('screenSharingStatusChanged', (e) => { A.sharing = !!e.on; renderControls(); });
     api.addEventListener('raiseHandUpdated', (e) => { if (e && e.handRaised !== undefined) { A.hand = !!e.handRaised; } });
     api.addEventListener('tileViewChanged', (e) => { A.tiles = !!e.enabled; });
@@ -863,13 +864,27 @@
   function showBanner(text) { const b = $('callBanner'); if (b) { b.textContent = text; b.classList.remove('hidden'); } }
   function hideBanner() { $('callBanner')?.classList.add('hidden'); }
 
+  // The host's camera choice decides whether the admin sees this as a video call
+  // or an audio call. Only the host reports it, and only once in the call.
+  function hostCamBody(inRoom) {
+    const body = { in_room: !!inRoom };
+    if (A && A.isHost && A.phase === 'call') body.cam = !A.camMuted;
+    return body;
+  }
+  // Report straight away (not on the next ~25 s heartbeat) when the host enters
+  // the call or switches the camera. Best-effort: the heartbeat repeats it anyway.
+  function reportHostCam() {
+    if (!A || !A.isHost || A.phase !== 'call') return;
+    apiFetch(`/api/sessions/${A.sessionId}/heartbeat`, { method: 'POST', body: hostCamBody(true), retry: false, timeout: 8000 }).catch(() => { });
+  }
+
   // ── heartbeat: presence + live state (works even when the socket is down) ──
   function startHeartbeat() {
     stopHeartbeat();
     const tick = async () => {
       if (!A) return;
       try {
-        const st = await apiFetch(`/api/sessions/${A.sessionId}/heartbeat`, { method: 'POST', body: { in_room: true }, retry: false, timeout: 8000 });
+        const st = await apiFetch(`/api/sessions/${A.sessionId}/heartbeat`, { method: 'POST', body: hostCamBody(true), retry: false, timeout: 8000 });
         if (!A) return;
         if (st.ended) return remoteEnded('ended');
         if (st.call_mode) followMode(st.call_mode);

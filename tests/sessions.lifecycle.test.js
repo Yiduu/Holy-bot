@@ -45,7 +45,10 @@ function from(table) {
         const row = { ...p }; if (table === 'video_sessions') row.id = row.id || 's' + (++seq);
         rows.push(row); return row;
       });
-    } else if (op === 'update') { data = match(); data.forEach(r => Object.assign(r, payload)); }
+    } else if (op === 'update') {
+      if (global.__failCallType && payload && 'call_type' in payload) return { data: null, error: { message: 'column "call_type" of relation "video_sessions" does not exist' } };
+      data = match(); data.forEach(r => Object.assign(r, payload));
+    }
     else if (op === 'delete') { const m = match(); db[table] = rows = rows.filter(r => !m.includes(r)); count = m.length; data = m; }
     if (lim) data = data.slice(0, lim);
     if (single) return data.length === 1 ? { data: data[0], error: null } : { data: null, error: { message: 'not found' } };
@@ -105,6 +108,24 @@ let port;
   db.user_settings.length = 0;
   assert.ok(emitted.some(e => e[0] === `user:${MENTEE}` && e[1] === 'session_host_joined')); ok('host join activates + unlocks mentee lobby');
   let hb = await call(MENTEE, 'POST', `/${sid}/heartbeat`); assert.equal(hb.body.host_present, true); ok('heartbeat reports host_present');
+
+  // 3b. call type: the HOST's camera decides audio vs video; nobody else can change it
+  const callType = () => db.video_sessions.find(s => s.id === sid).call_type;
+  assert.equal(callType(), undefined); ok('call type is unknown until the host reports a camera state');
+  await call(MENTEE, 'POST', `/${sid}/heartbeat`, { cam: true });
+  assert.equal(callType(), undefined); ok("a mentee's camera never sets the call type");
+  await call(MENTOR, 'POST', `/${sid}/heartbeat`, { in_room: true });
+  assert.equal(callType(), undefined); ok('a heartbeat without a camera state leaves the type unknown');
+  global.__failCallType = true;
+  r = await call(MENTOR, 'POST', `/${sid}/heartbeat`, { in_room: true, cam: false });
+  assert.equal(r.status, 200); assert.equal(callType(), undefined); ok('a failing call_type write (migration not run) never breaks the heartbeat');
+  global.__failCallType = false;
+  await call(MENTOR, 'POST', `/${sid}/heartbeat`, { in_room: true, cam: false });
+  assert.equal(callType(), 'audio'); ok('host camera off → audio call');
+  await call(MENTOR, 'POST', `/${sid}/heartbeat`, { in_room: true, cam: true });
+  assert.equal(callType(), 'video'); ok('host turns the camera on → it becomes a video call');
+  await call(MENTOR, 'POST', `/${sid}/heartbeat`, { in_room: true, cam: false });
+  assert.equal(callType(), 'video'); ok('video is sticky: camera off later does not turn it back into audio');
 
   // 4. host drops (leave without end) → session survives, mentee told, host can rejoin
   emitted.length = 0;
