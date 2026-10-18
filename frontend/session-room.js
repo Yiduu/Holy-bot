@@ -583,7 +583,7 @@
       if (err?.error?.isFatal) setStatus('problem');
     });
     // Hang-up from Jitsi's own toolbar.
-    const onHangup = () => { if (A && !A.ending && A.phase === 'call') handleHangup(); };
+    const onHangup = () => { if (A && A.api === api && !A.ending && A.phase === 'call') handleHangup(); };
     api.addEventListener('videoConferenceLeft', onHangup);
     api.addEventListener('readyToClose', onHangup);
   }
@@ -628,6 +628,8 @@
         if (k === 'closed') return;
         const live = k === 'live' || k === 'weak';
         if (live && !A.connected) { A.connected = true; A.startedAt = Date.now(); window.activeSession.connected = true; startTick(); haptic('success'); }
+        if (live) A.peerLeft = false;
+        if (A.peerLeft && !live) { setStatus('connecting'); return acLine(A.isHost ? sr('peer_left_mentee', 'Your mentee left the call. You can wait here in case they come back.') : sr('peer_left_mentor', 'Your mentor left the call. Stay here in case they come back.')); }
         if (live) {
           acLine(k === 'weak' ? sr('audio_weak', 'Your internet is slow. The call is saving data to keep your voice clear.') : '',
             k === 'weak' ? [{ label: sr('try_now', 'Try again now'), on: 'SR.audioRetry()' }] : []);
@@ -639,6 +641,13 @@
         const p = $('acPanel'); if (!p) return;
         p.style.setProperty('--ac-remote', remote.toFixed(2)); p.style.setProperty('--ac-local', local.toFixed(2));
         p.classList.toggle('is-speaking', remote > 0.08);
+      },
+      onPeerLeft: () => {
+        if (!A || A.call !== call) return;
+        A.peerLeft = true; haptic('warning');
+        setStatus('connecting');
+        acLine(A.isHost ? sr('peer_left_mentee', 'Your mentee left the call. You can wait here in case they come back.') : sr('peer_left_mentor', 'Your mentor left the call. Stay here in case they come back.'));
+        showToast(A.isHost ? sr('peer_left_mentee_t', 'Your mentee left the call.') : sr('peer_left_mentor_t', 'Your mentor left the call.'), 'info');
       },
       onAutoplayBlocked: () => acLine(sr('audio_tap_hear', 'Tap to hear the call'), [{ label: sr('audio_hear', 'Tap to hear'), primary: true, on: 'SR.audioListen()' }]),
       onFail: (why) => audioFailed(why),
@@ -669,10 +678,29 @@
     try { c.stop(notify); } catch (_) { /* ignore */ }
     $('callStage')?.classList.remove('is-audio');
   }
+  // Mentor (or a follow-the-mentor update) moves the whole session from video to the audio call.
+  async function switchToAudio(tell) {
+    if (!A || A.data.call_mode === 'audio' || !window.HolyAudioCall || !window.RTCPeerConnection) return;
+    const sid = A.sessionId;
+    if (tell) {
+      try { await apiFetch(`/api/sessions/${sid}/call-mode`, { method: 'POST', body: { mode: 'audio' }, retry: false, timeout: 8000 }); }
+      catch (_) { return showToast(sr('audio_pick_fail', 'Could not start the audio call. Try again, or start the video session.'), 'error'); }
+    }
+    if (!A || A.sessionId !== sid) return;
+    A.phase = 'lobby';                       // first, so Jitsi's "left" event is ignored
+    clearTimeout(connectTimer); connectTimer = null;
+    try { A.api?.dispose(); } catch (_) { /* ignore */ }
+    A.api = null; window.jitsiApi = null;
+    const c = $('jitsiContainer'); if (c) c.innerHTML = '';
+    A.data.call_mode = 'audio'; A.connected = false; A.startedAt = 0; A.peerLeft = false; A.lobbyKey = '';
+    closeSheet();
+    showToast(sr('video_to_audio', 'Switched to the audio call.'), 'info');
+    startCall();
+  }
   // The mentor's choice (or a "use video" switch) arrived from the server or a heartbeat.
   function followMode(mode) {
     if (!A || A.data.call_mode === mode || (mode !== 'audio' && mode !== 'video')) return;
-    if (A.phase === 'call') { if (mode === 'video') switchToVideo(false); return; }
+    if (A.phase === 'call') { if (mode === 'video') switchToVideo(false); else switchToAudio(false); return; }
     A.data.call_mode = mode; A.lobbyKey = '';
     if (A.phase === 'lobby') renderLobby();
   }
@@ -737,6 +765,7 @@
     if (A.isHost) items.push({ label: sr('mute_all', 'Mute everyone'), onClick: () => { cmd('muteEveryone'); showToast(sr('muted_all', 'Everyone has been muted.'), 'success'); } });
     if (isTouchDevice()) items.unshift({ label: sr('flip_camera', 'Flip camera'), onClick: () => window.SR.flip() });
     if (A.isHost) items.unshift({ label: A.sharing ? sr('stop_share', 'Stop sharing') : sr('share_screen', 'Share screen'), onClick: () => window.toggleScreenShare() });
+    if (A.isHost && !A.data.is_group && window.HolyAudioCall && window.RTCPeerConnection) items.push({ label: sr('switch_audio', 'Switch to audio call'), onClick: () => switchToAudio(true) });
     items.push({ label: sr('having_trouble', 'Having trouble?'), onClick: troubleSheet });
     sheet({ title: sr('more', 'More'), actions: items.map(i => ({ ...i, kind: 'ghost' })) });
   }
@@ -1050,6 +1079,10 @@
     },
     ended(sessionId, reason) { if (A && A.sessionId === sessionId) remoteEnded(reason); },
     signal(msg) { if (A && A.call && msg && msg.session_id === A.sessionId) A.call.handleSignal(msg); },
+    participantLeft(sessionId) {
+      if (!A || A.sessionId !== sessionId || A.phase !== 'call' || A.audio) return; // audio shows its own message
+      haptic('warning'); showBanner(sr('peer_left_mentee', 'Your mentee left the call. You can wait here in case they come back.'));
+    },
     modeChanged(sessionId, mode) { if (A && A.sessionId === sessionId) followMode(mode); },
     waiting(sessionId, name) {
       if (A && A.sessionId === sessionId) return; // already there

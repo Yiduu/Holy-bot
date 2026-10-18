@@ -1602,6 +1602,7 @@ function connectSocket() {
   socket.on('call_signal', (msg) => window.SRsocket?.signal(msg));
   socket.on('call_mode_changed', ({ session_id, mode } = {}) => window.SRsocket?.modeChanged(session_id, mode));
   socket.on('session_host_left', ({ session_id } = {}) => window.SRsocket?.hostLeft(session_id));
+  socket.on('session_participant_left', ({ session_id } = {}) => window.SRsocket?.participantLeft(session_id));
   // A mentee is waiting in the lobby and the mentor isn't in the room yet.
   socket.on('session_participant_waiting', ({ session_id, name } = {}) => window.SRsocket?.waiting(session_id, name));
 

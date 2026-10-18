@@ -33,7 +33,7 @@
       isHost: false,
       ice: async () => [],
       signal: async () => {},
-      onStatus() {}, onLevel() {}, onFail() {}, onAutoplayBlocked() {},
+      onStatus() {}, onLevel() {}, onFail() {}, onAutoplayBlocked() {}, onPeerLeft() {},
       PC: root.RTCPeerConnection,
       getUserMedia: (c) => root.navigator.mediaDevices.getUserMedia(c),
       AudioContext: root.AudioContext || root.webkitAudioContext,
@@ -190,7 +190,7 @@
           await pc.addIceCandidate(data.c).catch(() => {});
           return;
         }
-        if (kind === 'bye') { setStatus('closed'); return; }
+        if (kind === 'bye') { try { o.onPeerLeft(); } catch (_) { /* ui */ } return; }
       } catch (e) { /* a bad message must not kill the call */ }
     }
 

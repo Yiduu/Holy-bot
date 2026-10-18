@@ -473,7 +473,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
   // survives a dropped connection: the room stays open and they can rejoin.
   router.post('/:id/leave', requireAuth, async (req, res) => {
     const { id: telegram_id } = req.telegramUser;
-    const { data: session } = await supabase.from('video_sessions').select('id, host_id, status').eq('id', req.params.id).single();
+    const { data: session } = await supabase.from('video_sessions').select('id, host_id, status, is_group').eq('id', req.params.id).single();
     if (!session) return res.status(404).json({ error: 'We could not find this session' });
 
     await supabase.from('session_participants').update({ left_at: nowIso() })
@@ -485,6 +485,9 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       const others = (await getParticipants(session.id)).filter(p => !same(p.telegram_id, telegram_id));
       if (same(session.host_id, telegram_id)) {
         others.filter(isPresent).forEach(p => emitToUserRoom(p.telegram_id, 'session_host_left', { session_id: session.id }));
+      } else if (!session.is_group) {
+        // The mentee left a 1-on-1: tell the mentor (no identity needed — it is their only mentee).
+        emitToUserRoom(session.host_id, 'session_participant_left', { session_id: session.id });
       }
     }
     res.json({ success: true, ended });
