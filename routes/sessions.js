@@ -27,19 +27,19 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
   const waitingPings = new Map(); // `${sessionId}:${telegramId}` → last ping ts
 
   // ── Call mode: built-in audio call ("audio") or the Jitsi video room ("video") ──
-  // CALL_PROVIDER=p2p turns the audio call on for 1-on-1 sessions. Anything else
-  // (or unset) keeps Jitsi for everyone. If one person cannot use audio (no
-  // microphone support, "open in browser"), either side can flip the WHOLE session
-  // to video so the two phones never end up in different kinds of call.
-  const callModeOverride = new Map();   // session_id → 'video'
+  // The mentor picks "Start audio call" or "Start video session" in the lobby; the choice
+  // is stored here and both people follow it. Default is video (Jitsi). If one person
+  // cannot use audio, either side can flip the WHOLE session to video so the two phones
+  // never end up in different kinds of call. CALL_PROVIDER=off hides the audio option.
+  const callModeOverride = new Map();   // session_id → 'audio' | 'video'
   const signalWindow = new Map();       // `${session}:${user}` → { t, n } (rate limit)
   const SIGNAL_KINDS = new Set(['hello', 'offer', 'answer', 'candidate', 'bye']);
   const SIGNAL_MAX_BYTES = 20000;
   const SIGNAL_LIMIT = 150, SIGNAL_WINDOW_MS = 10 * 1000;
   const callModeFor = (session) => {
     if (session.is_group) return 'video';
-    if (callModeOverride.get(String(session.id)) === 'video') return 'video';
-    return String(process.env.CALL_PROVIDER || '').toLowerCase() === 'p2p' ? 'audio' : 'video';
+    if (String(process.env.CALL_PROVIDER || '').toLowerCase() === 'off') return 'video';
+    return callModeOverride.get(String(session.id)) === 'audio' ? 'audio' : 'video';
   };
 
   const nowIso = () => new Date().toISOString();
@@ -379,7 +379,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     const isHost = same(session.host_id, telegram_id);
     if (!me && !isHost) { res.status(403).json({ error: 'Not a participant', code: 'forbidden' }); return null; }
     const other = isHost ? participants.find(p => !same(p.telegram_id, session.host_id)) : { telegram_id: session.host_id };
-    return { session, telegram_id, peerId: other ? other.telegram_id : null };
+    return { session, telegram_id, isHost, peerId: other ? other.telegram_id : null };
   }
 
   // GET /api/sessions/:id/ice — STUN/TURN servers for the audio call.
@@ -417,15 +417,18 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     }
   });
 
-  // POST /api/sessions/:id/call-mode { mode: 'video' } — move the whole session to the
-  // Jitsi video room (e.g. a phone that cannot use the microphone in this app).
+  // POST /api/sessions/:id/call-mode { mode } — the mentor chooses 'audio' or 'video';
+  // the mentee can only ask for 'video' (e.g. a phone that cannot use the microphone here).
   router.post('/:id/call-mode', requireAuth, async (req, res) => {
     try {
       const ctx = await callContext(req, res); if (!ctx) return;
-      if (req.body?.mode !== 'video') return res.status(400).json({ error: 'Only "video" can be requested', code: 'bad_mode' });
-      callModeOverride.set(String(ctx.session.id), 'video');
-      if (ctx.peerId) emitToUserRoom(ctx.peerId, 'call_mode_changed', { session_id: ctx.session.id, mode: 'video' });
-      res.json({ mode: 'video' });
+      const mode = req.body?.mode;
+      if (mode !== 'audio' && mode !== 'video') return res.status(400).json({ error: 'Unknown call type', code: 'bad_mode' });
+      if (mode === 'audio' && !ctx.isHost) return res.status(403).json({ error: 'Only the host can start an audio call', code: 'host_only' });
+      if (mode === 'audio' && String(process.env.CALL_PROVIDER || '').toLowerCase() === 'off') return res.status(400).json({ error: 'Audio calls are turned off', code: 'disabled' });
+      callModeOverride.set(String(ctx.session.id), mode);
+      if (ctx.peerId) emitToUserRoom(ctx.peerId, 'call_mode_changed', { session_id: ctx.session.id, mode });
+      res.json({ mode });
     } catch (e) {
       console.error('[Sessions] call-mode failed:', e);
       res.status(500).json({ error: 'Could not switch the call.' });

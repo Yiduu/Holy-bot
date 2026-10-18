@@ -278,9 +278,11 @@
     const canEnter = isHost || hostPresent;
     const unreliable = window.detectUnreliableSessionEnvironment() && data.call_mode !== 'audio';
     const audioMode = data.call_mode === 'audio' && !!window.HolyAudioCall;
+    // The mentor can choose a plain audio call in a 1-on-1 session.
+    const canAudio = isHost && !data.is_group && !!window.HolyAudioCall && !!window.RTCPeerConnection;
 
     // Heartbeats re-render this every few seconds; skip when nothing visible changed.
-    const key = JSON.stringify([hostPresent, waiting, prefs.mic, prefs.cam, A.waitedMs > 20000]);
+    const key = JSON.stringify([hostPresent, waiting, prefs.mic, prefs.cam, A.waitedMs > 20000, data.call_mode]);
     if (A.lobbyKey === key && $('sessionLobby').firstChild) return;
     A.lobbyKey = key;
 
@@ -304,9 +306,10 @@
       : '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>';
 
     const primary = isHost
-      ? sr('start', 'Start session')
+      ? (canAudio ? sr('start_video_session', 'Start video session') : sr('start', 'Start session'))
       : (hostPresent ? sr('join_now', 'Join now') : sr('join_session', 'Join session'));
-    const badge = data.is_group ? sr('group_session_badge', 'Group session') : sr('1on1_session_badge', '1-on-1 session');
+    const badge = data.is_group ? sr('group_session_badge', 'Group session')
+      : audioMode ? sr('audio_badge', 'Audio call') : sr('1on1_session_badge', '1-on-1 session');
 
     $('sessionLobby').innerHTML = `
       <div class="sr-card sr-lobby">
@@ -324,6 +327,7 @@
         </div>
         <div class="sr-hint">${esc(audioMode ? sr('audio_hint', 'This is an audio call — no camera needed.') : sr('cam_hint', 'Camera is optional — you can turn it on any time during the call.'))}</div>
         <button class="btn btn-primary sr-primary" ${canEnter ? '' : 'disabled'} onclick="SR.start()">${esc(primary)}</button>
+        ${canAudio ? `<button class="btn btn-outline sr-secondary" onclick="SR.startAudio()">${esc(sr('start_audio', 'Start audio call'))}</button>` : ''}
         ${unreliable
           ? `<button class="btn btn-outline sr-secondary" onclick="SR.external()">${esc(sr('open_browser_rec', 'Open in browser (recommended)'))}</button>`
           : `<button class="sr-link" onclick="SR.trouble()">${esc(sr('having_trouble', 'Having trouble?'))}</button>`}
@@ -664,6 +668,13 @@
     try { c.stop(notify); } catch (_) { /* ignore */ }
     $('callStage')?.classList.remove('is-audio');
   }
+  // The mentor's choice (or a "use video" switch) arrived from the server or a heartbeat.
+  function followMode(mode) {
+    if (!A || A.data.call_mode === mode || (mode !== 'audio' && mode !== 'video')) return;
+    if (A.phase === 'call') { if (mode === 'video') switchToVideo(false); return; }
+    A.data.call_mode = mode; A.lobbyKey = '';
+    if (A.phase === 'lobby') renderLobby();
+  }
   // Whole session moves to the video room. `tell` = we are the one who asked.
   async function switchToVideo(tell) {
     if (!A || A.data.call_mode !== 'audio') return;
@@ -834,9 +845,7 @@
         const st = await apiFetch(`/api/sessions/${A.sessionId}/heartbeat`, { method: 'POST', body: { in_room: true }, retry: false, timeout: 8000 });
         if (!A) return;
         if (st.ended) return remoteEnded('ended');
-        if (st.call_mode === 'video' && A.data.call_mode === 'audio') {
-          if (A.phase === 'call') switchToVideo(false); else A.data.call_mode = 'video';
-        }
+        if (st.call_mode) followMode(st.call_mode);
         const was = A.hostPresent;
         A.hostPresent = !!st.host_present || A.isHost;
         A.presentCount = st.present_count || 1;
@@ -1040,10 +1049,7 @@
     },
     ended(sessionId, reason) { if (A && A.sessionId === sessionId) remoteEnded(reason); },
     signal(msg) { if (A && A.call && msg && msg.session_id === A.sessionId) A.call.handleSignal(msg); },
-    modeChanged(sessionId, mode) {
-      if (!A || A.sessionId !== sessionId || mode !== 'video') return;
-      if (A.phase === 'call') switchToVideo(false); else A.data.call_mode = 'video';
-    },
+    modeChanged(sessionId, mode) { if (A && A.sessionId === sessionId) followMode(mode); },
     waiting(sessionId, name) {
       if (A && A.sessionId === sessionId) return; // already there
       haptic('success');
@@ -1062,6 +1068,16 @@
     audioListen() { A?.call?.listen().then(ok => { if (ok && A) acLine(''); }); },
     audioRestart() { if (!A) return; stopAudio(false); A.phase = 'lobby'; startCall(); },
     useVideo() { switchToVideo(true); },
+    // Mentor picks the call type. The server stores it so the mentee follows.
+    async startAudio() {
+      if (!A || !A.isHost) return;
+      if (!window.RTCPeerConnection) return showToast(sr('audio_unsupported', 'Calls with sound are not supported here. The video call should work.'), 'info');
+      try { await apiFetch(`/api/sessions/${A.sessionId}/call-mode`, { method: 'POST', body: { mode: 'audio' }, retry: false, timeout: 8000 }); }
+      catch (e) { return showToast(sr('audio_pick_fail', 'Could not start the audio call. Try again, or start the video session.'), 'error'); }
+      if (!A) return;
+      A.data.call_mode = 'audio'; A.lobbyKey = '';
+      startCall();
+    },
     mic() {
       if (A && A.audio) { haptic('selection'); A.micMuted = !A.micMuted; A.call?.setMuted(A.micMuted); renderControls(); return; }
       haptic('selection'); if (A) A.micTouched = true; if (!cmd('toggleAudio')) showToast(sr('ctl_fail', 'Controls are not ready yet.'), 'info'); },
@@ -1085,7 +1101,15 @@
       if (!A) return;
       A.prefs[which] = !A.prefs[which]; savePrefs(A.prefs); haptic('selection'); renderLobby();
     },
-    start() { if (A && (A.isHost || A.hostPresent || A.waitedMs > 20000)) startCall(); },
+    async start() {
+      if (!A || !(A.isHost || A.hostPresent || A.waitedMs > 20000)) return;
+      // Mentor chose audio earlier but now wants video: tell the server first.
+      if (A.isHost && A.data.call_mode === 'audio') {
+        try { await apiFetch(`/api/sessions/${A.sessionId}/call-mode`, { method: 'POST', body: { mode: 'video' }, retry: false, timeout: 8000 }); } catch (_) { /* join gives the mode anyway */ }
+        if (!A) return; A.data.call_mode = 'video';
+      }
+      startCall();
+    },
     // "Open in browser instead" → hand-off page (nothing opens until the button there is tapped).
     external() { return switchToHandoff('browser'); },
     // Phone screen share → hand-off page for the Jitsi Meet app.
