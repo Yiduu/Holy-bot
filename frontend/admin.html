@@ -1873,7 +1873,7 @@
         @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
     </style>
     <!-- Shared look with the mini-app (tokens, cards, buttons, chips, sheets). Must stay after the inline <style>. -->
-    <link rel="stylesheet" href="admin.css?v=1.0" />
+    <link rel="stylesheet" href="admin.css?v=1.1" />
 </head>
 
 <body>
@@ -2233,18 +2233,21 @@
 
                 <!-- ── Live Sessions ─────────────────────────────────── -->
                 <div class="pane" id="pane-live-sessions">
-                    <div class="toolbar">
-                        <div style="display:flex;gap:6px">
-                            <button class="btn btn-sm" id="liveSessTabLive" onclick="switchSessionsView('live')">Live</button>
-                            <button class="btn btn-ghost btn-sm" id="liveSessTabPending" onclick="switchSessionsView('pending')">Pending<span id="pendingSessionsBadge" class="nav-badge" style="display:none;margin-left:4px">0</span></button>
-                            <button class="btn btn-ghost btn-sm" id="liveSessTabHistory" onclick="switchSessionsView('history')">History</button>
+                    <div class="ls-bar">
+                        <div class="seg" id="lsViewSeg">
+                            <button class="seg-btn active" id="liveSessTabLive" onclick="switchSessionsView('live')">Live</button>
+                            <button class="seg-btn" id="liveSessTabPending" onclick="switchSessionsView('pending')">Pending<span id="pendingSessionsBadge" class="seg-badge" style="display:none">0</span></button>
+                            <button class="seg-btn" id="liveSessTabHistory" onclick="switchSessionsView('history')">History</button>
                         </div>
-                        <div style="font-size:12px;color:var(--text2);flex:1">
-                            Audio/video runs peer-to-peer and isn't visible here — only who joined, when, and for how long.
+                        <div class="seg seg-type show-counts" id="lsTypeSeg">
+                            <button class="seg-btn active" data-type="all" onclick="setSessionsType('all')">All</button>
+                            <button class="seg-btn" data-type="video" onclick="setSessionsType('video')"><svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>Video<span class="seg-count" id="lsCountVideo"></span></button>
+                            <button class="seg-btn" data-type="audio" onclick="setSessionsType('audio')"><svg viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>Audio<span class="seg-count" id="lsCountAudio"></span></button>
                         </div>
-                        <button class="btn btn-ghost" onclick="switchSessionsView(currentSessionsView)">Refresh</button>
+                        <button class="btn btn-ghost btn-sm ls-refresh" onclick="switchSessionsView(currentSessionsView)">Refresh</button>
                     </div>
-                    <div id="liveSessionsContainer" class="mentorship-grid">
+                    <p class="ls-note" id="lsNote"></p>
+                    <div id="liveSessionsContainer" class="ls-container">
                         <div class="loading">Loading…</div>
                     </div>
                     <div class="pagination" id="sessionsHistoryPager"></div>
@@ -3266,66 +3269,8 @@
             try {
                 const d = await api(`/api/admin/users/${tid}/sessions`);
                 if (!d.sessions?.length) { c.innerHTML = '<div class="empty">No sessions</div>'; return; }
-                c.innerHTML = d.sessions.map(s => renderSessionSummaryCard(s)).join('');
+                c.innerHTML = `<div class="call-grid" style="grid-template-columns:1fr">${d.sessions.map(s => renderCallCard(s, 'history')).join('')}</div>`;
             } catch (e) { c.innerHTML = `<div class="loading">${e.message}</div>`; }
-        }
-
-        // Compact summary card: status, total duration, who ended it, and a
-        // per-participant join/leave breakdown. Used both in the per-user
-        // Sessions tab and the Live Sessions history view.
-        function renderSessionSummaryCard(s) {
-            const statusChip = s.status === 'active' ? '<span class="chip chip-green">● Live</span>'
-                : s.status === 'ended' ? '<span class="chip chip-gray">Ended</span>'
-                : s.status === 'cleared' ? '<span class="chip chip-gray">Cleared</span>'
-                : `<span class="chip chip-gold">${esc(s.status)}</span>`;
-
-            const endedByLabel = s.ended_by === 'admin' ? ' by admin' : s.ended_by === 'host' ? ' by host' : '';
-            const durationLabel = s.total_duration_seconds != null
-                ? `${fmtDuration(s.total_duration_seconds)}${(s.status === 'ended' || s.status === 'cleared') ? endedByLabel : ''}`
-                : '–';
-
-            const participantRows = (s.participants || []).map(p => `
-                <div class="mentee-row">
-                    <div class="mentee-row-header">
-                        <span class="mentee-name" style="font-family:var(--font-mono);font-size:11.5px;color:var(--accent);">
-                            ${esc(p.anonymous_id)}${p.is_host ? ' <span class="chip chip-gold" style="font-size:9px;padding:1px 5px;">Host</span>' : ''}
-                        </span>
-                    </div>
-                    <div class="mentee-details">
-                        <div class="mentee-detail-item">
-                            <span class="mentee-detail-label">Joined</span>
-                            <span class="mentee-detail-value">${p.joined_at ? new Date(p.joined_at).toLocaleString() : '–'}</span>
-                        </div>
-                        <div class="mentee-detail-item">
-                            <span class="mentee-detail-label">Left</span>
-                            <span class="mentee-detail-value">${p.left_at ? new Date(p.left_at).toLocaleString() : (p.still_in_session ? 'Still in session' : '–')}</span>
-                        </div>
-                        <div class="mentee-detail-item" style="grid-column: span 2;">
-                            <span class="mentee-detail-label">Duration</span>
-                            <span class="mentee-detail-value">${p.duration_seconds != null ? fmtDuration(p.duration_seconds) : '–'}</span>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-
-            return `
-                <div class="mentor-card" style="margin-bottom:10px">
-                    <div class="mentor-header">
-                        <div class="mentor-info">
-                            <span class="mentor-name">${esc(s.title || 'Session')}</span>
-                        </div>
-                        ${statusChip}
-                    </div>
-                    <div class="mentor-bio">
-                        ${s.is_group ? '👥 Group' : '💬 1‑on‑1'} · Host: ${esc(s.host)} · Total duration: ${durationLabel}
-                    </div>
-                    <div class="mentees-section">
-                        <div class="mentees-list" style="display:flex;">
-                            ${participantRows || '<div class="empty" style="padding:6px 0">No join records</div>'}
-                        </div>
-                    </div>
-                </div>
-            `;
         }
 
         /* ── Applications ───────────────────────────────────────────── */
@@ -4339,6 +4284,7 @@
         let liveSessionsTicker = null;
         let currentSessionsView = 'live';
         let sessionsHistoryPage = 1;
+        let sessionsTypeFilter = 'all';   // 'all' | 'video' | 'audio'
 
         function fmtDuration(sec) {
             sec = Math.max(0, sec | 0);
@@ -4361,15 +4307,105 @@
             } catch { /* non-fatal */ }
         }
 
+        /* ── Call cards (shared by Live, History and the per-user tab) ── */
+        const CALL_ICONS = {
+            video: '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>',
+            audio: '<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>',
+            none: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'
+        };
+        function callSvg(kind) { return `<svg viewBox="0 0 24 24" aria-hidden="true">${CALL_ICONS[kind] || CALL_ICONS.none}</svg>`; }
+        function callTypeOf(s) { return s.call_type === 'video' || s.call_type === 'audio' ? s.call_type : 'none'; }
+        function callWhen(iso) {
+            return iso ? new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+        }
+
+        function callPeopleHtml(s) {
+            return (s.participants || []).map(p => {
+                const tip = `Joined ${p.joined_at ? new Date(p.joined_at).toLocaleString() : '–'}` +
+                    (p.left_at ? ` · Left ${new Date(p.left_at).toLocaleString()}` : (p.still_in_session ? ' · Still in session' : ''));
+                return `<div class="call-person" title="${esc(tip)}">
+                    <span class="call-av">${esc(adminInitial(p.anonymous_id))}</span>
+                    <span class="call-pname"><span>${esc(p.anonymous_id)}</span>${p.is_host ? '<span class="call-host">Host</span>' : ''}</span>
+                    <span class="call-pmeta">${p.duration_seconds != null ? fmtDuration(p.duration_seconds) : '–'}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function renderCallCard(s, mode = 'history') {
+            const type = callTypeOf(s);
+            const live = s.status === 'active';
+            const eyebrow = type === 'video' ? 'Video call' : type === 'audio' ? 'Audio call'
+                : (live ? 'Detecting call type…' : 'Call type not recorded');
+
+            const startedTs = s.started_at ? Math.floor(new Date(s.started_at).getTime() / 1000) : Math.floor(Date.now() / 1000);
+            let state;
+            if (live) {
+                state = `<span class="chip chip-green"><span class="call-dot"></span>Live · <span data-duration-start="${startedTs}">${fmtDuration(Math.floor(Date.now() / 1000) - startedTs)}</span></span>`;
+            } else if (s.status === 'ended' || s.status === 'cleared') {
+                const by = s.ended_by === 'admin' ? ' · by admin' : '';
+                state = `<span class="chip chip-muted">${s.status === 'cleared' ? 'Cleared' : 'Ended'}${s.total_duration_seconds != null ? ' · ' + fmtDuration(s.total_duration_seconds) : ''}${by}</span>`;
+            } else {
+                state = `<span class="chip chip-gold">${esc(s.status)}</span>`;
+            }
+
+            const meta = [s.is_group ? 'Group' : '1-on-1', `Host ${esc(s.host)}`, live ? '' : callWhen(s.started_at || s.scheduled_at)].filter(Boolean).join(' · ');
+            const people = callPeopleHtml(s);
+            const n = (s.participants || []).length;
+            const body = !people ? '<div class="call-people"><div class="call-pmeta" style="padding:4px 2px">No join records</div></div>'
+                : (live || mode === 'live'
+                    ? `<div class="call-people">${people}</div>`
+                    : `<details class="call-details"><summary>${n} participant${n === 1 ? '' : 's'}</summary><div class="call-people">${people}</div></details>`);
+
+            return `<div class="call-card type-${type}">
+                <div class="call-head">
+                    <div class="call-ico">${callSvg(type)}</div>
+                    <div class="call-main">
+                        <div class="call-eyebrow">${esc(eyebrow)}</div>
+                        <div class="call-title" title="${esc(s.title || 'Session')}">${esc(s.title || 'Session')}</div>
+                        <div class="call-meta">${meta}</div>
+                    </div>
+                    <div class="call-state">${state}</div>
+                </div>
+                ${body}
+                ${live && mode === 'live' ? `<div class="call-foot"><button class="btn btn-ghost btn-sm call-end" onclick="endLiveSession('${esc(s.id)}')">End session</button></div>` : ''}
+            </div>`;
+        }
+
+        // Kept under its old name: the per-user Sessions tab and History both call it.
+        function renderSessionSummaryCard(s) { return renderCallCard(s, 'history'); }
+
+        function renderCallSection(type, list, title, emptyText, note) {
+            return `<section class="call-section type-${type}">
+                <div class="call-section-head">
+                    <span class="call-section-ico">${callSvg(type)}</span>
+                    <h3>${esc(title)}</h3><span class="call-count">${list.length}</span>
+                    ${note ? `<span class="call-section-note">${esc(note)}</span>` : ''}
+                </div>
+                ${list.length ? `<div class="call-grid">${list.map(s => renderCallCard(s, 'live')).join('')}</div>` : `<div class="call-empty">${esc(emptyText)}</div>`}
+            </section>`;
+        }
+
+        /* ── View + type switching ─────────────────────────────────── */
         function switchSessionsView(view) {
             currentSessionsView = view;
-            document.getElementById('liveSessTabLive').classList.toggle('btn-ghost', view !== 'live');
-            document.getElementById('liveSessTabPending').classList.toggle('btn-ghost', view !== 'pending');
-            document.getElementById('liveSessTabHistory').classList.toggle('btn-ghost', view !== 'history');
+            [['liveSessTabLive', 'live'], ['liveSessTabPending', 'pending'], ['liveSessTabHistory', 'history']]
+                .forEach(([id, v]) => document.getElementById(id).classList.toggle('active', v === view));
+            const typeSeg = document.getElementById('lsTypeSeg');
+            typeSeg.style.display = view === 'pending' ? 'none' : '';      // scheduled calls have no type yet
+            typeSeg.classList.toggle('show-counts', view === 'live');
             document.getElementById('sessionsHistoryPager').innerHTML = '';
+            document.getElementById('lsNote').textContent = view === 'pending'
+                ? "Scheduled sessions have no call type yet. It is set when the host enters the call and chooses camera on or off."
+                : "Calls run peer-to-peer, so only who joined, when and for how long is visible here. A call counts as Video once the host's camera is on, otherwise Audio.";
             if (view === 'live') loadLiveSessions();
             else if (view === 'pending') loadPendingSessions();
             else loadSessionsHistory(1);
+        }
+
+        function setSessionsType(type) {
+            sessionsTypeFilter = type;
+            document.querySelectorAll('#lsTypeSeg .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+            switchSessionsView(currentSessionsView);
         }
 
         async function loadLiveSessions() {
@@ -4393,63 +4429,25 @@
                 const d = await api('/api/admin/sessions/live');
                 refreshLiveSessionsBadge();
 
-                if (!d.sessions?.length) {
-                    container.innerHTML = `<div class="empty">No live sessions right now</div>`;
-                    return;
-                }
+                const all = d.sessions || [];
+                const video = all.filter(s => callTypeOf(s) === 'video');
+                const audio = all.filter(s => callTypeOf(s) === 'audio');
+                const none = all.filter(s => callTypeOf(s) === 'none');
+                document.getElementById('lsCountVideo').textContent = video.length;
+                document.getElementById('lsCountAudio').textContent = audio.length;
 
-                container.innerHTML = d.sessions.map(s => {
-                    const startedTs = s.started_at ? Math.floor(new Date(s.started_at).getTime() / 1000) : Math.floor(Date.now() / 1000);
-                    const participantsHtml = s.participants.map(p => `
-                        <div class="mentee-row">
-                            <div class="mentee-row-header">
-                                <span class="mentee-name" style="font-family:var(--font-mono);font-size:11.5px;color:var(--accent);">
-                                    ${esc(p.anonymous_id)}${p.is_host ? ' <span class="chip chip-gold" style="font-size:9px;padding:1px 5px;">Host</span>' : ''}
-                                </span>
-                            </div>
-                            <div class="mentee-details">
-                                <div class="mentee-detail-item">
-                                    <span class="mentee-detail-label">Joined</span>
-                                    <span class="mentee-detail-value">${new Date(p.joined_at).toLocaleString()}</span>
-                                </div>
-                                <div class="mentee-detail-item">
-                                    <span class="mentee-detail-label">In session for</span>
-                                    <span class="mentee-detail-value">${fmtDuration(p.duration_seconds)}</span>
-                                </div>
-                            </div>
-                        </div>
-                    `).join('');
-
-                    return `
-                        <div class="mentor-card">
-                            <div class="mentor-header">
-                                <div class="mentor-info">
-                                    <span class="mentor-name">${esc(s.title)}</span>
-                                </div>
-                                <span class="chip chip-green">● Live · <span data-duration-start="${startedTs}">${fmtDuration(Math.floor(Date.now() / 1000) - startedTs)}</span></span>
-                            </div>
-                            <div class="mentor-bio">
-                                ${s.is_group ? '👥 Group session' : '💬 1‑on‑1 session'} · Host: ${esc(s.host)} · ${s.participant_count} participant${s.participant_count === 1 ? '' : 's'}
-                            </div>
-                            <div class="mentees-section">
-                                <div class="mentees-list" style="display:flex;">
-                                    ${participantsHtml}
-                                </div>
-                                <button class="btn btn-ghost btn-sm" style="margin-top:8px;color:var(--danger)" onclick="endLiveSession('${s.id}')">
-                                    End Session
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
+                const f = sessionsTypeFilter;
+                container.innerHTML =
+                    (f === 'all' || f === 'video' ? renderCallSection('video', video, 'Video calls', 'No video calls right now') : '') +
+                    (f === 'all' || f === 'audio' ? renderCallSection('audio', audio, 'Audio calls', 'No audio calls right now') : '') +
+                    (f === 'all' && none.length ? renderCallSection('none', none, 'Detecting call type', '', 'Waiting for the host to enter the call, or the host joined from an external browser') : '');
             } catch (e) {
-                container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${e.message}</div>`;
+                container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${esc(e.message)}</div>`;
             }
         }
 
-        // Scheduled sessions that haven't started yet — who's hosting, who's
-        // invited, when it's due, and whether the 10-min "starting soon"
-        // reminder has already gone out to the host + participants.
+        // Scheduled sessions that haven't started yet. They have no call type
+        // until the host enters the call and chooses camera on or off.
         async function refreshPendingSessionsBadge() {
             try {
                 const d = await api('/api/admin/sessions/pending');
@@ -4471,70 +4469,53 @@
                 refreshPendingSessionsBadge();
 
                 if (!d.sessions?.length) {
-                    container.innerHTML = `<div class="empty">No pending schedules</div>`;
+                    container.innerHTML = '<div class="call-empty">No pending schedules</div>';
                     return;
                 }
 
-                container.innerHTML = d.sessions.map(s => {
-                    const startsMs = new Date(s.scheduled_at).getTime();
-                    const minsAway = Math.round((startsMs - Date.now()) / 60000);
-                    const etaLabel = minsAway <= 0 ? 'Starting now' : (minsAway < 60 ? `in ${minsAway} min` : `in ${Math.round(minsAway / 60)} hr`);
-                    const participantsHtml = (s.participants || []).map(name => `
-                        <div class="mentee-row">
-                            <div class="mentee-row-header">
-                                <span class="mentee-name" style="font-family:var(--font-mono);font-size:11.5px;color:var(--accent);">${esc(name)}</span>
+                container.innerHTML = `<div class="call-grid">${d.sessions.map(s => {
+                    const minsAway = Math.round((new Date(s.scheduled_at).getTime() - Date.now()) / 60000);
+                    const eta = minsAway <= 0 ? 'Starting now' : (minsAway < 60 ? `in ${minsAway} min` : `in ${Math.round(minsAway / 60)} hr`);
+                    const names = s.participants || [];
+                    const people = names.map(name => `<div class="call-person"><span class="call-av">${esc(adminInitial(name))}</span><span class="call-pname"><span>${esc(name)}</span></span></div>`).join('');
+                    return `<div class="call-card type-none">
+                        <div class="call-head">
+                            <div class="call-ico">${callSvg('none')}</div>
+                            <div class="call-main">
+                                <div class="call-eyebrow">Scheduled</div>
+                                <div class="call-title" title="${esc(s.title || 'Session')}">${esc(s.title || 'Session')}</div>
+                                <div class="call-meta">${s.is_group ? 'Group' : '1-on-1'} · Host ${esc(s.host)} · ${esc(callWhen(s.scheduled_at))}</div>
                             </div>
+                            <div class="call-state"><span class="chip chip-gold">${esc(eta)}</span></div>
                         </div>
-                    `).join('');
-
-                    return `
-                        <div class="mentor-card">
-                            <div class="mentor-header">
-                                <div class="mentor-info">
-                                    <span class="mentor-name">${esc(s.title)}</span>
-                                </div>
-                                <span class="chip chip-gold">🕒 ${esc(etaLabel)}</span>
-                            </div>
-                            <div class="mentor-bio">
-                                ${s.is_group ? '👥 Group session' : '💬 1‑on‑1 session'} · Host: ${esc(s.host)} · ${s.participant_count} invited · Starts ${new Date(s.scheduled_at).toLocaleString()}
-                            </div>
-                            <div class="mentor-bio" style="margin-top:2px">
-                                ${s.reminder_sent
-                            ? '<span class="chip chip-green" style="font-size:10px">✓ Reminder sent</span>'
-                            : '<span class="chip" style="font-size:10px">Reminder pending</span>'}
-                            </div>
-                            ${participantsHtml ? `
-                            <div class="mentees-section">
-                                <div class="mentees-list" style="display:flex;">
-                                    ${participantsHtml}
-                                </div>
-                            </div>` : ''}
-                        </div>
-                    `;
-                }).join('');
+                        ${people ? `<details class="call-details"><summary>${names.length} invited</summary><div class="call-people">${people}</div></details>` : ''}
+                        <div class="call-foot">${s.reminder_sent ? '<span class="chip chip-green">Reminder sent</span>' : '<span class="chip chip-muted">Reminder pending</span>'}</div>
+                    </div>`;
+                }).join('')}</div>`;
             } catch (e) {
-                container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${e.message}</div>`;
+                container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${esc(e.message)}</div>`;
             }
         }
 
-        // Past sessions (ended/cleared/currently-active) with total duration,
-        // who ended each one, and a per-participant join/leave breakdown —
-        // same card used in the per-user Sessions tab.
+        // Past sessions with duration, who ended them, and a per-participant
+        // breakdown. The Video / Audio switch filters on the server.
         async function loadSessionsHistory(page = 1) {
             sessionsHistoryPage = page;
             const container = document.getElementById('liveSessionsContainer');
             container.innerHTML = '<div class="loading">Loading…</div>';
             try {
-                const d = await api(`/api/admin/sessions?page=${page}`);
+                const typeQ = sessionsTypeFilter !== 'all' ? `&call_type=${sessionsTypeFilter}` : '';
+                const d = await api(`/api/admin/sessions?page=${page}${typeQ}`);
                 if (!d.sessions?.length) {
-                    container.innerHTML = `<div class="empty">No past sessions</div>`;
+                    const what = sessionsTypeFilter === 'all' ? 'past sessions' : `past ${sessionsTypeFilter} calls`;
+                    container.innerHTML = `<div class="call-empty">No ${what}</div>`;
                     document.getElementById('sessionsHistoryPager').innerHTML = '';
                     return;
                 }
-                container.innerHTML = d.sessions.map(s => renderSessionSummaryCard(s)).join('');
+                container.innerHTML = `<div class="call-grid">${d.sessions.map(s => renderCallCard(s, 'history')).join('')}</div>`;
                 pager('sessionsHistoryPager', page, d.pages, 'loadSessionsHistory');
             } catch (e) {
-                container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${e.message}</div>`;
+                container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${esc(e.message)}</div>`;
                 document.getElementById('sessionsHistoryPager').innerHTML = '';
             }
         }

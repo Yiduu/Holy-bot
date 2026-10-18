@@ -343,6 +343,31 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
     }
   });
 
+  // What we have already stored per session, so a host heartbeating every ~25 s
+  // doesn't write the same value over and over.
+  const storedCallType = new Map();
+  let callTypeWarned = false;
+
+  // 'video' is sticky (a call that ever had the host's camera on is a video call);
+  // 'audio' is only written while the type is still unknown.
+  async function recordCallType(sessionId, want) {
+    const have = storedCallType.get(sessionId);
+    if (have === 'video' || have === want) return;
+    try {
+      let q = supabase.from('video_sessions').update({ call_type: want }).eq('id', sessionId);
+      q = want === 'video' ? q.or('call_type.is.null,call_type.eq.audio') : q.is('call_type', null);
+      const { error } = await q;
+      if (error) throw error;
+      if (storedCallType.size > 500) storedCallType.clear();
+      storedCallType.set(sessionId, want);
+    } catch (e) {
+      if (!callTypeWarned) {
+        callTypeWarned = true;
+        console.warn('[Sessions] could not record call_type (has migrations/20261018_session_call_type.sql been run?):', e.message);
+      }
+    }
+  }
+
   // ── POST /api/sessions/:id/heartbeat ───────────────────────────────────────
   // Called every ~25 s by the lobby and the in-call screen. It (a) proves the
   // client is still there, and (b) returns live state, so the lobby unlocks and
@@ -366,6 +391,14 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       me.last_seen_at = nowIso();
       if (inRoom) me.left_at = null;
     }
+    // The host's camera choice decides whether this is a video or an audio call
+    // (shown on the admin Live Sessions page). Best-effort and isolated: if this
+    // fails (e.g. the call_type migration has not been run yet) it must never
+    // affect the heartbeat that keeps the call alive.
+    if (typeof req.body?.cam === 'boolean' && session.status === 'active' && same(session.host_id, telegram_id)) {
+      await recordCallType(session.id, req.body.cam ? 'video' : 'audio');
+    }
+
     res.json({
       status: session.status,
       ended: FINISHED.includes(session.status),
