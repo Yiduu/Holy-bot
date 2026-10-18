@@ -1409,82 +1409,6 @@
             border: 1px solid rgba(76, 175, 130, .2);
         }
 
-        /* ── Admin Chat Viewer Styles ── */
-        .chat-bubble-wrap {
-            display: flex;
-            flex-direction: column;
-            max-width: 80%;
-        }
-
-        .chat-bubble-wrap.mentor {
-            align-self: flex-start;
-        }
-
-        .chat-bubble-wrap.mentee {
-            align-self: flex-end;
-        }
-
-        .chat-sender {
-            font-size: 10px;
-            color: var(--text3);
-            margin-bottom: 2px;
-            font-weight: 600;
-        }
-
-        .chat-bubble-wrap.mentee .chat-sender {
-            text-align: right;
-            color: var(--accent);
-        }
-
-        .chat-bubble-wrap.mentor .chat-sender {
-            color: var(--gold);
-        }
-
-        .chat-bubble {
-            padding: 9px 13px;
-            border-radius: 12px;
-            font-size: 13px;
-            line-height: 1.5;
-            word-break: break-word;
-        }
-
-        .chat-bubble-wrap.mentor .chat-bubble {
-            background: var(--surface2);
-            color: var(--text);
-            border-bottom-left-radius: 2px;
-            border: 1px solid var(--border);
-        }
-
-        .chat-bubble-wrap.mentee .chat-bubble {
-            background: var(--gold-dim);
-            color: var(--gold);
-            border-bottom-right-radius: 2px;
-            border: 1px solid rgba(201, 168, 76, 0.25);
-        }
-
-        .chat-meta {
-            font-size: 9px;
-            color: var(--text3);
-            margin-top: 3px;
-            display: flex;
-            gap: 6px;
-            align-items: center;
-        }
-
-        .chat-bubble-wrap.mentee .chat-meta {
-            justify-content: flex-end;
-        }
-
-        .chat-edited {
-            font-style: italic;
-            opacity: 0.8;
-        }
-
-        .chat-deleted-placeholder {
-            font-style: italic;
-            color: var(--text3);
-        }
-
         /* ── Chat attachments (voice / photo / file) ─────────────────── */
         .admin-msg-voice {
             display: flex;
@@ -2301,25 +2225,8 @@
                             oninput="debounceConversations()" />
                         <button class="btn btn-ghost" onclick="clearConvFilters()">Clear</button>
                     </div>
-                    <div class="table-wrap">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Mentor</th>
-                                    <th>Mentee</th>
-                                    <th>Last Message</th>
-                                    <th>Last Activity</th>
-                                    <th>Total Messages</th>
-                                    <th>Unread</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="conversationsBody">
-                                <tr>
-                                    <td colspan="7" class="loading">Loading…</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div class="conv-list" id="conversationsList">
+                        <div class="loading">Loading conversations…</div>
                     </div>
                     <div class="pagination" id="conversationsPager"></div>
                 </div>
@@ -2857,38 +2764,29 @@
     </div>
 
     <!-- ── Conversation Chat Modal ────────────────────────────── -->
-    <div class="modal-overlay" id="conversationModal">
-        <div class="modal" style="max-width: 600px; display: flex; flex-direction: column; max-height: 90vh;">
-            <div
-                style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-shrink:0;">
-                <div>
-                    <div class="modal-title" id="chatModalTitle" style="margin-bottom:2px">Chat Viewer</div>
-                    <div style="font-size:11px;color:var(--text3);" id="chatModalSub">Mentor & Mentee Chat History</div>
+    <div class="modal-overlay" id="conversationModal" onclick="if(event.target===this)closeChatModal()">
+        <div class="modal chat-modal" role="dialog" aria-modal="true" aria-labelledby="chatModalTitle">
+            <div class="chat-head">
+                <div class="conv-avatars" id="chatHeadAvatars"></div>
+                <div class="chat-head-main">
+                    <div class="chat-head-title" id="chatModalTitle">Chat Viewer</div>
+                    <div class="chat-head-sub" id="chatModalSub"></div>
                 </div>
-                <button class="btn btn-ghost btn-sm btn-icon" onclick="closeChatModal()">
-                    <svg viewBox="0 0 24 24"
-                        style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2">
+                <button class="chat-close" onclick="closeChatModal()" aria-label="Close chat">
+                    <svg viewBox="0 0 24 24" stroke-linecap="round">
                         <line x1="18" y1="6" x2="6" y2="18" />
                         <line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
                 </button>
             </div>
 
-            <div class="chat-container"
-                style="display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--border-dim); border-radius: var(--radius); background: var(--bg);">
-                <div class="chat-load-more" id="chatLoadMoreContainer"
-                    style="display: none; padding: 10px; text-align: center; border-bottom: 1px solid var(--border-dim); flex-shrink: 0;">
-                    <button class="btn btn-ghost btn-sm" id="btnLoadMoreChats" onclick="loadMoreMessages()">Load Older
-                        Messages</button>
-                </div>
-                <div class="chat-messages" id="chatMessagesContent"
-                    style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+            <div class="chat-stage">
+                <div class="chat-scroll" id="chatMessagesContent" onscroll="chatOnScroll()">
                     <div class="loading">Loading conversation…</div>
                 </div>
-            </div>
-
-            <div style="display:flex;justify-content:flex-end;margin-top:14px;flex-shrink:0;">
-                <button class="btn btn-ghost" onclick="closeChatModal()">Close Chat</button>
+                <button class="chat-jump" id="chatJumpBtn" onclick="chatJumpToLatest()" aria-label="Jump to latest">
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+                </button>
             </div>
         </div>
     </div>
@@ -3934,12 +3832,17 @@
             loadConversations(1);
         }
 
+        function adminInitial(s) {
+            const m = String(s || '').replace(/[^A-Za-z0-9]/g, '');
+            return (m[0] || '?').toUpperCase();
+        }
+
         async function loadConversations(page = 1) {
             conversationsPage = page;
             const mentorSearch = document.getElementById('convMentorSearch').value.trim();
             const menteeSearch = document.getElementById('convMenteeSearch').value.trim();
-            const body = document.getElementById('conversationsBody');
-            body.innerHTML = '<tr><td colspan="7" class="loading">Loading…</td></tr>';
+            const list = document.getElementById('conversationsList');
+            list.innerHTML = '<div class="loading">Loading conversations…</div>';
             try {
                 let url = `/api/admin/conversations?page=${page}&limit=25`;
                 if (mentorSearch) url += `&mentor_search=${encodeURIComponent(mentorSearch)}`;
@@ -3947,26 +3850,37 @@
 
                 const d = await api(url);
                 if (!d.conversations?.length) {
-                    body.innerHTML = '<tr><td colspan="7" class="loading">No conversations found</td></tr>';
+                    list.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg><div>No conversations found</div></div>';
                     document.getElementById('conversationsPager').innerHTML = '';
                     return;
                 }
-                body.innerHTML = d.conversations.map(c => `<tr>
-                    <td><span style="font-family:var(--font-mono);font-size:11px;color:var(--gold)">${esc(c.mentor_anonymous_id)}</span></td>
-                    <td><span style="font-family:var(--font-mono);font-size:11px;color:var(--accent)">${esc(c.mentee_anonymous_id)}</span></td>
-                    <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.last_message || '')}">
-                        ${c.last_message ? esc(c.last_message) : '<span style="color:var(--text3);font-style:italic;">No messages</span>'}
-                    </td>
-                    <td>${c.last_message_time ? ago(c.last_message_time) : '–'}</td>
-                    <td>${c.message_count}</td>
-                    <td>${c.unread_count > 0 ? `<span class="chip chip-red">${c.unread_count}</span>` : '0'}</td>
-                    <td>
-                        <button class="btn btn-ghost btn-sm" onclick="openChat('${c.mentor_id}', '${c.mentee_id}', '${esc(c.mentor_anonymous_id)}', '${esc(c.mentee_anonymous_id)}')">View Chat</button>
-                    </td>
-                </tr>`).join('');
+                list.innerHTML = d.conversations.map(c => `
+                    <div class="conv-card" tabindex="0" role="button"
+                         onclick="openChat('${esc(c.mentor_id)}', '${esc(c.mentee_id)}', '${esc(c.mentor_anonymous_id)}', '${esc(c.mentee_anonymous_id)}')"
+                         onkeydown="if(event.key==='Enter')this.click()">
+                        <div class="conv-avatars">
+                            <div class="conv-av mentor">${esc(adminInitial(c.mentor_anonymous_id))}</div>
+                            <div class="conv-av mentee">${esc(adminInitial(c.mentee_anonymous_id))}</div>
+                        </div>
+                        <div class="conv-main">
+                            <div class="conv-names">
+                                <span class="m">${esc(c.mentor_anonymous_id)}</span>
+                                <span class="sep">↔</span>
+                                <span class="u">${esc(c.mentee_anonymous_id)}</span>
+                            </div>
+                            <div class="conv-preview${c.last_message ? '' : ' none'}">${c.last_message ? esc(c.last_message) : 'No messages yet'}</div>
+                        </div>
+                        <div class="conv-side">
+                            <div class="conv-time">${c.last_message_time ? ago(c.last_message_time) : '–'}</div>
+                            <div class="conv-chips">
+                                <span class="chip chip-muted">${c.message_count} msgs</span>
+                                ${c.unread_count > 0 ? `<span class="chip chip-red">${c.unread_count} unread</span>` : ''}
+                            </div>
+                        </div>
+                    </div>`).join('');
                 pager('conversationsPager', page, d.pages, 'loadConversations');
             } catch (e) {
-                body.innerHTML = `<tr><td colspan="7" class="loading">${e.message}</td></tr>`;
+                list.innerHTML = `<div class="loading">${esc(e.message)}</div>`;
             }
         }
 
@@ -4073,13 +3987,18 @@
             }
         }
 
+        const adminPhotoCache = new Map();
         function hydrateAdminPhotos(container) {
             if (!container) return;
             container.querySelectorAll('.admin-msg-photo[data-file-id]:not(.loaded)').forEach(async el => {
                 el.classList.add('loaded');
                 try {
-                    const blob = await adminFetchBlob(`/api/admin/messages/file/${el.dataset.fileId}`);
-                    const url = URL.createObjectURL(blob);
+                    let url = adminPhotoCache.get(el.dataset.fileId);
+                    if (!url) {
+                        const blob = await adminFetchBlob(`/api/admin/messages/file/${el.dataset.fileId}`);
+                        url = URL.createObjectURL(blob);
+                        adminPhotoCache.set(el.dataset.fileId, url);
+                    }
                     el.innerHTML = `<img src="${url}" alt="Photo attachment" onclick="openAdminImageLightbox('${url}')" />`;
                 } catch (e) {
                     el.innerHTML = '<div class="admin-msg-photo-error">⚠️ Failed to load photo</div>';
@@ -4184,19 +4103,157 @@
             }
         }
 
+        /* ── Chat viewer (mirrors the mini-app's chat) ───────────────── */
+        let chatMsgs = [];            // chronological, oldest → newest
+        let chatPeople = {};          // telegram_id → { name, role }
+        const CHAT_ICONS = {
+            mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>',
+            image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+            film: '<rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M17 3v18M2 8h5M17 8h5M2 16h5M17 16h5"/>',
+            music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+            file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+            trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>'
+        };
+        const CHAT_ATTACH = {
+            voice: ['mic', 'Voice message'], photo: ['image', 'Photo'], video: ['film', 'Video'],
+            audio: ['music', 'Audio'], document: ['file', 'Document']
+        };
+        function chatSvg(name) {
+            return `<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${CHAT_ICONS[name]}</svg>`;
+        }
+
+        // One-line description of a message: its text, or a labelled icon for attachments.
+        function chatPreviewHtml(msg, max = 100) {
+            let text = String(msg?.content || '').replace(/\s+/g, ' ').trim();
+            if (!text && msg?.file_type) {
+                const [icon, label] = CHAT_ATTACH[msg.file_type] || CHAT_ATTACH.document;
+                return `${chatSvg(icon)}<span>${esc(label)}</span>`;
+            }
+            if (text.length > max) text = text.substring(0, max) + '…';
+            return `<span>${esc(text)}</span>`;
+        }
+
+        function chatDateHeader(dateStr) {
+            const d = new Date(dateStr), now = new Date();
+            const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+            const diff = Math.round((day(now) - day(d)) / 86400000);
+            if (diff === 0) return 'Today';
+            if (diff === 1) return 'Yesterday';
+            if (diff > 1 && diff < 7) return d.toLocaleDateString([], { weekday: 'long' });
+            return d.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' });
+        }
+
+        function chatPerson(fromId) {
+            return chatPeople[String(fromId)] || { name: `User ${fromId}`, role: 'mentee' };
+        }
+
+        // The quoted snippet at the top of a reply bubble ('' for normal messages).
+        function chatQuoteHtml(m, byId) {
+            if (!m.parent_id) return '';
+            const pid = String(m.parent_id);
+            const inList = byId.get(pid);
+            const parent = inList || m.parent_preview;
+            if (!parent || parent.is_deleted) {
+                return '<div class="reply-quote reply-quote-missing"><span class="reply-quote-text">Original message unavailable</span></div>';
+            }
+            const who = chatPerson(parent.from_id);
+            const jump = inList ? `role="button" tabindex="0" data-reply-to="${esc(pid)}"` : 'style="cursor:default"';
+            return `<div class="reply-quote" ${jump}>
+                <span class="reply-quote-name ${who.role}">${esc(who.name)}</span>
+                <span class="reply-quote-text">${chatPreviewHtml(parent)}</span>
+            </div>`;
+        }
+
+        function chatBubbleHtml(m, byId, showSender) {
+            const who = chatPerson(m.from_id);
+            const isMentor = who.role === 'mentor';
+            const side = isMentor ? 'received' : 'sent';
+            const flags = `${m.parent_id ? ' has-reply' : ''}${m.file_type ? ' has-media' : ''}${m.is_deleted ? ' is-deleted' : ''}${m.is_flagged ? ' is-flagged' : ''}`;
+
+            let body;
+            if (m.is_deleted) {
+                body = `<div class="msg-deleted">${chatSvg('trash')}<span>This message was deleted</span></div>`;
+            } else {
+                const edited = m.edited_at ? `<span class="msg-edited" title="Edited ${esc(new Date(m.edited_at).toLocaleString())}">edited</span>` : '';
+                const media = m.file_type ? renderAdminAttachment(m) : '';
+                const text = m.content ? `<div class="msg-content${m.file_type ? ' message-caption' : ''}">${esc(m.content)}</div>` : '';
+                body = `${chatQuoteHtml(m, byId)}<div class="message-text">${media}${text}${edited}</div>`;
+            }
+
+            const read = m.is_read || m.read_at;
+            const ticks = `<span class="msg-status ${read ? 'read' : 'unread'}" title="${read ? 'Seen' : 'Not seen yet'}">${read ? '✓✓' : '✓'}</span>`;
+            const time = new Date(m.created_at);
+
+            return `${showSender ? `<div class="chat-sender-tag ${who.role}" style="align-self:${isMentor ? 'flex-start' : 'flex-end'}">${esc(who.name)} · ${isMentor ? 'Mentor' : 'Mentee'}</div>` : ''}
+                <div class="message-thread ${isMentor ? 'thread-received' : 'thread-sent'}" data-msg-id="${esc(m.id)}">
+                    <div class="message-bubble ${side}${flags}">
+                        ${body}
+                        <div class="message-footer">
+                            ${m.is_flagged ? '<span class="msg-flag">Flagged</span>' : ''}
+                            <span class="message-time" title="${esc(time.toLocaleString())}">${esc(time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</span>
+                            ${ticks}
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        function renderChat() {
+            const container = document.getElementById('chatMessagesContent');
+            const byId = new Map(chatMsgs.map(m => [String(m.id), m]));
+            let html = chatHasMore
+                ? '<div class="chat-older"><button class="btn btn-outline btn-sm" id="btnLoadMoreChats" onclick="loadMoreMessages()">Load older messages</button></div>'
+                : '';
+            let lastHeader = '', lastFrom = null;
+            for (const m of chatMsgs) {
+                const header = chatDateHeader(m.created_at);
+                if (header !== lastHeader) {
+                    html += `<div class="chat-date-divider"><span>${esc(header)}</span></div>`;
+                    lastHeader = header; lastFrom = null;
+                }
+                html += chatBubbleHtml(m, byId, String(m.from_id) !== lastFrom);
+                lastFrom = String(m.from_id);
+            }
+            container.innerHTML = html;
+            hydrateAdminPhotos(container);
+            renderChatStats();
+        }
+
+        function renderChatStats() {
+            const n = chatMsgs.length;
+            const replies = chatMsgs.filter(m => m.parent_id).length;
+            const edited = chatMsgs.filter(m => m.edited_at && !m.is_deleted).length;
+            const deleted = chatMsgs.filter(m => m.is_deleted).length;
+            const flagged = chatMsgs.filter(m => m.is_flagged).length;
+            const chip = (cls, t) => `<span class="chip ${cls}">${t}</span>`;
+            document.getElementById('chatModalSub').innerHTML =
+                chip('chip-muted', `${n}${chatHasMore ? '+' : ''} messages`) +
+                (replies ? chip('chip-gold', `${replies} replies`) : '') +
+                (edited ? chip('chip-blue', `${edited} edited`) : '') +
+                (deleted ? chip('chip-muted', `${deleted} deleted`) : '') +
+                (flagged ? chip('chip-red', `${flagged} flagged`) : '');
+        }
+
         async function openChat(mentorId, menteeId, mentorAnon, menteeAnon) {
             currentChatMentorId = mentorId;
             currentChatMenteeId = menteeId;
             chatBeforeTimestamp = null;
             chatHasMore = false;
+            chatMsgs = [];
+            chatPeople = {
+                [String(mentorId)]: { name: mentorAnon, role: 'mentor' },
+                [String(menteeId)]: { name: menteeAnon, role: 'mentee' }
+            };
 
-            document.getElementById('chatModalTitle').textContent = `Chat: ${mentorAnon} ↔ ${menteeAnon}`;
-            document.getElementById('chatModalSub').innerHTML = `Mentor: <span style="color:var(--gold)">${mentorAnon}</span> | Mentee: <span style="color:var(--accent)">${menteeAnon}</span>`;
-            document.getElementById('chatLoadMoreContainer').style.display = 'none';
+            document.getElementById('chatHeadAvatars').innerHTML =
+                `<div class="conv-av mentor">${esc(adminInitial(mentorAnon))}</div><div class="conv-av mentee">${esc(adminInitial(menteeAnon))}</div>`;
+            document.getElementById('chatModalTitle').innerHTML =
+                `<span class="m">${esc(mentorAnon)}</span><span class="sep">↔</span><span class="u">${esc(menteeAnon)}</span>`;
+            document.getElementById('chatModalSub').innerHTML = '';
+            document.getElementById('chatJumpBtn').classList.remove('show');
             document.getElementById('chatMessagesContent').innerHTML = '<div class="loading">Loading chat history…</div>';
             document.getElementById('conversationModal').classList.add('open');
 
-            loadChatMessages(true);
+            await loadChatMessages(true);
         }
 
         function closeChatModal() {
@@ -4204,93 +4261,80 @@
         }
 
         async function loadChatMessages(isInitial = false) {
+            const container = document.getElementById('chatMessagesContent');
             try {
                 let url = `/api/admin/conversations/${currentChatMentorId}/${currentChatMenteeId}/messages?limit=50`;
-                if (chatBeforeTimestamp) {
-                    url += `&before=${encodeURIComponent(chatBeforeTimestamp)}`;
-                }
-
+                if (chatBeforeTimestamp) url += `&before=${encodeURIComponent(chatBeforeTimestamp)}`;
                 const d = await api(url);
-                const container = document.getElementById('chatMessagesContent');
-
-                if (isInitial) {
-                    container.innerHTML = '';
-                }
 
                 if (!d.messages?.length && isInitial) {
-                    container.innerHTML = '<div class="empty">No messages recorded in this conversation.</div>';
+                    container.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg><div>No messages recorded in this conversation.</div></div>';
+                    renderChatStats();
                     return;
                 }
 
-                // ✅ Deduplicate messages by ID (keep only the first occurrence)
-                const uniqueMessages = [];
-                const seenIds = new Set();
+                // API pages arrive newest-first; keep ONE chronological list and
+                // de-duplicate by id so "load older" can never repeat a bubble.
+                const have = new Set(chatMsgs.map(m => String(m.id)));
+                const fresh = [];
                 for (const m of d.messages) {
-                    if (!seenIds.has(m.id)) {
-                        seenIds.add(m.id);
-                        uniqueMessages.push(m);
-                    }
+                    if (!have.has(String(m.id))) { have.add(String(m.id)); fresh.push(m); }
                 }
+                fresh.reverse();
+                chatMsgs = fresh.concat(chatMsgs);
 
-                const msgsHTML = uniqueMessages.map(m => {
-                    const isMentor = String(m.from_id) === String(currentChatMentorId);
-                    const senderRole = isMentor ? 'Mentor' : 'Mentee';
-                    const roleClass = isMentor ? 'mentor' : 'mentee';
-                    const senderName = isMentor ? m.from_anonymous_id : m.from_anonymous_id;
+                chatHasMore = !!d.has_more;
+                if (d.messages.length) chatBeforeTimestamp = d.messages[d.messages.length - 1].created_at;
 
-                    let contentHtml = '';
-                    if (m.is_deleted) {
-                        contentHtml = `<span class="chat-deleted-placeholder">Message deleted</span>`;
-                    } else if (m.file_type) {
-                        contentHtml = renderAdminAttachment(m) + (m.content ? `<div style="margin-top:6px">${esc(m.content)}</div>` : '');
-                    } else {
-                        contentHtml = esc(m.content);
-                    }
-
-                    const timeStr = new Date(m.created_at).toLocaleString();
-                    const editedMark = m.edited_at ? '<span class="chat-edited">(edited)</span>' : '';
-                    const flaggedMark = m.is_flagged ? '<span class="chip chip-red btn-sm" style="font-size: 8px; padding: 1px 4px; margin-left: 4px;">⚑ Flagged</span>' : '';
-
-                    return `
-                        <div class="chat-bubble-wrap ${roleClass}">
-                            <div class="chat-sender">${esc(senderName)} (${senderRole})</div>
-                            <div class="chat-bubble">
-                                ${contentHtml}
-                            </div>
-                            <div class="chat-meta">
-                                <span>${timeStr}</span>
-                                ${editedMark}
-                                ${flaggedMark}
-                            </div>
-                        </div>
-                    `;
-                }).reverse().join('');
-
-                if (isInitial) {
-                    container.innerHTML = msgsHTML;
-                    container.scrollTop = container.scrollHeight;
-                } else {
-                    const oldScrollHeight = container.scrollHeight;
-                    container.insertAdjacentHTML('afterbegin', msgsHTML);
-                    container.scrollTop = container.scrollHeight - oldScrollHeight;
-                }
-                hydrateAdminPhotos(container);
-
-                chatHasMore = d.has_more;
-                if (chatHasMore && d.messages.length > 0) {
-                    chatBeforeTimestamp = d.messages[d.messages.length - 1].created_at;
-                    document.getElementById('chatLoadMoreContainer').style.display = 'block';
-                } else {
-                    document.getElementById('chatLoadMoreContainer').style.display = 'none';
-                }
+                const prevHeight = container.scrollHeight;
+                renderChat();
+                if (isInitial) container.scrollTop = container.scrollHeight;
+                else container.scrollTop = container.scrollHeight - prevHeight; // stay on the same message
             } catch (e) {
-                document.getElementById('chatMessagesContent').innerHTML = `<div class="loading">${e.message}</div>`;
+                container.innerHTML = `<div class="loading">${esc(e.message)}</div>`;
             }
         }
 
         async function loadMoreMessages() {
-            loadChatMessages(false);
+            const btn = document.getElementById('btnLoadMoreChats');
+            if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+            await loadChatMessages(false);
         }
+
+        function chatOnScroll() {
+            const c = document.getElementById('chatMessagesContent');
+            const away = c.scrollHeight - c.scrollTop - c.clientHeight > 240;
+            document.getElementById('chatJumpBtn').classList.toggle('show', away);
+        }
+        function chatJumpToLatest() {
+            const c = document.getElementById('chatMessagesContent');
+            c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
+        }
+
+        // Tapping a reply's quote scrolls to the original and flashes it, like the app.
+        function chatScrollToMessage(msgId) {
+            const c = document.getElementById('chatMessagesContent');
+            const thread = c.querySelector(`.message-thread[data-msg-id="${CSS.escape(String(msgId))}"]`);
+            if (!thread) return;
+            const cRect = c.getBoundingClientRect(), tRect = thread.getBoundingClientRect();
+            const top = c.scrollTop + (tRect.top - cRect.top) - (c.clientHeight - tRect.height) / 2;
+            c.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+            const bubble = thread.querySelector('.message-bubble');
+            if (bubble) {
+                bubble.classList.add('msg-flash');
+                setTimeout(() => bubble.classList.remove('msg-flash'), 1200);
+            }
+        }
+        document.addEventListener('click', e => {
+            const q = e.target.closest?.('#chatMessagesContent .reply-quote[data-reply-to]');
+            if (q) chatScrollToMessage(q.dataset.replyTo);
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') closeChatModal();
+            if (e.key !== 'Enter') return;
+            const q = e.target.closest?.('#chatMessagesContent .reply-quote[data-reply-to]');
+            if (q) chatScrollToMessage(q.dataset.replyTo);
+        });
 
         /* ── Live Sessions ──────────────────────────────────────────── */
         let liveSessionsTicker = null;

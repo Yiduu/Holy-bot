@@ -1,0 +1,940 @@
+From 0112befead19f8159620bcee194f5df1dd3b4391 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 18 Oct 2026 11:52:43 +0300
+Subject: [PATCH] Admin conversations: premium list and chat viewer that
+ mirrors the app chat
+
+- Conversations list is now cards (avatars, last message, counts, unread)
+- Chat viewer reuses the app's bubble, reply-quote, edited and date-divider
+  styles: gold mentee bubbles, mentor bubbles, sender tags, seen ticks
+- Replies show a quote of the original; tapping it jumps to and flashes the
+  message. Older/deleted originals show a preview or "Original message
+  unavailable", same as the app
+- Edited, deleted and flagged markers, header stats, load-older, jump-to-latest
+- API: admin messages endpoint now returns parent_id, parent_preview, read_at
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SGbABJtPPrCj97G2nSqD6w
+---
+ frontend/admin.css  | 297 ++++++++++++++++++++++++++++
+ frontend/admin.html | 464 ++++++++++++++++++++++++--------------------
+ routes/admin.js     |  23 +++
+ 3 files changed, 574 insertions(+), 210 deletions(-)
+
+diff --git a/frontend/admin.css b/frontend/admin.css
+index 472cd43..bf11401 100644
+--- a/frontend/admin.css
++++ b/frontend/admin.css
+@@ -579,3 +579,300 @@ code.slug, .audit-action { border-radius: 6px; }
+ @media (prefers-reduced-motion: reduce) {
+   .toast, .modal { animation: none !important; }
+ }
++
++/* ============================================================
++   Conversations page + chat viewer
++   The bubbles below reuse the mini-app's own class names and
++   rules (styles.css: .message-bubble, .reply-quote, .msg-edited,
++   .chat-date-divider) so a conversation reads here exactly as it
++   does in the app. Mentee = "sent" (gold), mentor = "received".
++   ============================================================ */
++
++/* ─── Conversation list ──────────────────────────────────────── */
++.conv-list { display: flex; flex-direction: column; gap: 10px; }
++
++.conv-card {
++  position: relative;
++  overflow: hidden;
++  display: flex;
++  align-items: center;
++  gap: 14px;
++  padding: 14px 16px;
++  background: var(--surface);
++  border: 1px solid var(--border-dim);
++  border-radius: var(--radius-card);
++  box-shadow: var(--inset-hi);
++  cursor: pointer;
++  transition: transform 0.2s var(--ease-premium), border-color 0.2s ease, box-shadow 0.2s ease;
++}
++.conv-card::before {
++  content: '';
++  position: absolute;
++  top: 0; left: 0; right: 0;
++  height: 2px;
++  background: linear-gradient(90deg, transparent, var(--gold), transparent);
++  opacity: 0;
++  transition: opacity 0.4s ease;
++}
++@media (hover: hover) {
++  .conv-card:hover { transform: translateY(-1px); border-color: var(--border); box-shadow: var(--shadow-md), var(--inset-hi); }
++  .conv-card:hover::before { opacity: 1; }
++}
++.conv-card:active { transform: scale(0.995); }
++
++.conv-avatars { display: flex; flex-shrink: 0; }
++.conv-av {
++  width: 42px;
++  height: 42px;
++  border-radius: 50%;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  font-weight: 900;
++  font-size: 0.95rem;
++  border: 2px solid var(--bg);
++  flex-shrink: 0;
++}
++.conv-av.mentor { background: linear-gradient(145deg, var(--gold-light), var(--gold) 60%, #A87C2A); color: var(--espresso); position: relative; z-index: 1; }
++.conv-av.mentee { background: rgba(91, 142, 255, 0.2); color: var(--accent); margin-left: -12px; }
++
++.conv-main { flex: 1; min-width: 0; }
++.conv-names { display: flex; align-items: center; gap: 7px; font-size: var(--fs-md); font-weight: 700; min-width: 0; }
++.conv-names .m { color: var(--gold); }
++.conv-names .u { color: var(--accent); }
++.conv-names .sep { color: var(--text3); font-weight: 400; }
++.conv-names span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.conv-preview { margin-top: 3px; font-size: var(--fs-sm); color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
++.conv-preview.none { color: var(--text3); font-style: italic; }
++
++.conv-side { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; flex-shrink: 0; }
++.conv-time { font-size: var(--fs-xs); color: var(--text3); }
++.conv-chips { display: flex; gap: 6px; }
++
++@media (max-width: 480px) {
++  .conv-card { padding: 12px; gap: 10px; }
++  .conv-av { width: 36px; height: 36px; font-size: 0.85rem; }
++  .conv-av.mentee { margin-left: -10px; }
++}
++
++/* ─── Chat viewer modal ──────────────────────────────────────── */
++#conversationModal .modal.chat-modal {
++  max-width: 720px;
++  width: 100%;
++  height: min(88vh, 840px);
++  max-height: none;
++  padding: 0;
++  display: flex;
++  flex-direction: column;
++  overflow: hidden;
++}
++
++.chat-head {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++  padding: 14px 16px;
++  background: linear-gradient(180deg, var(--bg2), transparent);
++  border-bottom: 1px solid var(--border-dim);
++  flex-shrink: 0;
++}
++.chat-head .conv-av { width: 40px; height: 40px; border-color: var(--bg2); }
++.chat-head-main { flex: 1; min-width: 0; }
++.chat-head-title { display: flex; align-items: center; gap: 7px; font-size: var(--fs-base); font-weight: 700; min-width: 0; }
++.chat-head-title .m { color: var(--gold); }
++.chat-head-title .u { color: var(--accent); }
++.chat-head-title .sep { color: var(--text3); font-weight: 400; }
++.chat-head-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++.chat-head-sub { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
++.chat-close {
++  width: 34px; height: 34px;
++  border-radius: 12px;
++  background: var(--surface);
++  border: 1px solid var(--border-dim);
++  color: var(--text2);
++  display: flex; align-items: center; justify-content: center;
++  flex-shrink: 0;
++  transition: border-color 0.15s ease, color 0.15s ease;
++}
++.chat-close:hover { border-color: var(--gold); color: var(--gold); }
++.chat-close svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
++
++.chat-stage {
++  position: relative;
++  flex: 1;
++  min-height: 0;
++  background:
++    radial-gradient(90% 60% at 50% 0%, rgba(201, 168, 76, 0.07), transparent 70%),
++    var(--bg);
++}
++.chat-scroll {
++  height: 100%;
++  overflow-y: auto;
++  overscroll-behavior: contain;
++  -webkit-overflow-scrolling: touch;
++  padding: 14px 16px 18px;
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++}
++
++.chat-older { display: flex; justify-content: center; margin-bottom: 6px; }
++.chat-jump {
++  position: absolute;
++  right: 16px;
++  bottom: 16px;
++  width: 38px; height: 38px;
++  border-radius: 50%;
++  background: var(--bg2);
++  border: 1px solid var(--border);
++  color: var(--gold);
++  box-shadow: var(--shadow-md);
++  display: none;
++  align-items: center; justify-content: center;
++}
++.chat-jump.show { display: flex; }
++.chat-jump svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2.4; }
++
++/* ─── Bubbles (mirrors styles.css) ───────────────────────────── */
++.chat-scroll .message-thread { display: flex; flex-direction: column; width: 100%; gap: 4px; }
++.chat-scroll .message-thread.thread-sent { align-items: flex-end; }
++.chat-scroll .message-thread.thread-received { align-items: flex-start; }
++
++.chat-sender-tag {
++  font-size: var(--fs-2xs);
++  font-weight: 700;
++  letter-spacing: 0.06em;
++  text-transform: uppercase;
++  margin: 8px 6px 0;
++}
++.chat-sender-tag.mentor { color: var(--gold); }
++.chat-sender-tag.mentee { color: var(--accent); }
++
++.message-bubble {
++  max-width: 80%;
++  padding: 10px 14px 8px;
++  border-radius: 20px;
++  font-size: var(--fs-md);
++  line-height: 1.55;
++  word-break: break-word;
++  position: relative;
++  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
++  transition: box-shadow 0.35s ease;
++}
++.message-bubble.sent {
++  background: linear-gradient(145deg, var(--gold) 0%, #a87a28 100%);
++  color: #1a1200;
++  border-radius: 20px 20px 5px 20px;
++}
++.message-bubble.received {
++  background: var(--bg3);
++  border: 1px solid var(--border-dim);
++  color: var(--text);
++  border-radius: 20px 20px 20px 5px;
++}
++.message-bubble.msg-flash { box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.65), 0 1px 6px rgba(0, 0, 0, 0.18); }
++.message-bubble.is-flagged { outline: 1px solid rgba(224, 92, 92, 0.55); outline-offset: 2px; }
++
++.message-text { font-size: var(--fs-md); line-height: 1.55; }
++.msg-content { white-space: pre-wrap; }
++.message-caption { margin-top: 6px; }
++.msg-edited { font-size: var(--fs-2xs); font-style: italic; opacity: 0.6; margin-left: 5px; vertical-align: middle; }
++
++.message-footer { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin-top: 5px; min-height: 18px; }
++.message-time { font-size: var(--fs-2xs); color: var(--text3); letter-spacing: 0.01em; }
++.message-bubble.sent .message-time { color: rgba(26, 18, 0, 0.55); }
++
++.msg-status { font-size: var(--fs-xs); line-height: 1; letter-spacing: -2px; }
++.msg-status.unread { color: var(--text3); opacity: 0.6; }
++.msg-status.read { color: #3897f0; }
++.message-bubble.sent .msg-status.unread { color: rgba(26, 18, 0, 0.5); }
++.message-bubble.sent .msg-status.read { color: #0b4a8f; }
++
++.msg-flag {
++  font-size: var(--fs-2xs);
++  font-weight: 700;
++  letter-spacing: 0.04em;
++  text-transform: uppercase;
++  color: var(--danger);
++  background: rgba(224, 92, 92, 0.14);
++  padding: 1px 7px;
++  border-radius: 99px;
++}
++.message-bubble.sent .msg-flag { background: rgba(120, 20, 20, 0.18); color: #6b1111; }
++
++.msg-deleted { display: flex; align-items: center; gap: 7px; font-style: italic; opacity: 0.7; font-size: var(--fs-sm); }
++.msg-deleted svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
++.message-bubble.is-deleted { box-shadow: none; }
++.message-bubble.is-deleted.received { background: transparent; border-style: dashed; }
++.message-bubble.is-deleted.sent { background: rgba(201, 168, 76, 0.16); color: var(--text2); border: 1px dashed var(--border); }
++
++/* ─── Reply quote (mirrors styles.css) ───────────────────────── */
++.reply-quote {
++  display: flex;
++  flex-direction: column;
++  gap: 1px;
++  min-width: 0;
++  max-width: 100%;
++  margin: 0 0 6px;
++  padding: 5px 10px 5px 9px;
++  border-left: 3px solid var(--gold);
++  border-radius: 6px 10px 10px 6px;
++  background: rgba(201, 168, 76, 0.12);
++  font-size: var(--fs-xs);
++  line-height: 1.35;
++  text-align: left;
++  cursor: pointer;
++  overflow: hidden;
++}
++.reply-quote:active { filter: brightness(0.92); }
++.reply-quote-name { font-weight: 700; color: var(--gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
++.reply-quote-name.mentee { color: var(--accent); }
++.reply-quote-text { display: flex; align-items: center; gap: 5px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
++.reply-quote-text svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; flex-shrink: 0; }
++.message-bubble.sent .reply-quote { background: rgba(26, 18, 0, 0.14); border-left-color: rgba(26, 18, 0, 0.6); }
++.message-bubble.sent .reply-quote-name { color: rgba(26, 18, 0, 0.85); }
++.message-bubble.sent .reply-quote-text { color: rgba(26, 18, 0, 0.7); }
++.reply-quote-missing { cursor: default; border-left-color: var(--text3); background: rgba(128, 128, 128, 0.12); }
++.reply-quote-missing .reply-quote-text { font-style: italic; color: var(--text3); }
++.message-bubble.sent .reply-quote-missing { border-left-color: rgba(26, 18, 0, 0.35); }
++.message-bubble.sent .reply-quote-missing .reply-quote-text { color: rgba(26, 18, 0, 0.55); }
++
++/* ─── Date divider (mirrors styles.css) ──────────────────────── */
++.chat-date-divider { display: flex; align-items: center; justify-content: center; margin: 14px 0 8px; position: relative; }
++.chat-date-divider::before { content: ""; position: absolute; left: 0; right: 0; height: 1px; background: var(--border-dim); z-index: 1; }
++.chat-date-divider span {
++  position: relative;
++  z-index: 2;
++  background: var(--bg);
++  padding: 4px 12px;
++  font-size: var(--fs-xs);
++  font-weight: 600;
++  color: var(--text3);
++  border-radius: 12px;
++  border: 1px solid var(--border-dim);
++}
++
++/* ─── Attachments inside gold (mentee) bubbles ───────────────── */
++.message-bubble .admin-msg-voice-label,
++.message-bubble .admin-msg-voice-time,
++.message-bubble .admin-msg-file-size { color: inherit; opacity: 0.65; }
++.message-bubble.sent .admin-msg-voice-play,
++.message-bubble.sent .admin-msg-file-btn { background: rgba(26, 18, 0, 0.16); border-color: rgba(26, 18, 0, 0.3); color: #1a1200; }
++.message-bubble.sent .admin-msg-voice-progress { background: rgba(26, 18, 0, 0.22); }
++.message-bubble.sent .admin-msg-voice-progress-fill,
++.message-bubble.sent .admin-msg-voice-progress-handle { background: #1a1200; }
++.message-bubble .admin-msg-photo img { border-radius: 12px; }
++
++@media (max-width: 640px) {
++  .chat-head { gap: 10px; padding: 12px; }
++  .chat-head .conv-av { width: 32px; height: 32px; font-size: 0.8rem; }
++  .chat-head .conv-av.mentee { margin-left: -9px; }
++  .chat-head-title { font-size: var(--fs-md); gap: 5px; }
++  .chat-head-sub { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: -12px; padding-right: 12px; }
++  .chat-head-sub::-webkit-scrollbar { display: none; }
++  .chat-head-sub .chip { flex-shrink: 0; white-space: nowrap; }
++  #conversationModal .modal.chat-modal { height: 92vh; border-radius: var(--radius) var(--radius) 0 0; padding: 0; }
++  #conversationModal .modal.chat-modal::before { display: none; }
++  .chat-scroll { padding: 12px 12px 16px; }
++  .message-bubble { max-width: 88%; }
++}
+diff --git a/frontend/admin.html b/frontend/admin.html
+index 49618a2..7e8949f 100644
+--- a/frontend/admin.html
++++ b/frontend/admin.html
+@@ -1409,82 +1409,6 @@
+             border: 1px solid rgba(76, 175, 130, .2);
+         }
+ 
+-        /* ── Admin Chat Viewer Styles ── */
+-        .chat-bubble-wrap {
+-            display: flex;
+-            flex-direction: column;
+-            max-width: 80%;
+-        }
+-
+-        .chat-bubble-wrap.mentor {
+-            align-self: flex-start;
+-        }
+-
+-        .chat-bubble-wrap.mentee {
+-            align-self: flex-end;
+-        }
+-
+-        .chat-sender {
+-            font-size: 10px;
+-            color: var(--text3);
+-            margin-bottom: 2px;
+-            font-weight: 600;
+-        }
+-
+-        .chat-bubble-wrap.mentee .chat-sender {
+-            text-align: right;
+-            color: var(--accent);
+-        }
+-
+-        .chat-bubble-wrap.mentor .chat-sender {
+-            color: var(--gold);
+-        }
+-
+-        .chat-bubble {
+-            padding: 9px 13px;
+-            border-radius: 12px;
+-            font-size: 13px;
+-            line-height: 1.5;
+-            word-break: break-word;
+-        }
+-
+-        .chat-bubble-wrap.mentor .chat-bubble {
+-            background: var(--surface2);
+-            color: var(--text);
+-            border-bottom-left-radius: 2px;
+-            border: 1px solid var(--border);
+-        }
+-
+-        .chat-bubble-wrap.mentee .chat-bubble {
+-            background: var(--gold-dim);
+-            color: var(--gold);
+-            border-bottom-right-radius: 2px;
+-            border: 1px solid rgba(201, 168, 76, 0.25);
+-        }
+-
+-        .chat-meta {
+-            font-size: 9px;
+-            color: var(--text3);
+-            margin-top: 3px;
+-            display: flex;
+-            gap: 6px;
+-            align-items: center;
+-        }
+-
+-        .chat-bubble-wrap.mentee .chat-meta {
+-            justify-content: flex-end;
+-        }
+-
+-        .chat-edited {
+-            font-style: italic;
+-            opacity: 0.8;
+-        }
+-
+-        .chat-deleted-placeholder {
+-            font-style: italic;
+-            color: var(--text3);
+-        }
+-
+         /* ── Chat attachments (voice / photo / file) ─────────────────── */
+         .admin-msg-voice {
+             display: flex;
+@@ -2301,25 +2225,8 @@
+                             oninput="debounceConversations()" />
+                         <button class="btn btn-ghost" onclick="clearConvFilters()">Clear</button>
+                     </div>
+-                    <div class="table-wrap">
+-                        <table>
+-                            <thead>
+-                                <tr>
+-                                    <th>Mentor</th>
+-                                    <th>Mentee</th>
+-                                    <th>Last Message</th>
+-                                    <th>Last Activity</th>
+-                                    <th>Total Messages</th>
+-                                    <th>Unread</th>
+-                                    <th>Actions</th>
+-                                </tr>
+-                            </thead>
+-                            <tbody id="conversationsBody">
+-                                <tr>
+-                                    <td colspan="7" class="loading">Loading…</td>
+-                                </tr>
+-                            </tbody>
+-                        </table>
++                    <div class="conv-list" id="conversationsList">
++                        <div class="loading">Loading conversations…</div>
+                     </div>
+                     <div class="pagination" id="conversationsPager"></div>
+                 </div>
+@@ -2857,38 +2764,29 @@
+     </div>
+ 
+     <!-- ── Conversation Chat Modal ────────────────────────────── -->
+-    <div class="modal-overlay" id="conversationModal">
+-        <div class="modal" style="max-width: 600px; display: flex; flex-direction: column; max-height: 90vh;">
+-            <div
+-                style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-shrink:0;">
+-                <div>
+-                    <div class="modal-title" id="chatModalTitle" style="margin-bottom:2px">Chat Viewer</div>
+-                    <div style="font-size:11px;color:var(--text3);" id="chatModalSub">Mentor & Mentee Chat History</div>
++    <div class="modal-overlay" id="conversationModal" onclick="if(event.target===this)closeChatModal()">
++        <div class="modal chat-modal" role="dialog" aria-modal="true" aria-labelledby="chatModalTitle">
++            <div class="chat-head">
++                <div class="conv-avatars" id="chatHeadAvatars"></div>
++                <div class="chat-head-main">
++                    <div class="chat-head-title" id="chatModalTitle">Chat Viewer</div>
++                    <div class="chat-head-sub" id="chatModalSub"></div>
+                 </div>
+-                <button class="btn btn-ghost btn-sm btn-icon" onclick="closeChatModal()">
+-                    <svg viewBox="0 0 24 24"
+-                        style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2">
++                <button class="chat-close" onclick="closeChatModal()" aria-label="Close chat">
++                    <svg viewBox="0 0 24 24" stroke-linecap="round">
+                         <line x1="18" y1="6" x2="6" y2="18" />
+                         <line x1="6" y1="6" x2="18" y2="18" />
+                     </svg>
+                 </button>
+             </div>
+ 
+-            <div class="chat-container"
+-                style="display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--border-dim); border-radius: var(--radius); background: var(--bg);">
+-                <div class="chat-load-more" id="chatLoadMoreContainer"
+-                    style="display: none; padding: 10px; text-align: center; border-bottom: 1px solid var(--border-dim); flex-shrink: 0;">
+-                    <button class="btn btn-ghost btn-sm" id="btnLoadMoreChats" onclick="loadMoreMessages()">Load Older
+-                        Messages</button>
+-                </div>
+-                <div class="chat-messages" id="chatMessagesContent"
+-                    style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
++            <div class="chat-stage">
++                <div class="chat-scroll" id="chatMessagesContent" onscroll="chatOnScroll()">
+                     <div class="loading">Loading conversation…</div>
+                 </div>
+-            </div>
+-
+-            <div style="display:flex;justify-content:flex-end;margin-top:14px;flex-shrink:0;">
+-                <button class="btn btn-ghost" onclick="closeChatModal()">Close Chat</button>
++                <button class="chat-jump" id="chatJumpBtn" onclick="chatJumpToLatest()" aria-label="Jump to latest">
++                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
++                </button>
+             </div>
+         </div>
+     </div>
+@@ -3934,12 +3832,17 @@
+             loadConversations(1);
+         }
+ 
++        function adminInitial(s) {
++            const m = String(s || '').replace(/[^A-Za-z0-9]/g, '');
++            return (m[0] || '?').toUpperCase();
++        }
++
+         async function loadConversations(page = 1) {
+             conversationsPage = page;
+             const mentorSearch = document.getElementById('convMentorSearch').value.trim();
+             const menteeSearch = document.getElementById('convMenteeSearch').value.trim();
+-            const body = document.getElementById('conversationsBody');
+-            body.innerHTML = '<tr><td colspan="7" class="loading">Loading…</td></tr>';
++            const list = document.getElementById('conversationsList');
++            list.innerHTML = '<div class="loading">Loading conversations…</div>';
+             try {
+                 let url = `/api/admin/conversations?page=${page}&limit=25`;
+                 if (mentorSearch) url += `&mentor_search=${encodeURIComponent(mentorSearch)}`;
+@@ -3947,26 +3850,37 @@
+ 
+                 const d = await api(url);
+                 if (!d.conversations?.length) {
+-                    body.innerHTML = '<tr><td colspan="7" class="loading">No conversations found</td></tr>';
++                    list.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg><div>No conversations found</div></div>';
+                     document.getElementById('conversationsPager').innerHTML = '';
+                     return;
+                 }
+-                body.innerHTML = d.conversations.map(c => `<tr>
+-                    <td><span style="font-family:var(--font-mono);font-size:11px;color:var(--gold)">${esc(c.mentor_anonymous_id)}</span></td>
+-                    <td><span style="font-family:var(--font-mono);font-size:11px;color:var(--accent)">${esc(c.mentee_anonymous_id)}</span></td>
+-                    <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.last_message || '')}">
+-                        ${c.last_message ? esc(c.last_message) : '<span style="color:var(--text3);font-style:italic;">No messages</span>'}
+-                    </td>
+-                    <td>${c.last_message_time ? ago(c.last_message_time) : '–'}</td>
+-                    <td>${c.message_count}</td>
+-                    <td>${c.unread_count > 0 ? `<span class="chip chip-red">${c.unread_count}</span>` : '0'}</td>
+-                    <td>
+-                        <button class="btn btn-ghost btn-sm" onclick="openChat('${c.mentor_id}', '${c.mentee_id}', '${esc(c.mentor_anonymous_id)}', '${esc(c.mentee_anonymous_id)}')">View Chat</button>
+-                    </td>
+-                </tr>`).join('');
++                list.innerHTML = d.conversations.map(c => `
++                    <div class="conv-card" tabindex="0" role="button"
++                         onclick="openChat('${esc(c.mentor_id)}', '${esc(c.mentee_id)}', '${esc(c.mentor_anonymous_id)}', '${esc(c.mentee_anonymous_id)}')"
++                         onkeydown="if(event.key==='Enter')this.click()">
++                        <div class="conv-avatars">
++                            <div class="conv-av mentor">${esc(adminInitial(c.mentor_anonymous_id))}</div>
++                            <div class="conv-av mentee">${esc(adminInitial(c.mentee_anonymous_id))}</div>
++                        </div>
++                        <div class="conv-main">
++                            <div class="conv-names">
++                                <span class="m">${esc(c.mentor_anonymous_id)}</span>
++                                <span class="sep">↔</span>
++                                <span class="u">${esc(c.mentee_anonymous_id)}</span>
++                            </div>
++                            <div class="conv-preview${c.last_message ? '' : ' none'}">${c.last_message ? esc(c.last_message) : 'No messages yet'}</div>
++                        </div>
++                        <div class="conv-side">
++                            <div class="conv-time">${c.last_message_time ? ago(c.last_message_time) : '–'}</div>
++                            <div class="conv-chips">
++                                <span class="chip chip-muted">${c.message_count} msgs</span>
++                                ${c.unread_count > 0 ? `<span class="chip chip-red">${c.unread_count} unread</span>` : ''}
++                            </div>
++                        </div>
++                    </div>`).join('');
+                 pager('conversationsPager', page, d.pages, 'loadConversations');
+             } catch (e) {
+-                body.innerHTML = `<tr><td colspan="7" class="loading">${e.message}</td></tr>`;
++                list.innerHTML = `<div class="loading">${esc(e.message)}</div>`;
+             }
+         }
+ 
+@@ -4073,13 +3987,18 @@
+             }
+         }
+ 
++        const adminPhotoCache = new Map();
+         function hydrateAdminPhotos(container) {
+             if (!container) return;
+             container.querySelectorAll('.admin-msg-photo[data-file-id]:not(.loaded)').forEach(async el => {
+                 el.classList.add('loaded');
+                 try {
+-                    const blob = await adminFetchBlob(`/api/admin/messages/file/${el.dataset.fileId}`);
+-                    const url = URL.createObjectURL(blob);
++                    let url = adminPhotoCache.get(el.dataset.fileId);
++                    if (!url) {
++                        const blob = await adminFetchBlob(`/api/admin/messages/file/${el.dataset.fileId}`);
++                        url = URL.createObjectURL(blob);
++                        adminPhotoCache.set(el.dataset.fileId, url);
++                    }
+                     el.innerHTML = `<img src="${url}" alt="Photo attachment" onclick="openAdminImageLightbox('${url}')" />`;
+                 } catch (e) {
+                     el.innerHTML = '<div class="admin-msg-photo-error">⚠️ Failed to load photo</div>';
+@@ -4184,19 +4103,157 @@
+             }
+         }
+ 
++        /* ── Chat viewer (mirrors the mini-app's chat) ───────────────── */
++        let chatMsgs = [];            // chronological, oldest → newest
++        let chatPeople = {};          // telegram_id → { name, role }
++        const CHAT_ICONS = {
++            mic: '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/>',
++            image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
++            film: '<rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M17 3v18M2 8h5M17 8h5M2 16h5M17 16h5"/>',
++            music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
++            file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
++            trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>'
++        };
++        const CHAT_ATTACH = {
++            voice: ['mic', 'Voice message'], photo: ['image', 'Photo'], video: ['film', 'Video'],
++            audio: ['music', 'Audio'], document: ['file', 'Document']
++        };
++        function chatSvg(name) {
++            return `<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${CHAT_ICONS[name]}</svg>`;
++        }
++
++        // One-line description of a message: its text, or a labelled icon for attachments.
++        function chatPreviewHtml(msg, max = 100) {
++            let text = String(msg?.content || '').replace(/\s+/g, ' ').trim();
++            if (!text && msg?.file_type) {
++                const [icon, label] = CHAT_ATTACH[msg.file_type] || CHAT_ATTACH.document;
++                return `${chatSvg(icon)}<span>${esc(label)}</span>`;
++            }
++            if (text.length > max) text = text.substring(0, max) + '…';
++            return `<span>${esc(text)}</span>`;
++        }
++
++        function chatDateHeader(dateStr) {
++            const d = new Date(dateStr), now = new Date();
++            const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
++            const diff = Math.round((day(now) - day(d)) / 86400000);
++            if (diff === 0) return 'Today';
++            if (diff === 1) return 'Yesterday';
++            if (diff > 1 && diff < 7) return d.toLocaleDateString([], { weekday: 'long' });
++            return d.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' });
++        }
++
++        function chatPerson(fromId) {
++            return chatPeople[String(fromId)] || { name: `User ${fromId}`, role: 'mentee' };
++        }
++
++        // The quoted snippet at the top of a reply bubble ('' for normal messages).
++        function chatQuoteHtml(m, byId) {
++            if (!m.parent_id) return '';
++            const pid = String(m.parent_id);
++            const inList = byId.get(pid);
++            const parent = inList || m.parent_preview;
++            if (!parent || parent.is_deleted) {
++                return '<div class="reply-quote reply-quote-missing"><span class="reply-quote-text">Original message unavailable</span></div>';
++            }
++            const who = chatPerson(parent.from_id);
++            const jump = inList ? `role="button" tabindex="0" data-reply-to="${esc(pid)}"` : 'style="cursor:default"';
++            return `<div class="reply-quote" ${jump}>
++                <span class="reply-quote-name ${who.role}">${esc(who.name)}</span>
++                <span class="reply-quote-text">${chatPreviewHtml(parent)}</span>
++            </div>`;
++        }
++
++        function chatBubbleHtml(m, byId, showSender) {
++            const who = chatPerson(m.from_id);
++            const isMentor = who.role === 'mentor';
++            const side = isMentor ? 'received' : 'sent';
++            const flags = `${m.parent_id ? ' has-reply' : ''}${m.file_type ? ' has-media' : ''}${m.is_deleted ? ' is-deleted' : ''}${m.is_flagged ? ' is-flagged' : ''}`;
++
++            let body;
++            if (m.is_deleted) {
++                body = `<div class="msg-deleted">${chatSvg('trash')}<span>This message was deleted</span></div>`;
++            } else {
++                const edited = m.edited_at ? `<span class="msg-edited" title="Edited ${esc(new Date(m.edited_at).toLocaleString())}">edited</span>` : '';
++                const media = m.file_type ? renderAdminAttachment(m) : '';
++                const text = m.content ? `<div class="msg-content${m.file_type ? ' message-caption' : ''}">${esc(m.content)}</div>` : '';
++                body = `${chatQuoteHtml(m, byId)}<div class="message-text">${media}${text}${edited}</div>`;
++            }
++
++            const read = m.is_read || m.read_at;
++            const ticks = `<span class="msg-status ${read ? 'read' : 'unread'}" title="${read ? 'Seen' : 'Not seen yet'}">${read ? '✓✓' : '✓'}</span>`;
++            const time = new Date(m.created_at);
++
++            return `${showSender ? `<div class="chat-sender-tag ${who.role}" style="align-self:${isMentor ? 'flex-start' : 'flex-end'}">${esc(who.name)} · ${isMentor ? 'Mentor' : 'Mentee'}</div>` : ''}
++                <div class="message-thread ${isMentor ? 'thread-received' : 'thread-sent'}" data-msg-id="${esc(m.id)}">
++                    <div class="message-bubble ${side}${flags}">
++                        ${body}
++                        <div class="message-footer">
++                            ${m.is_flagged ? '<span class="msg-flag">Flagged</span>' : ''}
++                            <span class="message-time" title="${esc(time.toLocaleString())}">${esc(time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</span>
++                            ${ticks}
++                        </div>
++                    </div>
++                </div>`;
++        }
++
++        function renderChat() {
++            const container = document.getElementById('chatMessagesContent');
++            const byId = new Map(chatMsgs.map(m => [String(m.id), m]));
++            let html = chatHasMore
++                ? '<div class="chat-older"><button class="btn btn-outline btn-sm" id="btnLoadMoreChats" onclick="loadMoreMessages()">Load older messages</button></div>'
++                : '';
++            let lastHeader = '', lastFrom = null;
++            for (const m of chatMsgs) {
++                const header = chatDateHeader(m.created_at);
++                if (header !== lastHeader) {
++                    html += `<div class="chat-date-divider"><span>${esc(header)}</span></div>`;
++                    lastHeader = header; lastFrom = null;
++                }
++                html += chatBubbleHtml(m, byId, String(m.from_id) !== lastFrom);
++                lastFrom = String(m.from_id);
++            }
++            container.innerHTML = html;
++            hydrateAdminPhotos(container);
++            renderChatStats();
++        }
++
++        function renderChatStats() {
++            const n = chatMsgs.length;
++            const replies = chatMsgs.filter(m => m.parent_id).length;
++            const edited = chatMsgs.filter(m => m.edited_at && !m.is_deleted).length;
++            const deleted = chatMsgs.filter(m => m.is_deleted).length;
++            const flagged = chatMsgs.filter(m => m.is_flagged).length;
++            const chip = (cls, t) => `<span class="chip ${cls}">${t}</span>`;
++            document.getElementById('chatModalSub').innerHTML =
++                chip('chip-muted', `${n}${chatHasMore ? '+' : ''} messages`) +
++                (replies ? chip('chip-gold', `${replies} replies`) : '') +
++                (edited ? chip('chip-blue', `${edited} edited`) : '') +
++                (deleted ? chip('chip-muted', `${deleted} deleted`) : '') +
++                (flagged ? chip('chip-red', `${flagged} flagged`) : '');
++        }
++
+         async function openChat(mentorId, menteeId, mentorAnon, menteeAnon) {
+             currentChatMentorId = mentorId;
+             currentChatMenteeId = menteeId;
+             chatBeforeTimestamp = null;
+             chatHasMore = false;
++            chatMsgs = [];
++            chatPeople = {
++                [String(mentorId)]: { name: mentorAnon, role: 'mentor' },
++                [String(menteeId)]: { name: menteeAnon, role: 'mentee' }
++            };
+ 
+-            document.getElementById('chatModalTitle').textContent = `Chat: ${mentorAnon} ↔ ${menteeAnon}`;
+-            document.getElementById('chatModalSub').innerHTML = `Mentor: <span style="color:var(--gold)">${mentorAnon}</span> | Mentee: <span style="color:var(--accent)">${menteeAnon}</span>`;
+-            document.getElementById('chatLoadMoreContainer').style.display = 'none';
++            document.getElementById('chatHeadAvatars').innerHTML =
++                `<div class="conv-av mentor">${esc(adminInitial(mentorAnon))}</div><div class="conv-av mentee">${esc(adminInitial(menteeAnon))}</div>`;
++            document.getElementById('chatModalTitle').innerHTML =
++                `<span class="m">${esc(mentorAnon)}</span><span class="sep">↔</span><span class="u">${esc(menteeAnon)}</span>`;
++            document.getElementById('chatModalSub').innerHTML = '';
++            document.getElementById('chatJumpBtn').classList.remove('show');
+             document.getElementById('chatMessagesContent').innerHTML = '<div class="loading">Loading chat history…</div>';
+             document.getElementById('conversationModal').classList.add('open');
+ 
+-            loadChatMessages(true);
++            await loadChatMessages(true);
+         }
+ 
+         function closeChatModal() {
+@@ -4204,93 +4261,80 @@
+         }
+ 
+         async function loadChatMessages(isInitial = false) {
++            const container = document.getElementById('chatMessagesContent');
+             try {
+                 let url = `/api/admin/conversations/${currentChatMentorId}/${currentChatMenteeId}/messages?limit=50`;
+-                if (chatBeforeTimestamp) {
+-                    url += `&before=${encodeURIComponent(chatBeforeTimestamp)}`;
+-                }
+-
++                if (chatBeforeTimestamp) url += `&before=${encodeURIComponent(chatBeforeTimestamp)}`;
+                 const d = await api(url);
+-                const container = document.getElementById('chatMessagesContent');
+-
+-                if (isInitial) {
+-                    container.innerHTML = '';
+-                }
+ 
+                 if (!d.messages?.length && isInitial) {
+-                    container.innerHTML = '<div class="empty">No messages recorded in this conversation.</div>';
++                    container.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg><div>No messages recorded in this conversation.</div></div>';
++                    renderChatStats();
+                     return;
+                 }
+ 
+-                // ✅ Deduplicate messages by ID (keep only the first occurrence)
+-                const uniqueMessages = [];
+-                const seenIds = new Set();
++                // API pages arrive newest-first; keep ONE chronological list and
++                // de-duplicate by id so "load older" can never repeat a bubble.
++                const have = new Set(chatMsgs.map(m => String(m.id)));
++                const fresh = [];
+                 for (const m of d.messages) {
+-                    if (!seenIds.has(m.id)) {
+-                        seenIds.add(m.id);
+-                        uniqueMessages.push(m);
+-                    }
++                    if (!have.has(String(m.id))) { have.add(String(m.id)); fresh.push(m); }
+                 }
++                fresh.reverse();
++                chatMsgs = fresh.concat(chatMsgs);
+ 
+-                const msgsHTML = uniqueMessages.map(m => {
+-                    const isMentor = String(m.from_id) === String(currentChatMentorId);
+-                    const senderRole = isMentor ? 'Mentor' : 'Mentee';
+-                    const roleClass = isMentor ? 'mentor' : 'mentee';
+-                    const senderName = isMentor ? m.from_anonymous_id : m.from_anonymous_id;
+-
+-                    let contentHtml = '';
+-                    if (m.is_deleted) {
+-                        contentHtml = `<span class="chat-deleted-placeholder">Message deleted</span>`;
+-                    } else if (m.file_type) {
+-                        contentHtml = renderAdminAttachment(m) + (m.content ? `<div style="margin-top:6px">${esc(m.content)}</div>` : '');
+-                    } else {
+-                        contentHtml = esc(m.content);
+-                    }
++                chatHasMore = !!d.has_more;
++                if (d.messages.length) chatBeforeTimestamp = d.messages[d.messages.length - 1].created_at;
+ 
+-                    const timeStr = new Date(m.created_at).toLocaleString();
+-                    const editedMark = m.edited_at ? '<span class="chat-edited">(edited)</span>' : '';
+-                    const flaggedMark = m.is_flagged ? '<span class="chip chip-red btn-sm" style="font-size: 8px; padding: 1px 4px; margin-left: 4px;">⚑ Flagged</span>' : '';
+-
+-                    return `
+-                        <div class="chat-bubble-wrap ${roleClass}">
+-                            <div class="chat-sender">${esc(senderName)} (${senderRole})</div>
+-                            <div class="chat-bubble">
+-                                ${contentHtml}
+-                            </div>
+-                            <div class="chat-meta">
+-                                <span>${timeStr}</span>
+-                                ${editedMark}
+-                                ${flaggedMark}
+-                            </div>
+-                        </div>
+-                    `;
+-                }).reverse().join('');
+-
+-                if (isInitial) {
+-                    container.innerHTML = msgsHTML;
+-                    container.scrollTop = container.scrollHeight;
+-                } else {
+-                    const oldScrollHeight = container.scrollHeight;
+-                    container.insertAdjacentHTML('afterbegin', msgsHTML);
+-                    container.scrollTop = container.scrollHeight - oldScrollHeight;
+-                }
+-                hydrateAdminPhotos(container);
+-
+-                chatHasMore = d.has_more;
+-                if (chatHasMore && d.messages.length > 0) {
+-                    chatBeforeTimestamp = d.messages[d.messages.length - 1].created_at;
+-                    document.getElementById('chatLoadMoreContainer').style.display = 'block';
+-                } else {
+-                    document.getElementById('chatLoadMoreContainer').style.display = 'none';
+-                }
++                const prevHeight = container.scrollHeight;
++                renderChat();
++                if (isInitial) container.scrollTop = container.scrollHeight;
++                else container.scrollTop = container.scrollHeight - prevHeight; // stay on the same message
+             } catch (e) {
+-                document.getElementById('chatMessagesContent').innerHTML = `<div class="loading">${e.message}</div>`;
++                container.innerHTML = `<div class="loading">${esc(e.message)}</div>`;
+             }
+         }
+ 
+         async function loadMoreMessages() {
+-            loadChatMessages(false);
++            const btn = document.getElementById('btnLoadMoreChats');
++            if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
++            await loadChatMessages(false);
++        }
++
++        function chatOnScroll() {
++            const c = document.getElementById('chatMessagesContent');
++            const away = c.scrollHeight - c.scrollTop - c.clientHeight > 240;
++            document.getElementById('chatJumpBtn').classList.toggle('show', away);
++        }
++        function chatJumpToLatest() {
++            const c = document.getElementById('chatMessagesContent');
++            c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
++        }
++
++        // Tapping a reply's quote scrolls to the original and flashes it, like the app.
++        function chatScrollToMessage(msgId) {
++            const c = document.getElementById('chatMessagesContent');
++            const thread = c.querySelector(`.message-thread[data-msg-id="${CSS.escape(String(msgId))}"]`);
++            if (!thread) return;
++            const cRect = c.getBoundingClientRect(), tRect = thread.getBoundingClientRect();
++            const top = c.scrollTop + (tRect.top - cRect.top) - (c.clientHeight - tRect.height) / 2;
++            c.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
++            const bubble = thread.querySelector('.message-bubble');
++            if (bubble) {
++                bubble.classList.add('msg-flash');
++                setTimeout(() => bubble.classList.remove('msg-flash'), 1200);
++            }
+         }
++        document.addEventListener('click', e => {
++            const q = e.target.closest?.('#chatMessagesContent .reply-quote[data-reply-to]');
++            if (q) chatScrollToMessage(q.dataset.replyTo);
++        });
++        document.addEventListener('keydown', e => {
++            if (e.key === 'Escape') closeChatModal();
++            if (e.key !== 'Enter') return;
++            const q = e.target.closest?.('#chatMessagesContent .reply-quote[data-reply-to]');
++            if (q) chatScrollToMessage(q.dataset.replyTo);
++        });
+ 
+         /* ── Live Sessions ──────────────────────────────────────────── */
+         let liveSessionsTicker = null;
+diff --git a/routes/admin.js b/routes/admin.js
+index 9456545..7169f80 100644
+--- a/routes/admin.js
++++ b/routes/admin.js
+@@ -544,7 +544,30 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
+     const has_more = messages.length > limit;
+     const sliced = messages.slice(0, limit);
+ 
++    // Replies carry a quote of the message they answer. When that original is
++    // older than this page, look it up (this conversation only) so the quote
++    // can still be drawn, same as the mini-app does for its history window.
++    const inPage = new Set(sliced.map(m => String(m.id)));
++    const missingParents = [...new Set(sliced
++      .filter(m => m.parent_id && !inPage.has(String(m.parent_id)))
++      .map(m => String(m.parent_id)))];
++    const parentMap = new Map();
++    if (missingParents.length) {
++      const { data: parents } = await supabase
++        .from('messages')
++        .select('id, from_id, content, file_type, is_deleted')
++        .in('id', missingParents)
++        .or(`and(from_id.eq.${mentor_id},to_id.eq.${mentee_id}),and(from_id.eq.${mentee_id},to_id.eq.${mentor_id})`);
++      (parents || []).forEach(p => parentMap.set(String(p.id), {
++        id: p.id, from_id: p.from_id, content: p.content,
++        file_type: p.file_type || null, is_deleted: !!p.is_deleted
++      }));
++    }
++
+     const responseMessages = sliced.map(m => ({
++      parent_id: m.parent_id || null,
++      parent_preview: m.parent_id ? (parentMap.get(String(m.parent_id)) || null) : null,
++      read_at: m.read_at || null,
+       id: m.id,
+       from_id: m.from_id,
+       to_id: m.to_id,
+-- 
+2.43.0
+
