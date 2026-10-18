@@ -290,7 +290,7 @@
     let tone, headline;
     if (isHost) {
       tone = waiting > 0 ? 'ok' : 'wait';
-      headline = waiting > 0 ? sr('n_waiting', '{n} waiting for you', { n: waiting }) : sr('host_ready_title', 'Ready when you are');
+      headline = waiting > 0 ? sr('n_waiting', '{n} waiting for you', { n: waiting }) : (data.title || sr('live_session_title', 'Live Session'));
     } else if (hostPresent) {
       tone = 'ok';
       headline = sr('host_here_title', 'Your mentor is here');
@@ -321,11 +321,13 @@
             <span class="sr-ico">${ico('cam', !prefs.cam)}</span><span>${prefs.cam ? esc(sr('cam_on', 'Camera on')) : esc(sr('cam_off', 'Camera off'))}</span>
           </button>`}
         </div>
-        <button class="btn btn-primary sr-primary" ${canEnter ? '' : 'disabled'} onclick="SR.start()">${esc(primary)}</button>
-        ${canAudio ? `<button class="btn btn-outline sr-secondary" onclick="SR.startAudio()">${esc(sr('start_audio', 'Start audio call'))}</button>` : ''}
-        ${unreliable
-          ? `<button class="btn btn-outline sr-secondary" onclick="SR.external()">${esc(sr('open_browser_rec', 'Open in browser (recommended)'))}</button>`
-          : `<button class="sr-link" onclick="SR.trouble()">${esc(sr('having_trouble', 'Having trouble?'))}</button>`}
+        <div class="sr-actions">
+          <button class="btn btn-primary sr-primary" ${canEnter ? '' : 'disabled'} onclick="SR.start()">${esc(primary)}</button>
+          ${canAudio ? `<button class="btn btn-outline sr-secondary" onclick="SR.startAudio()">${esc(sr('start_audio', 'Start audio call'))}</button>` : ''}
+          ${unreliable
+            ? `<button class="btn btn-outline sr-secondary" onclick="SR.external()">${esc(sr('open_browser_rec', 'Open in browser (recommended)'))}</button>`
+            : `<button class="sr-link" onclick="SR.trouble()">${esc(sr('having_trouble', 'Having trouble?'))}</button>`}
+        </div>
       </div>`;
   }
 

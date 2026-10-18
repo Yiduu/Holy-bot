@@ -14609,3 +14609,15 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
 .ac-actions { display: flex; flex-direction: column; gap: 10px; width: min(320px, 100%); }
 .ac-actions:empty { display: none; }
 @media (prefers-reduced-motion: reduce) { .ac-ring--mid, .ac-meter i { transition: none; } }
+
+/* ── Waiting room hierarchy: who/when → status → options → actions ───────── */
+.sr-lobby { gap: 12px; padding: 24px 20px 18px; }
+.sr-lobby .sr-eyebrow { opacity: .8; letter-spacing: .1em; }
+.sr-lobby .sr-hero { margin: 6px 0 2px; }
+.sr-lobby .sr-title { font-size: var(--fs-xl); font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; padding: 0 6px; }
+.sr-lobby .sr-toggles { margin-top: 10px; }
+.sr-lobby .sr-toggle { min-height: 46px; font-size: var(--fs-sm); }
+.sr-lobby .sr-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.sr-lobby .sr-primary { min-height: 52px; font-weight: 800; }
+.sr-lobby .sr-secondary { min-height: 48px; }
+.sr-lobby .sr-link { align-self: center; padding: 6px 12px; opacity: .55; font-size: var(--fs-xs); }
