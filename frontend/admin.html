@@ -5,6 +5,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>Holy Helper – Admin</title>
+    <meta name="color-scheme" content="dark light" />
+    <!-- Apply the saved theme before first paint. Shares the app's "theme" key
+         (the admin used to keep its own "holyTheme", so the two drifted apart). -->
+    <script>try { var _t = localStorage.getItem('theme') || localStorage.getItem('holyTheme'); document.documentElement.setAttribute('data-theme', _t === 'light' ? 'light' : 'dark') } catch (e) { }</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -1940,9 +1948,14 @@
         }
         @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
     </style>
+    <!-- Shared look with the mini-app (tokens, cards, buttons, chips, sheets). Must stay after the inline <style>. -->
+    <link rel="stylesheet" href="admin.css?v=1.0" />
 </head>
 
 <body>
+    <div class="bg-blobs" aria-hidden="true">
+        <div class="bg-blob"></div>
+    </div>
 
     <div class="sidebar-dim" id="sidebarDim" onclick="closeSidebar()"></div>
 
@@ -1951,7 +1964,7 @@
         <!-- ── Sidebar ──────────────────────────────────────────── -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-logo">
-                <div class="logo-mark">✦</div>
+                <img src="Holy%20logo1.png" alt="Holy Helper" class="app-logo" />
                 <div>
                     <div class="logo-text">Holy Helper</div>
                     <div class="logo-sub">Admin Panel</div>
@@ -2913,14 +2926,10 @@
         /* ── Toast ─────────────────────────────────────────────────── */
         function toast(msg, type = 'info', icon = null) {
             const t = document.createElement('div');
-            t.className = 'toast';
-            const bg = { error: 'var(--danger)', success: 'var(--success)', info: 'var(--bg3)' }[type] || 'var(--bg3)';
-            t.style.background = bg;
-            t.style.color = type === 'info' ? 'var(--text)' : '#fff';
+            // Look comes from admin.css (.toast / .toast.success / .toast.error)
+            t.className = 'toast' + (type === 'error' || type === 'success' ? ' ' + type : '');
+            if (!icon) icon = { error: 'x', success: 'check' }[type] || null;
             if (icon) {
-                t.style.display = 'flex';
-                t.style.alignItems = 'center';
-                t.style.gap = '8px';
                 t.innerHTML = `${ticketIcon(icon, 16)}<span>${esc(msg)}</span>`;
             } else {
                 t.textContent = msg;
@@ -2988,16 +2997,46 @@
         }
 
         /* ── Theme ─────────────────────────────────────────────────── */
+        // Same storage key + page-flip veil as the mini-app, so the theme chosen
+        // in either place carries over to the other.
+        const THEME_BG = { dark: '#0D0F14', light: '#F4F1EA' };
         function setTheme(t) {
             document.documentElement.setAttribute('data-theme', t);
-            localStorage.setItem('holyTheme', t);
+            try { localStorage.setItem('theme', t); } catch (e) { }
             document.getElementById('themeBtn').textContent = t === 'light' ? '🌙' : '☀️';
+            const tc = document.querySelector('meta[name="theme-color"]');
+            if (tc) tc.setAttribute('content', THEME_BG[t] || THEME_BG.dark);
+            try { window.Telegram?.WebApp?.setHeaderColor?.(THEME_BG[t] || THEME_BG.dark); } catch (e) { }
             rebuildChart();
         }
+        let _themeBusy = false;
         function toggleTheme() {
-            setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+            if (_themeBusy) return;
+            const root = document.documentElement;
+            const next = (root.getAttribute('data-theme') || 'dark') === 'dark' ? 'light' : 'dark';
+            const flip = () => {
+                root.classList.add('theme-switching');
+                setTheme(next);
+                void root.offsetWidth; // apply new values with transitions disabled
+                requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
+            };
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { flip(); return; }
+            _themeBusy = true;
+            const veil = document.createElement('div');
+            veil.className = 'theme-veil';
+            veil.style.background = THEME_BG[next];
+            document.body.appendChild(veil);
+            void veil.offsetWidth;
+            veil.style.transition = 'opacity .12s ease-out';
+            veil.style.opacity = '1';
+            setTimeout(() => {
+                flip();
+                veil.style.transition = 'opacity .18s ease-in';
+                veil.style.opacity = '0';
+                setTimeout(() => { veil.remove(); _themeBusy = false; }, 220);
+            }, 130);
         }
-        setTheme(localStorage.getItem('holyTheme') || 'dark');
+        setTheme(document.documentElement.getAttribute('data-theme') || 'dark');
 
         /* ── Sidebar ───────────────────────────────────────────────── */
         function toggleSidebar() {

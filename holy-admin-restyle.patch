@@ -1,0 +1,717 @@
+From e629a8cd48c41426cee58ec1f0f9a24e4f1d5c02 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 18 Oct 2026 11:39:05 +0300
+Subject: [PATCH] Restyle admin panel to match the mini-app design system
+
+- Add admin.css: shared tokens, Lato, glass cards, gradient buttons, pill chips,
+  bottom-sheet modals on phones, shimmer/spinner loading states, grain + glow
+- Share the app's "theme" storage key and add the theme-flip veil
+- Class-based toasts with icons; live badge turns red when offline
+- Use the real Holy logo in the sidebar
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SGbABJtPPrCj97G2nSqD6w
+---
+ frontend/admin.css  | 577 ++++++++++++++++++++++++++++++++++++++++++++
+ frontend/admin.html |  63 ++++-
+ 2 files changed, 628 insertions(+), 12 deletions(-)
+ create mode 100644 frontend/admin.css
+
+diff --git a/frontend/admin.css b/frontend/admin.css
+new file mode 100644
+index 0000000..471000d
+--- /dev/null
++++ b/frontend/admin.css
+@@ -0,0 +1,577 @@
++/* ============================================================
++   Holy Helper – Admin design layer
++   Brings the admin panel onto the same design system as the
++   mini-app (styles.css): Lato, gold-on-espresso palette, glass
++   cards, gradient primary buttons, pill chips, bottom-sheet
++   modals, shimmer skeletons, grain + glow, theme veil.
++
++   Loaded AFTER the inline <style> in admin.html, so these rules
++   win at equal specificity. Layout rules (sidebar, panes, grids)
++   stay in admin.html; this file only owns the look.
++   ============================================================ */
++
++/* ─── Tokens (mirror styles.css) ─────────────────────────────── */
++:root {
++  --gold: #C9A84C;
++  --gold-light: #E8C96B;
++  --gold-dim: rgba(201, 168, 76, 0.25);
++  --espresso: #20180a;
++
++  --bg: #0D0F14;
++  --bg2: #141720;
++  --bg3: #1C2030;
++  --surface: rgba(255, 255, 255, 0.04);
++  --surface2: rgba(255, 255, 255, 0.07);
++  --border: rgba(201, 168, 76, 0.18);
++  --border-dim: rgba(255, 255, 255, 0.06);
++
++  --text: #F0EDE4;
++  --text2: #A8A49A;
++  --text3: #867F76;
++  --text-dim: var(--text3);
++
++  --accent: #5B8EFF;
++  --info: #5B8EFF;
++  --danger: #E05C5C;
++  --success: #5BAD7A;
++  --warn: #E09B3A;
++
++  --radius: 14px;
++  --radius-sm: 8px;
++  --radius-card: 20px;
++  --shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
++  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
++  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.35);
++  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
++  --shadow-gold: 0 0 20px rgba(201, 168, 76, 0.15);
++  --inset-hi: inset 0 1px 0 rgba(255, 255, 255, 0.07);
++  --inset-hi-gold: inset 0 1px 0 rgba(255, 255, 255, 0.35);
++
++  --font: 'Lato', system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans Ethiopic', 'Noto Sans', sans-serif;
++  --font-body: var(--font);
++  --font-display: var(--font);
++
++  --fs-2xs: 0.68rem;
++  --fs-xs: 0.75rem;
++  --fs-sm: 0.82rem;
++  --fs-md: 0.92rem;
++  --fs-base: 1rem;
++  --fs-lg: 1.15rem;
++  --fs-xl: 1.35rem;
++
++  --transition: 0.2s ease;
++  --ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
++  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
++}
++
++[data-theme="light"] {
++  --bg: #F4F1EA;
++  --bg2: #ECEAE0;
++  --bg3: #E0DDD2;
++  --surface: rgba(0, 0, 0, 0.04);
++  --surface2: rgba(0, 0, 0, 0.06);
++  --border: rgba(150, 120, 40, 0.2);
++  --border-dim: rgba(0, 0, 0, 0.06);
++  --text: #1A1714;
++  --text2: #5A5650;
++  --text3: #6F6659;
++  --shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
++  --shadow-sm: 0 2px 8px rgba(30, 25, 15, 0.08);
++  --shadow-md: 0 6px 20px rgba(30, 25, 15, 0.10);
++  --shadow-lg: 0 24px 60px rgba(30, 25, 15, 0.14), 0 2px 6px rgba(30, 25, 15, 0.08);
++  --inset-hi: inset 0 1px 0 rgba(255, 255, 255, 0.5);
++  --inset-hi-gold: inset 0 1px 0 rgba(255, 255, 255, 0.45);
++}
++
++:root { color-scheme: dark; }
++[data-theme="light"] { color-scheme: light; }
++
++/* ─── Theme switch (same veil trick as the app) ──────────────── */
++html.theme-switching *,
++html.theme-switching *::before,
++html.theme-switching *::after { transition: none !important; }
++
++.theme-veil {
++  position: fixed;
++  inset: 0;
++  z-index: 2147483000;
++  pointer-events: none;
++  opacity: 0;
++}
++
++/* ─── Base ───────────────────────────────────────────────────── */
++html { font-size: 16px; }
++
++body {
++  font-family: var(--font);
++  font-size: var(--fs-md);
++  font-weight: 400;
++  line-height: 1.45;
++  background: var(--bg);
++  color: var(--text);
++  position: relative;
++  text-shadow: 0 0 0.4px currentColor, 0 0 0.4px currentColor;
++}
++
++button, input, select, textarea { font-family: var(--font); }
++
++h1, h2, h3, h4 { font-family: var(--font); letter-spacing: 0.015em; }
++
++/* Faint grain + one gold glow, like the app shell */
++body::after {
++  content: '';
++  position: fixed;
++  inset: 0;
++  opacity: 0.035;
++  pointer-events: none;
++  z-index: 0;
++  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
++}
++[data-theme="light"] body::after { opacity: 0.02; }
++
++.bg-blobs { position: fixed; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
++.bg-blob {
++  position: absolute;
++  width: 640px;
++  height: 380px;
++  top: -160px;
++  left: 50%;
++  margin-left: -320px;
++  border-radius: 50%;
++  filter: blur(70px);
++  opacity: 0.14;
++  background: radial-gradient(ellipse, var(--gold-light), var(--gold) 55%, transparent 75%);
++}
++[data-theme="light"] .bg-blob { opacity: 0.1; }
++@media (hover: none), (max-width: 480px) { .bg-blobs { display: none; } }
++
++.layout { position: relative; z-index: 1; }
++
++:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
++.form-control:focus-visible, .search-box:focus-visible, .filter-select:focus-visible,
++.inline-area:focus-visible { outline: none; }
++
++/* ─── Sidebar ────────────────────────────────────────────────── */
++.sidebar {
++  background: linear-gradient(180deg, var(--bg2), var(--bg));
++  border-right: 1px solid var(--border-dim);
++}
++
++.sidebar-logo { gap: 12px; padding: 18px 18px 16px; }
++.sidebar-logo .app-logo {
++  display: block;
++  height: 30px;
++  width: auto;
++  max-width: 104px;
++  object-fit: contain;
++  flex-shrink: 0;
++}
++.logo-text { display: none; }
++.logo-sub {
++  font-size: var(--fs-2xs);
++  font-weight: 600;
++  letter-spacing: 0.14em;
++  color: var(--gold);
++  margin: 0;
++}
++
++.nav-section {
++  font-size: var(--fs-2xs);
++  font-weight: 700;
++  letter-spacing: 0.14em;
++  color: var(--text3);
++  padding: 14px 20px 6px;
++}
++
++.nav-item {
++  font-size: var(--fs-sm);
++  font-weight: 700;
++  letter-spacing: 0.01em;
++  color: var(--text2);
++  border-radius: 12px;
++  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
++}
++@media (hover: hover) {
++  .nav-item:hover { color: var(--text); background: var(--surface); }
++}
++.nav-item.active {
++  color: var(--gold);
++  background: rgba(201, 168, 76, 0.13);
++  box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.28);
++}
++[data-theme="light"] .nav-item.active { color: #6B4E0F; background: rgba(201, 168, 76, 0.18); }
++
++.nav-badge {
++  font-size: var(--fs-2xs);
++  font-weight: 700;
++  padding: 2px 7px;
++  border-radius: 99px;
++}
++
++.user-avatar {
++  background: rgba(201, 168, 76, 0.13);
++  border: 1px solid var(--border);
++  font-weight: 700;
++}
++
++/* ─── Topbar ─────────────────────────────────────────────────── */
++.topbar {
++  background: linear-gradient(180deg, var(--bg2), transparent);
++  border-bottom: 1px solid var(--border-dim);
++  backdrop-filter: blur(6px);
++  -webkit-backdrop-filter: blur(6px);
++}
++.topbar-title { font-size: var(--fs-lg); font-weight: 700; letter-spacing: 0.015em; }
++
++.theme-btn, .refresh-btn, .menu-btn {
++  background: var(--surface);
++  border: 1px solid var(--border-dim);
++  border-radius: 12px;
++  box-shadow: var(--inset-hi);
++  transition: transform 0.12s ease, border-color 0.15s ease, background 0.15s ease;
++}
++.menu-btn svg { stroke: var(--gold); }
++@media (hover: hover) {
++  .theme-btn:hover, .refresh-btn:hover, .menu-btn:hover { border-color: var(--gold); background: rgba(201, 168, 76, 0.1); }
++}
++.theme-btn:active, .refresh-btn:active, .menu-btn:active { transform: scale(0.94); }
++
++.live-badge {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  padding: 4px 10px;
++  border-radius: 99px;
++  background: rgba(91, 173, 122, 0.12);
++  color: var(--success);
++  font-size: var(--fs-2xs);
++  font-weight: 700;
++  letter-spacing: 0.04em;
++  text-transform: uppercase;
++}
++
++.live-badge:has(.ws-dot.offline) { background: rgba(224, 92, 92, 0.12); color: var(--danger); }
++
++/* ─── Cards ──────────────────────────────────────────────────── */
++.stat-card, .chart-card, .table-wrap, .app-card, .quick-btn, .skeleton-card,
++.mentor-card, .mentee-row {
++  background: var(--surface);
++  border: 1px solid var(--border-dim);
++  border-radius: var(--radius-card);
++  box-shadow: var(--inset-hi);
++}
++.stat-card, .chart-card, .app-card { position: relative; overflow: hidden; }
++
++.stat-card::before, .app-card::before {
++  content: '';
++  position: absolute;
++  top: 0; left: 0; right: 0;
++  height: 2px;
++  background: linear-gradient(90deg, transparent, var(--gold), transparent);
++  opacity: 0;
++  transition: opacity 0.4s ease;
++}
++@media (hover: hover) {
++  .stat-card:hover::before, .app-card:hover::before { opacity: 1; }
++  .app-card:hover, .quick-btn:hover { border-color: var(--border); }
++  .quick-btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-md), var(--inset-hi); }
++}
++
++.stat-icon { border-radius: 14px; width: 36px; height: 36px; }
++.stat-icon.gold { background: rgba(201, 168, 76, 0.13); }
++.stat-num { font-size: 1.7rem; font-weight: 900; letter-spacing: -0.01em; }
++.stat-label {
++  font-size: var(--fs-2xs);
++  font-weight: 700;
++  letter-spacing: 0.1em;
++  color: var(--text3);
++}
++.stat-sub { font-size: var(--fs-xs); }
++.chart-title { font-size: var(--fs-md); font-weight: 700; }
++
++/* Support tickets: same glass as other cards, gold spine kept */
++.ticket-card {
++  background: var(--surface);
++  border: 1px solid var(--border-dim);
++  border-radius: 22px;
++  box-shadow: var(--shadow-sm), var(--inset-hi);
++  backdrop-filter: none;
++  -webkit-backdrop-filter: none;
++}
++.ticket-card::before { width: 3px; opacity: 1; background: linear-gradient(180deg, var(--gold-light), var(--gold)); }
++@media (hover: hover) {
++  .ticket-card:hover { border-color: var(--border); box-shadow: var(--shadow-md), var(--shadow-gold); }
++}
++.ticket-subject { font-size: var(--fs-base); font-weight: 700; }
++.ticket-meta { font-size: var(--fs-xs); }
++.ticket-body { font-size: var(--fs-md); }
++.admin-reply-preview { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
++
++/* ─── Headings ───────────────────────────────────────────────── */
++.section-title {
++  font-size: var(--fs-sm);
++  font-weight: 700;
++  letter-spacing: 0.1em;
++  text-transform: uppercase;
++  color: var(--gold);
++}
++.preview-label, .app-q-label, .mentee-detail-label {
++  font-weight: 700;
++  letter-spacing: 0.1em;
++}
++.app-id { font-weight: 900; }
++
++/* ─── Buttons ────────────────────────────────────────────────── */
++.btn {
++  justify-content: center;
++  gap: 7px;
++  padding: 9px 15px;
++  border-radius: var(--radius-sm);
++  font-size: var(--fs-sm);
++  font-weight: 700;
++  letter-spacing: 0.01em;
++  transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
++}
++.btn:active { transform: scale(0.98); opacity: 0.94; }
++.btn-sm { padding: 6px 12px; font-size: var(--fs-xs); }
++
++.btn-primary {
++  background: linear-gradient(135deg, var(--gold-light), var(--gold) 65%, #A87C2A);
++  color: var(--espresso);
++  border: 0;
++  box-shadow: var(--shadow-sm), var(--inset-hi-gold);
++}
++@media (hover: hover) {
++  .btn-primary:hover {
++    background: linear-gradient(135deg, var(--gold-light), var(--gold) 65%, #A87C2A);
++    transform: none;
++    box-shadow: var(--shadow-gold), var(--inset-hi-gold);
++  }
++}
++
++.btn-outline {
++  background: transparent;
++  border: 1px solid var(--border);
++  color: var(--gold);
++}
++@media (hover: hover) {
++  .btn-outline:hover { background: rgba(201, 168, 76, 0.13); border-color: var(--gold); color: var(--gold); }
++}
++
++.btn-ghost { background: transparent; border: 0; color: var(--text2); }
++@media (hover: hover) {
++  .btn-ghost:hover { background: var(--surface); color: var(--text); }
++}
++
++.btn-danger { background: rgba(224, 92, 92, 0.15); border: 1px solid rgba(224, 92, 92, 0.3); color: var(--danger); }
++.btn-success { background: rgba(91, 173, 122, 0.15); border: 1px solid rgba(91, 173, 122, 0.3); color: var(--success); }
++@media (hover: hover) {
++  .btn-danger:hover { background: rgba(224, 92, 92, 0.25); }
++  .btn-success:hover { background: rgba(91, 173, 122, 0.25); }
++}
++.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
++
++.page-btn {
++  border-radius: var(--radius-sm);
++  background: var(--surface);
++  border: 1px solid var(--border-dim);
++  color: var(--text2);
++  font-weight: 700;
++}
++.page-btn.active { background: rgba(201, 168, 76, 0.13); border-color: var(--gold); color: var(--gold); }
++
++/* ─── Chips ──────────────────────────────────────────────────── */
++.chip {
++  display: inline-block;
++  padding: 3px 9px;
++  border-radius: 99px;
++  border: 0;
++  font-size: var(--fs-2xs);
++  font-weight: 700;
++  letter-spacing: 0.04em;
++  text-transform: uppercase;
++}
++.chip-gold { background: rgba(201, 168, 76, 0.18); color: var(--gold); border: 0; }
++.chip-blue { background: rgba(91, 142, 255, 0.12); color: var(--accent); border: 0; }
++.chip-green { background: rgba(91, 173, 122, 0.12); color: var(--success); border: 0; }
++.chip-red { background: rgba(224, 92, 92, 0.12); color: var(--danger); border: 0; }
++.chip-muted, .chip-gray { background: rgba(150, 150, 150, 0.1); color: var(--text3); border: 0; }
++[data-theme="light"] .chip-gold { color: #7A5A12; }
++
++/* ─── Forms ──────────────────────────────────────────────────── */
++.form-label {
++  font-size: var(--fs-xs);
++  font-weight: 700;
++  letter-spacing: 0.05em;
++  color: var(--text2);
++  margin-bottom: 6px;
++}
++.form-control, .search-box, .filter-select, .inline-area {
++  background: var(--bg3);
++  border: 1px solid var(--border-dim);
++  border-radius: var(--radius-sm);
++  color: var(--text);
++  font-size: var(--fs-md);
++  padding: 10px 13px;
++  transition: border-color 0.15s ease, box-shadow 0.15s ease;
++}
++.form-control:focus, .search-box:focus, .filter-select:focus, .inline-area:focus {
++  outline: none;
++  border-color: var(--gold);
++  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.15);
++}
++.form-control::placeholder, .search-box::placeholder, .inline-area::placeholder { color: var(--text3); }
++
++.toggle { background: var(--bg3); border: 1px solid var(--border-dim); }
++.toggle::after { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); }
++.toggle.on { background: var(--gold); border-color: var(--gold); }
++.toggle.on::after { background: #fff; }
++
++/* ─── Tables ─────────────────────────────────────────────────── */
++table { font-size: var(--fs-sm); }
++thead th {
++  background: var(--bg3);
++  font-size: var(--fs-2xs);
++  letter-spacing: 0.1em;
++  color: var(--text3);
++}
++tbody tr { border-bottom: 1px solid var(--border-dim); }
++@media (hover: hover) {
++  tbody tr:hover { background: rgba(201, 168, 76, 0.06); }
++}
++tbody td { padding: 11px 12px; }
++.table-wrap { overflow-x: auto; }
++
++/* ─── Modals: bottom sheet on phones, centred card on desktop ── */
++.modal-overlay {
++  background: rgba(0, 0, 0, 0.7);
++  backdrop-filter: blur(4px);
++  -webkit-backdrop-filter: blur(4px);
++}
++.modal {
++  background: var(--bg2);
++  border: 1px solid var(--border-dim);
++  border-radius: var(--radius-card);
++  box-shadow: var(--shadow-lg), var(--inset-hi);
++  animation: adminModalIn 0.25s var(--ease-premium);
++}
++.modal-title {
++  font-size: var(--fs-base);
++  font-weight: 700;
++  color: var(--gold);
++  letter-spacing: 0.015em;
++}
++@keyframes adminModalIn {
++  from { opacity: 0; transform: translateY(14px) scale(0.985); }
++  to { opacity: 1; transform: none; }
++}
++@keyframes adminSheetIn {
++  from { transform: translateY(100%); }
++  to { transform: none; }
++}
++@media (max-width: 640px) {
++  .modal-overlay { align-items: flex-end; padding: 0; }
++  .modal {
++    max-width: none;
++    max-height: 88vh;
++    border-radius: var(--radius) var(--radius) 0 0;
++    border-bottom: 0;
++    padding-bottom: calc(24px + var(--safe-bottom, 0px));
++    animation: adminSheetIn 0.25s var(--ease-premium);
++  }
++  .modal::before {
++    content: '';
++    display: block;
++    width: 36px;
++    height: 4px;
++    border-radius: 2px;
++    background: var(--border-dim);
++    margin: -8px auto 16px;
++  }
++}
++
++.detail-tabs { background: var(--bg3); border-radius: 12px; }
++.detail-tab { border-radius: 9px; font-size: var(--fs-xs); font-weight: 700; }
++.detail-tab.active { background: rgba(201, 168, 76, 0.16); color: var(--gold); box-shadow: inset 0 0 0 1px rgba(201, 168, 76, 0.25); }
++
++/* ─── Toast ──────────────────────────────────────────────────── */
++.toast {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  padding: 11px 16px;
++  border-radius: 14px;
++  background: var(--bg2);
++  color: var(--text);
++  border: 1px solid var(--border);
++  font-size: var(--fs-sm);
++  font-weight: 700;
++  box-shadow: var(--shadow-lg);
++  transition: opacity 0.3s ease, transform 0.3s var(--ease-premium);
++  animation: adminToastIn 0.3s var(--ease-premium);
++}
++.toast.success { border-color: rgba(91, 173, 122, 0.45); color: var(--success); }
++.toast.error { border-color: rgba(224, 92, 92, 0.45); color: var(--danger); }
++.toast.success, .toast.error { background: var(--bg2); }
++/* admin.html centres the toast with translateX(-50%), so keep that in the keyframes */
++@keyframes adminToastIn {
++  from { opacity: 0; transform: translate(-50%, -8px); }
++  to { opacity: 1; transform: translate(-50%, 0); }
++}
++
++/* ─── Loading + empty states ─────────────────────────────────── */
++.loading {
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  justify-content: center;
++  gap: 12px;
++  padding: 40px 20px;
++  color: var(--text3);
++  font-size: var(--fs-sm);
++}
++.loading::before {
++  content: '';
++  width: 22px;
++  height: 22px;
++  border-radius: 50%;
++  border: 2px solid var(--border);
++  border-top-color: var(--gold);
++  animation: spin 0.7s linear infinite;
++}
++td.loading { display: table-cell; text-align: center; }
++td.loading::before { display: inline-block; vertical-align: middle; margin-right: 10px; }
++.admin-msg-voice-play.loading::before { content: none; }
++
++.empty, .empty-state {
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  gap: 12px;
++  padding: 40px 20px;
++  text-align: center;
++  color: var(--text3);
++  font-size: var(--fs-sm);
++}
++td.empty { display: table-cell; }
++.empty-state svg { width: 48px; height: 48px; stroke: var(--text3); opacity: 0.4; fill: none; stroke-width: 1.5; }
++
++/* shimmer skeletons (same motion as the app) */
++.skeleton-card::after {
++  background: linear-gradient(90deg, transparent, rgba(201, 168, 76, 0.07), transparent);
++}
++.skeleton-line { background: var(--bg3); border-radius: 6px; }
++
++/* ─── Misc ───────────────────────────────────────────────────── */
++.divider { background: var(--border-dim); }
++code.slug, .audit-action { border-radius: 6px; }
++.sidebar-dim { backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
++
++@media (max-width: 480px) {
++  .topbar, .sidebar { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
++  .topbar { background: var(--bg2); }
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .toast, .modal { animation: none !important; }
++}
+diff --git a/frontend/admin.html b/frontend/admin.html
+index 3e77f55..49618a2 100644
+--- a/frontend/admin.html
++++ b/frontend/admin.html
+@@ -5,6 +5,14 @@
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+     <title>Holy Helper – Admin</title>
++    <meta name="color-scheme" content="dark light" />
++    <!-- Apply the saved theme before first paint. Shares the app's "theme" key
++         (the admin used to keep its own "holyTheme", so the two drifted apart). -->
++    <script>try { var _t = localStorage.getItem('theme') || localStorage.getItem('holyTheme'); document.documentElement.setAttribute('data-theme', _t === 'light' ? 'light' : 'dark') } catch (e) { }</script>
++    <link rel="preconnect" href="https://fonts.googleapis.com" />
++    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
++    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" media="print" onload="this.media='all'" />
++    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
+     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+@@ -1940,9 +1948,14 @@
+         }
+         @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+     </style>
++    <!-- Shared look with the mini-app (tokens, cards, buttons, chips, sheets). Must stay after the inline <style>. -->
++    <link rel="stylesheet" href="admin.css?v=1.0" />
+ </head>
+ 
+ <body>
++    <div class="bg-blobs" aria-hidden="true">
++        <div class="bg-blob"></div>
++    </div>
+ 
+     <div class="sidebar-dim" id="sidebarDim" onclick="closeSidebar()"></div>
+ 
+@@ -1951,7 +1964,7 @@
+         <!-- ── Sidebar ──────────────────────────────────────────── -->
+         <aside class="sidebar" id="sidebar">
+             <div class="sidebar-logo">
+-                <div class="logo-mark">✦</div>
++                <img src="Holy%20logo1.png" alt="Holy Helper" class="app-logo" />
+                 <div>
+                     <div class="logo-text">Holy Helper</div>
+                     <div class="logo-sub">Admin Panel</div>
+@@ -2913,14 +2926,10 @@
+         /* ── Toast ─────────────────────────────────────────────────── */
+         function toast(msg, type = 'info', icon = null) {
+             const t = document.createElement('div');
+-            t.className = 'toast';
+-            const bg = { error: 'var(--danger)', success: 'var(--success)', info: 'var(--bg3)' }[type] || 'var(--bg3)';
+-            t.style.background = bg;
+-            t.style.color = type === 'info' ? 'var(--text)' : '#fff';
++            // Look comes from admin.css (.toast / .toast.success / .toast.error)
++            t.className = 'toast' + (type === 'error' || type === 'success' ? ' ' + type : '');
++            if (!icon) icon = { error: 'x', success: 'check' }[type] || null;
+             if (icon) {
+-                t.style.display = 'flex';
+-                t.style.alignItems = 'center';
+-                t.style.gap = '8px';
+                 t.innerHTML = `${ticketIcon(icon, 16)}<span>${esc(msg)}</span>`;
+             } else {
+                 t.textContent = msg;
+@@ -2988,16 +2997,46 @@
+         }
+ 
+         /* ── Theme ─────────────────────────────────────────────────── */
++        // Same storage key + page-flip veil as the mini-app, so the theme chosen
++        // in either place carries over to the other.
++        const THEME_BG = { dark: '#0D0F14', light: '#F4F1EA' };
+         function setTheme(t) {
+             document.documentElement.setAttribute('data-theme', t);
+-            localStorage.setItem('holyTheme', t);
++            try { localStorage.setItem('theme', t); } catch (e) { }
+             document.getElementById('themeBtn').textContent = t === 'light' ? '🌙' : '☀️';
++            const tc = document.querySelector('meta[name="theme-color"]');
++            if (tc) tc.setAttribute('content', THEME_BG[t] || THEME_BG.dark);
++            try { window.Telegram?.WebApp?.setHeaderColor?.(THEME_BG[t] || THEME_BG.dark); } catch (e) { }
+             rebuildChart();
+         }
++        let _themeBusy = false;
+         function toggleTheme() {
+-            setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+-        }
+-        setTheme(localStorage.getItem('holyTheme') || 'dark');
++            if (_themeBusy) return;
++            const root = document.documentElement;
++            const next = (root.getAttribute('data-theme') || 'dark') === 'dark' ? 'light' : 'dark';
++            const flip = () => {
++                root.classList.add('theme-switching');
++                setTheme(next);
++                void root.offsetWidth; // apply new values with transitions disabled
++                requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
++            };
++            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { flip(); return; }
++            _themeBusy = true;
++            const veil = document.createElement('div');
++            veil.className = 'theme-veil';
++            veil.style.background = THEME_BG[next];
++            document.body.appendChild(veil);
++            void veil.offsetWidth;
++            veil.style.transition = 'opacity .12s ease-out';
++            veil.style.opacity = '1';
++            setTimeout(() => {
++                flip();
++                veil.style.transition = 'opacity .18s ease-in';
++                veil.style.opacity = '0';
++                setTimeout(() => { veil.remove(); _themeBusy = false; }, 220);
++            }, 130);
++        }
++        setTheme(document.documentElement.getAttribute('data-theme') || 'dark');
+ 
+         /* ── Sidebar ───────────────────────────────────────────────── */
+         function toggleSidebar() {
+-- 
+2.43.0
+
