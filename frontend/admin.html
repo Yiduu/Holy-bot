@@ -2443,7 +2443,15 @@
                         .ma-count { font-size: 13.5px; font-weight: 700; text-align: right; white-space: nowrap; }
                         .ma-count small { font-weight: 400; color: var(--text2); margin-left: 4px; }
                         .ma-empty { font-size: 13px; color: var(--text2); padding: 8px 0 2px; }
+                        .ma-more { margin-top: 14px; font-size: 13px; }
+                        .ma-more summary { cursor: pointer; color: var(--text2); padding: 6px 0; }
+                        .ma-more-list { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px 14px; margin-top: 6px; }
+                        .ma-more-list div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); }
+                        .ma-more-list div:first-child { border-top: 0; }
+                        .ma-more-list b { font-weight: 700; }
                         .ma-foot { margin-top: 12px; font-size: 11.5px; color: var(--text3); line-height: 1.5; }
+                        #pane-mentorship-analytics .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+                        @media (max-width: 560px) { #pane-mentorship-analytics .stats-grid { gap: 8px; } #pane-mentorship-analytics .stat-card { padding: 14px 10px; } #pane-mentorship-analytics .stat-label { font-size: 10px; letter-spacing: .04em; } .ma-card-sub { font-size: 11px; } }
                         @media (max-width: 560px) { .ma-row { grid-template-columns: 1fr auto; } .ma-bar { grid-column: 1 / -1; order: 3; } }
                     </style>
 
@@ -2451,36 +2459,32 @@
 
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <div class="stat-num" id="ma-people" style="color:var(--gold)">–</div>
-                            <div class="stat-label">People matched</div>
-                            <div class="ma-card-sub" id="ma-people-sub"></div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-num" id="ma-started" style="color:var(--accent)">–</div>
-                            <div class="stat-label">Mentorships started</div>
-                            <div class="ma-card-sub" id="ma-started-sub">in this period</div>
+                            <div class="stat-num" id="ma-mentees" style="color:var(--gold)">–</div>
+                            <div class="stat-label">Mentees matched</div>
+                            <div class="ma-card-sub">got a mentor</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-num" id="ma-active" style="color:var(--success)">–</div>
-                            <div class="stat-label">Active now</div>
-                            <div class="ma-card-sub">running right now</div>
+                            <div class="stat-label">Still together</div>
+                            <div class="ma-card-sub">right now</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-num" id="ma-ended" style="color:var(--danger)">–</div>
-                            <div class="stat-label">Mentorships ended</div>
-                            <div class="ma-card-sub" id="ma-ended-sub"></div>
+                            <div class="stat-label">Ended</div>
+                            <div class="ma-card-sub">mentorships stopped</div>
                         </div>
                     </div>
 
                     <div class="ma-panel">
-                        <h3>Who ended the mentorship?</h3>
-                        <div class="ma-hint">Share of the mentorships that ended in this period.</div>
+                        <h3>Who ended it?</h3>
                         <div id="maBreakdown"><div class="ma-empty">Loading…</div></div>
                     </div>
-                    <div class="ma-foot">
-                        Each person is counted once, even if they were matched or ended more than once.
-                        Matches are counted by the day they started, endings by the day they ended.
-                    </div>
+
+                    <details class="ma-more">
+                        <summary>More details</summary>
+                        <div class="ma-more-list" id="maMore"></div>
+                    </details>
+                    <div class="ma-foot">Each person is counted once, even if matched more than once.</div>
                 </div>
 
                 <!-- ── Mentorship Request Log ────────────────────────── -->
@@ -3652,60 +3656,56 @@
             const days = document.getElementById('maRange')?.value || '0';
             const box = document.getElementById('maBreakdown');
             const sel = document.getElementById('maRange');
-            const periodText = days === '0' ? 'Overall' : (sel?.options[sel.selectedIndex]?.text || 'In this period').replace(/^Last/, 'In the last');
+            const period = days === '0' ? 'So far' : (sel?.options[sel.selectedIndex]?.text || '').replace(/^Last/, 'In the last');
             try {
                 const d = await api(`/api/admin/analytics/mentorship?days=${encodeURIComponent(days)}`);
                 const m = d.matched || {}, e = d.ended || {}, by = e.by || {};
                 const n = (v) => Number(v || 0);
                 const plural = (c, w, ws) => `${c} ${c === 1 ? w : (ws || w + 's')}`;
 
-                set('ma-people', n(m.unique_users));
-                set('ma-people-sub', `${plural(n(m.unique_mentees), 'mentee')} · ${plural(n(m.unique_mentors), 'mentor')}`);
-                set('ma-started', n(m.total_matches));
-                set('ma-started-sub', days === '0' ? 'since the start' : 'in this period');
+                set('ma-mentees', n(m.unique_mentees));
                 set('ma-active', n(m.active_now));
                 set('ma-ended', n(e.total));
-                set('ma-ended-sub', n(e.total) ? `affecting ${plural(n(e.unique_users), 'person', 'people')}` : 'none yet');
-
-                const summary = document.getElementById('maSummary');
-                summary.innerHTML = `${esc(periodText)}: <b>${plural(n(m.unique_users), 'person', 'people')}</b> matched and `
-                    + `<b>${plural(n(e.total), 'mentorship')}</b> ended. <b>${n(m.active_now)}</b> ${n(m.active_now) === 1 ? 'is' : 'are'} active now.`;
+                document.getElementById('maSummary').innerHTML =
+                    `${esc(period)}: <b>${plural(n(m.unique_mentees), 'mentee')}</b> got a mentor, and <b>${plural(n(e.total), 'mentorship')}</b> ended.`;
 
                 const tracked = d.ended_by_tracking !== false;
                 const notice = document.getElementById('maNotice');
-                const unknown = n(by.unknown?.endings);
                 if (!tracked) {
                     notice.style.display = 'block';
                     notice.textContent = 'We are not recording who ended each mentorship yet. Run migrations/20260929_mentorship_end_reason.sql in Supabase to start.';
-                } else {
-                    notice.style.display = 'none';
-                }
+                } else notice.style.display = 'none';
 
-                if (!tracked) {
-                    box.innerHTML = '<div class="ma-empty">Not available yet.</div>';
-                } else if (!n(e.total)) {
-                    box.innerHTML = '<div class="ma-empty">No mentorships ended in this period.</div>';
-                } else {
-                    const rows = [
-                        ['mentee', 'The mentee', '', 'var(--accent)'],
-                        ['mentor', 'The mentor', '', 'var(--gold)'],
-                        ['admin', 'An admin', '', 'var(--danger)'],
-                        ['system', 'Automatically', 'Person became a mentor', 'var(--text2)'],
-                        ['unknown', 'Not recorded', 'Ended before we started tracking', 'var(--text3)'],
-                    ].map(([k, label, note, color]) => ({ k, label, note, color, r: by[k] || {} }))
-                     .filter(x => n(x.r.endings) > 0)
-                     .sort((a, b) => n(b.r.endings) - n(a.r.endings));
-                    const total = n(e.total);
-                    box.innerHTML = rows.map(({ label, note, color, r }) => {
-                        const pct = Math.round(n(r.endings) / total * 100);
-                        const who = `${plural(n(r.unique_mentees), 'mentee')} · ${plural(n(r.unique_mentors), 'mentor')}`;
-                        return `<div class="ma-row">
-      <div class="ma-name">${esc(label)}<small>${esc(note ? note + ' · ' + who : who)}</small></div>
+                // Three simple groups: the mentee, the mentor, anyone else.
+                const total = n(e.total);
+                const other = ['admin', 'system', 'unknown'].reduce((t, k) => t + n(by[k]?.endings), 0);
+                const groups = [
+                    ['The mentee stopped it', n(by.mentee?.endings), 'var(--accent)'],
+                    ['The mentor stopped it', n(by.mentor?.endings), 'var(--gold)'],
+                    ['Someone else, or not recorded', other, 'var(--text3)'],
+                ].filter(g => g[1] > 0).sort((a, b) => b[1] - a[1]);
+                if (!tracked) box.innerHTML = '<div class="ma-empty">Not available yet.</div>';
+                else if (!total) box.innerHTML = '<div class="ma-empty">No mentorships ended in this period.</div>';
+                else box.innerHTML = groups.map(([label, c, color]) => {
+                    const pct = Math.round(c / total * 100);
+                    return `<div class="ma-row">
+      <div class="ma-name">${esc(label)}</div>
       <div class="ma-bar" role="img" aria-label="${pct}%"><i style="width:${pct}%;background:${color}"></i></div>
-      <div class="ma-count">${n(r.endings)}<small>${pct}%</small></div>
+      <div class="ma-count">${c}</div>
     </div>`;
-                    }).join('');
-                }
+                }).join('');
+
+                // The detail that used to crowd the page.
+                const line = (k, v) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`;
+                document.getElementById('maMore').innerHTML = [
+                    line('People matched (mentees and mentors together)', n(m.unique_users)),
+                    line('Mentors who took on a mentee', n(m.unique_mentors)),
+                    line('Mentorships started', n(m.total_matches)),
+                    line('People whose mentorship ended', n(e.unique_users)),
+                    tracked ? line('Ended by an admin', n(by.admin?.endings)) : '',
+                    tracked ? line('Ended automatically (became a mentor)', n(by.system?.endings)) : '',
+                    tracked ? line('Ended before we recorded who did it', n(by.unknown?.endings)) : '',
+                ].join('');
             } catch (err) {
                 box.innerHTML = `<div class="ma-empty">Could not load analytics: ${esc(err.message)}</div>`;
                 set('maSummary', '');
