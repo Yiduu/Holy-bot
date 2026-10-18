@@ -36,7 +36,7 @@ const base = (o = {}) => ({ session_id: 's1', room_name: 'holy-x', room_password
   await w.joinSession('s1'); await sleep(30);
   assert.deepEqual(log.nav, ['video']); assert.ok(log.closeConfirm.includes(1)); ok('mentee: navigates to video page + enables close-confirmation');
   let lobby = w.$('sessionLobby'); assert.ok(!lobby.classList.contains('hidden'));
-  assert.ok(lobby.textContent.includes('Waiting for Shepherd_1')); ok('mentee: lobby says waiting for the mentor');
+  assert.ok(lobby.textContent.includes('Waiting for your mentor')); ok('mentee: lobby says waiting for the mentor');
   assert.ok(lobby.querySelector('.sr-primary').disabled); ok('mentee: Join button disabled until host is present');
   assert.ok(lobby.textContent.includes('Camera off')); ok('mentee: camera defaults OFF (anonymity-first), mic on');
   w.SR.toggle('cam'); assert.ok(w.$('sessionLobby').textContent.includes('Camera on')); assert.equal(JSON.parse(w.localStorage.getItem('holy_call_prefs')).cam, true); ok('toggle works and persists');
@@ -47,13 +47,13 @@ const base = (o = {}) => ({ session_id: 's1', room_name: 'holy-x', room_password
   assert.equal(j.domain, 'meet.example.org'); ok('embed uses the SERVER-issued domain (was hardcoded)');
   assert.equal(j.opts.configOverwrite.startWithVideoMuted, false); assert.equal(j.opts.configOverwrite.startWithAudioMuted, false);
   assert.equal(j.opts.configOverwrite.prejoinConfig.enabled, false); ok('Jitsi starts with the lobby choices; its own pre-join is off');
-  w.__jitsi.emit('videoConferenceJoined'); assert.equal(w.$('callState').textContent, 'Live'); ok('status → Live once connected');
+  w.__jitsi.emit('videoConferenceJoined'); assert.equal(w.$('callState').textContent, 'Connected'); ok('status → Connected once connected');
   w.__peers = 1; w.__jitsi.emit('participantLeft'); assert.ok(!w.$('callBanner').classList.contains('hidden')); assert.ok(w.$('callBanner').textContent.includes('mentor stepped out')); ok('mentee sees "mentor stepped out" banner when alone');
   w.__peers = 2; w.__jitsi.emit('participantJoined'); assert.ok(w.$('callBanner').classList.contains('hidden')); ok('banner clears when mentor returns');
 
   // ── in-call controls (the bug: no buttons after joining)
   assert.ok(w.$('callStage').classList.contains('in-call')); ok('call is full-screen so controls can never be hidden behind app nav');
-  assert.equal(w.$('ctlMic').querySelector('.ctl-lbl').textContent, 'Mic'); assert.ok(!w.$('ctlMic').classList.contains('off'));
+  assert.equal(w.$('ctlMic').querySelector('.ctl-lbl').textContent, 'Mute'); assert.ok(!w.$('ctlMic').classList.contains('off'));
   w.$('ctlMic').dispatchEvent(new w.Event('click')); w.SR.mic(); assert.deepEqual(log.cmds.pop(), ['toggleAudio']); ok('mic button → toggleAudio');
   w.SR.cam(); assert.deepEqual(log.cmds.pop(), ['toggleVideo']); w.SR.chat(); assert.deepEqual(log.cmds.pop(), ['toggleChat']); ok('camera + chat buttons send commands');
   w.__jitsi.emit('audioMuteStatusChanged', { muted: true });
@@ -136,7 +136,7 @@ const base = (o = {}) => ({ session_id: 's1', room_name: 'holy-x', room_password
   assert.equal(w.supportsScreenShare(), false);
   assert.equal(w.buildAppSessionUrl(base({ jitsi_token: 'JWT1' })), 'org.jitsi.meet://meet.example.org/holy-x?jwt=JWT1'); ok('app deep link: org.jitsi.meet://<server>/<room>?jwt=…');
   await w.joinSession('s1'); await sleep(20);
-  assert.ok(w.$('sessionLobby').textContent.includes('Share my phone screen')); ok('host lobby on a phone offers "Share my phone screen"');
+  w.SR.trouble(); assert.ok(w.document.getElementById('srSheet').textContent.includes('Use the Jitsi Meet app')); w.document.getElementById('srSheet').remove(); ok('host lobby on a phone: "Having trouble?" offers the Jitsi Meet app (phone screen share)');
   w.SR.start(); await sleep(30); w.__jitsi.emit('videoConferenceJoined');
   w.toggleScreenShare(); const ss = w.document.getElementById('srSheet').textContent;
   assert.ok(ss.includes('Share your phone screen') && ss.includes('Continue')); ok('Share button on a phone explains + offers to continue (not a dead end)');

@@ -1598,6 +1598,9 @@ function connectSocket() {
 
   // The host arrived — unlock the lobby instantly.
   socket.on('session_host_joined', ({ session_id } = {}) => window.SRsocket?.hostJoined(session_id));
+  // Built-in audio call: messages from the other person, and "move to video".
+  socket.on('call_signal', (msg) => window.SRsocket?.signal(msg));
+  socket.on('call_mode_changed', ({ session_id, mode } = {}) => window.SRsocket?.modeChanged(session_id, mode));
   socket.on('session_host_left', ({ session_id } = {}) => window.SRsocket?.hostLeft(session_id));
   // A mentee is waiting in the lobby and the mentor isn't in the room yet.
   socket.on('session_participant_waiting', ({ session_id, name } = {}) => window.SRsocket?.waiting(session_id, name));
@@ -7585,13 +7588,14 @@ function toggleLanguage() {
 // what is already loaded where we can, so the switch is instant.
 function refreshLanguageContent() {
   try {
-    if (_transferAssignmentId != null && $('transferModal')?.classList.contains('open')) { renderTransferSheet(); }
+    if (typeof _transferAssignmentId !== 'undefined' && _transferAssignmentId != null && $('transferModal')?.classList.contains('open')) { renderTransferSheet(); }
     switch (currentPage) {
       case 'mentors':
         renderMentorTopicChips();
         updateFilterActiveIndicators();
         renderActiveMentorCard();
         renderMentorsList();
+        if (openMentorSheetId != null && $('mentorSheet')?.classList.contains('open')) openMentorSheet(openMentorSheetId);
         break;
       case 'mentor-profile':
         if (openMentorSheetId != null) renderMentorProfilePage(openMentorSheetId);

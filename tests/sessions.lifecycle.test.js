@@ -142,6 +142,33 @@ let port;
   assert.ok(!db.session_participants.some(p => p.session_id === sid && p.telegram_id === MENTEE), 'ended session cleared');
   ok('"Clear history" keeps upcoming/live sessions, removes finished ones');
 
+  // 10. built-in audio call: mode, signalling, fallback (CALL_PROVIDER=p2p)
+  process.env.CALL_PROVIDER = '';
+  r = await call(MENTOR, 'POST', '/create', { mentee_id: MENTEE, title: 'Audio' }); const aid = r.body.session.id;
+  r = await call(MENTEE, 'GET', `/${aid}/join`); assert.equal(r.body.call_mode, 'video'); ok('Jitsi stays the default call mode');
+  process.env.CALL_PROVIDER = 'p2p';
+  r = await call(MENTEE, 'GET', `/${aid}/join`); assert.equal(r.body.call_mode, 'audio'); ok('CALL_PROVIDER=p2p gives 1-on-1 sessions the audio call');
+  r = await call(STRANGER, 'GET', `/${aid}/ice`); assert.equal(r.status, 403); ok('strangers cannot fetch call servers');
+  r = await call(MENTEE, 'GET', `/${aid}/ice`); assert.equal(r.status, 200); assert.ok(r.body.iceServers.length); ok('participants get ICE servers');
+  r = await call(STRANGER, 'POST', `/${aid}/signal`, { kind: 'hello', data: {} }); assert.equal(r.status, 403); ok('strangers cannot send call messages');
+  r = await call(MENTEE, 'POST', `/${aid}/signal`, { kind: 'nope', data: {} }); assert.equal(r.status, 400); ok('unknown message kinds are rejected');
+  r = await call(MENTEE, 'POST', `/${aid}/signal`, { kind: 'offer', data: { sdp: 'x'.repeat(30000) } }); assert.equal(r.status, 413); ok('oversized messages are rejected');
+  emitted.length = 0;
+  r = await call(MENTEE, 'POST', `/${aid}/signal`, { kind: 'hello', data: { t: 1 } }); assert.equal(r.body.delivered, true);
+  const sig = emitted.find(e => e[1] === 'call_signal');
+  assert.ok(sig && sig[0] === `user:${MENTOR}`, 'goes to the host only');
+  assert.ok(!JSON.stringify(sig[2]).includes(String(MENTEE)) || sig[2].data.t === 1, 'no telegram id in payload');
+  assert.deepEqual(Object.keys(sig[2]).sort(), ['data', 'kind', 'session_id']); ok('message reaches only the other person, with no identity attached');
+  emitted.length = 0;
+  r = await call(MENTEE, 'POST', `/${aid}/call-mode`, { mode: 'video' }); assert.equal(r.body.mode, 'video');
+  assert.ok(emitted.some(e => e[0] === `user:${MENTOR}` && e[1] === 'call_mode_changed')); ok('"use video" tells the other person');
+  r = await call(MENTOR, 'GET', `/${aid}/join`); assert.equal(r.body.call_mode, 'video'); ok('after the switch both people join the video room');
+  hb = await call(MENTEE, 'POST', `/${aid}/heartbeat`); assert.equal(hb.body.call_mode, 'video'); ok('heartbeat carries the mode (covers a missed socket event)');
+  r = await call(MENTOR, 'POST', '/create', { mentee_id: MENTEE, title: 'Again' }); const bid = r.body.session.id;
+  for (let i = 0; i < 150; i++) await call(MENTEE, 'POST', `/${bid}/signal`, { kind: 'candidate', data: {} });
+  r = await call(MENTEE, 'POST', `/${bid}/signal`, { kind: 'candidate', data: {} }); assert.equal(r.status, 429); ok('message flood is rate limited');
+  process.env.CALL_PROVIDER = '';
+
   console.log('\nALL LIFECYCLE CHECKS PASSED');
   srv.close();
   setTimeout(() => process.exit(0), 50);

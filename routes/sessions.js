@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { notifySessionInvite, notifySessionStarted, notifySessionWaiting } = require('../bot');
 const { generateJitsiJWT, emitToUserRoom, JITSI_DOMAIN, isPublicJitsi } = require('../utils');
+const { getIceServers } = require('../utils/callIce');
 
 // ── Lifecycle tuning ─────────────────────────────────────────────────────────
 const EARLY_JOIN_MS       = 5 * 60 * 1000;                                   // lobby opens 5 min before start
@@ -24,6 +25,22 @@ const HOST_JOIN = 'host:host_id(anonymous_id, user_settings(display_name))';
 module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) {
   const router = express.Router();
   const waitingPings = new Map(); // `${sessionId}:${telegramId}` → last ping ts
+
+  // ── Call mode: built-in audio call ("audio") or the Jitsi video room ("video") ──
+  // CALL_PROVIDER=p2p turns the audio call on for 1-on-1 sessions. Anything else
+  // (or unset) keeps Jitsi for everyone. If one person cannot use audio (no
+  // microphone support, "open in browser"), either side can flip the WHOLE session
+  // to video so the two phones never end up in different kinds of call.
+  const callModeOverride = new Map();   // session_id → 'video'
+  const signalWindow = new Map();       // `${session}:${user}` → { t, n } (rate limit)
+  const SIGNAL_KINDS = new Set(['hello', 'offer', 'answer', 'candidate', 'bye']);
+  const SIGNAL_MAX_BYTES = 20000;
+  const SIGNAL_LIMIT = 150, SIGNAL_WINDOW_MS = 10 * 1000;
+  const callModeFor = (session) => {
+    if (session.is_group) return 'video';
+    if (callModeOverride.get(String(session.id)) === 'video') return 'video';
+    return String(process.env.CALL_PROVIDER || '').toLowerCase() === 'p2p' ? 'audio' : 'video';
+  };
 
   const nowIso = () => new Date().toISOString();
   const same = (a, b) => String(a) === String(b);
@@ -83,6 +100,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       .in('status', ['scheduled', 'active'])
       .select('id');
     if (!updated || !updated.length) return false; // already finished
+    callModeOverride.delete(String(sessionId));
 
     await supabase.from('session_participants').update({ left_at: nowIso() }).eq('session_id', sessionId).is('left_at', null);
     const participants = await getParticipants(sessionId);
@@ -335,11 +353,82 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
         status,
         host_name: hostName,
         host_present: isHost || hostWasPresent,
+        call_mode: external ? 'video' : callModeFor(session),
         server_time: nowIso(),
       });
     } catch (e) {
       console.error('[Sessions] join failed:', e);
       res.status(500).json({ error: 'Could not join the session. Please try again.' });
+    }
+  });
+
+
+  // ── Audio call plumbing ────────────────────────────────────────────────────
+  // Everything below checks the SESSION first: you must be one of its two people.
+  // The other person is worked out by the server, never taken from the request,
+  // so nobody can aim a message at someone else — and nobody learns the other
+  // person's Telegram ID (the platform is anonymous).
+  async function callContext(req, res) {
+    const { id: telegram_id } = req.telegramUser;
+    const { data: session } = await supabase.from('video_sessions').select('id, host_id, status, is_group').eq('id', req.params.id).single();
+    if (!session) { res.status(404).json({ error: 'We could not find this session', code: 'not_found' }); return null; }
+    if (FINISHED.includes(session.status)) { res.status(410).json({ error: 'This session has already ended.', code: 'ended' }); return null; }
+    if (session.is_group) { res.status(400).json({ error: 'Audio calls are for 1-on-1 sessions.', code: 'group' }); return null; }
+    const participants = await getParticipants(session.id);
+    const me = participants.find(p => same(p.telegram_id, telegram_id));
+    const isHost = same(session.host_id, telegram_id);
+    if (!me && !isHost) { res.status(403).json({ error: 'Not a participant', code: 'forbidden' }); return null; }
+    const other = isHost ? participants.find(p => !same(p.telegram_id, session.host_id)) : { telegram_id: session.host_id };
+    return { session, telegram_id, peerId: other ? other.telegram_id : null };
+  }
+
+  // GET /api/sessions/:id/ice — STUN/TURN servers for the audio call.
+  router.get('/:id/ice', requireAuth, async (req, res) => {
+    try {
+      const ctx = await callContext(req, res); if (!ctx) return;
+      res.set('Cache-Control', 'no-store');
+      res.json({ iceServers: await getIceServers() });
+    } catch (e) {
+      console.error('[Sessions] ice failed:', e);
+      res.status(500).json({ error: 'Could not prepare the call. Please try again.' });
+    }
+  });
+
+  // POST /api/sessions/:id/signal — pass a call message to the other person.
+  router.post('/:id/signal', requireAuth, async (req, res) => {
+    try {
+      const ctx = await callContext(req, res); if (!ctx) return;
+      const { kind, data } = req.body || {};
+      if (!SIGNAL_KINDS.has(kind)) return res.status(400).json({ error: 'Unknown message', code: 'bad_kind' });
+      if (JSON.stringify(data === undefined ? null : data).length > SIGNAL_MAX_BYTES) return res.status(413).json({ error: 'Message too large', code: 'too_big' });
+
+      const key = `${ctx.session.id}:${ctx.telegram_id}`, now = Date.now();
+      const w = signalWindow.get(key);
+      if (!w || now - w.t > SIGNAL_WINDOW_MS) signalWindow.set(key, { t: now, n: 1 });
+      else if (++w.n > SIGNAL_LIMIT) return res.status(429).json({ error: 'Too many messages', code: 'slow_down' });
+      if (signalWindow.size > 5000) { for (const [k, v] of signalWindow) if (now - v.t > SIGNAL_WINDOW_MS) signalWindow.delete(k); }
+
+      if (!ctx.peerId) return res.json({ delivered: false });
+      emitToUserRoom(ctx.peerId, 'call_signal', { session_id: ctx.session.id, kind, data: data === undefined ? null : data });
+      res.json({ delivered: true });
+    } catch (e) {
+      console.error('[Sessions] signal failed:', e);
+      res.status(500).json({ error: 'Could not reach the other person.' });
+    }
+  });
+
+  // POST /api/sessions/:id/call-mode { mode: 'video' } — move the whole session to the
+  // Jitsi video room (e.g. a phone that cannot use the microphone in this app).
+  router.post('/:id/call-mode', requireAuth, async (req, res) => {
+    try {
+      const ctx = await callContext(req, res); if (!ctx) return;
+      if (req.body?.mode !== 'video') return res.status(400).json({ error: 'Only "video" can be requested', code: 'bad_mode' });
+      callModeOverride.set(String(ctx.session.id), 'video');
+      if (ctx.peerId) emitToUserRoom(ctx.peerId, 'call_mode_changed', { session_id: ctx.session.id, mode: 'video' });
+      res.json({ mode: 'video' });
+    } catch (e) {
+      console.error('[Sessions] call-mode failed:', e);
+      res.status(500).json({ error: 'Could not switch the call.' });
     }
   });
 
@@ -371,6 +460,7 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
       ended: FINISHED.includes(session.status),
       host_present: participants.some(p => same(p.telegram_id, session.host_id) && isPresent(p)),
       present_count: participants.filter(isPresent).length,
+      call_mode: callModeFor(session),
       server_time: nowIso(),
     });
   });

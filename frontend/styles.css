@@ -14590,3 +14590,22 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
 #scheduleModal.ps-overlay { align-items: flex-end; padding: 0 0 var(--kb-inset, 0px); }
 #scheduleModal .modal-sheet.sch-sheet { height: auto; min-height: 0; max-height: min(92%, calc(100% - 12px)); }
 #scheduleModal .sch-sheet .ps-body { flex: 0 1 auto; }
+
+/* ── Built-in audio call (middle of the call stage) ─────────────────────── */
+.call-dot.weak { background: #e09b3a; animation: srPulse 1.2s ease-in-out infinite; }
+.call-stage.is-audio #jitsiContainer { display: flex; align-items: center; justify-content: center; background: #0d0f14; }
+.ac-panel { --ac-remote: 0; --ac-local: 0; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 0 24px; text-align: center; color: var(--text, #f0ede4); }
+.ac-ring { border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(201,168,76,.2); }
+.ac-ring--out { width: 220px; height: 220px; }
+.ac-ring--mid { width: 168px; height: 168px; border-color: rgba(201,168,76,.4); background: rgba(201,168,76,.05); transition: transform .12s linear; transform: scale(calc(1 + var(--ac-remote) * .08)); }
+.ac-avatar { width: 116px; height: 116px; border-radius: 50%; border: 1px solid rgba(201,168,76,.7); background: rgba(201,168,76,.12); color: #e8c96b; display: flex; align-items: center; justify-content: center; }
+.ac-who { font-size: 22px; font-weight: 900; }
+.ac-line { min-height: 20px; font-size: 13px; line-height: 1.5; color: #b5b0a3; max-width: 32ch; text-wrap: pretty; }
+.ac-meter { display: flex; align-items: flex-end; gap: 3px; height: 18px; opacity: 0; transition: opacity .2s; color: #7fd39f; }
+.ac-meter i { width: 4px; border-radius: 2px; background: currentColor; height: 6px; transition: height .12s; }
+.ac-panel.is-speaking .ac-meter { opacity: 1; }
+.ac-panel.is-speaking .ac-meter i:nth-child(1) { height: 8px; } .ac-panel.is-speaking .ac-meter i:nth-child(2) { height: 16px; }
+.ac-panel.is-speaking .ac-meter i:nth-child(3) { height: 18px; } .ac-panel.is-speaking .ac-meter i:nth-child(4) { height: 11px; }
+.ac-actions { display: flex; flex-direction: column; gap: 10px; width: min(320px, 100%); }
+.ac-actions:empty { display: none; }
+@media (prefers-reduced-motion: reduce) { .ac-ring--mid, .ac-meter i { transition: none; } }

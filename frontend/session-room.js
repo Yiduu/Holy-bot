@@ -276,7 +276,8 @@
     const { data, isHost, hostPresent, prefs } = A;
     const waiting = Math.max(0, A.presentCount - 1);
     const canEnter = isHost || hostPresent;
-    const unreliable = window.detectUnreliableSessionEnvironment();
+    const unreliable = window.detectUnreliableSessionEnvironment() && data.call_mode !== 'audio';
+    const audioMode = data.call_mode === 'audio' && !!window.HolyAudioCall;
 
     // Heartbeats re-render this every few seconds; skip when nothing visible changed.
     const key = JSON.stringify([hostPresent, waiting, prefs.mic, prefs.cam, A.waitedMs > 20000]);
@@ -317,11 +318,11 @@
           <button class="sr-toggle ${prefs.mic ? 'on' : ''}" onclick="SR.toggle('mic')" aria-pressed="${prefs.mic}">
             <span class="sr-ico">${ico('mic', !prefs.mic)}</span><span>${prefs.mic ? esc(sr('mic_on', 'Mic on')) : esc(sr('mic_off', 'Mic off'))}</span>
           </button>
-          <button class="sr-toggle ${prefs.cam ? 'on' : ''}" onclick="SR.toggle('cam')" aria-pressed="${prefs.cam}">
+          ${audioMode ? '' : `<button class="sr-toggle ${prefs.cam ? 'on' : ''}" onclick="SR.toggle('cam')" aria-pressed="${prefs.cam}">
             <span class="sr-ico">${ico('cam', !prefs.cam)}</span><span>${prefs.cam ? esc(sr('cam_on', 'Camera on')) : esc(sr('cam_off', 'Camera off'))}</span>
-          </button>
+          </button>`}
         </div>
-        <div class="sr-hint">${esc(sr('cam_hint', 'Camera is optional — you can turn it on any time during the call.'))}</div>
+        <div class="sr-hint">${esc(audioMode ? sr('audio_hint', 'This is an audio call — no camera needed.') : sr('cam_hint', 'Camera is optional — you can turn it on any time during the call.'))}</div>
         <button class="btn btn-primary sr-primary" ${canEnter ? '' : 'disabled'} onclick="SR.start()">${esc(primary)}</button>
         ${unreliable
           ? `<button class="btn btn-outline sr-secondary" onclick="SR.external()">${esc(sr('open_browser_rec', 'Open in browser (recommended)'))}</button>`
@@ -472,8 +473,9 @@
     A.micMuted = !A.prefs.mic; A.camMuted = !A.prefs.cam; A.sharing = false; A.hand = false; A.tiles = false;
     renderControls();
     setStatus('connecting');
-    toggleShareScreenButtonVisibility(A.isHost);
+    toggleShareScreenButtonVisibility(A.isHost && A.data.call_mode !== 'audio');
     acquireWakeLock();
+    if (A.data.call_mode === 'audio' && window.HolyAudioCall) return startAudio();
     try {
       await loadJitsiScript(A.data.jitsi_domain);
     } catch (e) {
@@ -582,6 +584,98 @@
     api.addEventListener('readyToClose', onHangup);
   }
 
+  // ── built-in audio call (1-on-1) ───────────────────────────────────────────
+  // Same stage, same status bar and Leave button as the video call; only the middle
+  // is different. Anything that stops audio from working offers the video room, and
+  // switching is session-wide (the server tells the other phone) so both people
+  // always end up in the same kind of call.
+  const APPLY_STATUS = { live: 'live', weak: 'weak', reconnecting: 'connecting', connecting: 'connecting' };
+  function audioPanel() {
+    const who = A.isHost ? sr('audio_mentee', 'Your mentee') : sr('audio_mentor', 'Your mentor');
+    $('jitsiContainer').innerHTML = `
+      <div class="ac-panel" id="acPanel">
+        <div class="ac-rings"><div class="ac-ring ac-ring--out"><div class="ac-ring ac-ring--mid"><div class="ac-avatar" id="acAvatar">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div></div></div></div>
+        <div class="ac-who">${esc(who)}</div>
+        <div class="ac-line" id="acLine" role="status" aria-live="polite">${esc(sr('audio_connecting', 'Connecting…'))}</div>
+        <div class="ac-meter" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <div class="ac-actions" id="acActions"></div>
+      </div>`;
+  }
+  function acLine(text, actions) {
+    const l = $('acLine'); if (l) l.textContent = text || '';
+    const a = $('acActions'); if (!a) return;
+    a.innerHTML = (actions || []).map(x => `<button class="btn ${x.primary ? 'btn-primary' : 'btn-outline'} sr-secondary" onclick="${x.on}">${esc(x.label)}</button>`).join('');
+  }
+  async function startAudio() {
+    const stage = $('callStage');
+    stage.classList.add('is-audio');
+    A.audio = true;
+    audioPanel();
+    renderControls();
+    const sid = A.sessionId;
+    const call = window.HolyAudioCall.create({
+      isHost: A.isHost,
+      ice: async () => (await apiFetch(`/api/sessions/${sid}/ice`, { retry: false, timeout: 8000 })).iceServers,
+      signal: (kind, data) => apiFetch(`/api/sessions/${sid}/signal`, { method: 'POST', body: { kind, data }, retry: false, timeout: 8000 }),
+      onStatus: (k) => {
+        if (!A || A.call !== call) return;
+        if (k === 'closed') return;
+        const live = k === 'live' || k === 'weak';
+        if (live && !A.connected) { A.connected = true; A.startedAt = Date.now(); window.activeSession.connected = true; startTick(); haptic('success'); }
+        if (live) {
+          acLine(k === 'weak' ? sr('audio_weak', 'Your internet is slow. The call is saving data to keep your voice clear.') : '',
+            k === 'weak' ? [{ label: sr('try_now', 'Try again now'), on: 'SR.audioRetry()' }] : []);
+        } else if (k === 'reconnecting') acLine(sr('audio_reconnecting', 'Reconnecting… stay on this screen.'), [{ label: sr('try_now', 'Try again now'), on: 'SR.audioRetry()' }]);
+        else acLine(A.isHost ? sr('audio_wait_peer', 'Waiting for the other person…') : sr('audio_connecting', 'Connecting…'));
+        setStatus(k === 'weak' ? 'weak' : (live ? 'live' : (k === 'reconnecting' ? 'reconnecting' : 'connecting')));
+      },
+      onLevel: ({ local, remote }) => {
+        const p = $('acPanel'); if (!p) return;
+        p.style.setProperty('--ac-remote', remote.toFixed(2)); p.style.setProperty('--ac-local', local.toFixed(2));
+        p.classList.toggle('is-speaking', remote > 0.08);
+      },
+      onAutoplayBlocked: () => acLine(sr('audio_tap_hear', 'Tap to hear the call'), [{ label: sr('audio_hear', 'Tap to hear'), primary: true, on: 'SR.audioListen()' }]),
+      onFail: (why) => audioFailed(why),
+    });
+    A.call = call;
+    call.setMuted(A.micMuted);
+    renderControls();
+    const ok = await call.start();
+    if (!ok && A && A.call === call) return; // onFail already told the person
+  }
+  function audioFailed(why) {
+    if (!A || !A.audio) return;
+    haptic('error');
+    const body = why === 'blocked' ? sr('audio_blocked', 'Your phone is blocking the microphone inside this app. Allow it, or use the video call, which works in more places.')
+      : why === 'nomic' ? sr('audio_nomic', 'We could not find a microphone on this device.')
+      : why === 'unsupported' ? sr('audio_unsupported', 'Calls with sound are not supported here. The video call should work.')
+      : sr('audio_failed', 'We could not connect the call.');
+    setStatus('problem');
+    acLine(body, [
+      ...(why === 'blocked' || why === 'error' ? [{ label: sr('audio_allow', 'Try again'), primary: true, on: 'SR.audioRestart()' }] : []),
+      { label: sr('audio_use_video', 'Use the video call instead'), on: 'SR.useVideo()' },
+    ]);
+  }
+  function stopAudio(notify) {
+    const c = A && A.call; if (!c) return;
+    A.call = null; A.audio = false;
+    try { c.stop(notify); } catch (_) { /* ignore */ }
+    $('callStage')?.classList.remove('is-audio');
+  }
+  // Whole session moves to the video room. `tell` = we are the one who asked.
+  async function switchToVideo(tell) {
+    if (!A || A.data.call_mode !== 'audio') return;
+    const sid = A.sessionId;
+    if (tell) { try { await apiFetch(`/api/sessions/${sid}/call-mode`, { method: 'POST', body: { mode: 'video' }, retry: false, timeout: 8000 }); } catch (_) { /* heartbeat tells the other phone */ } }
+    if (!A || A.sessionId !== sid) return;
+    stopAudio(false);
+    A.data.call_mode = 'video'; A.connected = false; A.startedAt = 0; A.phase = 'lobby'; A.lobbyKey = '';
+    showToast(sr('audio_to_video', 'Switched to the video call.'), 'info');
+    startCall();
+  }
+
   // ── call controls ──────────────────────────────────────────────────────────
   function isTouchDevice() { return (navigator.maxTouchPoints || 0) > 0; }
 
@@ -597,6 +691,8 @@
     };
     set('ctlMic', !A.micMuted, sr('mute', 'Mute'), sr('unmute', 'Unmute'));
     set('ctlCam', !A.camMuted, sr('camera', 'Camera'), sr('start_video', 'Start'));
+    $('ctlCam')?.classList.toggle('hidden', !!A.audio);
+    $('ctlChat')?.classList.toggle('hidden', !!A.audio);
     const setLbl = (id, lbl) => { const el = $(id)?.querySelector('.ctl-lbl'); if (el) el.textContent = lbl; };
     setLbl('ctlFlip', sr('flip', 'Flip'));
     setLbl('ctlShare', sr('share', 'Share'));
@@ -613,6 +709,13 @@
   }
 
   function moreSheet() {
+    if (A.audio) {
+      return sheet({ title: sr('more', 'More'), actions: [
+        { label: sr('audio_use_video', 'Use the video call instead'), kind: 'ghost', onClick: () => switchToVideo(true) },
+        { label: sr('having_trouble', 'Having trouble?'), kind: 'ghost', onClick: troubleSheet },
+        { label: sr('close', 'Close'), kind: 'ghost' },
+      ] });
+    }
     const items = [
       { label: sr('devices', 'Audio & video settings'), onClick: devicesSheet },
       { label: A.hand ? sr('lower_hand', 'Lower hand') : sr('raise_hand', 'Raise hand'), onClick: () => { A.hand = !A.hand; cmd('toggleRaiseHand'); } },
@@ -700,6 +803,8 @@
     label.textContent = ({
       connecting: sr('connecting', 'Connecting…'),
       live: sr('connected', 'Connected'),
+      weak: sr('weak_conn', 'Weak connection'),
+      reconnecting: sr('reconnecting', 'Reconnecting…'),
       offline: sr('offline', 'You\'re offline — reconnecting…'),
       problem: sr('problem', 'Connection problem'),
     })[kind] || '';
@@ -729,6 +834,9 @@
         const st = await apiFetch(`/api/sessions/${A.sessionId}/heartbeat`, { method: 'POST', body: { in_room: true }, retry: false, timeout: 8000 });
         if (!A) return;
         if (st.ended) return remoteEnded('ended');
+        if (st.call_mode === 'video' && A.data.call_mode === 'audio') {
+          if (A.phase === 'call') switchToVideo(false); else A.data.call_mode = 'video';
+        }
         const was = A.hostPresent;
         A.hostPresent = !!st.host_present || A.isHost;
         A.presentCount = st.present_count || 1;
@@ -835,6 +943,8 @@
     clearInterval(tickTimer); tickTimer = null;
     clearTimeout(connectTimer); connectTimer = null;
     try { A?.api?.dispose(); } catch (_) { /* ignore */ }
+    try { A?.call?.stop(); } catch (_) { /* ignore */ }
+    $('callStage')?.classList.remove('is-audio');
     window.jitsiApi = null;
     releaseWakeLock();
     tg()?.disableClosingConfirmation?.();
@@ -929,6 +1039,11 @@
       if (A && A.sessionId === sessionId && A.phase === 'call') showBanner(sr('alone_mentee', 'Your mentor stepped out. Stay here — you\'ll reconnect automatically when they\'re back.'));
     },
     ended(sessionId, reason) { if (A && A.sessionId === sessionId) remoteEnded(reason); },
+    signal(msg) { if (A && A.call && msg && msg.session_id === A.sessionId) A.call.handleSignal(msg); },
+    modeChanged(sessionId, mode) {
+      if (!A || A.sessionId !== sessionId || mode !== 'video') return;
+      if (A.phase === 'call') switchToVideo(false); else A.data.call_mode = 'video';
+    },
     waiting(sessionId, name) {
       if (A && A.sessionId === sessionId) return; // already there
       haptic('success');
@@ -943,7 +1058,13 @@
 
   // ── handlers for inline onclick in the lobby ───────────────────────────────
   window.SR = {
-    mic() { haptic('selection'); if (A) A.micTouched = true; if (!cmd('toggleAudio')) showToast(sr('ctl_fail', 'Controls are not ready yet.'), 'info'); },
+    audioRetry() { A?.call?.retry(); },
+    audioListen() { A?.call?.listen().then(ok => { if (ok && A) acLine(''); }); },
+    audioRestart() { if (!A) return; stopAudio(false); A.phase = 'lobby'; startCall(); },
+    useVideo() { switchToVideo(true); },
+    mic() {
+      if (A && A.audio) { haptic('selection'); A.micMuted = !A.micMuted; A.call?.setMuted(A.micMuted); renderControls(); return; }
+      haptic('selection'); if (A) A.micTouched = true; if (!cmd('toggleAudio')) showToast(sr('ctl_fail', 'Controls are not ready yet.'), 'info'); },
     cam() { haptic('selection'); if (!cmd('toggleVideo')) showToast(sr('ctl_fail', 'Controls are not ready yet.'), 'info'); },
     flip() {
       haptic('selection');
