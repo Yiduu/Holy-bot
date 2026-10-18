@@ -3855,7 +3855,7 @@
                     return;
                 }
                 list.innerHTML = d.conversations.map(c => `
-                    <div class="conv-card" tabindex="0" role="button"
+                    <div class="conv-card" tabindex="0" role="button" title="${c.message_count} messages"
                          onclick="openChat('${esc(c.mentor_id)}', '${esc(c.mentee_id)}', '${esc(c.mentor_anonymous_id)}', '${esc(c.mentee_anonymous_id)}')"
                          onkeydown="if(event.key==='Enter')this.click()">
                         <div class="conv-avatars">
@@ -3872,10 +3872,7 @@
                         </div>
                         <div class="conv-side">
                             <div class="conv-time">${c.last_message_time ? ago(c.last_message_time) : '–'}</div>
-                            <div class="conv-chips">
-                                <span class="chip chip-muted">${c.message_count} msgs</span>
-                                ${c.unread_count > 0 ? `<span class="chip chip-red">${c.unread_count} unread</span>` : ''}
-                            </div>
+                            ${c.unread_count > 0 ? `<span class="conv-badge" title="${c.unread_count} unread">${c.unread_count}</span>` : ''}
                         </div>
                     </div>`).join('');
                 pager('conversationsPager', page, d.pages, 'loadConversations');
@@ -4112,6 +4109,7 @@
             film: '<rect x="2" y="3" width="20" height="18" rx="2"/><path d="M7 3v18M17 3v18M2 8h5M17 8h5M2 16h5M17 16h5"/>',
             music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
             file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+            flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
             trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>'
         };
         const CHAT_ATTACH = {
@@ -4164,7 +4162,7 @@
             </div>`;
         }
 
-        function chatBubbleHtml(m, byId, showSender) {
+        function chatBubbleHtml(m, byId, grouped) {
             const who = chatPerson(m.from_id);
             const isMentor = who.role === 'mentor';
             const side = isMentor ? 'received' : 'sent';
@@ -4180,18 +4178,18 @@
                 body = `${chatQuoteHtml(m, byId)}<div class="message-text">${media}${text}${edited}</div>`;
             }
 
-            const read = m.is_read || m.read_at;
-            const ticks = `<span class="msg-status ${read ? 'read' : 'unread'}" title="${read ? 'Seen' : 'Not seen yet'}">${read ? '✓✓' : '✓'}</span>`;
+            // Keep the footer quiet: time always; a single faint tick only while the
+            // message is still unseen; a flag icon only when flagged.
+            const unseen = !(m.is_read || m.read_at);
             const time = new Date(m.created_at);
 
-            return `${showSender ? `<div class="chat-sender-tag ${who.role}" style="align-self:${isMentor ? 'flex-start' : 'flex-end'}">${esc(who.name)} · ${isMentor ? 'Mentor' : 'Mentee'}</div>` : ''}
-                <div class="message-thread ${isMentor ? 'thread-received' : 'thread-sent'}" data-msg-id="${esc(m.id)}">
+            return `<div class="message-thread ${isMentor ? 'thread-received' : 'thread-sent'}${grouped ? ' grouped' : ''}" data-msg-id="${esc(m.id)}">
                     <div class="message-bubble ${side}${flags}">
                         ${body}
                         <div class="message-footer">
-                            ${m.is_flagged ? '<span class="msg-flag">Flagged</span>' : ''}
+                            ${m.is_flagged ? `<span class="msg-flag" title="Flagged">${chatSvg('flag')}</span>` : ''}
                             <span class="message-time" title="${esc(time.toLocaleString())}">${esc(time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</span>
-                            ${ticks}
+                            ${unseen ? '<span class="msg-status unread" title="Not seen yet">✓</span>' : ''}
                         </div>
                     </div>
                 </div>`;
@@ -4203,15 +4201,18 @@
             let html = chatHasMore
                 ? '<div class="chat-older"><button class="btn btn-outline btn-sm" id="btnLoadMoreChats" onclick="loadMoreMessages()">Load older messages</button></div>'
                 : '';
-            let lastHeader = '', lastFrom = null;
+            let lastHeader = '', lastFrom = null, lastTime = 0;
             for (const m of chatMsgs) {
                 const header = chatDateHeader(m.created_at);
                 if (header !== lastHeader) {
                     html += `<div class="chat-date-divider"><span>${esc(header)}</span></div>`;
                     lastHeader = header; lastFrom = null;
                 }
-                html += chatBubbleHtml(m, byId, String(m.from_id) !== lastFrom);
-                lastFrom = String(m.from_id);
+                const t = new Date(m.created_at).getTime();
+                // Same sender within 5 minutes reads as one run of messages.
+                const grouped = String(m.from_id) === lastFrom && (t - lastTime) < 5 * 60 * 1000;
+                html += chatBubbleHtml(m, byId, grouped);
+                lastFrom = String(m.from_id); lastTime = t;
             }
             container.innerHTML = html;
             hydrateAdminPhotos(container);
@@ -4220,17 +4221,15 @@
 
         function renderChatStats() {
             const n = chatMsgs.length;
+            const flagged = chatMsgs.filter(m => m.is_flagged).length;
             const replies = chatMsgs.filter(m => m.parent_id).length;
             const edited = chatMsgs.filter(m => m.edited_at && !m.is_deleted).length;
             const deleted = chatMsgs.filter(m => m.is_deleted).length;
-            const flagged = chatMsgs.filter(m => m.is_flagged).length;
-            const chip = (cls, t) => `<span class="chip ${cls}">${t}</span>`;
-            document.getElementById('chatModalSub').innerHTML =
-                chip('chip-muted', `${n}${chatHasMore ? '+' : ''} messages`) +
-                (replies ? chip('chip-gold', `${replies} replies`) : '') +
-                (edited ? chip('chip-blue', `${edited} edited`) : '') +
-                (deleted ? chip('chip-muted', `${deleted} deleted`) : '') +
-                (flagged ? chip('chip-red', `${flagged} flagged`) : '');
+            const el = document.getElementById('chatModalSub');
+            el.title = `${replies} replies · ${edited} edited · ${deleted} deleted`;
+            el.innerHTML =
+                `<span class="chat-sub-text"><span class="chat-legend">Mentor left · Mentee right · </span>${n}${chatHasMore ? '+' : ''} messages</span>` +
+                (flagged ? `<span class="chip chip-red">${flagged} flagged</span>` : '');
         }
 
         async function openChat(mentorId, menteeId, mentorAnon, menteeAnon) {
