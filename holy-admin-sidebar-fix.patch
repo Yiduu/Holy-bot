@@ -1,0 +1,35 @@
+From 25d27cc926a59bc42e415a0d2fe37c79fa120bb0 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 18 Oct 2026 11:44:06 +0300
+Subject: [PATCH] Fix admin sidebar blurred and unclickable on mobile
+
+.layout had z-index:1, which created a stacking context that trapped the
+sidebar (z 200) beneath the sibling dim overlay (z 199). Move the z-index
+to .main so the sidebar sits above the overlay again.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01SGbABJtPPrCj97G2nSqD6w
+---
+ frontend/admin.css | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/frontend/admin.css b/frontend/admin.css
+index 471000d..472cd43 100644
+--- a/frontend/admin.css
++++ b/frontend/admin.css
+@@ -145,7 +145,11 @@ body::after {
+ [data-theme="light"] .bg-blob { opacity: 0.1; }
+ @media (hover: none), (max-width: 480px) { .bg-blobs { display: none; } }
+ 
+-.layout { position: relative; z-index: 1; }
++/* Lift the content above the grain/glow layers WITHOUT giving .layout its own
++   stacking context: the sidebar (z 200) lives inside .layout, but the dim overlay
++   (z 199) is a sibling outside it. A z-index on .layout trapped the sidebar below
++   the overlay, which blurred it and swallowed every tap. */
++.main { position: relative; z-index: 1; }
+ 
+ :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+ .form-control:focus-visible, .search-box:focus-visible, .filter-select:focus-visible,
+-- 
+2.43.0
+
