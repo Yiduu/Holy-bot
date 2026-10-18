@@ -65,6 +65,17 @@ function phone(name, isHost, pipe, over = {}) {
   ok('blocked / no microphone / other errors are told apart');
   const none = create({ PC: undefined, onFail: (w) => none.f = w }); await none.start(); assert.equal(none.f, 'unsupported'); ok('no WebRTC → "unsupported"');
 
+  // 4b. a call that never worked says "Connecting", not "Reconnecting"; only the host re-offers
+  const pipe3 = []; const H3 = phone('H3', true, pipe3); await H3.c.start();
+  await H3.c.handleSignal({ kind: 'hello', data: {} }); await wait(5);
+  const p3 = H3.peers[0]; p3.connectionState = 'failed'; p3.onconnectionstatechange();
+  assert.ok(!H3.log.status.includes('reconnecting')); ok('a call that never connected is not shown as "Reconnecting"');
+  await wait(10); assert.equal(H3.peers.length, 2, 'host starts a fresh attempt'); H3.c.stop(false);
+  const M3 = phone('M3', false, []); await M3.c.start();
+  await M3.c.handleSignal({ kind: 'offer', data: { epoch: 9, sdp: 'o' } }); await wait(5);
+  const mp = M3.peers[0]; mp.connectionState = 'failed'; mp.onconnectionstatechange(); await wait(20);
+  assert.equal(M3.peers.length, 1, 'mentee does not make its own new attempt'); M3.c.stop(false); ok('only the host starts new attempts after a drop');
+
   // 5. stop releases the microphone and tells the other side
   const before = pipe.length; H.c.stop(); await wait(5); assert.equal(H.t.stopped, true); assert.ok(pipe.slice(before).some(m => m.kind === 'bye')); ok('leaving stops the mic and says bye');
 

@@ -24,6 +24,8 @@
   const CONNECT_GIVE_UP_MS = 25000;
   const STATS_EVERY_MS = 3000;
   const ANSWER_WAIT_MS = 8000;
+  const DOWN_GIVE_UP_MS = 20000;      // still not working this long after it dropped → tell the person
+  const MENTEE_ASK_AFTER_MS = 8000;
   const MAX_BITRATE = 32000;         // plenty for speech, and kind to weak networks
 
   function create(opts) {
@@ -40,7 +42,7 @@
 
     let stream = null, pc = null, epoch = 0, stopped = false, muted = false;
     let iceServers = null, helloTimer = null, lastOfferAt = 0, connectTimer = null, restartTimer = null;
-    let answerTimer = null, statsTimer = null, levelTimer = null, audioEl = null, status = '', weak = 0, good = 0, lastIn = null;
+    let everLive = false, downTimer = null, answerTimer = null, statsTimer = null, levelTimer = null, audioEl = null, status = '', weak = 0, good = 0, lastIn = null;
     let pendingCandidates = [];       // candidates that arrived before their offer
     let actx = null, localAn = null, remoteAn = null, remoteStreamForMeter = null;
 
@@ -69,7 +71,6 @@
       if (stopped) return false;
       if (o.isHost) { /* wait for the mentee's hello (also covers a mentee who joined first) */ }
       else sayHello();
-      armGiveUp();
       return true;
     }
 
@@ -82,7 +83,7 @@
 
     function armGiveUp() {
       clearTimeout(connectTimer);
-      connectTimer = setTimeout(() => { if (!stopped && status !== 'live' && status !== 'weak') o.onFail('error'); }, CONNECT_GIVE_UP_MS);
+      connectTimer = setTimeout(() => { connectTimer = null; if (!stopped && status !== 'live' && status !== 'weak') o.onFail('error'); }, CONNECT_GIVE_UP_MS);
     }
 
     function newPeer() {
@@ -108,21 +109,26 @@
 
     function onState(s) {
       if (s === 'connected') {
-        clearInterval(helloTimer); clearTimeout(connectTimer); clearTimeout(restartTimer); clearTimeout(answerTimer);
+        clearInterval(helloTimer); clearTimeout(connectTimer); connectTimer = null; clearTimeout(restartTimer); clearTimeout(answerTimer);
         weak = good = 0; lastIn = null;
+        everLive = true; clearTimeout(downTimer); downTimer = null;
         setStatus('live'); startStats();
       } else if (s === 'disconnected' || s === 'failed') {
-        setStatus('reconnecting');
+        // Say "Reconnecting" only if the call had really been working; before that it is still "Connecting".
+        if (everLive) setStatus('reconnecting');
+        // One overall limit for being down, so it never spins for minutes.
+        if (!downTimer) downTimer = setTimeout(() => { if (!stopped && status !== 'live' && status !== 'weak') o.onFail('error'); }, DOWN_GIVE_UP_MS);
         clearTimeout(restartTimer);
-        restartTimer = setTimeout(() => restart(), s === 'failed' ? 0 : RESTART_AFTER_MS);
+        // Only the host makes new offers (two phones both restarting kept cancelling each other).
+        // The mentee waits a little, then asks again if no new offer came.
+        restartTimer = setTimeout(() => restart(), o.isHost ? (s === 'failed' ? 0 : RESTART_AFTER_MS) : MENTEE_ASK_AFTER_MS);
       } else if (s === 'closed') { /* we did it */ }
     }
 
     // Host makes a fresh offer; the mentee asks the host to.
     function restart() {
       if (stopped) return;
-      if (o.isHost) offer(); else { send('hello', { t: Date.now(), again: true }); sayHello(); }
-      armGiveUp();
+      if (o.isHost) offer(); else sayHello();
     }
 
     // Every attempt is a brand-new connection with a new epoch (simple, and it
@@ -132,6 +138,7 @@
       lastOfferAt = Date.now();
       epoch = Math.max(Date.now(), epoch + 1);
       const mine = newPeer();
+      if (!everLive && !connectTimer) armGiveUp();
       clearTimeout(answerTimer);
       try {
         const d = await mine.createOffer();
@@ -157,6 +164,7 @@
           if (data.epoch < epoch) return;                    // older attempt
           epoch = data.epoch;
           clearInterval(helloTimer);                          // the offer is here; stop asking
+          if (!everLive && !connectTimer) armGiveUp();
           const mine = newPeer();
           await mine.setRemoteDescription({ type: 'offer', sdp: data.sdp });
           await drain(mine);
@@ -264,7 +272,7 @@
       if (notify !== false) send('bye', {});
       stopped = true;
       [helloTimer, statsTimer, levelTimer].forEach(clearInterval);
-      [connectTimer, restartTimer, answerTimer].forEach(clearTimeout);
+      [connectTimer, restartTimer, answerTimer, downTimer].forEach(clearTimeout);
       closePeer(); stopTracks();
       if (audioEl) { try { audioEl.srcObject = null; audioEl.remove(); } catch (_) { /* gone */ } audioEl = null; }
       if (actx) { try { actx.close(); } catch (_) { /* gone */ } actx = null; }
@@ -272,7 +280,7 @@
     }
 
     // "Try again now": a clean restart from our side.
-    function retry() { if (stopped || !stream) return; weak = good = 0; setStatus('reconnecting'); restart(); }
+    function retry() { if (stopped || !stream) return; weak = good = 0; if (everLive) setStatus('reconnecting'); restart(); }
 
     return { start, handleSignal, setMuted, retry, stop, listen, get muted() { return muted; } };
   }

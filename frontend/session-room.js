@@ -655,8 +655,9 @@
     const body = why === 'blocked' ? sr('audio_blocked', 'Your phone is blocking the microphone inside this app. Allow it, or use the video call, which works in more places.')
       : why === 'nomic' ? sr('audio_nomic', 'We could not find a microphone on this device.')
       : why === 'unsupported' ? sr('audio_unsupported', 'Calls with sound are not supported here. The video call should work.')
-      : sr('audio_failed', 'We could not connect the call.');
+      : sr('audio_failed', 'We could not connect the call. Some networks block direct calls. The video call usually works.');
     setStatus('problem');
+    try { A.call && A.call.stop(false); } catch (_) { /* ignore */ }   // release the mic, stop retrying
     acLine(body, [
       ...(why === 'blocked' || why === 'error' ? [{ label: sr('audio_allow', 'Try again'), primary: true, on: 'SR.audioRestart()' }] : []),
       { label: sr('audio_use_video', 'Use the video call instead'), on: 'SR.useVideo()' },
