@@ -135,6 +135,10 @@ module.exports = function sessionRoutes(supabase, requireAuth, io, onlineUsers) 
             .eq('mentor_id', host_id).eq('is_active', true).in('user_id', requested);
           inviteeIds = [...new Set((owned || []).map(a => a.user_id))];
         }
+        // A group session must have at least one valid invited mentee.
+        if (!inviteeIds.length) {
+          return res.status(400).json({ error: 'Please select at least one participant to schedule a group session.' });
+        }
       } else if (mentee_id != null && mentee_id !== '') {
         const menteeId = parseInt(mentee_id, 10);
         if (isNaN(menteeId)) return res.status(400).json({ error: 'Invalid mentee' });
