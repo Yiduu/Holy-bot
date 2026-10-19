@@ -5092,6 +5092,9 @@ function showScheduleModal(is_group, mentee_id = null) {
     titleInput.value = '';
   }
   participantField.classList.toggle('hidden', !is_group);
+  participantField.classList.remove('ps-invalid');
+  // Ticking a mentee clears the "pick at least one" highlight.
+  if (menteeList) menteeList.onchange = () => participantField.classList.remove('ps-invalid');
 
   if (is_group && menteeList) {
     menteeList.innerHTML = `<div class="text-xs text-dim">${escapeHtml(t('loading_mentees'))}</div>`;
@@ -5144,6 +5147,19 @@ function showScheduleModal(is_group, mentee_id = null) {
       document.querySelectorAll('input[name="invite_mentee"]:checked').forEach(cb => {
         participant_ids.push(cb.value);
       });
+
+      // A group session needs at least one invited participant. Keep the modal
+      // open so the host can tick someone and try again.
+      if (!participant_ids.length) {
+        const hasMentees = !!document.querySelector('input[name="invite_mentee"]');
+        haptic('error');
+        showToast(t(hasMentees ? 'select_participant_required' : 'no_mentees_to_invite'), 'error');
+        if (participantField) {
+          participantField.classList.add('ps-invalid');
+          participantField.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+        return;
+      }
     }
 
     // Build a local Date (year, month-1, day, hour, minute) to avoid UTC conversion issues

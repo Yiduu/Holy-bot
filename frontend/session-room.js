@@ -197,6 +197,9 @@
     if (!is_group && !mentee_id && currentUser?.role === 'mentor') {
       haptic('error'); showToast(sr('select_mentee_first', 'Please select a mentee first.'), 'error'); return;
     }
+    if (is_group && !(participant_ids && participant_ids.length)) {
+      haptic('error'); showToast(t('select_participant_required'), 'error'); return;
+    }
     creating = true;
     haptic('light');
     try {
