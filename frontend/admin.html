@@ -503,6 +503,24 @@
             font-weight: 600
         }
 
+        /* ── Sub-tabs + attention / health cards ─────────────────── */
+        .subtabs { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .subtabs::-webkit-scrollbar { display: none; }
+        .subtab, .mh-chip { flex: none; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--border-dim); background: transparent; color: var(--text2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .subtab.active, .mh-chip.active { background: var(--gold); border-color: var(--gold); color: #1a1405; }
+        .att-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+        .att-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+        .att-names { font-weight: 700; font-size: 14.5px; overflow-wrap: anywhere; }
+        .att-names span { font-weight: 400; color: var(--text2); margin: 0 2px; }
+        .att-days { font-size: 13px; font-weight: 700; color: var(--danger); white-space: nowrap; }
+        .att-line { font-size: 13px; color: var(--text2); margin-top: 6px; line-height: 1.45; }
+        .att-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+        .mh-pill { font-size: 12px; font-weight: 700; border: 1px solid; border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+        .mh-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+        .mh-stat b { display: block; font-size: 16px; }
+        .mh-stat span { display: block; font-size: 11.5px; color: var(--text2); margin-top: 2px; line-height: 1.3; }
+        @media (max-width: 560px) { .mh-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
         /* ── Toolbar ─────────────────────────────────────────────── */
         .toolbar {
             display: flex;
@@ -1907,7 +1925,7 @@
                     Overview
                 </div>
 
-                <div class="nav-section">Management</div>
+                <div class="nav-section">People</div>
                 <div class="nav-item" onclick="showTab('users')" id="nav-users">
                     <svg viewBox="0 0 24 24">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -1916,46 +1934,6 @@
                         <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                     </svg>
                     Users
-                </div>
-                <div class="nav-item" onclick="showTab('conversations')" id="nav-conversations">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M17 8h2a2 2 0 0 1 2 2v12l-4-4H9a2 2 0 0 1-2-2V8h10z" />
-                        <path d="M15 4H5a2 2 0 0 0-2 2v12l4-4h8a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
-                    </svg>
-                    Conversations
-                </div>
-                <div class="nav-item" onclick="showTab('live-sessions')" id="nav-live-sessions">
-                    <svg viewBox="0 0 24 24">
-                        <polygon points="23 7 16 12 23 17 23 7" />
-                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-                    </svg>
-                    Live Sessions
-                    <span id="liveSessionsBadge" class="nav-badge" style="display:none;background:var(--success)">0</span>
-                </div>
-                <div class="nav-item" onclick="showTab('mentorship')" id="nav-mentorship">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                        <circle cx="9" cy="7" r="4" />
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                    </svg>
-                    Mentorship
-                </div>
-                <div class="nav-item" onclick="showTab('mentorship-analytics')" id="nav-mentorship-analytics">
-                    <svg viewBox="0 0 24 24">
-                        <line x1="18" y1="20" x2="18" y2="10" />
-                        <line x1="12" y1="20" x2="12" y2="4" />
-                        <line x1="6" y1="20" x2="6" y2="14" />
-                    </svg>
-                    Mentorship Analytics
-                </div>
-                <div class="nav-item" onclick="showTab('mentor-control')" id="nav-mentor-control">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 2l8 3.2v6c0 5-3.4 8.7-8 10.8-4.6-2.1-8-5.8-8-10.8v-6z" />
-                        <path d="m9 12 2 2 4-4" />
-                    </svg>
-                    Mentor Control
-                    <span id="suspendedBadge" class="nav-badge" style="display:none;background:var(--danger)">0</span>
                 </div>
                 <div class="nav-item" onclick="showTab('applications')" id="nav-applications">
                     <svg viewBox="0 0 24 24">
@@ -1967,12 +1945,42 @@
                     Applications
                     <span id="pendingBadge" class="nav-badge gold" style="display:none">0</span>
                 </div>
-                <div class="nav-item" onclick="showTab('messages')" id="nav-messages">
+                <div class="nav-item" onclick="showTab('mentor-control')" id="nav-mentor-control">
                     <svg viewBox="0 0 24 24">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        <path d="M12 2l8 3.2v6c0 5-3.4 8.7-8 10.8-4.6-2.1-8-5.8-8-10.8v-6z" />
+                        <path d="m9 12 2 2 4-4" />
                     </svg>
-                    Messages
+                    Mentors
+                    <span id="suspendedBadge" class="nav-badge" style="display:none;background:var(--danger)">0</span>
                 </div>
+
+                <div class="nav-section">Mentoring</div>
+                <div class="nav-item" onclick="showTab('mentorship-stuck')" id="nav-mentorship">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    Mentorships
+                </div>
+                <div class="nav-item" onclick="showTab('live-sessions')" id="nav-live-sessions">
+                    <svg viewBox="0 0 24 24">
+                        <polygon points="23 7 16 12 23 17 23 7" />
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                    </svg>
+                    Live Sessions
+                    <span id="liveSessionsBadge" class="nav-badge" style="display:none;background:var(--success)">0</span>
+                </div>
+                <div class="nav-item" onclick="showTab('conversations')" id="nav-conversations">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M17 8h2a2 2 0 0 1 2 2v12l-4-4H9a2 2 0 0 1-2-2V8h10z" />
+                        <path d="M15 4H5a2 2 0 0 0-2 2v12l4-4h8a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
+                    </svg>
+                    Chats
+                </div>
+
+                <div class="nav-section">Help &amp; tools</div>
                 <div class="nav-item" onclick="showTab('tickets')" id="nav-tickets">
                     <svg viewBox="0 0 24 24">
                         <circle cx="12" cy="12" r="10" />
@@ -1982,25 +1990,6 @@
                     Support Requests
                     <span id="ticketsBadge" class="nav-badge" style="display:none">0</span>
                 </div>
-                <div class="nav-item" onclick="showTab('topics')" id="nav-topics">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                        <path d="M2 17l10 5 10-5" />
-                        <path d="M2 12l10 5 10-5" />
-                    </svg>
-                    Topics
-                </div>
-                <div class="nav-item" onclick="showTab('mentorship-requests')" id="nav-mentorship-requests">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                        <line x1="9" y1="13" x2="15" y2="13" />
-                        <line x1="9" y1="17" x2="15" y2="17" />
-                    </svg>
-                    Request Log
-                </div>
-
-                <div class="nav-section">Tools</div>
                 <div class="nav-item" onclick="showTab('broadcast')" id="nav-broadcast">
                     <svg viewBox="0 0 24 24">
                         <path d="M22 2L11 13" />
@@ -2218,6 +2207,7 @@
 
                 <!-- ── Conversations ─────────────────────────────────── -->
                 <div class="pane" id="pane-conversations">
+                    <div class="subtabs" data-group="chats"></div>
                     <div class="toolbar">
                         <input class="search-box" id="convMentorSearch" placeholder="Search by Mentor anonymous ID…"
                             oninput="debounceConversations()" />
@@ -2253,21 +2243,36 @@
                     <div class="pagination" id="sessionsHistoryPager"></div>
                 </div>
 
-                <!-- ── Mentorship ────────────────────────────────────── -->
-                <div class="pane" id="pane-mentorship">
+                <!-- ── Mentorships: needs attention ──────────────────── -->
+                <div class="pane" id="pane-mentorship-stuck">
+                    <div class="subtabs" data-group="mentorships"></div>
                     <div class="toolbar">
-                        <input class="search-box" id="mentorSearch" placeholder="Search mentors by anonymous ID…"
-                            oninput="debounceMentorship()" />
-                        <button class="btn btn-ghost" onclick="clearMentorshipFilter()">Clear</button>
+                        <select class="filter-select" id="stuckDays" onchange="loadStuck()" aria-label="Quiet for at least">
+                            <option value="3">Quiet for 3+ days</option>
+                            <option value="7" selected>Quiet for 7+ days</option>
+                            <option value="14">Quiet for 14+ days</option>
+                            <option value="30">Quiet for 30+ days</option>
+                        </select>
                     </div>
-                    <div id="mentorshipContainer" class="mentorship-grid">
-                        <div class="loading">Loading…</div>
+                    <div class="ma-summary" id="stuckSummary">Loading…</div>
+                    <div id="stuckList"></div>
+                </div>
+
+                <!-- ── Mentors: health ───────────────────────────────── -->
+                <div class="pane" id="pane-mentor-health">
+                    <div class="subtabs" data-group="mentors"></div>
+                    <div class="ma-summary" id="mhSummary">Loading…</div>
+                    <div class="toolbar" id="mhFilters" role="group" aria-label="Show">
+                        <button class="mh-chip active" data-f="all" onclick="setMhFilter('all')">Everyone</button>
+                        <button class="mh-chip" data-f="attention" onclick="setMhFilter('attention')">Needs a look</button>
+                        <button class="mh-chip" data-f="full" onclick="setMhFilter('full')">At capacity</button>
                     </div>
-                    <div class="pagination" id="mentorshipPager"></div>
+                    <div id="mhList"></div>
                 </div>
 
                 <!-- ── Mentor Control ────────────────────────────────── -->
                 <div class="pane" id="pane-mentor-control">
+                    <div class="subtabs" data-group="mentors"></div>
                     <div class="stats-grid" id="mcStatsGrid" style="margin-bottom:18px">
                         <div class="stat-card">
                             <div class="stat-icon gold"><svg viewBox="0 0 24 24">
@@ -2346,6 +2351,7 @@
 
                 <!-- ── Messages ──────────────────────────────────────── -->
                 <div class="pane" id="pane-messages">
+                    <div class="subtabs" data-group="chats"></div>
                     <div class="toolbar">
                         <label
                             style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text2);cursor:pointer">
@@ -2384,6 +2390,7 @@
 
                 <!-- ── Topics ─────────────────────────────────────────── -->
                 <div class="pane" id="pane-topics">
+                    <div class="subtabs" data-group="mentors"></div>
                     <div class="section-hdr">
                         <div class="section-title">Counseling Topics</div>
                         <button class="btn btn-primary btn-sm" onclick="openTopicModal()">
@@ -2416,6 +2423,7 @@
 
                 <!-- ── Mentorship Analytics ──────────────────────────── -->
                 <div class="pane" id="pane-mentorship-analytics">
+                    <div class="subtabs" data-group="mentorships"></div>
                     <div class="toolbar">
                         <select class="filter-select" id="maRange" onchange="loadMentorshipAnalytics()">
                             <option value="0">All time</option>
@@ -2489,6 +2497,7 @@
 
                 <!-- ── Mentorship Request Log ────────────────────────── -->
                 <div class="pane" id="pane-mentorship-requests">
+                    <div class="subtabs" data-group="mentorships"></div>
                     <div class="toolbar">
                         <select class="filter-select" id="reqStatusFilter" onchange="loadMentorshipRequests(1)">
                             <option value="all">All</option>
@@ -2949,9 +2958,9 @@
 
         /* ── Tab nav ────────────────────────────────────────────────── */
         const TITLES = {
-            overview: 'Overview', users: 'Users', conversations: 'Conversations', 'live-sessions': 'Live Sessions', mentorship: 'Mentorship', 'mentorship-analytics': 'Mentorship Analytics', 'mentor-control': 'Mentor Control', applications: 'Mentor Applications',
+            overview: 'Overview', users: 'Users', conversations: 'Conversations', 'live-sessions': 'Live Sessions', 'mentorship-stuck': 'Needs Attention', 'mentorship-analytics': 'Mentorship Analytics', 'mentor-control': 'Mentors', 'mentor-health': 'Mentor Health', applications: 'Mentor Applications',
             messages: 'Message Moderation', tickets: 'Support Requests', topics: 'Counseling Topics',
-            'mentorship-requests': 'Request Log',
+            'mentorship-requests': 'Mentorship Requests',
             broadcast: 'Broadcast', audit: 'Audit Log'
         };
 
@@ -2959,11 +2968,12 @@
             document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
             document.getElementById(`pane-${tab}`).classList.add('active');
-            document.getElementById(`nav-${tab}`).classList.add('active');
+            document.getElementById(`nav-${NAV_OF[tab] || tab}`).classList.add('active');
+            renderSubtabs(tab);
             document.getElementById('topbarTitle').textContent = TITLES[tab] || tab;
             activeTab = tab; closeSidebar();
             const loaders = {
-                overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), 'live-sessions': () => switchSessionsView(currentSessionsView), mentorship: () => loadMentorship(1), 'mentorship-analytics': loadMentorshipAnalytics, 'mentor-control': () => { loadMentorControl(1); loadMcStats(); }, applications: () => loadApps(1),
+                overview: loadStats, users: () => loadUsers(1), conversations: () => loadConversations(1), 'live-sessions': () => switchSessionsView(currentSessionsView), 'mentorship-stuck': loadStuck, 'mentor-health': loadMentorHealth, 'mentorship-analytics': loadMentorshipAnalytics, 'mentor-control': () => { loadMentorControl(1); loadMcStats(); }, applications: () => loadApps(1),
                 messages: () => loadMessages(1), tickets: loadTickets, topics: loadTopics,
                 'mentorship-requests': () => loadMentorshipRequests(1),
                 broadcast: () => { }, audit: () => loadAudit(1)
@@ -4530,130 +4540,112 @@
             }
         }
 
-        /* ── Mentorship ──────────────────────────────────────────────── */
-        let mentorshipTimer = null;
-        let mentorshipPage = 1;
-        let expandedMentors = new Set();
-
-        function debounceMentorship() {
-            clearTimeout(mentorshipTimer);
-            mentorshipTimer = setTimeout(() => loadMentorship(1), 400);
+        /* ── Sub-tabs: related screens share one sidebar item ───────── */
+        const GROUPS = {
+            mentors: { nav: 'mentor-control', tabs: [['mentor-control', 'Manage'], ['mentor-health', 'Health'], ['topics', 'Topics']] },
+            mentorships: { nav: 'mentorship', tabs: [['mentorship-stuck', 'Needs attention'], ['mentorship-requests', 'Requests'], ['mentorship-analytics', 'Analytics']] },
+            chats: { nav: 'conversations', tabs: [['conversations', 'Conversations'], ['messages', 'Flagged messages']] },
+        };
+        const NAV_OF = {};
+        Object.values(GROUPS).forEach(g => g.tabs.forEach(([t]) => { NAV_OF[t] = g.nav; }));
+        function renderSubtabs(tab) {
+            const g = Object.values(GROUPS).find(x => x.tabs.some(t => t[0] === tab));
+            const bar = document.querySelector(`#pane-${tab} .subtabs`);
+            if (!g || !bar) return;
+            bar.innerHTML = g.tabs.map(([t, label]) =>
+                `<button class="subtab${t === tab ? ' active' : ''}" onclick="showTab('${t}')">${label}</button>`).join('');
         }
 
-        function clearMentorshipFilter() {
-            document.getElementById('mentorSearch').value = '';
-            loadMentorship(1);
-        }
-
-        function toggleMentees(mentorId) {
-            const listEl = document.getElementById(`mentees-list-${mentorId}`);
-            const btnEl = document.getElementById(`mentees-btn-${mentorId}`);
-            if (!listEl || !btnEl) return;
-
-            if (expandedMentors.has(mentorId)) {
-                expandedMentors.delete(mentorId);
-                listEl.style.display = 'none';
-                btnEl.innerHTML = `<span>Show Mentees</span> <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
-            } else {
-                expandedMentors.add(mentorId);
-                listEl.style.display = 'flex';
-                btnEl.innerHTML = `<span>Hide Mentees</span> <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2"><polyline points="18 15 12 9 6 15"></polyline></svg>`;
+        /* ── Needs attention: quiet mentorships ─────────────────────── */
+        async function loadStuck() {
+            const list = document.getElementById('stuckList'), sum = document.getElementById('stuckSummary');
+            const days = document.getElementById('stuckDays')?.value || '7';
+            try {
+                const d = await api(`/api/admin/mentorships/needs-attention?days=${encodeURIComponent(days)}`);
+                const n = d.items.length;
+                sum.innerHTML = n
+                    ? `<b>${n} of ${d.total_active}</b> active ${d.total_active === 1 ? 'mentorship has' : 'mentorships have'} had no messages for ${d.days}+ days.`
+                    : `All ${d.total_active} active mentorships have had a message in the last ${d.days} days.`;
+                list.innerHTML = d.items.map(it => {
+                    const days = `${it.quiet_days}${it.at_least ? '+' : ''} days`;
+                    const mentor = esc(it.mentor_name), mentee = esc(it.mentee_name);
+                    const line = !it.last_from ? `No messages yet. ${mentor} has not said hello.`
+                        : it.last_from === 'mentee' ? `${mentee} wrote last. ${mentor} has not replied.`
+                        : `${mentor} wrote last. ${mentee} has not replied.`;
+                    const who = it.waiting_on;
+                    const target = who === 'mentor' ? mentor : mentee;
+                    return `<div class="att-card">
+      <div class="att-top"><div class="att-names">${mentee} <span>with</span> ${mentor}</div><div class="att-days">${days} quiet</div></div>
+      <div class="att-line">${line}</div>
+      <div class="att-actions">
+        <button class="btn btn-primary btn-sm" data-mentor="${esc(it.mentor_id)}" data-mentee="${esc(it.mentee_id)}" data-who="${who}" onclick="stuckNudge(this)">Remind ${target}</button>
+        <button class="btn btn-ghost btn-sm" data-mentor="${esc(it.mentor_id)}" data-mentee="${esc(it.mentee_id)}" data-mn="${mentor}" data-en="${mentee}" onclick="stuckOpenChat(this)">Read chat</button>
+      </div>
+    </div>`;
+                }).join('') || '<div class="ma-empty">Nothing needs attention right now.</div>';
+            } catch (err) {
+                sum.textContent = '';
+                list.innerHTML = `<div class="ma-empty">Could not load: ${esc(err.message)}</div>`;
+                toast(err.message, 'error');
             }
         }
-
-        async function loadMentorship(page = 1) {
-            mentorshipPage = page;
-            const search = document.getElementById('mentorSearch').value;
-            const container = document.getElementById('mentorshipContainer');
-
-            // Render skeleton loader
-            container.innerHTML = Array.from({ length: 6 }).map(() => `
-                <div class="skeleton-card">
-                    <div class="skeleton-line title"></div>
-                    <div class="skeleton-line badge"></div>
-                    <div class="skeleton-line text"></div>
-                    <div class="skeleton-line text" style="width: 60%"></div>
-                    <div class="skeleton-line button"></div>
-                </div>
-            `).join('');
-
+        async function stuckNudge(btn) {
+            btn.disabled = true;
             try {
-                let url = `/api/admin/mentorship?page=${page}`;
-                if (search) url += `&search=${encodeURIComponent(search)}`;
-                const d = await api(url);
+                await api('/api/admin/mentorships/nudge', { method: 'POST', body: { mentor_id: btn.dataset.mentor, mentee_id: btn.dataset.mentee, who: btn.dataset.who } });
+                btn.textContent = 'Reminder sent';
+                toast('Reminder sent', 'success');
+            } catch (err) {
+                btn.disabled = false;
+                toast(err.message, 'error');
+            }
+        }
+        function stuckOpenChat(btn) {
+            openChat(btn.dataset.mentor, btn.dataset.mentee, btn.dataset.mn, btn.dataset.en);
+        }
 
-                if (!d.mentors?.length) {
-                    container.innerHTML = `<div class="empty">No mentors found</div>`;
-                    document.getElementById('mentorshipPager').innerHTML = '';
-                    return;
-                }
-
-                container.innerHTML = d.mentors.map(m => {
-                    const menteeCount = m.mentees?.length || 0;
-                    const isExpanded = expandedMentors.has(m.mentor_id);
-                    const listDisplay = isExpanded ? 'flex' : 'none';
-                    const btnLabel = isExpanded ? 'Hide Mentees' : 'Show Mentees';
-                    const btnIconPoints = isExpanded ? '18 15 12 9 6 15' : '6 9 12 15 18 9';
-
-                    let menteesHtml = '';
-                    if (menteeCount === 0) {
-                        menteesHtml = `<div class="empty" style="padding: 10px 0;">No active mentees</div>`;
-                    } else {
-                        menteesHtml = m.mentees.map(me => `
-                            <div class="mentee-row">
-                                <div class="mentee-row-header">
-                                    <span class="mentee-name" style="font-family:var(--font-mono);font-size:11.5px;color:var(--accent);">${esc(me.mentee_anonymous_id)}</span>
-                                </div>
-                                <div class="mentee-details">
-                                    <div class="mentee-detail-item">
-                                        <span class="mentee-detail-label">Assigned</span>
-                                        <span class="mentee-detail-value">${ago(me.assigned_at)}</span>
-                                    </div>
-                                    <div class="mentee-detail-item">
-                                        <span class="mentee-detail-label">Last Active</span>
-                                        <span class="mentee-detail-value">${me.last_active ? ago(me.last_active) : 'Never'}</span>
-                                    </div>
-                                    <div class="mentee-detail-item" style="grid-column: span 2;">
-                                        <span class="mentee-detail-label">Sessions Held</span>
-                                        <span class="mentee-detail-value">${me.session_count}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        `).join('');
-                    }
-
-                    return `
-                        <div class="mentor-card">
-                            <div class="mentor-header">
-                                <div class="mentor-info">
-                                    <span class="mentor-name">${esc(m.mentor_anonymous_id)}</span>
-                                </div>
-                                <span class="mentor-badge">
-                                    👥 ${menteeCount} Mentee${menteeCount === 1 ? '' : 's'}
-                                </span>
-                            </div>
-                            <div class="mentor-bio ${m.mentor_bio ? '' : 'none'}">
-                                ${m.mentor_bio ? esc(m.mentor_bio) : 'No bio available'}
-                            </div>
-                            <div class="mentees-section">
-                                <button class="btn btn-ghost btn-sm mentees-toggle-btn" id="mentees-btn-${m.mentor_id}" onclick="toggleMentees(${m.mentor_id})">
-                                    <span>${btnLabel}</span>
-                                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2">
-                                        <polyline points="${btnIconPoints}"></polyline>
-                                    </svg>
-                                </button>
-                                <div class="mentees-list" id="mentees-list-${m.mentor_id}" style="display: ${listDisplay};">
-                                    ${menteesHtml}
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-
-                pager('mentorshipPager', page, d.pages, 'loadMentorship');
-            } catch (e) {
-                container.innerHTML = `<div class="empty" style="color:var(--danger)">Error: ${e.message}</div>`;
-                document.getElementById('mentorshipPager').innerHTML = '';
+        /* ── Mentor health ──────────────────────────────────────────── */
+        let mhRows = [], mhFilter = 'all';
+        const MH_STATUS = {
+            attention: ['Needs a look', 'var(--danger)'], full: ['At capacity', 'var(--accent)'], good: ['Doing well', 'var(--success)'],
+            idle: ['No mentees', 'var(--text3)'], suspended: ['Suspended', 'var(--text3)'],
+        };
+        function setMhFilter(f) {
+            mhFilter = f;
+            document.querySelectorAll('#mhFilters .mh-chip').forEach(c => c.classList.toggle('active', c.dataset.f === f));
+            renderMentorHealth();
+        }
+        function renderMentorHealth() {
+            const rows = mhRows.filter(r => mhFilter === 'all' || r.status === mhFilter);
+            const hours = (h) => h === null ? '–' : h < 1 ? 'under 1 h' : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`;
+            document.getElementById('mhList').innerHTML = rows.map(r => {
+                const [label, color] = MH_STATUS[r.status] || MH_STATUS.good;
+                const stat = (v, l) => `<div class="mh-stat"><b>${v}</b><span>${l}</span></div>`;
+                return `<div class="att-card">
+      <div class="att-top"><div class="att-names">${esc(r.anonymous_id)}</div><div class="mh-pill" style="color:${color};border-color:${color}">${label}</div></div>
+      ${r.status === 'good' ? '' : `<div class="att-line">${esc(r.reason)}</div>`}
+      <div class="mh-stats">
+        ${stat(`${r.active_mentees}/${r.capacity || '–'}`, 'mentees')}
+        ${stat(hours(r.median_reply_hours), 'usual reply time')}
+        ${stat(r.messages_7d, 'messages this week')}
+        ${stat(r.sessions_30d, 'sessions this month')}
+      </div>
+    </div>`;
+            }).join('') || '<div class="ma-empty">No mentors here.</div>';
+        }
+        async function loadMentorHealth() {
+            const sum = document.getElementById('mhSummary');
+            try {
+                const d = await api('/api/admin/mentors/health');
+                mhRows = d.mentors;
+                const need = mhRows.filter(r => r.status === 'attention').length;
+                const full = mhRows.filter(r => r.status === 'full').length;
+                sum.innerHTML = `<b>${mhRows.length}</b> ${mhRows.length === 1 ? 'mentor' : 'mentors'}: <b>${need}</b> ${need === 1 ? 'needs' : 'need'} a look, <b>${full}</b> at capacity.`;
+                renderMentorHealth();
+            } catch (err) {
+                sum.textContent = '';
+                document.getElementById('mhList').innerHTML = `<div class="ma-empty">Could not load: ${esc(err.message)}</div>`;
+                toast(err.message, 'error');
             }
         }
 

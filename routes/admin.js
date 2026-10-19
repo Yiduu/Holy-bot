@@ -5,6 +5,7 @@ const axios = require('axios');
 const multer = require('multer');
 const { endMenteeSideOnPromotion, closeAssignment } = require('../utils');
 const { summarize } = require('../utils/mentorshipAnalytics');
+const { findStuck, mentorHealth, sortByNeed } = require('../utils/mentorshipHealth');
 
 // Broadcast attachments are held in memory just long enough to hand them to
 // Telegram (50 MB is the Bot API upload ceiling).
@@ -136,6 +137,133 @@ module.exports = function adminRoutes(supabase, requireAuth, requireAdmin, io) {
       res.json({ days, ended_by_tracking: tracking, ...summarize(result.rows, sinceMs) });
     } catch (err) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ==================== NEEDS ATTENTION / MENTOR HEALTH ====================
+  // Read-only views built from the mentorship, message and session tables.
+  // The rules live in utils/mentorshipHealth.js.
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const HEALTH_MESSAGE_WINDOW_DAYS = 60;   // how far back we look for messages
+  const DEFAULT_MAX_MENTEES = parseInt(process.env.MAX_MENTEES_DEFAULT || '3');
+
+  // PostgREST returns at most 1000 rows per request; walk the pages (with a safety cap).
+  async function pageAll(build, cap = 60) {
+    const out = [];
+    for (let from = 0, n = 0; n < cap; from += 1000, n++) {
+      const { data, error } = await build().range(from, from + 999);
+      if (error) throw new Error(error.message);
+      out.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    return out;
+  }
+
+  async function loadHealthInputs(now) {
+    const sinceIso = new Date(now - HEALTH_MESSAGE_WINDOW_DAYS * DAY_MS).toISOString();
+    const active = await pageAll(() => supabase.from('mentorship_assignments')
+      .select('mentor_id, user_id, assigned_at').eq('is_active', true).order('assigned_at', { ascending: true }));
+    const messages = await pageAll(() => supabase.from('messages')
+      .select('from_id, to_id, created_at').gte('created_at', sinceIso).order('created_at', { ascending: true }));
+    return { active, messages, windowStartMs: now - HEALTH_MESSAGE_WINDOW_DAYS * DAY_MS };
+  }
+
+  async function anonymousNames(ids) {
+    const names = {};
+    const list = [...new Set(ids.map(String))];
+    for (let i = 0; i < list.length; i += 200) {
+      const { data } = await supabase.from('users').select('telegram_id, anonymous_id').in('telegram_id', list.slice(i, i + 200));
+      (data || []).forEach(u => { names[String(u.telegram_id)] = u.anonymous_id; });
+    }
+    return names;
+  }
+
+  // GET /api/admin/mentorships/needs-attention?days=7
+  // Active mentorships where nobody has written for N days, and who owes the next message.
+  router.get('/mentorships/needs-attention', async (req, res) => {
+    try {
+      const now = Date.now();
+      const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 60);
+      const { active, messages, windowStartMs } = await loadHealthInputs(now);
+      const stuck = findStuck(active, messages, { now, days, windowStartMs });
+      const names = await anonymousNames(stuck.flatMap(s => [s.mentor_id, s.mentee_id]));
+      res.json({
+        days,
+        total_active: active.length,
+        items: stuck.map(s => ({
+          ...s,
+          mentor_name: names[String(s.mentor_id)] || 'Unknown',
+          mentee_name: names[String(s.mentee_id)] || 'Unknown',
+        })),
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/admin/mentors/health
+  // One row per mentor: workload, reply speed, activity, and a plain-words status.
+  router.get('/mentors/health', async (req, res) => {
+    try {
+      const now = Date.now();
+      const { active, messages } = await loadHealthInputs(now);
+      const since30 = new Date(now - 30 * DAY_MS).toISOString();
+      const since90 = new Date(now - 90 * DAY_MS).toISOString();
+
+      const mentorRows = await pageAll(() => supabase.from('users')
+        .select('telegram_id, anonymous_id, rating, user_settings(max_mentees), mentors(suspended_by_admin)')
+        .eq('role', 'mentor').order('anonymous_id', { ascending: true }));
+      const mentors = mentorRows.map(m => ({
+        telegram_id: m.telegram_id,
+        anonymous_id: m.anonymous_id,
+        rating: m.rating,
+        max_mentees: m.user_settings?.max_mentees || DEFAULT_MAX_MENTEES,
+        suspended: !!m.mentors?.suspended_by_admin,
+      }));
+
+      const ended = await pageAll(() => supabase.from('mentorship_assignments')
+        .select('mentor_id, ended_by, ended_at').eq('is_active', false).gte('ended_at', since90));
+      const sessions = await pageAll(() => supabase.from('video_sessions')
+        .select('host_id, started_at').gte('started_at', since30));
+
+      res.json({ mentors: sortByNeed(mentorHealth({ mentors, active, ended, messages, sessions, now })) });
+    } catch (err) {
+      // "ended_by" may not be migrated yet: fall back to a view without who-left numbers.
+      if (/ended_by/i.test(err.message || '')) return res.status(500).json({ error: 'Run migrations/20260929_mentorship_end_reason.sql first.' });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/mentorships/nudge { mentor_id, mentee_id, who: 'mentor' | 'mentee' }
+  // Sends a gentle Telegram reminder to the person who owes the next message.
+  // Only works on a real active pairing, and only once a day per person.
+  router.post('/mentorships/nudge', async (req, res) => {
+    try {
+      const admin_id = req.telegramUser.id;
+      const { mentor_id, mentee_id, who } = req.body || {};
+      if (!['mentor', 'mentee'].includes(who) || !mentor_id || !mentee_id) return res.status(400).json({ error: 'Choose who to remind.' });
+
+      const { data: pair } = await supabase.from('mentorship_assignments').select('id')
+        .eq('mentor_id', mentor_id).eq('user_id', mentee_id).eq('is_active', true).maybeSingle();
+      if (!pair) return res.status(404).json({ error: 'This mentorship is no longer active.' });
+
+      const target = who === 'mentor' ? mentor_id : mentee_id;
+      const since = new Date(Date.now() - DAY_MS).toISOString();
+      const { data: recent } = await supabase.from('audit_logs').select('id')
+        .eq('action', 'mentorship_nudge').eq('target_id', target).gte('created_at', since).limit(1);
+      if (recent && recent.length) return res.status(429).json({ error: 'This person was already reminded in the last 24 hours.' });
+
+      const { sendCard } = require('../bot');
+      const card = who === 'mentor'
+        ? { icon: '💬', title: 'Your mentee is waiting', body: 'It has been a while since your last message. A short note can mean a lot.', footer: 'Thank you for walking with them 🙏' }
+        : { icon: '💬', title: 'Your mentor is thinking of you', body: 'It has been a while since your last message. Say hello when you can.', footer: 'God bless you 🙏' };
+      await sendCard(target, card, { label: 'Open App' });
+
+      await logAudit(admin_id, 'mentorship_nudge', target, 'user', { who, mentor_id, mentee_id });
+      res.json({ success: true });
+    } catch (err) {
+      console.error('[admin] nudge failed:', err.message);
+      res.status(500).json({ error: 'Could not send the reminder.' });
     }
   });
 
