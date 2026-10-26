@@ -1,0 +1,79 @@
+diff --git a/frontend/admin.css b/frontend/admin.css
+index ebf9b60..027c7bb 100644
+--- a/frontend/admin.css
++++ b/frontend/admin.css
+@@ -770,7 +770,7 @@ code.slug, .audit-action { border-radius: 6px; }
+ .message-bubble.msg-flash { box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.65), 0 1px 6px rgba(0, 0, 0, 0.18); }
+ .message-bubble.is-flagged { outline: 1px solid rgba(224, 92, 92, 0.55); outline-offset: 2px; }
+ 
+-.message-text { font-size: var(--fs-md); line-height: 1.55; }
++.message-text { font-size: var(--fs-md); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+ .msg-content { white-space: pre-wrap; }
+ .message-caption { margin-top: 6px; }
+ .msg-edited { font-size: var(--fs-2xs); font-style: italic; opacity: 0.6; margin-left: 5px; vertical-align: middle; }
+diff --git a/frontend/app.js b/frontend/app.js
+index 2897a04..d462209 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -5875,13 +5875,28 @@ function resetChatView() {
+   syncChatInputHeight();
+ }
+ 
++// True on phones/tablets (touch-first devices with an on-screen keyboard).
++// There, Enter must insert a new line and the Send button sends the message.
++// On desktop, Enter still sends and Shift+Enter inserts a new line.
++function isTouchKeyboardDevice() {
++  try {
++    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
++  } catch (_) { /* ignore */ }
++  return (navigator.maxTouchPoints || 0) > 0 && !window.matchMedia?.('(hover: hover)').matches;
++}
++window.isTouchKeyboardDevice = isTouchKeyboardDevice;
++
+ function handleChatInputKeydown(event) {
+   if (event.key === 'Escape' && window.editingMessageId) {
+     event.preventDefault();
+     cancelEditMessage();
+     return;
+   }
+-  if (event.key === 'Enter' && !event.shiftKey) {
++  if (event.key !== 'Enter' || event.isComposing) return;
++  // Mobile / touch keyboards: let Enter add a new line (default textarea behavior).
++  if (isTouchKeyboardDevice()) return;
++  // Desktop: Enter sends, Shift+Enter adds a new line.
++  if (!event.shiftKey) {
+     event.preventDefault();
+     sendMessage();
+   }
+diff --git a/frontend/chat-media.js b/frontend/chat-media.js
+index 9ba6421..d69b1fe 100644
+--- a/frontend/chat-media.js
++++ b/frontend/chat-media.js
+@@ -990,7 +990,12 @@ function cmOpenSheet(fileList, { asFile = false } = {}) {
+     if (e.target.dataset?.cm === 'asfile') { items.forEach(it => { it.asFile = e.target.checked; }); draw(); }
+   });
+   caption.addEventListener('input', () => { caption.style.height = 'auto'; caption.style.height = Math.min(110, caption.scrollHeight) + 'px'; });
+-  caption.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
++  caption.addEventListener('keydown', (e) => {
++    if (e.key !== 'Enter' || e.isComposing) return;
++    // Touch keyboards: Enter adds a new line; the Send button sends.
++    if (window.isTouchKeyboardDevice?.() ?? matchMedia('(pointer: coarse)').matches) return;
++    if (!e.shiftKey) { e.preventDefault(); doSend(); }
++  });
+   cmSheet.onKey = (e) => { if (e.key === 'Escape') cmCloseSheet(); };
+   document.addEventListener('keydown', cmSheet.onKey);
+ 
+diff --git a/frontend/styles.css b/frontend/styles.css
+index fa31d8a..d5b4226 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -3423,6 +3423,9 @@ textarea.form-control {
+ .message-text {
+   font-size: var(--fs-md);
+   line-height: 1.55;
++  /* Keep the line breaks and blank lines the sender typed (Enter on mobile). */
++  white-space: pre-wrap;
++  overflow-wrap: anywhere;
+ }
+ 
+ /* ── Footer: time + actions ─────────────────────────────────── */

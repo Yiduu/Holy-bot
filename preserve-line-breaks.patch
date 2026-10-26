@@ -1,0 +1,27 @@
+diff --git a/frontend/admin.css b/frontend/admin.css
+index ebf9b60..027c7bb 100644
+--- a/frontend/admin.css
++++ b/frontend/admin.css
+@@ -770,7 +770,7 @@ code.slug, .audit-action { border-radius: 6px; }
+ .message-bubble.msg-flash { box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.65), 0 1px 6px rgba(0, 0, 0, 0.18); }
+ .message-bubble.is-flagged { outline: 1px solid rgba(224, 92, 92, 0.55); outline-offset: 2px; }
+ 
+-.message-text { font-size: var(--fs-md); line-height: 1.55; }
++.message-text { font-size: var(--fs-md); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+ .msg-content { white-space: pre-wrap; }
+ .message-caption { margin-top: 6px; }
+ .msg-edited { font-size: var(--fs-2xs); font-style: italic; opacity: 0.6; margin-left: 5px; vertical-align: middle; }
+diff --git a/frontend/styles.css b/frontend/styles.css
+index fa31d8a..d5b4226 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -3423,6 +3423,9 @@ textarea.form-control {
+ .message-text {
+   font-size: var(--fs-md);
+   line-height: 1.55;
++  /* Keep the line breaks and blank lines the sender typed (Enter on mobile). */
++  white-space: pre-wrap;
++  overflow-wrap: anywhere;
+ }
+ 
+ /* ── Footer: time + actions ─────────────────────────────────── */
