@@ -3423,6 +3423,9 @@ textarea.form-control {
 .message-text {
   font-size: var(--fs-md);
   line-height: 1.55;
+  /* Keep the line breaks and blank lines the sender typed (Enter on mobile). */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* ── Footer: time + actions ─────────────────────────────────── */
