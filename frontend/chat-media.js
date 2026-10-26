@@ -990,7 +990,12 @@ function cmOpenSheet(fileList, { asFile = false } = {}) {
     if (e.target.dataset?.cm === 'asfile') { items.forEach(it => { it.asFile = e.target.checked; }); draw(); }
   });
   caption.addEventListener('input', () => { caption.style.height = 'auto'; caption.style.height = Math.min(110, caption.scrollHeight) + 'px'; });
-  caption.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
+  caption.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    // Touch keyboards: Enter adds a new line; the Send button sends.
+    if (window.isTouchKeyboardDevice?.() ?? matchMedia('(pointer: coarse)').matches) return;
+    if (!e.shiftKey) { e.preventDefault(); doSend(); }
+  });
   cmSheet.onKey = (e) => { if (e.key === 'Escape') cmCloseSheet(); };
   document.addEventListener('keydown', cmSheet.onKey);
 

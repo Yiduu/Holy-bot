@@ -5875,13 +5875,28 @@ function resetChatView() {
   syncChatInputHeight();
 }
 
+// True on phones/tablets (touch-first devices with an on-screen keyboard).
+// There, Enter must insert a new line and the Send button sends the message.
+// On desktop, Enter still sends and Shift+Enter inserts a new line.
+function isTouchKeyboardDevice() {
+  try {
+    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return true;
+  } catch (_) { /* ignore */ }
+  return (navigator.maxTouchPoints || 0) > 0 && !window.matchMedia?.('(hover: hover)').matches;
+}
+window.isTouchKeyboardDevice = isTouchKeyboardDevice;
+
 function handleChatInputKeydown(event) {
   if (event.key === 'Escape' && window.editingMessageId) {
     event.preventDefault();
     cancelEditMessage();
     return;
   }
-  if (event.key === 'Enter' && !event.shiftKey) {
+  if (event.key !== 'Enter' || event.isComposing) return;
+  // Mobile / touch keyboards: let Enter add a new line (default textarea behavior).
+  if (isTouchKeyboardDevice()) return;
+  // Desktop: Enter sends, Shift+Enter adds a new line.
+  if (!event.shiftKey) {
     event.preventDefault();
     sendMessage();
   }
