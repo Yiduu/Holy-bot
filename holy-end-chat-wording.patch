@@ -1,0 +1,36 @@
+diff --git a/local/am.json b/local/am.json
+index e93ea89..ded42ac 100644
+--- a/local/am.json
++++ b/local/am.json
+@@ -90,10 +90,10 @@
+   "no_active_mentorship": "ንቁ አማካሪነት የለዎትም።",
+   "no_active_partners": "ንቁ ጓደኛ የለዎትም።",
+   "partner_not_found": "ጓደኛ አልተገኘም ወይም ንቁ አይደለም።",
+-  "focus_set": "አሁን ከ {nick} ጋር እየተወያዩ ነው። የሚጽፉት ሁሉ ለእነሱ ይላካል።\n\nሲጨርሱ ወይም ሌላ ሰው ለመምረጥ ከታች \"ውይይት ጨርስ\" ይንኩ።",
++  "focus_set": "አሁን ከ {nick} ጋር እያወሩ ነው። የምትጽፉት ነገር ሁሉ ወደ እነሱ ይሄዳል።",
+   "btn_end_chat": "❌ ውይይት ጨርስ / ሌላ ምረጥ",
+-  "focus_cleared": "ውይይቱ ተጠናቋል። አሁን የሚጽፉት ምንም አይላክም።\n\nእንደገና ለመወያየት \"የእኔ የቻት ጓደኛ\" ይንኩ ወይም መልእክት ጽፈው ለማን እንደሚሄድ ይምረጡ።",
+-  "focus_none": "አሁን ከማንም ጋር እየተወያዩ አይደለም።",
++  "focus_cleared": "ቻቱ ተጠናቋል። አሁን የሚላክ ነገር የለም። ሌላ ተመካሪ ለማግኘት የእኔ የቻት ጓደኛ የሚለውን ቁልፍ ይጫኑ።",
++  "focus_none": "አሁን ከማንም ጋር እያወሩ አይደለም።",
+   "msg_sent": "ተልኳል።",
+   "msg_from_partner": "ከ{role} [{nick}] የተላከ መልእክት፦\n\n{text}",
+   "msg_from_partner_file": "{icon} የእርስዎ {role} {nick} {type} ልኮልዎታል።",
+diff --git a/local/en.json b/local/en.json
+index f33cb27..3362bc1 100644
+--- a/local/en.json
++++ b/local/en.json
+@@ -90,10 +90,10 @@
+     "no_active_mentorship": "You have no active mentorship to end.",
+     "no_active_partners": "You have no active partners.",
+     "partner_not_found": "Partner not found or not active.",
+-    "focus_set": "You are now chatting with {nick}. Everything you type will go to them.\n\nTap \"End chat\" below when you are done or want to switch to someone else.",
++    "focus_set": "Now chatting with {nick}. Whatever you type goes to them.",
+     "btn_end_chat": "❌ End chat / Switch mentee",
+-    "focus_cleared": "Chat ended. Nothing you type will be sent now.\n\nTo talk to a mentee again, tap \"My Chat Partner\" or just type a message and choose who it goes to.",
+-    "focus_none": "You are not chatting with anyone right now.",
++    "focus_cleared": "Chat ended. Nothing will be sent now. Tap My Chat Partner to pick someone again.",
++    "focus_none": "You're not chatting with anyone right now.",
+     "msg_sent": "Sent.",
+     "msg_from_partner": "Message from your {role} [{nick}]:\n\n{text}",
+     "msg_from_partner_file": "{icon} Your {role}, {nick}, sent you {type}.",
