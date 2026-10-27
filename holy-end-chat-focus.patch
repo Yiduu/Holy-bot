@@ -1,0 +1,170 @@
+diff --git a/bot.js b/bot.js
+index e19a14a..3bb8408 100644
+--- a/bot.js
++++ b/bot.js
+@@ -229,8 +229,11 @@ async function showMainMenu(chatId, customText) {
+ // of showPersistentMenu so other send paths (chat notifications) can
+ // reattach the same keyboard without duplicating the layout, and without
+ // needing a full showMainMenu-style text message.
+-function buildPersistentKeyboard(role, lang) {
++function buildPersistentKeyboard(role, lang, focused = false) {
+   const kb = [
++    // While the user is locked onto one chat partner, keep an "End chat"
++    // button pinned on top so they can always release the focus.
++    ...(focused ? [[tSync(lang, 'btn_end_chat')]] : []),
+     [tSync(lang, 'btn_find_mentor'), tSync(lang, 'btn_my_chat')],
+     [tSync(lang, 'btn_streak'), tSync(lang, 'btn_journal')],
+     [tSync(lang, 'btn_verse'), tSync(lang, 'btn_settings')]
+@@ -245,16 +248,45 @@ function buildPersistentKeyboard(role, lang) {
+   return { keyboard: kb, resize_keyboard: true, one_time_keyboard: false };
+ }
+ 
++// True when this user is currently "focused" on one chat partner AND has more
++// than one partner (focus only matters when there is someone to switch to).
++async function hasActiveFocus(chatId) {
++  const state = getState(chatId);
++  if (state?.step !== 'chat_active' || !state.targetId) return false;
++  const info = await getActiveChatPartners(chatId);
++  return !!info && info.partners.length > 1;
++}
++
++// Sends the "you are now chatting with X" message with the End chat button
++// attached to the bottom keyboard.
++async function sendFocusSet(chatId, lang, nick) {
++  const { data: user } = await supabase.from('users').select('role').eq('telegram_id', chatId).single();
++  return safeSend(chatId, tSync(lang, 'focus_set', { nick: mdEscape(nick) }), {
++    reply_markup: buildPersistentKeyboard(user?.role || 'user', lang, true)
++  });
++}
++
++// Releases the focus and restores the normal menu (no End chat button).
++async function endFocus(chatId, lang) {
++  const state = getState(chatId);
++  if (state?.step === 'chat_active') {
++    clearState(chatId);
++    return showPersistentMenu(chatId, tSync(lang, 'focus_cleared'));
++  }
++  return showPersistentMenu(chatId, tSync(lang, 'focus_none'));
++}
++
+ async function showPersistentMenu(chatId, customText) {
+-  const [{ data: user }, lang] = await Promise.all([
++  const [{ data: user }, lang, focused] = await Promise.all([
+     supabase.from('users').select('role, anonymous_id').eq('telegram_id', chatId).single(),
+-    getUserLang(chatId)
++    getUserLang(chatId),
++    hasActiveFocus(chatId)
+   ]);
+   const role = user?.role || 'user';
+   const menuText = customText || tSync(lang, 'menu_welcome', { nick: user?.anonymous_id || '' });
+ 
+   await safeSend(chatId, menuText, {
+-    reply_markup: buildPersistentKeyboard(role, lang)
++    reply_markup: buildPersistentKeyboard(role, lang, focused)
+   });
+ }
+ 
+@@ -765,8 +797,11 @@ async function forwardMessage(fromId, toId, text, srcMessageId = null) {
+     // often the first message a recipient sees in a session, and without a
+     // keyboard field on it the client can be left showing no keyboard at
+     // all until the user types /start.
++    // This message auto-focuses the recipient on the sender (setState below),
++    // so keep the End chat button when they have several partners.
++    const recipientPartners = await getActiveChatPartners(toId);
+     const sentCopy = await safeSend(recipient.chat_id, msgText, {
+-      reply_markup: buildPersistentKeyboard(recipient.role || 'user', lang)
++      reply_markup: buildPersistentKeyboard(recipient.role || 'user', lang, (recipientPartners?.partners.length || 0) > 1)
+     });
+     setState(toId, 'chat_active', fromId);
+ 
+@@ -957,8 +992,11 @@ async function forwardFileMessage(fromId, toId, fileType, meta, caption = '') {
+       type: tSync(lang, `file_label_${fileType}`)
+     });
+     // Same keyboard reattachment as forwardMessage — see comment there.
++    // This message auto-focuses the recipient on the sender (setState below),
++    // so keep the End chat button when they have several partners.
++    const recipientPartners = await getActiveChatPartners(toId);
+     await safeSend(recipient.chat_id, label, {
+-      reply_markup: buildPersistentKeyboard(recipient.role || 'user', lang)
++      reply_markup: buildPersistentKeyboard(recipient.role || 'user', lang, (recipientPartners?.partners.length || 0) > 1)
+     });
+ 
+     // Forward the actual file using its file_id — Telegram re-serves the
+@@ -2291,6 +2329,17 @@ bot.on('message', async (msg) => {
+ 
+   await touchActivity(chatId);
+ 
++  // ─── End chat / release focus ──────────────────────────────────────────────
++  // Must run BEFORE the chat shield at the bottom, otherwise this text would
++  // be forwarded to the mentee like any other message.
++  const cmd0 = text.split(' ')[0].toLowerCase();
++  if (
++    text === tSync('en', 'btn_end_chat') || text === tSync('am', 'btn_end_chat') ||
++    cmd0 === '/endchat' || cmd0 === '/stopchat'
++  ) {
++    return endFocus(chatId, lang);
++  }
++
+   if (text.startsWith('/')) {
+     const command = text.split(' ')[0].toLowerCase();
+     const isFlowCommand = command === '/skip' && state &&
+@@ -2419,7 +2468,7 @@ bot.on('message', async (msg) => {
+         if (!content) {
+           setState(chatId, 'chat_active', targetId);
+           const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', targetId).single();
+-          return safeSend(chatId, await t(chatId, 'focus_set', { nick: mdEscape(u.anonymous_id) }));
++          return sendFocusSet(chatId, lang, u.anonymous_id);
+         }
+         await forwardMessage(chatId, targetId, content);
+         return safeSend(chatId, await t(chatId, 'msg_sent'));
+@@ -2864,6 +2913,8 @@ bot.on('callback_query', async (query) => {
+     const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', targetId).single();
+     await bot.answerCallbackQuery(query.id, { text: tSync(lang, 'target_selected', { nick: u?.anonymous_id || '' }) });
+     try { await bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: query.message.message_id }); } catch { }
++    // Pin the End chat button now that the user is locked onto this mentee.
++    await sendFocusSet(chatId, lang, u?.anonymous_id || targetId);
+     return;
+   }
+ 
+@@ -3305,7 +3356,8 @@ bot.on('callback_query', async (query) => {
+     const userId = data.replace('focus_chat_', '');
+     setState(chatId, 'chat_active', userId);
+     const { data: u } = await supabase.from('users').select('anonymous_id').eq('telegram_id', userId).single();
+-    await safeSend(chatId, tSync(lang, 'focus_set', { nick: mdEscape(u?.anonymous_id || userId) }));
++    await sendFocusSet(chatId, lang, u?.anonymous_id || userId);
++    await bot.answerCallbackQuery(query.id).catch(() => { });
+   }
+ 
+   else if (data === 'menu_apply') {
+diff --git a/local/am.json b/local/am.json
+index 6c0b262..e93ea89 100644
+--- a/local/am.json
++++ b/local/am.json
+@@ -90,7 +90,10 @@
+   "no_active_mentorship": "ንቁ አማካሪነት የለዎትም።",
+   "no_active_partners": "ንቁ ጓደኛ የለዎትም።",
+   "partner_not_found": "ጓደኛ አልተገኘም ወይም ንቁ አይደለም።",
+-  "focus_set": "ትኩረት ወደ {nick} ተቀይሯል። ቀጣይ መልዕክትዎ ለነሱ ይሄዳል።",
++  "focus_set": "አሁን ከ {nick} ጋር እየተወያዩ ነው። የሚጽፉት ሁሉ ለእነሱ ይላካል።\n\nሲጨርሱ ወይም ሌላ ሰው ለመምረጥ ከታች \"ውይይት ጨርስ\" ይንኩ።",
++  "btn_end_chat": "❌ ውይይት ጨርስ / ሌላ ምረጥ",
++  "focus_cleared": "ውይይቱ ተጠናቋል። አሁን የሚጽፉት ምንም አይላክም።\n\nእንደገና ለመወያየት \"የእኔ የቻት ጓደኛ\" ይንኩ ወይም መልእክት ጽፈው ለማን እንደሚሄድ ይምረጡ።",
++  "focus_none": "አሁን ከማንም ጋር እየተወያዩ አይደለም።",
+   "msg_sent": "ተልኳል።",
+   "msg_from_partner": "ከ{role} [{nick}] የተላከ መልእክት፦\n\n{text}",
+   "msg_from_partner_file": "{icon} የእርስዎ {role} {nick} {type} ልኮልዎታል።",
+diff --git a/local/en.json b/local/en.json
+index 1bb503a..f33cb27 100644
+--- a/local/en.json
++++ b/local/en.json
+@@ -90,7 +90,10 @@
+     "no_active_mentorship": "You have no active mentorship to end.",
+     "no_active_partners": "You have no active partners.",
+     "partner_not_found": "Partner not found or not active.",
+-    "focus_set": "Focus set to {nick}. Your next message will go to them.",
++    "focus_set": "You are now chatting with {nick}. Everything you type will go to them.\n\nTap \"End chat\" below when you are done or want to switch to someone else.",
++    "btn_end_chat": "❌ End chat / Switch mentee",
++    "focus_cleared": "Chat ended. Nothing you type will be sent now.\n\nTo talk to a mentee again, tap \"My Chat Partner\" or just type a message and choose who it goes to.",
++    "focus_none": "You are not chatting with anyone right now.",
+     "msg_sent": "Sent.",
+     "msg_from_partner": "Message from your {role} [{nick}]:\n\n{text}",
+     "msg_from_partner_file": "{icon} Your {role}, {nick}, sent you {type}.",
