@@ -423,25 +423,22 @@ body.hg-typing .hg-root { padding-bottom: 140px; }
 [data-theme="light"] .hg-cb { border-color: rgba(150, 120, 40, 0.45); background: rgba(201, 168, 76, 0.14); }
 [data-theme="light"] .hg-undo { color: #2F7A4B; }
 
-/* ── Per-task reminders: time chip + bottom sheet ───────────────────────────
-   The chip sits in the task row (360px and wider) and drops to its own
-   full-width line under the task on narrow phones, so the task name never gets
-   squeezed. The sheet is at most 85% of the screen high; only its middle
-   scrolls, so Save stays visible, and it clears the home bar. */
-.hg-pt { flex-wrap: wrap; }
-.hg-pt input { flex: 1 1 120px; }
-.hg-rchip { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 12px; border-radius: 999px;
-  border: 1px dashed rgba(255, 255, 255, 0.28); background: transparent; color: var(--text2); font: 700 var(--fs-xs) var(--font-body); cursor: pointer; }
-.hg-rchip.on { border-style: solid; border-color: rgba(201, 168, 76, 0.55); background: var(--gold-dim); color: var(--gold-light); }
+/* ── Per-task reminders: clock button + bottom sheet ───────────────────────
+   With no reminder a task row only shows a small clock button; with one it
+   shows the time. The sheet is at most 85% of the screen high and only its
+   middle scrolls, so Save stays visible and clears the home bar. */
+.hg-rchip { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 44px; min-height: 44px; padding: 0; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.06); color: var(--text2); font: 700 var(--fs-xs) var(--font-body); cursor: pointer; }
+.hg-rchip.on { padding: 0 12px; border-color: rgba(201, 168, 76, 0.5); background: var(--gold-dim); color: var(--gold-light); }
 .hg-rchip svg { flex: none; }
 .hg-rrow { display: flex; padding: 0 0 4px 38px; }
-.hg-rrow .hg-rchip { min-height: 36px; }
-@media (max-width: 359px) {
-  .hg-pt .hg-rchip { order: 9; flex: 1 0 100%; justify-content: flex-start; margin-left: 34px; width: calc(100% - 34px); }
-  .hg-rrow { padding-left: 0; }
-}
-.hg-copy-rem { display: flex; align-items: center; gap: 10px; min-height: 44px; color: var(--text2); font-size: var(--fs-xs); font-weight: 700; cursor: pointer; }
-.hg-copy-rem input { width: 20px; height: 20px; flex: none; accent-color: #C9A84C; }
+.hg-rrow .hg-rchip { min-height: 36px; min-width: 36px; }
+.hg-rrow .hg-rchip.on { padding: 0 10px; }
+@media (max-width: 339px) { .hg-pt .hg-rchip.on { padding: 0 8px; } }
+.hg-last { display: flex; align-items: center; gap: 6px; }
+.hg-last svg { flex: none; }
+.hg-copy-rem { display: flex; align-items: center; gap: 10px; min-height: 40px; color: var(--text2); font-size: var(--fs-xs); font-weight: 600; cursor: pointer; }
+.hg-copy-rem input { width: 18px; height: 18px; flex: none; accent-color: #C9A84C; }
 
 .hg-rs-ov { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.55); }
 .hg-rs { width: 100%; max-width: 480px; max-height: 85%; display: flex; flex-direction: column; box-sizing: border-box;
@@ -450,17 +447,18 @@ body.hg-typing .hg-root { padding-bottom: 140px; }
 @keyframes hg-rs-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .hg-rs-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .hg-rs-head h3 { margin: 0; font: 600 16px var(--font-display); overflow-wrap: anywhere; min-width: 0; }
-.hg-rs-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 14px 0; }
-.hg-rs-body > .hg-rest { align-self: flex-start; }
+.hg-rs-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 16px 0; }
 .hg-rs-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.hg-rs-presets .hg-pill { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-.hg-rs-presets .hg-pill:disabled, .hg-rs-custom input:disabled { opacity: 0.45; }
+.hg-rs-presets .hg-pill { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .hg-rs-custom { display: flex; flex-direction: column; gap: 6px; color: var(--text2); font-size: var(--fs-xs); }
-.hg-rs-custom input { min-height: 44px; min-width: 0; box-sizing: border-box; padding: 0 12px; font-size: 16px; color-scheme: dark; border-radius: 12px;
+.hg-rs-custom input { min-height: 48px; min-width: 0; box-sizing: border-box; padding: 0 12px; font-size: 16px; color-scheme: dark; border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.05); color: var(--text); text-align: left; }
-.hg-rs-foot { flex: none; }
-.hg-rs-foot .hg-btn { width: 100%; min-height: 48px; }
+.hg-rs-foot { flex: none; display: flex; gap: 10px; }
+.hg-rs-foot .hg-btn { flex: 1 1 0; min-width: 0; min-height: 48px; }
 @media (prefers-reduced-motion: reduce) { .hg-rs { animation: none; } }
 [data-theme="light"] .hg-rs-custom input { color-scheme: light; background: #fffaf0; border-color: rgba(150, 120, 40, 0.28); }
-[data-theme="light"] .hg-rchip { border-color: rgba(150, 120, 40, 0.45); color: #5A5650; }
-[data-theme="light"] .hg-rchip.on { border-color: #A87C2A; color: #7A5812; }
+[data-theme="light"] .hg-rchip { background: rgba(255, 255, 255, 0.85); border-color: rgba(150, 120, 40, 0.28); color: #5A5650; }
+[data-theme="light"] .hg-rchip.on { background: var(--gold-dim); border-color: #A87C2A; color: #7A5812; }
+
+.hg-pt input { flex: 1 1 0; min-width: 0; }
+

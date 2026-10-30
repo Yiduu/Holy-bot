@@ -42,10 +42,10 @@
       rest_note: 'Rest day. Nothing is assigned. Switch off to add tasks.', copy_to: "Copy this day's tasks to",
       copy_empty: 'Empty days', copy_all: 'All days', copy_need: 'Add a task to this day first, then you can copy it.',
       copied_n: 'Copied to {n} days', undo: 'Undo', rename: 'Rename', tick_when_done: 'Tick when finished', actions: 'Actions',
-      remind_add: 'Remind', remind_at: 'Reminder at {t}', remind_title: 'Task reminder', remind_on: 'Send a reminder',
+      remind_add: 'Remind', remind_at: 'Reminder at {t}', remind_title: 'Task reminder',
       rp_morning: 'Morning', rp_noon: 'Noon', rp_evening: 'Evening', rp_night: 'Night',
-      rp_custom: 'Or pick a custom time', rp_save: 'Save reminder', rp_off: 'No reminder for this task', rp_close: 'Close',
-      rp_copy: 'Include reminder times', rp_daily_note: 'Used for tasks that have no reminder time of their own.',
+      rp_custom: 'Or pick a custom time', rp_save: 'Save reminder', rp_off: 'Remove', rp_close: 'Close',
+      rp_copy: 'Include reminder times',
       rp_last: 'Last reminder for unfinished tasks: 11:00 PM',
     },
     am: {
@@ -81,10 +81,10 @@
       rest_note: 'የእረፍት ቀን ነው። ምንም ተግባር አልተሰጠም። ተግባር ለመጨመር ማብሪያውን ያጥፉ።', copy_to: 'የዚህን ቀን ተግባራት ቅዳ ለ',
       copy_empty: 'ባዶ ቀናት', copy_all: 'ሁሉም ቀናት', copy_need: 'መጀመሪያ ለዚህ ቀን ተግባር ይጨምሩ፣ ከዚያ መቅዳት ይችላሉ።',
       copied_n: 'ለ{n} ቀናት ተቀድቷል', undo: 'ቀልብስ', rename: 'ስም ቀይር', tick_when_done: 'ሲጨርሱ ምልክት ያድርጉ', actions: 'ተግባራት',
-      remind_add: 'አስታውስ', remind_at: 'ማስታወሻ በ{t}', remind_title: 'የተግባር ማስታወሻ', remind_on: 'ማስታወሻ ላክ',
+      remind_add: 'አስታውስ', remind_at: 'ማስታወሻ በ{t}', remind_title: 'የተግባር ማስታወሻ',
       rp_morning: 'ጠዋት', rp_noon: 'ቀትር', rp_evening: 'ምሽት', rp_night: 'ሌሊት',
-      rp_custom: 'ወይም የራስዎን ሰዓት ይምረጡ', rp_save: 'ማስታወሻውን አስቀምጥ', rp_off: 'ለዚህ ተግባር ማስታወሻ አያስፈልግም', rp_close: 'ዝጋ',
-      rp_copy: 'የማስታወሻ ሰዓቶችንም ቅዳ', rp_daily_note: 'የራሳቸው የማስታወሻ ሰዓት ለሌላቸው ተግባራት ያገለግላል።',
+      rp_custom: 'ወይም የራስዎን ሰዓት ይምረጡ', rp_save: 'ማስታወሻውን አስቀምጥ', rp_off: 'አስወግድ', rp_close: 'ዝጋ',
+      rp_copy: 'የማስታወሻ ሰዓቶችንም ቅዳ',
       rp_last: 'ላልተጠናቀቁ ተግባራት የመጨረሻ ማስታወሻ፦ 11:00 PM',
     },
   };
@@ -204,7 +204,8 @@
     if (role !== 'mentor' || g.type !== 'challenge' || t.status !== 'pending' || !t.due_date || d10(t.due_date) < today()) return '';
     return `<div class="hg-rrow">${chipHtml(hm(t.remind_at), `data-act="rsheet" data-scope="task" data-task="${t.id}"`)}</div>`;
   }
-  const chipHtml = (at, attrs) => `<button type="button" class="hg-rchip${at ? ' on' : ''}" ${attrs}>${I_CLOCK}<span>${at ? esc(fmtHM(at)) : tr('remind_add')}</span></button>`;
+  // No reminder: just a clock icon (keeps rows tidy). With one: the time.
+  const chipHtml = (at, attrs) => `<button type="button" class="hg-rchip${at ? ' on' : ''}" aria-label="${at ? tr('remind_at', { t: fmtHM(at) }) : tr('remind_add')}" ${attrs}>${I_CLOCK}${at ? `<span>${esc(fmtHM(at))}</span>` : ''}</button>`;
 
   function dayInfo(g, date) {
     const ts = g.tasks.filter(t => d10(t.due_date) === date && t.status !== 'skipped');
@@ -467,7 +468,7 @@
           <button type="button" class="${d.mode === 'custom' ? 'on' : ''}" data-act="fmode" data-mode="custom">${tr('mode_custom')}</button></div>
         ${d.mode === 'custom' ? planner(menteeId, d) : same}
         <label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${esc(d.reminder)}"></label>
-        <div class="hg-hint">${tr('rp_daily_note')} ${tr('rp_last')}</div>`;
+        <div class="hg-hint hg-last">${I_CLOCK}<span>${tr('rp_last')}</span></div>`;
     }
     return `<div class="hg-hero"><span class="hg-type-ico hg-hero-ico">${icon(type, 28)}</span>
         <div><h2>${tr(TK[type][0])}</h2><p>${tr(k + '_hero')}</p></div></div>
@@ -824,8 +825,7 @@
     if (scope === 'tpl') { const d = fd(mid); title = String(d.same[i] || '').trim(); at = hm(d.sameRemind?.[i]); }
     else if (scope === 'day') { const d = fd(mid); title = String(d.plan[date]?.[i] || '').trim(); at = hm(d.remind?.[date]?.[i]); }
     else { const f = findTask(el.dataset.task, root); if (!f) return; title = f.t.title; at = hm(f.t.remind_at); }
-    let on = !!at;
-    let time = at || '06:00';
+    let time = at;
     const ov = document.createElement('div');
     ov.className = 'hg-rs-ov';
     rsEl = ov;
@@ -834,36 +834,36 @@
         <div class="hg-rs-head"><h3>${esc(title) || tr('remind_title')}</h3>
           <button type="button" class="hg-x" data-rs="close" aria-label="${tr('rp_close')}">${I_X}</button></div>
         <div class="hg-rs-body">
-          <button type="button" class="hg-rest${on ? ' on' : ''}" role="switch" aria-checked="${on}" data-rs="sw"><span>${tr('remind_on')}</span><span class="hg-sw"><i></i></span></button>
-          <div class="hg-rs-presets" role="group">${PRESETS.map(([k, v]) => `<button type="button" class="hg-pill${on && time === v ? ' on' : ''}" data-rs="p" data-at="${v}"${on ? '' : ' disabled'}><b>${tr(k)}</b> ${esc(fmtHM(v))}</button>`).join('')}</div>
-          <label class="hg-rs-custom">${tr('rp_custom')}<input type="time" data-rs="t" value="${time}"${on ? '' : ' disabled'}></label>
-          <div class="hg-hint">${tr('rp_last')}</div>
+          <div class="hg-rs-presets" role="group">${PRESETS.map(([k, v]) => `<button type="button" class="hg-pill${time === v ? ' on' : ''}" data-rs="p" data-at="${v}"><b>${tr(k)}</b> ${esc(fmtHM(v))}</button>`).join('')}</div>
+          <label class="hg-rs-custom">${tr('rp_custom')}<input type="time" data-rs="t" value="${time}"></label>
         </div>
-        <div class="hg-rs-foot"><button type="button" class="hg-btn" data-rs="save">${tr('rp_save')}</button></div></div>`;
+        <div class="hg-rs-foot">${at ? `<button type="button" class="hg-btn hg-btn-ghost" data-rs="off">${tr('rp_off')}</button>` : ''}
+          <button type="button" class="hg-btn" data-rs="save"${time ? '' : ' disabled'}>${tr('rp_save')}</button></div></div>`;
     };
     draw();
+    const apply = val => {
+      closeReminderSheet();
+      if (scope === 'task') return call(`/api/goals/tasks/${el.dataset.task}`, 'PATCH', { remind_at: val });
+      const d = fd(mid);
+      if (scope === 'tpl') { d.sameRemind = d.sameRemind || []; d.sameRemind[i] = val; }
+      else { d.remind = d.remind || {}; d.remind[date] = d.remind[date] || []; d.remind[date][i] = val; }
+      paint(root, true);
+    };
     ov.addEventListener('click', e => {
       if (e.target === ov) return closeReminderSheet();
       const b = e.target.closest('[data-rs]');
       if (!b) return;
       const k = b.dataset.rs;
       if (k === 'close') return closeReminderSheet();
-      if (k === 'sw') { on = !on; return draw(); }
       if (k === 'p') { time = b.dataset.at; return draw(); }
-      if (k === 'save') {
-        const val = on && /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : '';
-        closeReminderSheet();
-        if (scope === 'task') return call(`/api/goals/tasks/${el.dataset.task}`, 'PATCH', { remind_at: val });
-        const d = fd(mid);
-        if (scope === 'tpl') { d.sameRemind = d.sameRemind || []; d.sameRemind[i] = val; }
-        else { d.remind = d.remind || {}; d.remind[date] = d.remind[date] || []; d.remind[date][i] = val; }
-        paint(root, true);
-      }
+      if (k === 'off') return apply('');
+      if (k === 'save' && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)) apply(time);
     });
     ov.addEventListener('input', e => {   // the native picker: a custom time replaces the preset highlight
       if (e.target.dataset.rs !== 't') return;
       time = e.target.value;
       ov.querySelectorAll('[data-rs="p"]').forEach(p => p.classList.toggle('on', p.dataset.at === time));
+      const sv = ov.querySelector('[data-rs="save"]'); if (sv) sv.disabled = !time;
     });
     rsKey = e => { if (e.key === 'Escape') closeReminderSheet(); };
     document.addEventListener('keydown', rsKey);

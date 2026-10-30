@@ -51,9 +51,8 @@ const chips = () => [...doc.querySelectorAll('#goalPageBody .hg-pt .hg-rchip')];
   // open the sheet, pick the Morning preset, then save
   click(chips()[0]);
   assert(sheet(), 'sheet opens');
-  assert.strictEqual(sheet().querySelector('[data-rs="sw"]').getAttribute('aria-checked'), 'false', 'starts off');
-  assert(sheet().querySelector('[data-rs="t"]').disabled, 'time field locked while off');
-  click(sheet().querySelector('[data-rs="sw"]'));
+  assert(sheet().querySelector('[data-rs="save"]').disabled, 'Save waits for a time');
+  assert(!sheet().querySelector('[data-rs="off"]'), 'nothing to remove yet');
   click(sheet().querySelector('[data-rs="p"][data-at="06:00"]'));
   assert(sheet().querySelector('[data-rs="p"][data-at="06:00"]').classList.contains('on'), 'preset highlighted');
   const custom = sheet().querySelector('[data-rs="t"]');
@@ -86,7 +85,6 @@ const chips = () => [...doc.querySelectorAll('#goalPageBody .hg-pt .hg-rchip')];
   page.querySelector('[data-dayedit] input').value = 'Scripture';
   page.querySelector('[data-dayedit] input').dispatchEvent(new w.Event('input', { bubbles: true }));
   click(chips()[0]);
-  click(sheet().querySelector('[data-rs="sw"]'));
   click(sheet().querySelector('[data-rs="p"][data-at="18:00"]'));
   click(sheet().querySelector('[data-rs="save"]'));
   assert(page.querySelector('.hg-copy-rem input').checked, 'copy includes reminder times by default');
@@ -106,7 +104,7 @@ const chips = () => [...doc.querySelectorAll('#goalPageBody .hg-pt .hg-rchip')];
   click(page.querySelector('[data-act="fmode"][data-mode="custom"]'));
   page.querySelector('[data-dayedit] input').value = 'Walk';
   page.querySelector('[data-dayedit] input').dispatchEvent(new w.Event('input', { bubbles: true }));
-  click(chips()[0]); click(sheet().querySelector('[data-rs="sw"]')); click(sheet().querySelector('[data-rs="save"]'));
+  click(chips()[0]); click(sheet().querySelector('[data-rs="p"][data-at="06:00"]')); click(sheet().querySelector('[data-rs="save"]'));
   click(page.querySelector('.hg-copy-rem input'));
   click(page.querySelector('[data-act="pfill"][data-scope="all"]'));
   click(page.querySelector('[data-act="create"]'));
@@ -131,8 +129,7 @@ const chips = () => [...doc.querySelectorAll('#goalPageBody .hg-pt .hg-rchip')];
   assert.strictEqual(rc.length, 1, 'chip only on the pending task, not the done one');
   assert(/6:00/.test(rc[0].textContent), 'DB time (06:00:00) shown as 6:00');
   click(rc[0]);
-  click(sheet().querySelector('[data-rs="sw"]'));            // turn it off
-  click(sheet().querySelector('[data-rs="save"]'));
+  click(sheet().querySelector('[data-rs="off"]'));           // Remove
   await tick();
   const patch = calls.filter(c => c[0] === 'PATCH' && c[1] === '/api/goals/tasks/t1').pop();
   assert.strictEqual(patch[2].remind_at, '', 'turning it off sends an empty time');

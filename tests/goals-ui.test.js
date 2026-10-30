@@ -22,12 +22,14 @@ function makeGoal() {
     start_date: start, end_date: end, tasks, stats: { done: 4, total: 16, pct: 25, streak: 1, missed: 2 } };
 }
 
-const dom = new JSDOM('<!doctype html><body><div id="panel"></div><div id="card" class="hidden"><span id="myGoalsProgressLabel"></span><div id="myGoalsProgressTrack"></div><div id="list"></div></div></body>',
+const dom = new JSDOM('<!doctype html><body><div id="panel"></div><div id="goalPageBody"></div><div id="card" class="hidden"><span id="myGoalsProgressLabel"></span><div id="myGoalsProgressTrack"></div><div id="list"></div></div></body>',
   { runScripts: 'outside-only', pretendToBeVisual: true });
 const w = dom.window;
 const calls = [];
 w.currentLanguage = 'en';
 w.currentUser = { telegram_id: 2 };
+w.currentPage = 'my-mentees';
+w.showAppPageQuiet = p => { w.currentPage = p; };
 w.escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 w.menteeIcon = () => '<i></i>';
 w.haptic = () => {};
@@ -69,25 +71,30 @@ const tick = () => new Promise(r => setTimeout(r, 20));
 
   // new goal form: switch type, validate required title
   panel.querySelector('[data-act="new"]').click();
-  assert(panel.querySelector('.hg-new'), 'form opens');
-  panel.querySelector('[data-act="addtpl"]').click();
-  assert.strictEqual(panel.querySelectorAll('[data-tpl] input').length, 2, 'extra daily task input');
-  panel.querySelector('[data-type="progressive"]').click();
-  assert(panel.querySelector('[data-f="target"]'), 'progressive fields');
+  const page = doc.getElementById('goalPageBody');
+  assert(page.querySelector('[data-type="challenge"]'), 'picker opens');
+  page.querySelector('[data-type="challenge"]').click();
+  assert(page.querySelector('.hg-new'), 'form opens');
+  page.querySelector('[data-act="addtpl"]').click();
+  assert.strictEqual(page.querySelectorAll('[data-tpl] input').length, 2, 'extra daily task input');
+  page.querySelector('[data-act="back"]').click();
+  page.querySelector('[data-type="progressive"]').click();
+  assert(page.querySelector('[data-f="target"]'), 'progressive fields');
 
   // per-day planner: switch to "different each day", plan two days, submit
-  panel.querySelector('[data-type="challenge"]').click();
-  panel.querySelector('[data-f="title"]').value = 'Lent';
-  panel.querySelector('[data-act="fmode"][data-mode="custom"]').click();
-  assert.strictEqual(panel.querySelector('[data-f="title"]').value, 'Lent', 'typed title survives repaint');
-  assert(panel.querySelector('[data-dayedit]'), 'day editor shown');
-  assert.strictEqual(panel.querySelectorAll('.hg-plan .hg-d:not(.x)').length, 30, 'one planner cell per day (30-day default)');
-  panel.querySelector('[data-dayedit] input').value = 'Read Psalm 1';
-  panel.querySelector(`.hg-plan .hg-d[data-date="${add(TODAY, 1)}"]`).click();
-  panel.querySelector('[data-dayedit] input').value = 'Fast until noon';
-  panel.querySelector('[data-act="padd"]').click();
-  panel.querySelectorAll('[data-dayedit] input')[1].value = 'Evening prayer';
-  panel.querySelector('[data-act="create"]').click();
+  page.querySelector('[data-act="back"]').click();
+  page.querySelector('[data-type="challenge"]').click();
+  page.querySelector('[data-f="title"]').value = 'Lent';
+  page.querySelector('[data-act="fmode"][data-mode="custom"]').click();
+  assert.strictEqual(page.querySelector('[data-f="title"]').value, 'Lent', 'typed title survives repaint');
+  assert(page.querySelector('[data-dayedit]'), 'day editor shown');
+  assert.strictEqual(page.querySelectorAll('.hg-plan .hg-d:not(.x)').length, 30, 'one planner cell per day (30-day default)');
+  page.querySelector('[data-dayedit] input').value = 'Read Psalm 1';
+  page.querySelector(`.hg-plan .hg-d[data-date="${add(TODAY, 1)}"]`).click();
+  page.querySelector('[data-dayedit] input').value = 'Fast until noon';
+  page.querySelector('[data-act="padd"]').click();
+  page.querySelectorAll('[data-dayedit] input')[1].value = 'Evening prayer';
+  page.querySelector('[data-act="create"]').click();
   await tick();
   const post = calls.find(c => c[0] === 'POST' && c[1] === '/api/goals');
   assert(post, 'goal POSTed');
@@ -95,13 +102,14 @@ const tick = () => new Promise(r => setTimeout(r, 20));
   assert(!post[2].task_template, 'no repeated template in custom mode');
   // creating with an empty plan is blocked client-side
   panel.querySelector('[data-act="new"]').click();
-  panel.querySelector('[data-act="fmode"][data-mode="custom"]').click();
+  page.querySelector('[data-type="challenge"]').click();
+  page.querySelector('[data-act="fmode"][data-mode="custom"]').click();
   const before = calls.length;
-  panel.querySelector('[data-f="title"]').value = 'Empty';
-  panel.querySelector('[data-act="create"]').click();
+  page.querySelector('[data-f="title"]').value = 'Empty';
+  page.querySelector('[data-act="create"]').click();
   await tick();
   assert.strictEqual(calls.length, before, 'empty plan not submitted');
-  panel.querySelector('[data-act="cancel-new"]').click();
+  page.querySelector('[data-act="back"]').click();
 
   // calendar shows one month at a time
   assert(panel.querySelectorAll('.hg-goal .hg-cal:not([hidden])').length === 1, 'single visible month');
