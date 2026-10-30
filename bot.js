@@ -9,7 +9,8 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
-const { ethiopiaToday, ethiopiaTimeHM, addDays, daysBetween, trailingMissedDays, isTaskReminderDue, FINAL_REMINDER_TIME } = require('./utils/goalRules');
+const { ethiopiaToday, ethiopiaTimeHM, addDays, daysBetween, trailingMissedDays } = require('./utils/goalRules');
+const { makeGoalReminders } = require('./utils/goalReminders');
 const { setTaskDone: setGoalTaskDone, emitGoal } = require('./utils/goalService');
 const fs = require('fs');
 const path = require('path');
@@ -3750,8 +3751,6 @@ async function runGoalMaintenance() {
     const today = ethiopiaToday();
     await sweepMissedGoalTasks(today);
     await sendGoalReminders(today);
-    await sendTaskReminders(today);
-    await sendFinalReminders(today);
   } catch (e) {
     console.error('[Scheduler] Goal maintenance failed:', e.message);
   } finally {
@@ -3812,83 +3811,25 @@ async function sendGoalReminders(today) {
   if (byGoal.size) console.log(`[Scheduler] Sent ${byGoal.size} goal reminder(s).`);
 }
 
-// Per-task reminders. A task is claimed (task_reminder_sent_on = today) with a
-// conditional UPDATE before it is sent, so a retry, a restart or two ticks
-// overlapping can never send the same task twice. Only today's pending tasks
-// qualify: done, skipped (rest day) and missed tasks never remind. A reminder
-// more than REMINDER_GRACE_MIN late is dropped; the 11:00 PM reminder covers it.
-async function sendTaskReminders(today) {
-  const nowHM = ethiopiaTimeHM();
-  const notClaimed = `task_reminder_sent_on.is.null,task_reminder_sent_on.neq.${today}`;
-  const { data: rows, error } = await supabase
-    .from('goal_tasks')
-    .select('id, goal_id, mentee_id, title, remind_at, goals!inner(id, title, type, status)')
-    .eq('status', 'pending')
-    .eq('goals.status', 'active')
-    .eq('due_date', today)
-    .not('remind_at', 'is', null)
-    .or(notClaimed);
-  if (error) throw error;
-
-  const due = (rows || []).filter(r => isTaskReminderDue(String(r.remind_at).substring(0, 5), nowHM));
-  if (!due.length) return;
-
-  const { data: claimed } = await supabase.from('goal_tasks')
-    .update({ task_reminder_sent_on: today }).in('id', due.map(r => r.id)).or(notClaimed).select('id');
-  const ok = new Set((claimed || []).map(r => r.id));
-
-  let sent = 0;
-  for (const r of due.filter(r => ok.has(r.id))) {
-    try { await notifyTaskReminder(r.mentee_id, r.goals, r); sent++; }
-    catch (e) { console.error('[Scheduler] Task reminder failed:', e.message); }
+// Per-task reminders and the 11:00 PM last reminder (rules: utils/goalReminders.js).
+// Checked every minute, so a reminder lands on its minute, not up to 5 minutes late.
+const { sendTaskReminders, sendFinalReminders } = makeGoalReminders({ supabase, notifyTaskReminder, notifyFinalReminder });
+let taskRemindersRunning = false;
+async function runTaskReminders() {
+  if (taskRemindersRunning) return;
+  taskRemindersRunning = true;
+  try {
+    const today = ethiopiaToday();
+    await sendTaskReminders(today);
+    await sendFinalReminders(today);
+  } catch (e) {
+    console.error('[Scheduler] Task reminders failed:', e.message);
+  } finally {
+    taskRemindersRunning = false;
   }
-  if (sent) console.log(`[Scheduler] Sent ${sent} per-task reminder(s).`);
 }
-
-// The last reminder of the day, at FINAL_REMINDER_TIME (11:00 PM). Sent once
-// per goal per day (goals.final_reminder_sent_on) and only for goals that use
-// per-task reminders today. It lists the tasks still pending and is skipped
-// when everything is done.
-async function sendFinalReminders(today) {
-  if (ethiopiaTimeHM() < FINAL_REMINDER_TIME) return;
-  const { data: withRemind, error } = await supabase
-    .from('goal_tasks')
-    .select('goal_id, goals!inner(status)')
-    .eq('goals.status', 'active')
-    .eq('due_date', today)
-    .not('remind_at', 'is', null);
-  if (error) throw error;
-  const goalIds = [...new Set((withRemind || []).map(r => r.goal_id))];
-  if (!goalIds.length) return;
-
-  const { data: pending, error: pErr } = await supabase
-    .from('goal_tasks')
-    .select('id, goal_id, mentee_id, title, goals!inner(id, title, type, status, final_reminder_sent_on)')
-    .eq('status', 'pending')
-    .eq('due_date', today)
-    .in('goal_id', goalIds)
-    .order('position', { ascending: true });
-  if (pErr) throw pErr;
-
-  const byGoal = new Map();
-  for (const t of pending || []) {
-    if (String(t.goals.final_reminder_sent_on || '').substring(0, 10) === today) continue;
-    if (!byGoal.has(t.goal_id)) byGoal.set(t.goal_id, { goal: t.goals, menteeId: t.mentee_id, tasks: [] });
-    byGoal.get(t.goal_id).tasks.push(t);
-  }
-  if (!byGoal.size) return;
-
-  const { data: claimed } = await supabase.from('goals')
-    .update({ final_reminder_sent_on: today }).in('id', [...byGoal.keys()])
-    .or(`final_reminder_sent_on.is.null,final_reminder_sent_on.neq.${today}`).select('id');
-  let sent = 0;
-  for (const g of claimed || []) {
-    const { goal, menteeId, tasks } = byGoal.get(g.id);
-    try { await notifyFinalReminder(menteeId, goal, tasks); sent++; }
-    catch (e) { console.error('[Scheduler] Final reminder failed:', e.message); }
-  }
-  if (sent) console.log(`[Scheduler] Sent ${sent} last reminder(s).`);
-}
+setInterval(runTaskReminders, 60 * 1000);
+setTimeout(runTaskReminders, 20 * 1000);
 
 setInterval(runGoalMaintenance, 5 * 60 * 1000);
 setTimeout(runGoalMaintenance, 30 * 1000);

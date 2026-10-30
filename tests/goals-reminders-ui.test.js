@@ -87,7 +87,6 @@ const chips = () => [...doc.querySelectorAll('#goalPageBody .hg-pt .hg-rchip')];
   click(chips()[0]);
   click(sheet().querySelector('[data-rs="p"][data-at="18:00"]'));
   click(sheet().querySelector('[data-rs="save"]'));
-  assert(page.querySelector('.hg-copy-rem input').checked, 'copy includes reminder times by default');
   click(page.querySelector('[data-act="pfill"][data-scope="all"]'));
   click(page.querySelector('[data-act="create"]'));
   await tick();
@@ -95,24 +94,30 @@ const chips = () => [...doc.querySelectorAll('#goalPageBody .hg-pt .hg-rchip')];
   assert.strictEqual(Object.keys(plan).length, 3, 'copied to all three days');
   for (const day of Object.keys(plan)) same(plan[day], [{ title: 'Scripture', remind_at: '18:00' }], day);
 
-  // unchecking "Include reminder times" copies the tasks only
+  // copy box: hidden until the day has a task, no checkbox, nothing to explain
   click(doc.querySelector('#panel [data-act="new"]'));
   click(page.querySelector('[data-type="challenge"]'));
-  page.querySelector('[data-f="title"]').value = 'Plan 2';
+  page.querySelector('[data-f="title"]').value = 'Plan 3';
   page.querySelector('[data-f="end"]').value = add(TODAY, 1);
   page.querySelector('[data-f="end"]').dispatchEvent(new w.Event('change', { bubbles: true }));
   click(page.querySelector('[data-act="fmode"][data-mode="custom"]'));
+  assert(!page.querySelector('.hg-copy'), 'no copy box on an empty day');
+  assert(!page.textContent.includes('then you can copy it'), 'no "add a task first" hint');
+  assert(!page.querySelector('.hg-copy-rem, [data-act="pcopyrem"]'), 'no "include reminder times" checkbox');
+  page.querySelector('[data-dayedit] input').value = 'Walk';
+  page.querySelector('[data-dayedit] input').dispatchEvent(new w.Event('input', { bubbles: true }));
+  assert(page.querySelector('.hg-copy'), 'copy box appears once the day has a task');
+  page.querySelector('[data-dayedit] input').value = '';
+  page.querySelector('[data-dayedit] input').dispatchEvent(new w.Event('input', { bubbles: true }));
+  assert(!page.querySelector('.hg-copy'), 'and goes away again when the task is cleared');
   page.querySelector('[data-dayedit] input').value = 'Walk';
   page.querySelector('[data-dayedit] input').dispatchEvent(new w.Event('input', { bubbles: true }));
   click(chips()[0]); click(sheet().querySelector('[data-rs="p"][data-at="06:00"]')); click(sheet().querySelector('[data-rs="save"]'));
-  click(page.querySelector('.hg-copy-rem input'));
   click(page.querySelector('[data-act="pfill"][data-scope="all"]'));
   click(page.querySelector('[data-act="create"]'));
   await tick();
   const plan2 = calls.filter(c => c[0] === 'POST' && c[1] === '/api/goals').pop()[2].day_plan;
-  const days = Object.keys(plan2).sort();
-  same(plan2[days[0]], [{ title: 'Walk', remind_at: '06:00' }], 'source day keeps its reminder');
-  same(plan2[days[1]], ['Walk'], 'copied day has the task but no reminder');
+  for (const day of Object.keys(plan2)) same(plan2[day], [{ title: 'Walk', remind_at: '06:00' }], 'reminder copied with its task on ' + day);
 
   // sheet closes with Escape
   click(chips()[0]);

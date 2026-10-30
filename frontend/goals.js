@@ -39,8 +39,8 @@
       prev_month: 'Previous month', next_month: 'Next month', plan_dates_first: 'Pick valid start and end dates first (up to 120 days).',
       plan_empty: 'Add tasks for at least one day',
       t_add: 'Add task', t_remove: 'Remove task', t_max: 'Up to {n} tasks per day', t_planned: 'Planned',
-      rest_note: 'Rest day. Nothing is assigned. Switch off to add tasks.', copy_to: "Copy this day's tasks to",
-      copy_empty: 'Empty days', copy_all: 'All days', copy_need: 'Add a task to this day first, then you can copy it.',
+      rest_note: 'Rest day. Nothing is assigned. Switch off to add tasks.', copy_to: "Copy this day's tasks and reminders to",
+      copy_empty: 'Empty days', copy_all: 'All days',
       copied_n: 'Copied to {n} days', undo: 'Undo', rename: 'Rename', tick_when_done: 'Tick when finished', actions: 'Actions',
       remind_add: 'Remind', remind_at: 'Reminder at {t}', remind_title: 'Task reminder',
       rp_morning: 'Morning', rp_noon: 'Noon', rp_evening: 'Evening', rp_night: 'Night',
@@ -78,8 +78,8 @@
       prev_month: 'ያለፈው ወር', next_month: 'የሚቀጥለው ወር', plan_dates_first: 'መጀመሪያ ትክክለኛ የመጀመሪያና የመጨረሻ ቀን ይምረጡ (እስከ 120 ቀን)።',
       plan_empty: 'ቢያንስ ለአንድ ቀን ተግባር ይጨምሩ',
       t_add: 'ተግባር ጨምር', t_remove: 'ተግባሩን አስወግድ', t_max: 'በቀን እስከ {n} ተግባራት', t_planned: 'የታቀደ',
-      rest_note: 'የእረፍት ቀን ነው። ምንም ተግባር አልተሰጠም። ተግባር ለመጨመር ማብሪያውን ያጥፉ።', copy_to: 'የዚህን ቀን ተግባራት ቅዳ ለ',
-      copy_empty: 'ባዶ ቀናት', copy_all: 'ሁሉም ቀናት', copy_need: 'መጀመሪያ ለዚህ ቀን ተግባር ይጨምሩ፣ ከዚያ መቅዳት ይችላሉ።',
+      rest_note: 'የእረፍት ቀን ነው። ምንም ተግባር አልተሰጠም። ተግባር ለመጨመር ማብሪያውን ያጥፉ።', copy_to: 'የዚህን ቀን ተግባራትና ማስታወሻዎች ቅዳ ለ',
+      copy_empty: 'ባዶ ቀናት', copy_all: 'ሁሉም ቀናት',
       copied_n: 'ለ{n} ቀናት ተቀድቷል', undo: 'ቀልብስ', rename: 'ስም ቀይር', tick_when_done: 'ሲጨርሱ ምልክት ያድርጉ', actions: 'ተግባራት',
       remind_add: 'አስታውስ', remind_at: 'ማስታወሻ በ{t}', remind_title: 'የተግባር ማስታወሻ',
       rp_morning: 'ጠዋት', rp_noon: 'ቀትር', rp_evening: 'ምሽት', rp_night: 'ሌሊት',
@@ -319,7 +319,7 @@
   const newFd = () => {
     const td = today(); return {
       title: '', due: '', target: '5', deadline: '', start: td, end: addDays(td, 29),
-      reminder: '20:00', mode: 'same', same: [''], sameRemind: [], plan: {}, remind: {}, rest: {}, undo: null, day: null, copyRemind: true
+      reminder: '20:00', mode: 'same', same: [''], sameRemind: [], plan: {}, remind: {}, rest: {}, undo: null, day: null
     };
   };
   const fd = mid => ui.fd[mid] || (ui.fd[mid] = newFd());
@@ -375,13 +375,12 @@
     return { planned, nEmpty, nAll, total: diff(r[0], r[1]) + 1, rest: isRest(sel), hasSel: hasTasks(sel) };
   }
   const planLabel = st => `${tr('plan_title')} · ${tr('planned_n', { n: st.planned, m: st.total })}`;
-  const copyBox = (st, d) => `<div class="hg-copy">
+  // Only shown once the day has a task: nothing to copy before that, so no hint is needed.
+  const copyBox = st => !st.hasSel ? '' : `<div class="hg-copy">
           <div class="hg-copy-l">${I_COPY}<span>${tr('copy_to')}</span></div>
           <div class="hg-copy-b">
             <button type="button" class="hg-cb" data-act="pfill" data-scope="empty"${st.hasSel && st.nEmpty ? '' : ' disabled'}><span>${tr('copy_empty')}</span><b>${st.nEmpty}</b></button>
             <button type="button" class="hg-cb" data-act="pfill" data-scope="all"${st.hasSel && st.nAll ? '' : ' disabled'}><span>${tr('copy_all')}</span><b>${st.nAll}</b></button></div>
-          <label class="hg-copy-rem"><input type="checkbox" data-act="pcopyrem"${d.copyRemind !== false ? ' checked' : ''}><span>${tr('rp_copy')}</span></label>
-          ${st.hasSel || st.rest ? '' : `<div class="hg-copy-h">${tr('copy_need')}</div>`}
         </div>`;
 
   // Typing doesn't repaint, so keep the day dot, the "x of y planned" line and the copy box in step with it.
@@ -392,7 +391,7 @@
     const cell = root.querySelector('.hg-d.sel');
     if (cell && !st.rest) { cell.classList.toggle('has', st.hasSel); if (st.hasSel && !cell.querySelector('b')) cell.insertAdjacentHTML('beforeend', '<b></b>'); if (!st.hasSel) cell.querySelector('b')?.remove(); }
     const eb = root.querySelector('.hg-plan > .hg-eyebrow'); if (eb) eb.textContent = planLabel(st);
-    const box = root.querySelector('.hg-copy'); if (box) box.outerHTML = copyBox(st, d);
+    const box = root.querySelector('.hg-copywrap'); if (box) box.innerHTML = copyBox(st);
   }
 
   function planner(mid, d) {
@@ -423,7 +422,7 @@
           <button type="button" class="hg-rest${rest ? ' on' : ''}" role="switch" aria-checked="${rest}" data-act="prest"><span>${tr('rest_day')}</span><span class="hg-sw"><i></i></span></button>
         </div>
         ${body}
-        ${copyBox(st, d)}
+        <div class="hg-copywrap">${copyBox(st)}</div>
         ${d.undo ? `<div class="hg-undo" role="status"><span>${tr('copied_n', { n: d.undo.n })}</span><button type="button" data-act="pundo">${tr('undo')}</button></div>` : ''}
       </div></div>`;
   }
@@ -654,7 +653,6 @@
         return paint(root, true);
       }
       case 'rsheet': return openReminderSheet(root, el);
-      case 'pcopyrem': { const d = fd(mid); d.copyRemind = el.checked; return; }
       case 'padd': {
         const d = fd(mid), r = rangeOf(d); if (!r) return;
         const day = dayOf(d, r), cur = d.plan[day]?.length ? d.plan[day] : [''];
@@ -683,7 +681,7 @@
         for (let x = r[0]; x <= r[1]; x = addDays(x, 1)) {
           if (x === day) continue;
           if (el.dataset.scope === 'empty' && (d.rest[x] || filled(d.plan[x]).length)) continue;
-          d.plan[x] = [...src]; d.remind[x] = d.copyRemind !== false ? [...rems] : []; delete d.rest[x]; n++;
+          d.plan[x] = [...src]; d.remind[x] = [...rems]; delete d.rest[x]; n++;
         }
         d.undo = n ? { ...before, n } : null;
         return paint(root, true);
