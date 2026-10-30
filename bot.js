@@ -9,7 +9,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
-const { ethiopiaToday, ethiopiaTimeHM, addDays, daysBetween, trailingMissedDays } = require('./utils/goalRules');
+const { ethiopiaToday, ethiopiaTimeHM, addDays, daysBetween, trailingMissedDays, isTaskReminderDue, FINAL_REMINDER_TIME } = require('./utils/goalRules');
 const { setTaskDone: setGoalTaskDone, emitGoal } = require('./utils/goalService');
 const fs = require('fs');
 const path = require('path');
@@ -2305,6 +2305,49 @@ async function notifyDailyReminder(menteeId, goal, tasks) {
   await safeSend(chatId, text, { ...HTML, reply_markup: { inline_keyboard: buttons } });
 }
 
+// Mentee: reminder for ONE task at the time the mentor set for it. Only that
+// task is shown, with its own "Mark done" button.
+async function notifyTaskReminder(menteeId, goal, task) {
+  const lang = await getUserLang(menteeId);
+  const am = lang === 'am';
+  const chatId = await resolveChatId(menteeId);
+  const text = card({
+    icon: '⏰',
+    title: am ? 'የተግባር ማስታወሻ' : 'Task Reminder',
+    body: am ? 'አሁን ሊያጠናቅቁት የሚገባ ተግባር፦' : 'It is time for this task:',
+    quote: `${goal.title}\n• ${task.title}`,
+    footer: am ? 'ዛሬ አንድ እርምጃ ወደፊት 🚶' : 'One step forward today 🚶',
+  });
+  await safeSend(chatId, text, {
+    ...HTML,
+    reply_markup: { inline_keyboard: [
+      [goldCallback(`${tSync(lang, 'btn_mark_goal_done')}: ${task.title.slice(0, 24)}`, `goal_done_${task.id}`)],
+      [goldButton(tSync(lang, 'btn_open_app'), `${APP_URL}?start=goal_${goal.id}`)],
+    ] },
+  });
+}
+
+// Mentee: the last reminder of the day (11:00 PM). Lists only what is still
+// unfinished today, so nothing is sent when everything is done.
+async function notifyFinalReminder(menteeId, goal, tasks) {
+  const lang = await getUserLang(menteeId);
+  const am = lang === 'am';
+  const chatId = await resolveChatId(menteeId);
+  const text = card({
+    icon: '🌙',
+    title: am ? 'የዛሬ የመጨረሻ ማስታወሻ' : 'Last Reminder for Today',
+    body: am ? 'ዛሬ ገና ያልተጠናቀቁ ተግባራት፦' : 'Still waiting to be done today:',
+    quote: `${goal.title}\n${tasks.map(t => `• ${t.title}`).join('\n')}`,
+    footer: am ? 'ቀኑ ከማለቁ በፊት ያጠናቅቁ 🙏' : 'Finish before the day ends 🙏',
+  });
+  const buttons = tasks.slice(0, 3).map(t => [goldCallback(
+    `${tSync(lang, 'btn_mark_goal_done')}: ${t.title.slice(0, 24)}`,
+    `goal_done_${t.id}`
+  )]);
+  buttons.push([goldButton(tSync(lang, 'btn_open_app'), `${APP_URL}?start=goal_${goal.id}`)]);
+  await safeSend(chatId, text, { ...HTML, reply_markup: { inline_keyboard: buttons } });
+}
+
 // ─── Message Handler ──────────────────────────────────────────────────────────
 
 bot.on('message', async (msg) => {
@@ -3707,6 +3750,8 @@ async function runGoalMaintenance() {
     const today = ethiopiaToday();
     await sweepMissedGoalTasks(today);
     await sendGoalReminders(today);
+    await sendTaskReminders(today);
+    await sendFinalReminders(today);
   } catch (e) {
     console.error('[Scheduler] Goal maintenance failed:', e.message);
   } finally {
@@ -3741,6 +3786,7 @@ async function sendGoalReminders(today) {
     .select('id, goal_id, mentee_id, title, due_date, goals!inner(id, title, type, reminder_time, status)')
     .eq('status', 'pending')
     .eq('goals.status', 'active')
+    .is('remind_at', null) // tasks with their own reminder are handled by sendTaskReminders, never twice
     .gte('due_date', today)
     .lte('due_date', addDays(today, 1))
     .or(notClaimed);
@@ -3764,6 +3810,84 @@ async function sendGoalReminders(today) {
   }
   for (const { goal, menteeId, tasks } of byGoal.values()) await notifyDailyReminder(menteeId, goal, tasks);
   if (byGoal.size) console.log(`[Scheduler] Sent ${byGoal.size} goal reminder(s).`);
+}
+
+// Per-task reminders. A task is claimed (task_reminder_sent_on = today) with a
+// conditional UPDATE before it is sent, so a retry, a restart or two ticks
+// overlapping can never send the same task twice. Only today's pending tasks
+// qualify: done, skipped (rest day) and missed tasks never remind. A reminder
+// more than REMINDER_GRACE_MIN late is dropped; the 11:00 PM reminder covers it.
+async function sendTaskReminders(today) {
+  const nowHM = ethiopiaTimeHM();
+  const notClaimed = `task_reminder_sent_on.is.null,task_reminder_sent_on.neq.${today}`;
+  const { data: rows, error } = await supabase
+    .from('goal_tasks')
+    .select('id, goal_id, mentee_id, title, remind_at, goals!inner(id, title, type, status)')
+    .eq('status', 'pending')
+    .eq('goals.status', 'active')
+    .eq('due_date', today)
+    .not('remind_at', 'is', null)
+    .or(notClaimed);
+  if (error) throw error;
+
+  const due = (rows || []).filter(r => isTaskReminderDue(String(r.remind_at).substring(0, 5), nowHM));
+  if (!due.length) return;
+
+  const { data: claimed } = await supabase.from('goal_tasks')
+    .update({ task_reminder_sent_on: today }).in('id', due.map(r => r.id)).or(notClaimed).select('id');
+  const ok = new Set((claimed || []).map(r => r.id));
+
+  let sent = 0;
+  for (const r of due.filter(r => ok.has(r.id))) {
+    try { await notifyTaskReminder(r.mentee_id, r.goals, r); sent++; }
+    catch (e) { console.error('[Scheduler] Task reminder failed:', e.message); }
+  }
+  if (sent) console.log(`[Scheduler] Sent ${sent} per-task reminder(s).`);
+}
+
+// The last reminder of the day, at FINAL_REMINDER_TIME (11:00 PM). Sent once
+// per goal per day (goals.final_reminder_sent_on) and only for goals that use
+// per-task reminders today. It lists the tasks still pending and is skipped
+// when everything is done.
+async function sendFinalReminders(today) {
+  if (ethiopiaTimeHM() < FINAL_REMINDER_TIME) return;
+  const { data: withRemind, error } = await supabase
+    .from('goal_tasks')
+    .select('goal_id, goals!inner(status)')
+    .eq('goals.status', 'active')
+    .eq('due_date', today)
+    .not('remind_at', 'is', null);
+  if (error) throw error;
+  const goalIds = [...new Set((withRemind || []).map(r => r.goal_id))];
+  if (!goalIds.length) return;
+
+  const { data: pending, error: pErr } = await supabase
+    .from('goal_tasks')
+    .select('id, goal_id, mentee_id, title, goals!inner(id, title, type, status, final_reminder_sent_on)')
+    .eq('status', 'pending')
+    .eq('due_date', today)
+    .in('goal_id', goalIds)
+    .order('position', { ascending: true });
+  if (pErr) throw pErr;
+
+  const byGoal = new Map();
+  for (const t of pending || []) {
+    if (String(t.goals.final_reminder_sent_on || '').substring(0, 10) === today) continue;
+    if (!byGoal.has(t.goal_id)) byGoal.set(t.goal_id, { goal: t.goals, menteeId: t.mentee_id, tasks: [] });
+    byGoal.get(t.goal_id).tasks.push(t);
+  }
+  if (!byGoal.size) return;
+
+  const { data: claimed } = await supabase.from('goals')
+    .update({ final_reminder_sent_on: today }).in('id', [...byGoal.keys()])
+    .or(`final_reminder_sent_on.is.null,final_reminder_sent_on.neq.${today}`).select('id');
+  let sent = 0;
+  for (const g of claimed || []) {
+    const { goal, menteeId, tasks } = byGoal.get(g.id);
+    try { await notifyFinalReminder(menteeId, goal, tasks); sent++; }
+    catch (e) { console.error('[Scheduler] Final reminder failed:', e.message); }
+  }
+  if (sent) console.log(`[Scheduler] Sent ${sent} last reminder(s).`);
 }
 
 setInterval(runGoalMaintenance, 5 * 60 * 1000);

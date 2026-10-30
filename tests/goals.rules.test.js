@@ -89,4 +89,33 @@ test('per-day plan validation', () => {
   assert(R.normalizeDayPlan({ [T]: ['1', '2', '3', '4', '5'] }, T, '2026-10-10').error, 'too many tasks rejected');
 });
 
+test('per-task reminders: due window', () => {
+  assert.strictEqual(R.isTaskReminderDue('06:00', '05:59'), false, 'not before its time');
+  assert.strictEqual(R.isTaskReminderDue('06:00', '06:00'), true, 'at its time');
+  assert.strictEqual(R.isTaskReminderDue('06:00:00', '07:59'), true, 'DB TIME values (HH:MM:SS) work, still inside the grace window');
+  assert.strictEqual(R.isTaskReminderDue('06:00', '08:01'), false, 'too late: skipped, the 11 PM reminder covers it');
+  assert.strictEqual(R.isTaskReminderDue(null, '06:00'), false, 'no reminder time, no reminder');
+  assert.strictEqual(R.FINAL_REMINDER_TIME, '23:00');
+});
+
+test('per-task reminders: plan and template keep old shapes when unused', () => {
+  const plan = R.normalizeDayPlan({ [T]: ['Prayer', { title: 'Scripture', remind_at: '07:15' }, { title: 'Walk' }] }, T, '2026-10-10');
+  assert.deepStrictEqual(plan.plan[T], ['Prayer', { title: 'Scripture', remind_at: '07:15' }, 'Walk']);
+  assert(R.normalizeDayPlan({ [T]: [{ title: 'x', remind_at: '25:00' }] }, T, '2026-10-10').error, 'bad time rejected');
+  assert.deepStrictEqual(R.normalizeTemplate(['a', { title: 'b', remind_at: '21:00' }], 't').template, ['a', { title: 'b', remind_at: '21:00' }]);
+  assert(R.normalizeTemplate(['a', { title: 'b', remind_at: 'nope' }], 't').error, 'bad template time rejected');
+  assert.deepStrictEqual(R.normalizeTemplate(undefined, 'Title').template, ['Title'], 'falls back to the goal title');
+});
+
+test('per-task reminders: generated tasks carry remind_at only when set', () => {
+  const g = { custom_days: false, task_template: ['Prayer', { title: 'Journal', remind_at: '20:30' }], title: 'x' };
+  const rows = R.buildChallengeTasks(g, '2026-10-07', '2026-10-08');
+  assert.strictEqual(rows.length, 4);
+  assert(!('remind_at' in rows[0]), 'plain task has no remind_at key (works before the migration)');
+  assert.strictEqual(rows[1].remind_at, '20:30');
+  assert.strictEqual(rows[1].title, 'Journal');
+  const custom = R.buildChallengeTasks({ custom_days: true, task_template: [] }, T, T, { [T]: [{ title: 'A', remind_at: '06:00' }, 'B'] });
+  assert.deepStrictEqual(custom.map(r => [r.title, r.remind_at ?? null]), [['A', '06:00'], ['B', null]]);
+});
+
 console.log(`${passed} goal rule tests passed`);

@@ -42,6 +42,11 @@
       rest_note: 'Rest day. Nothing is assigned. Switch off to add tasks.', copy_to: "Copy this day's tasks to",
       copy_empty: 'Empty days', copy_all: 'All days', copy_need: 'Add a task to this day first, then you can copy it.',
       copied_n: 'Copied to {n} days', undo: 'Undo', rename: 'Rename', tick_when_done: 'Tick when finished', actions: 'Actions',
+      remind_add: 'Remind', remind_at: 'Reminder at {t}', remind_title: 'Task reminder', remind_on: 'Send a reminder',
+      rp_morning: 'Morning', rp_noon: 'Noon', rp_evening: 'Evening', rp_night: 'Night',
+      rp_custom: 'Or pick a custom time', rp_save: 'Save reminder', rp_off: 'No reminder for this task', rp_close: 'Close',
+      rp_copy: 'Include reminder times', rp_daily_note: 'Used for tasks that have no reminder time of their own.',
+      rp_last: 'Last reminder for unfinished tasks: 11:00 PM',
     },
     am: {
       new_goal: 'አዲስ ግብ', type_one: 'ነጠላ ተግባር', type_prog: 'ደረጃ በደረጃ የሚከናወን', type_chal: 'ቻሌንጅ',
@@ -76,6 +81,11 @@
       rest_note: 'የእረፍት ቀን ነው። ምንም ተግባር አልተሰጠም። ተግባር ለመጨመር ማብሪያውን ያጥፉ።', copy_to: 'የዚህን ቀን ተግባራት ቅዳ ለ',
       copy_empty: 'ባዶ ቀናት', copy_all: 'ሁሉም ቀናት', copy_need: 'መጀመሪያ ለዚህ ቀን ተግባር ይጨምሩ፣ ከዚያ መቅዳት ይችላሉ።',
       copied_n: 'ለ{n} ቀናት ተቀድቷል', undo: 'ቀልብስ', rename: 'ስም ቀይር', tick_when_done: 'ሲጨርሱ ምልክት ያድርጉ', actions: 'ተግባራት',
+      remind_add: 'አስታውስ', remind_at: 'ማስታወሻ በ{t}', remind_title: 'የተግባር ማስታወሻ', remind_on: 'ማስታወሻ ላክ',
+      rp_morning: 'ጠዋት', rp_noon: 'ቀትር', rp_evening: 'ምሽት', rp_night: 'ሌሊት',
+      rp_custom: 'ወይም የራስዎን ሰዓት ይምረጡ', rp_save: 'ማስታወሻውን አስቀምጥ', rp_off: 'ለዚህ ተግባር ማስታወሻ አያስፈልግም', rp_close: 'ዝጋ',
+      rp_copy: 'የማስታወሻ ሰዓቶችንም ቅዳ', rp_daily_note: 'የራሳቸው የማስታወሻ ሰዓት ለሌላቸው ተግባራት ያገለግላል።',
+      rp_last: 'ላልተጠናቀቁ ተግባራት የመጨረሻ ማስታወሻ፦ 11:00 PM',
     },
   };
   const tr = (k, r) => {
@@ -92,6 +102,12 @@
   const addDays = (s, n) => new Date(utc(s) + n * 864e5).toISOString().substring(0, 10);
   const diff = (a, b) => Math.round((utc(b) - utc(a)) / 864e5);
   const fmt = (s, o) => new Date(utc(s)).toLocaleDateString(currentLanguage === 'am' ? 'am-ET' : 'en-US', { timeZone: 'UTC', ...o });
+
+  // Reminder times are 'HH:MM' strings in Ethiopia local time, same as the server.
+  const hm = v => (v ? String(v).substring(0, 5) : '');
+  const fmtHM = v => { const [h, m] = hm(v).split(':').map(Number); return new Date(Date.UTC(2000, 0, 1, h, m)).toLocaleTimeString(currentLanguage === 'am' ? 'am-ET' : 'en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit' }); };
+  const I_CLOCK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+  const PRESETS = [['rp_morning', '06:00'], ['rp_noon', '12:00'], ['rp_evening', '18:00'], ['rp_night', '21:00']];
 
   const CHK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
   const ICO = p => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
@@ -154,6 +170,7 @@
     if (t.status === 'missed') sub = tr('missed');
     else if (t.status === 'skipped') sub = tr('skipped');
     else if (g.type !== 'challenge' && t.due_date && !on) sub = fmt(t.due_date, { month: 'short', day: 'numeric' });
+    else if (role === 'mentee' && t.remind_at && !on) sub = tr('remind_at', { t: fmtHM(t.remind_at) });
     if (role === 'mentor' && ui.ren[t.id]) {
       return `<div class="hg-trow hg-ren"><input type="text" maxlength="200" data-ren="${t.id}" value="${esc(t.title)}">
         <button type="button" class="hg-btn hg-btn-sm" data-act="saveren" data-task="${t.id}">${tr('save')}</button></div>`;
@@ -179,8 +196,15 @@
       <button type="button" class="hg-task${on ? ' dn' : ''}${t.status === 'missed' ? ' ms' : ''}" data-act="tick" data-task="${t.id}" aria-pressed="${on}"${lk ? ' disabled' : ''}>
         <span class="hg-ck${on ? ' on' : ''}">${on ? CHK : ''}</span>
         <span class="hg-tcol"><span class="hg-tt">${label}</span><span class="hg-sub">${sub}</span></span>
-      </button>${tools}</div>${note}`;
+      </button>${tools}</div>${remindRow(g, t, role)}${note}`;
   }
+
+  // Mentor: a time chip under an upcoming task of a challenge. Opens the reminder sheet.
+  function remindRow(g, t, role) {
+    if (role !== 'mentor' || g.type !== 'challenge' || t.status !== 'pending' || !t.due_date || d10(t.due_date) < today()) return '';
+    return `<div class="hg-rrow">${chipHtml(hm(t.remind_at), `data-act="rsheet" data-scope="task" data-task="${t.id}"`)}</div>`;
+  }
+  const chipHtml = (at, attrs) => `<button type="button" class="hg-rchip${at ? ' on' : ''}" ${attrs}>${I_CLOCK}<span>${at ? esc(fmtHM(at)) : tr('remind_add')}</span></button>`;
 
   function dayInfo(g, date) {
     const ts = g.tasks.filter(t => d10(t.due_date) === date && t.status !== 'skipped');
@@ -261,7 +285,7 @@
     return `<div class="hg-form">
       <label>${tr('f_title')}<input type="text" maxlength="200" data-f="title" value="${esc(g.title)}"></label>
       <label>${tr('f_end')}<input type="date" data-f="end" value="${g.end_date ? d10(g.end_date) : ''}"${g.type === 'one_time' || g.type === 'progressive' ? '' : ' min="' + d10(g.start_date) + '"'}></label>
-      ${g.type === 'challenge' ? `<label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${g.reminder_time ? String(g.reminder_time).substring(0, 5) : ''}"></label>` : ''}
+      ${g.type === 'challenge' ? `<label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${g.reminder_time ? String(g.reminder_time).substring(0, 5) : ''}"></label><div class="hg-hint">${tr('rp_daily_note')} ${tr('rp_last')}</div>` : ''}
       <div class="hg-actions"><button type="button" class="hg-btn hg-btn-ghost" data-act="cancel-edit" data-goal="${g.id}">${tr('cancel')}</button>
       <button type="button" class="hg-btn" data-act="save-edit" data-goal="${g.id}">${tr('save')}</button></div></div>`;
   }
@@ -294,7 +318,7 @@
   const newFd = () => {
     const td = today(); return {
       title: '', due: '', target: '5', deadline: '', start: td, end: addDays(td, 29),
-      reminder: '20:00', mode: 'same', same: [''], plan: {}, rest: {}, undo: null, day: null
+      reminder: '20:00', mode: 'same', same: [''], sameRemind: [], plan: {}, remind: {}, rest: {}, undo: null, day: null, copyRemind: true
     };
   };
   const fd = mid => ui.fd[mid] || (ui.fd[mid] = newFd());
@@ -314,7 +338,7 @@
     const same = form.querySelectorAll('[data-tpl] input');
     if (same.length) d.same = [...same].map(i => i.value);
     const ed = form.querySelector('[data-dayedit]');
-    const dayIns = ed ? [...ed.querySelectorAll('input')] : [];
+    const dayIns = ed ? [...ed.querySelectorAll('.hg-pt input')] : [];
     if (dayIns.length) d.plan[ed.dataset.dayedit] = dayIns.map(i => i.value);
   }
 
@@ -325,12 +349,19 @@
   const I_COPY = SV('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>');
 
   // One task row = number, field, remove. One add button under the list. Used by both modes.
-  const taskRows = (vals, remAct) => vals.map((v, i) => `<div class="hg-pt"><span class="hg-num">${i + 1}</span>
+  const taskRows = (vals, remAct, rems, scope, day) => vals.map((v, i) => `<div class="hg-pt"><span class="hg-num">${i + 1}</span>
     <input type="text" maxlength="200" placeholder="${tr('f_daily_ph')}" value="${esc(v)}">
+    ${chipHtml(hm(rems?.[i]), `data-act="rsheet" data-scope="${scope}" data-i="${i}"${day ? ` data-date="${day}"` : ''}`)}
     ${vals.length > 1 ? `<button type="button" class="hg-x" data-act="${remAct}" data-i="${i}" aria-label="${tr('t_remove')}">${I_X}</button>` : ''}</div>`).join('');
   const addTask = (act, n) => n < MAX_TASKS
     ? `<button type="button" class="hg-pt-add" data-act="${act}">${I_PLUS}<span>${tr('t_add')}</span><em>${n}/${MAX_TASKS}</em></button>`
     : `<div class="hg-pt-max">${tr('t_max', { n: MAX_TASKS })}</div>`;
+  // A day's non-empty titles with the reminder time that sits on the same row.
+  const pairsOf = (d, day) => {
+    const titles = [], rems = [];
+    (d.plan[day] || []).forEach((v, i) => { const t = String(v).trim(); if (t) { titles.push(t); rems.push(hm(d.remind?.[day]?.[i])); } });
+    return { titles, rems };
+  };
   const dayOf = (d, r) => d.day && d.day >= r[0] && d.day <= r[1] ? d.day : r[0];
 
   function planStats(d, r, sel) {
@@ -343,11 +374,12 @@
     return { planned, nEmpty, nAll, total: diff(r[0], r[1]) + 1, rest: isRest(sel), hasSel: hasTasks(sel) };
   }
   const planLabel = st => `${tr('plan_title')} · ${tr('planned_n', { n: st.planned, m: st.total })}`;
-  const copyBox = st => `<div class="hg-copy">
+  const copyBox = (st, d) => `<div class="hg-copy">
           <div class="hg-copy-l">${I_COPY}<span>${tr('copy_to')}</span></div>
           <div class="hg-copy-b">
             <button type="button" class="hg-cb" data-act="pfill" data-scope="empty"${st.hasSel && st.nEmpty ? '' : ' disabled'}><span>${tr('copy_empty')}</span><b>${st.nEmpty}</b></button>
             <button type="button" class="hg-cb" data-act="pfill" data-scope="all"${st.hasSel && st.nAll ? '' : ' disabled'}><span>${tr('copy_all')}</span><b>${st.nAll}</b></button></div>
+          <label class="hg-copy-rem"><input type="checkbox" data-act="pcopyrem"${d.copyRemind !== false ? ' checked' : ''}><span>${tr('rp_copy')}</span></label>
           ${st.hasSel || st.rest ? '' : `<div class="hg-copy-h">${tr('copy_need')}</div>`}
         </div>`;
 
@@ -359,7 +391,7 @@
     const cell = root.querySelector('.hg-d.sel');
     if (cell && !st.rest) { cell.classList.toggle('has', st.hasSel); if (st.hasSel && !cell.querySelector('b')) cell.insertAdjacentHTML('beforeend', '<b></b>'); if (!st.hasSel) cell.querySelector('b')?.remove(); }
     const eb = root.querySelector('.hg-plan > .hg-eyebrow'); if (eb) eb.textContent = planLabel(st);
-    const box = root.querySelector('.hg-copy'); if (box) box.outerHTML = copyBox(st);
+    const box = root.querySelector('.hg-copy'); if (box) box.outerHTML = copyBox(st, d);
   }
 
   function planner(mid, d) {
@@ -379,7 +411,7 @@
     const list = d.plan[sel]?.length ? d.plan[sel] : [''];
     const body = rest
       ? `<div class="hg-restnote">${I_MOON}<span>${tr('rest_note')}</span></div>`
-      : `<div class="hg-tasks">${taskRows(list, 'prem')}</div>${addTask('padd', list.length)}`;
+      : `<div class="hg-tasks">${taskRows(list, 'prem', d.remind?.[sel], 'day', sel)}</div>${addTask('padd', list.length)}`;
     return `<div class="hg-plan">
       <div class="hg-eyebrow">${planLabel(st)}</div>
       <div class="hg-calwrap">${cal}</div>
@@ -390,7 +422,7 @@
           <button type="button" class="hg-rest${rest ? ' on' : ''}" role="switch" aria-checked="${rest}" data-act="prest"><span>${tr('rest_day')}</span><span class="hg-sw"><i></i></span></button>
         </div>
         ${body}
-        ${copyBox(st)}
+        ${copyBox(st, d)}
         ${d.undo ? `<div class="hg-undo" role="status"><span>${tr('copied_n', { n: d.undo.n })}</span><button type="button" data-act="pundo">${tr('undo')}</button></div>` : ''}
       </div></div>`;
   }
@@ -426,7 +458,7 @@
       const len = rangeOf(d) ? diff(d.start, d.end) + 1 : 0;
       const chips = [7, 14, 21, 30, 40].map(n => `<button type="button" class="hg-pill${len === n ? ' on' : ''}" data-act="dur" data-n="${n}">${tr('days_n', { n })}</button>`).join('');
       const sameList = d.same.length ? d.same : [''];
-      const same = `<div class="hg-tpl"><span>${tr('f_daily')}</span><div data-tpl>${taskRows(sameList, 'trem')}</div>${addTask('addtpl', sameList.length)}</div>`;
+      const same = `<div class="hg-tpl"><span>${tr('f_daily')}</span><div data-tpl>${taskRows(sameList, 'trem', d.sameRemind, 'tpl')}</div>${addTask('addtpl', sameList.length)}</div>`;
       fields = `<div class="hg-row2"><label>${tr('f_start')}<input type="date" data-f="start" min="${td}" value="${esc(d.start)}"></label>
         <label>${tr('f_end')}<input type="date" data-f="end" min="${esc(d.start || td)}" value="${esc(d.end)}"></label></div>
         <div class="hg-chips" role="group" aria-label="${tr('f_dur')}">${chips}</div>
@@ -434,7 +466,8 @@
           <button type="button" class="${d.mode === 'same' ? 'on' : ''}" data-act="fmode" data-mode="same">${tr('mode_same')}</button>
           <button type="button" class="${d.mode === 'custom' ? 'on' : ''}" data-act="fmode" data-mode="custom">${tr('mode_custom')}</button></div>
         ${d.mode === 'custom' ? planner(menteeId, d) : same}
-        <label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${esc(d.reminder)}"></label>`;
+        <label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${esc(d.reminder)}"></label>
+        <div class="hg-hint">${tr('rp_daily_note')} ${tr('rp_last')}</div>`;
     }
     return `<div class="hg-hero"><span class="hg-type-ico hg-hero-ico">${icon(type, 28)}</span>
         <div><h2>${tr(TK[type][0])}</h2><p>${tr(k + '_hero')}</p></div></div>
@@ -579,12 +612,17 @@
       if (d.mode === 'custom') {
         const r = rangeOf(d);
         const plan = {};
-        if (r) for (const [x, v] of Object.entries(d.plan)) if (x >= r[0] && x <= r[1] && !d.rest?.[x] && filled(v).length) plan[x] = filled(v);
+        if (r) for (const x of Object.keys(d.plan)) {
+          if (x < r[0] || x > r[1] || d.rest?.[x]) continue;
+          const { titles, rems } = pairsOf(d, x);
+          if (titles.length) plan[x] = titles.map((title, i) => rems[i] ? { title, remind_at: rems[i] } : title);
+        }
         if (!Object.keys(plan).length) return { error: tr('plan_empty') };
         body.day_plan = plan;
       } else {
-        body.task_template = filled(d.same);
-        if (!body.task_template.length) body.task_template = [body.title];
+        const tpl = [];
+        d.same.forEach((v, i) => { const title = String(v).trim(); if (title) tpl.push(hm(d.sameRemind?.[i]) ? { title, remind_at: hm(d.sameRemind[i]) } : title); });
+        body.task_template = tpl.length ? tpl : [body.title];
       }
     }
     return body;
@@ -611,20 +649,22 @@
         const ins = root.querySelectorAll('[data-tpl] input'); return ins[ins.length - 1]?.focus();
       }
       case 'trem': {
-        const d = fd(mid); d.same.splice(Number(el.dataset.i), 1); if (!d.same.length) d.same = [''];
+        const d = fd(mid); d.same.splice(Number(el.dataset.i), 1); (d.sameRemind || []).splice(Number(el.dataset.i), 1); if (!d.same.length) d.same = [''];
         return paint(root, true);
       }
+      case 'rsheet': return openReminderSheet(root, el);
+      case 'pcopyrem': { const d = fd(mid); d.copyRemind = el.checked; return; }
       case 'padd': {
         const d = fd(mid), r = rangeOf(d); if (!r) return;
         const day = dayOf(d, r), cur = d.plan[day]?.length ? d.plan[day] : [''];
         if (cur.length < MAX_TASKS) d.plan[day] = [...cur, ''];
         d.undo = null; paint(root, true);
-        const ins = root.querySelectorAll('[data-dayedit] input'); return ins[ins.length - 1]?.focus();
+        const ins = root.querySelectorAll('[data-dayedit] .hg-pt input'); return ins[ins.length - 1]?.focus();
       }
       case 'prem': {
         const d = fd(mid), r = rangeOf(d); if (!r) return;
         const day = dayOf(d, r), cur = [...(d.plan[day] || [''])];
-        cur.splice(Number(el.dataset.i), 1); d.plan[day] = cur.length ? cur : [''];
+        cur.splice(Number(el.dataset.i), 1); d.plan[day] = cur.length ? cur : ['']; (d.remind?.[day] || []).splice(Number(el.dataset.i), 1);
         d.undo = null; return paint(root, true);
       }
       case 'prest': {   // rest day is a switch: tasks typed for the day are kept, just hidden and not sent
@@ -635,21 +675,21 @@
       }
       case 'pfill': {
         const d = fd(mid), r = rangeOf(d); if (!r) return;
-        const day = dayOf(d, r), src = d.rest?.[day] ? [] : filled(d.plan[day]);
+        const day = dayOf(d, r), { titles: src, rems } = d.rest?.[day] ? { titles: [], rems: [] } : pairsOf(d, day);
         if (!src.length) return;
-        const before = { plan: JSON.parse(JSON.stringify(d.plan)), rest: { ...d.rest } };   // for Undo
-        let n = 0; d.rest = d.rest || {};
+        const before = { plan: JSON.parse(JSON.stringify(d.plan)), remind: JSON.parse(JSON.stringify(d.remind || {})), rest: { ...d.rest } };   // for Undo
+        let n = 0; d.rest = d.rest || {}; d.remind = d.remind || {};
         for (let x = r[0]; x <= r[1]; x = addDays(x, 1)) {
           if (x === day) continue;
           if (el.dataset.scope === 'empty' && (d.rest[x] || filled(d.plan[x]).length)) continue;
-          d.plan[x] = [...src]; delete d.rest[x]; n++;
+          d.plan[x] = [...src]; d.remind[x] = d.copyRemind !== false ? [...rems] : []; delete d.rest[x]; n++;
         }
         d.undo = n ? { ...before, n } : null;
         return paint(root, true);
       }
       case 'pundo': {
         const d = fd(mid); if (!d.undo) return;
-        d.plan = d.undo.plan; d.rest = d.undo.rest; d.undo = null;
+        d.plan = d.undo.plan; d.remind = d.undo.remind; d.rest = d.undo.rest; d.undo = null;
         return paint(root, true);
       }
       case 'create': {
@@ -765,6 +805,72 @@
   baseH = viewH();
   window.visualViewport?.addEventListener('resize', onViewport);
   window.Telegram?.WebApp?.onEvent?.('viewportChanged', onViewport);
+
+  // ── reminder sheet ──────────────────────────────────────────────────────
+  // Bottom sheet for one task's reminder: on/off, quick times, and the phone's
+  // own time picker (same <input type="time"> the live-session scheduler uses).
+  // Sits on <body> so it is never clipped by the page it opened from. Max 85% of
+  // the screen high with only the middle scrolling, so Save is always visible.
+  let rsEl = null, rsKey = null;
+  function closeReminderSheet() {
+    if (!rsEl) return;
+    document.removeEventListener('keydown', rsKey);
+    rsEl.remove(); rsEl = null;
+  }
+  function openReminderSheet(root, el) {
+    closeReminderSheet();
+    const scope = el.dataset.scope, mid = root.dataset.mentee, i = Number(el.dataset.i), date = el.dataset.date;
+    let title = '', at = '';
+    if (scope === 'tpl') { const d = fd(mid); title = String(d.same[i] || '').trim(); at = hm(d.sameRemind?.[i]); }
+    else if (scope === 'day') { const d = fd(mid); title = String(d.plan[date]?.[i] || '').trim(); at = hm(d.remind?.[date]?.[i]); }
+    else { const f = findTask(el.dataset.task, root); if (!f) return; title = f.t.title; at = hm(f.t.remind_at); }
+    let on = !!at;
+    let time = at || '06:00';
+    const ov = document.createElement('div');
+    ov.className = 'hg-rs-ov';
+    rsEl = ov;
+    const draw = () => {
+      ov.innerHTML = `<div class="hg-rs" role="dialog" aria-modal="true" aria-label="${tr('remind_title')}">
+        <div class="hg-rs-head"><h3>${esc(title) || tr('remind_title')}</h3>
+          <button type="button" class="hg-x" data-rs="close" aria-label="${tr('rp_close')}">${I_X}</button></div>
+        <div class="hg-rs-body">
+          <button type="button" class="hg-rest${on ? ' on' : ''}" role="switch" aria-checked="${on}" data-rs="sw"><span>${tr('remind_on')}</span><span class="hg-sw"><i></i></span></button>
+          <div class="hg-rs-presets" role="group">${PRESETS.map(([k, v]) => `<button type="button" class="hg-pill${on && time === v ? ' on' : ''}" data-rs="p" data-at="${v}"${on ? '' : ' disabled'}><b>${tr(k)}</b> ${esc(fmtHM(v))}</button>`).join('')}</div>
+          <label class="hg-rs-custom">${tr('rp_custom')}<input type="time" data-rs="t" value="${time}"${on ? '' : ' disabled'}></label>
+          <div class="hg-hint">${tr('rp_last')}</div>
+        </div>
+        <div class="hg-rs-foot"><button type="button" class="hg-btn" data-rs="save">${tr('rp_save')}</button></div></div>`;
+    };
+    draw();
+    ov.addEventListener('click', e => {
+      if (e.target === ov) return closeReminderSheet();
+      const b = e.target.closest('[data-rs]');
+      if (!b) return;
+      const k = b.dataset.rs;
+      if (k === 'close') return closeReminderSheet();
+      if (k === 'sw') { on = !on; return draw(); }
+      if (k === 'p') { time = b.dataset.at; return draw(); }
+      if (k === 'save') {
+        const val = on && /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? time : '';
+        closeReminderSheet();
+        if (scope === 'task') return call(`/api/goals/tasks/${el.dataset.task}`, 'PATCH', { remind_at: val });
+        const d = fd(mid);
+        if (scope === 'tpl') { d.sameRemind = d.sameRemind || []; d.sameRemind[i] = val; }
+        else { d.remind = d.remind || {}; d.remind[date] = d.remind[date] || []; d.remind[date][i] = val; }
+        paint(root, true);
+      }
+    });
+    ov.addEventListener('input', e => {   // the native picker: a custom time replaces the preset highlight
+      if (e.target.dataset.rs !== 't') return;
+      time = e.target.value;
+      ov.querySelectorAll('[data-rs="p"]').forEach(p => p.classList.toggle('on', p.dataset.at === time));
+    });
+    rsKey = e => { if (e.key === 'Escape') closeReminderSheet(); };
+    document.addEventListener('keydown', rsKey);
+    document.body.appendChild(ov);
+    haptic('light');
+    ov.querySelector('.hg-rs')?.focus?.();
+  }
 
   function bind(root) {
     if (root._hg) return;

@@ -10,6 +10,11 @@ const MS_DAY = 86400000;
 const MAX_CHALLENGE_DAYS = 120;
 const MAX_TEMPLATE_TASKS = 4;
 const MAX_PROGRESSIVE = 50;
+// Per-task reminders: a reminder that is more than this late (e.g. the server
+// was down, or the task was added after its time) is skipped, not sent hours late.
+const REMINDER_GRACE_MIN = 120;
+// Last reminder of the day: lists what is still unfinished. Ethiopia local time.
+const FINAL_REMINDER_TIME = '23:00';
 
 function ethiopiaToday() {
   // en-CA formats as YYYY-MM-DD
@@ -28,6 +33,31 @@ const addDays = (s, n) => formatDay(parseDay(s) + n * MS_DAY);
 const daysBetween = (a, b) => Math.round((parseDay(b) - parseDay(a)) / MS_DAY); // b - a
 const isValidDay = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && formatDay(parseDay(s)) === s;
 const isValidTime = s => typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+
+const hmToMin = s => { const [h, m] = String(s).substring(0, 5).split(':').map(Number); return h * 60 + m; };
+
+// Is a per-task reminder due right now? True from remind_at until
+// REMINDER_GRACE_MIN later (same Ethiopia day, so no wrap-around).
+function isTaskReminderDue(remindAt, nowHM = ethiopiaTimeHM()) {
+  if (!remindAt) return false;
+  const late = hmToMin(nowHM) - hmToMin(remindAt);
+  return late >= 0 && late <= REMINDER_GRACE_MIN;
+}
+
+// A mentor's task entry is a title string (no reminder) or { title, remind_at }.
+// Returns { title, remind_at } (remind_at null when absent) or { error }.
+function taskItem(x) {
+  const raw = x && typeof x === 'object' ? x : { title: x };
+  const title = String(raw.title ?? '').trim().slice(0, 200);
+  const at = raw.remind_at ? String(raw.remind_at).substring(0, 5) : null;
+  if (at && !isValidTime(at)) return { error: 'Invalid reminder time' };
+  return { title, remind_at: at };
+}
+// Keep plain strings when there is no reminder, so stored data for existing
+// goals and old clients stays exactly as it was.
+const compactItem = it => (it.remind_at ? { title: it.title, remind_at: it.remind_at } : it.title);
+const itemTitle = x => (x && typeof x === 'object' ? String(x.title ?? '') : String(x ?? ''));
+const itemRemind = x => (x && typeof x === 'object' && x.remind_at ? String(x.remind_at).substring(0, 5) : null);
 
 // dueDate may be 'YYYY-MM-DD' or a full timestamp string; null/empty = no due date.
 function isGoalPastDue(dueDate, today = ethiopiaToday()) {
@@ -103,7 +133,19 @@ function trailingMissedDays(tasks, today = ethiopiaToday()) {
   return run;
 }
 
-// Validates a mentor's day-by-day plan: { 'YYYY-MM-DD': ['task', ...] }.
+// Same for the "same every day" template: ['task', { title, remind_at }, ...].
+function normalizeTemplate(raw, fallbackTitle) {
+  const items = [];
+  for (const x of Array.isArray(raw) ? raw : [fallbackTitle]) {
+    const it = taskItem(x);
+    if (it.error) return { error: it.error };
+    if (it.title) items.push(compactItem(it));
+  }
+  if (!items.length || items.length > MAX_TEMPLATE_TASKS) return { error: `Add 1 to ${MAX_TEMPLATE_TASKS} daily tasks` };
+  return { template: items };
+}
+
+// Validates a mentor's day-by-day plan: { 'YYYY-MM-DD': ['task' | { title, remind_at }, ...] }.
 // Dates outside start..end are rejected, titles are trimmed/clamped, and a day
 // with no tasks is simply a rest day. Returns { plan } or { error }.
 function normalizeDayPlan(raw, start, end) {
@@ -112,9 +154,14 @@ function normalizeDayPlan(raw, start, end) {
   let any = false;
   for (const [d, list] of Object.entries(raw)) {
     if (!isValidDay(d) || d < day(start) || d > day(end)) return { error: `${d} is outside the challenge dates` };
-    const titles = (Array.isArray(list) ? list : []).map(x => String(x ?? '').trim().slice(0, 200)).filter(Boolean);
-    if (titles.length > MAX_TEMPLATE_TASKS) return { error: `A day can have at most ${MAX_TEMPLATE_TASKS} tasks (${d})` };
-    if (titles.length) { plan[d] = titles; any = true; }
+    const items = [];
+    for (const x of Array.isArray(list) ? list : []) {
+      const it = taskItem(x);
+      if (it.error) return { error: it.error };
+      if (it.title) items.push(compactItem(it));
+    }
+    if (items.length > MAX_TEMPLATE_TASKS) return { error: `A day can have at most ${MAX_TEMPLATE_TASKS} tasks (${d})` };
+    if (items.length) { plan[d] = items; any = true; }
   }
   return any ? { plan } : { error: 'Add tasks for at least one day' };
 }
@@ -127,14 +174,20 @@ function buildChallengeTasks(goal, from = goal.start_date, to = goal.end_date, p
   const rows = [];
   const template = (goal.task_template?.length ? goal.task_template : [goal.title]);
   for (let d = day(from); d <= day(to); d = addDays(d, 1)) {
-    const titles = goal.custom_days ? (plan?.[d] || []) : template;
-    titles.forEach((title, position) => rows.push({ title, position, due_date: d }));
+    const items = goal.custom_days ? (plan?.[d] || []) : template;
+    items.forEach((x, position) => {
+      const row = { title: itemTitle(x), position, due_date: d };
+      const at = itemRemind(x);
+      if (at) row.remind_at = at; // only set when used, so goals without reminders insert as before
+      rows.push(row);
+    });
   }
   return rows;
 }
 
 module.exports = {
-  MAX_CHALLENGE_DAYS, MAX_TEMPLATE_TASKS, MAX_PROGRESSIVE,
+  MAX_CHALLENGE_DAYS, MAX_TEMPLATE_TASKS, MAX_PROGRESSIVE, REMINDER_GRACE_MIN, FINAL_REMINDER_TIME,
+  isTaskReminderDue, taskItem, normalizeTemplate,
   ethiopiaToday, ethiopiaTimeHM, isGoalPastDue, addDays, daysBetween, isValidDay, isValidTime,
   menteeCannotSetDone, computeStreak, trailingMissedDays, goalStats, buildChallengeTasks, normalizeDayPlan,
 };

@@ -69,9 +69,9 @@ module.exports = (supabase, requireAuth) => {
           goal.custom_days = true;
           tasks = R.buildChallengeTasks(goal, b.start_date, b.end_date, r.plan);
         } else {
-          const tpl = (Array.isArray(b.task_template) ? b.task_template : [title]).map(x => String(x).trim().slice(0, 200)).filter(Boolean);
-          if (!tpl.length || tpl.length > R.MAX_TEMPLATE_TASKS) return res.status(400).json({ error: `Add 1 to ${R.MAX_TEMPLATE_TASKS} daily tasks` });
-          goal.task_template = tpl;
+          const r = R.normalizeTemplate(b.task_template, title);
+          if (r.error) return res.status(400).json({ error: r.error });
+          goal.task_template = r.template;
           tasks = R.buildChallengeTasks(goal);
         }
       } else {
@@ -112,14 +112,21 @@ module.exports = (supabase, requireAuth) => {
   router.patch('/tasks/:id', requireAuth, async (req, res) => {
     try {
       const me = req.telegramUser.id;
-      const { done, note, title, status } = req.body || {};
-      if (title !== undefined || status !== undefined) {
+      const { done, note, title, status, remind_at } = req.body || {};
+      if (title !== undefined || status !== undefined || remind_at !== undefined) {
         const { data: t } = await supabase.from('goal_tasks').select('*').eq('id', req.params.id).maybeSingle();
         if (!t || String(t.mentor_id) !== String(me)) return res.status(404).json({ error: 'Task not found' });
         const up = { updated_at: new Date().toISOString() };
         if (typeof title === 'string' && title.trim()) up.title = title.trim().slice(0, 200);
         if (status === 'skipped') Object.assign(up, { status: 'skipped', completed_at: null, completed_by: null });
         if (status === 'restore' && t.status === 'skipped') up.status = R.isGoalPastDue(t.due_date) ? 'missed' : 'pending';
+        if (remind_at !== undefined) {
+          // '' / null turns this task's reminder off (it then follows the goal's daily reminder).
+          const at = remind_at ? String(remind_at).substring(0, 5) : null;
+          if (at && !R.isValidTime(at)) return res.status(400).json({ error: 'Invalid reminder time' });
+          up.remind_at = at;
+          up.task_reminder_sent_on = null; // a new time may still fire later today
+        }
         const { error } = await supabase.from('goal_tasks').update(up).eq('id', t.id);
         if (error) return res.status(500).json({ error: error.message });
         if (done === undefined && note === undefined) return res.json(await S.emitGoal(supabase, t.goal_id));
@@ -145,10 +152,13 @@ module.exports = (supabase, requireAuth) => {
       let q = supabase.from('goal_tasks').select('position').eq('goal_id', goal.id);
       q = due ? q.eq('due_date', due) : q.is('due_date', null);
       const { data: last } = await q.order('position', { ascending: false }).limit(1);
+      const at = req.body?.remind_at ? String(req.body.remind_at).substring(0, 5) : null;
+      if (at && !R.isValidTime(at)) return res.status(400).json({ error: 'Invalid reminder time' });
       const { error } = await supabase.from('goal_tasks').insert({
         goal_id: goal.id, mentor_id: goal.mentor_id, mentee_id: goal.mentee_id, title, due_date: due,
         position: (last?.[0]?.position ?? -1) + 1,
         status: due && R.isGoalPastDue(due) ? 'missed' : 'pending',
+        ...(at ? { remind_at: at } : {}),
       });
       if (error) return res.status(500).json({ error: error.message });
       res.status(201).json(await S.emitGoal(supabase, goal.id));
