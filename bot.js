@@ -3551,7 +3551,7 @@ setInterval(async () => {
 
   const { data: assignments, error: aErr } = await supabase
     .from('mentorship_assignments')
-    .select('id, user_id, mentor_id, last_reminder_tier, last_reminder_at')
+    .select('id, user_id, mentor_id, last_reminder_tier, last_reminder_at, remind_paused')
     .eq('is_active', true);
   if (aErr) { console.error('[Scheduler] Inactive-mentee query failed:', aErr.message); return; }
   if (!assignments?.length) return;
@@ -3582,6 +3582,7 @@ setInterval(async () => {
     const u = menteeMap.get(String(a.user_id));
     if (!u) continue; // banned, or user fetch missed them
     if (remindOff.has(String(a.mentor_id))) continue; // mentor turned reminders off
+    if (a.remind_paused) continue; // mentor paused reminders for this mentee
 
     const daysInactive = (now.getTime() - new Date(u.last_active).getTime()) / (24 * 60 * 60 * 1000);
     const target = MENTEE_INACTIVITY_TIERS.find(t => daysInactive >= t.days);

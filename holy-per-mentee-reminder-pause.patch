@@ -1,0 +1,172 @@
+diff --git a/bot.js b/bot.js
+index 091e4cc..1fbd862 100644
+--- a/bot.js
++++ b/bot.js
+@@ -3551,7 +3551,7 @@ setInterval(async () => {
+ 
+   const { data: assignments, error: aErr } = await supabase
+     .from('mentorship_assignments')
+-    .select('id, user_id, mentor_id, last_reminder_tier, last_reminder_at')
++    .select('id, user_id, mentor_id, last_reminder_tier, last_reminder_at, remind_paused')
+     .eq('is_active', true);
+   if (aErr) { console.error('[Scheduler] Inactive-mentee query failed:', aErr.message); return; }
+   if (!assignments?.length) return;
+@@ -3582,6 +3582,7 @@ setInterval(async () => {
+     const u = menteeMap.get(String(a.user_id));
+     if (!u) continue; // banned, or user fetch missed them
+     if (remindOff.has(String(a.mentor_id))) continue; // mentor turned reminders off
++    if (a.remind_paused) continue; // mentor paused reminders for this mentee
+ 
+     const daysInactive = (now.getTime() - new Date(u.last_active).getTime()) / (24 * 60 * 60 * 1000);
+     const target = MENTEE_INACTIVITY_TIERS.find(t => daysInactive >= t.days);
+diff --git a/frontend/app.js b/frontend/app.js
+index 52e8171..9e49bb9 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -345,6 +345,8 @@ const MENTEE_ICONS = {
+   pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+   transfer: '<path d="M7 3v14"/><path d="M3 7l4-4 4 4"/><path d="M17 21V7"/><path d="M21 17l-4 4-4-4"/>',
+   userMinus: '<path d="M14 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-4A3.5 3.5 0 0 0 3 17.5V19"/><circle cx="8.5" cy="7.5" r="3.5"/><path d="M17 10h5"/>',
++  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
++  bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="M2 2l20 20"/>',
+   more: '<circle cx="12" cy="5" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.7" fill="currentColor" stroke="none"/>',
+   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+   sliders: '<line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="1.6" fill="currentColor" stroke="none"/>',
+@@ -7715,14 +7717,18 @@ function renderMenteeActivity(user) {
+ }
+ 
+ /** Chip row under the card header: Bible streak, plus the follow-up flag when it applies. */
+-function renderMenteeStats(user) {
++function renderMenteeStats(user, remindPaused) {
+   const needsFollowup = menteeActivityMeta(user).needsFollowup;
+   const chip = needsFollowup
+     ? `<span class="mentee-followup-pill">${t('mentee_needs_followup')}</span>`
+     : '';
++  const pausedChip = remindPaused
++    ? `<span class="mentee-reminder-pill">${menteeIcon('bellOff', 12)}${t('mentee_reminders_paused')}</span>`
++    : '';
+   return `<div class="mentee-card-stats">
+     ${renderMenteeStreakBadge(user.telegram_id)}
+     ${chip}
++    ${pausedChip}
+   </div>`;
+ }
+ 
+@@ -7848,6 +7854,26 @@ async function loadMyMentees() {
+   } catch (e) { showToast(e.message, 'error'); }
+ }
+ 
++/** Pause or resume the inactivity reminders for one mentee (mentor's choice). */
++async function toggleMenteeReminders(assignId) {
++  haptic('light');
++  const row = _myMenteesCache.find(x => String(x.id) === String(assignId));
++  if (!row) return;
++  const next = !row.remind_paused;
++  row.remind_paused = next;
++  renderMenteesList();
++  try {
++    await apiFetch(`/api/mentors/assignments/${encodeURIComponent(assignId)}/reminders`, { method: 'PATCH', body: { paused: next } });
++    haptic('success');
++    showToast(next ? t('mentee_reminders_paused_toast') : t('mentee_reminders_resumed_toast'), 'success');
++  } catch (e) {
++    row.remind_paused = !next;
++    renderMenteesList();
++    haptic('error');
++    showToast(e.message, 'error');
++  }
++}
++
+ function renderMenteesList() {
+   const container = $('menteesList');
+   const mentees = sortedMentees();
+@@ -7890,11 +7916,12 @@ function renderMenteesList() {
+               <button type="button" class="mentee-actions-btn" data-dropdown-toggle aria-haspopup="menu" aria-label="${t('mentee_actions_label')}" title="${t('mentee_actions_label')}">${menteeIcon('more', 18)}</button>
+               <div class="premium-dropdown-menu" data-dropdown-menu>
+                 <button type="button" class="dropdown-item" onclick="openTransferModal('${assignId}')">${menteeIcon('transfer', 14)}${t('btn_transfer')}</button>
++                <button type="button" class="dropdown-item" onclick="toggleMenteeReminders('${assignId}')">${menteeIcon(m.remind_paused ? 'bell' : 'bellOff', 14)}${m.remind_paused ? t('btn_resume_reminders') : t('btn_pause_reminders')}</button>
+                 <button type="button" class="dropdown-item" style="color:var(--danger)" onclick="endMentorship('${assignId}')">${menteeIcon('userMinus', 14)}${t('btn_end')}</button>
+               </div>
+             </div>
+           </div>
+-          ${renderMenteeStats(user)}
++          ${renderMenteeStats(user, m.remind_paused)}
+         </div>
+ 
+         <div class="mentee-card-body">
+diff --git a/frontend/locales.js b/frontend/locales.js
+index c1feac8..7ad959b 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -39,6 +39,11 @@ const I18N = {
+     "btn_message": "Message",
+     "btn_session": "Session",
+     "btn_transfer": "Transfer",
++    "btn_pause_reminders": "Pause reminders",
++    "btn_resume_reminders": "Resume reminders",
++    "mentee_reminders_paused": "Reminders paused",
++    "mentee_reminders_paused_toast": "Reminders paused for this mentee.",
++    "mentee_reminders_resumed_toast": "Reminders turned back on for this mentee.",
+     "transfer_title": "Transfer Mentee",
+     "transfer_since": "With you since {date}",
+     "transfer_sub": "Choose a new mentor for {name}.",
+@@ -981,6 +986,11 @@ const I18N = {
+     "btn_message": "መልዕክት",
+     "btn_session": "ክፍለጊዜ",
+     "btn_transfer": "አስተላልፍ",
++    "btn_pause_reminders": "ማስታወሻዎችን አቁም",
++    "btn_resume_reminders": "ማስታወሻዎችን ቀጥል",
++    "mentee_reminders_paused": "ማስታወሻ ቆሟል",
++    "mentee_reminders_paused_toast": "ለዚህ ተመካሪ ማስታወሻ ቆሟል።",
++    "mentee_reminders_resumed_toast": "ለዚህ ተመካሪ ማስታወሻ እንደገና ተከፍቷል።",
+     "transfer_title": "ተመካሪ አስተላልፍ",
+     "transfer_since": "ከእርስዎ ጋር ከ{date} ጀምሮ",
+     "transfer_sub": "ለ{name} አዲስ አማካሪ ይምረጡ።",
+diff --git a/frontend/styles.css b/frontend/styles.css
+index d5b4226..7f37039 100644
+--- a/frontend/styles.css
++++ b/frontend/styles.css
+@@ -14628,3 +14628,7 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
+ .sr-lobby .sr-primary { min-height: 52px; font-weight: 800; }
+ .sr-lobby .sr-secondary { min-height: 48px; }
+ .sr-lobby .sr-link { align-self: center; padding: 6px 12px; opacity: .55; font-size: var(--fs-xs); }
++
++/* Mentee card: "Reminders paused" chip (mentor paused inactivity reminders for this mentee) */
++.mentee-card-stats .mentee-reminder-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: var(--fs-xs); font-weight: 700; color: var(--text2); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.10); }
++[data-theme="light"] .mentee-card-stats .mentee-reminder-pill { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.12); color: #5A5650; }
+diff --git a/migrations/20261103_assignment_remind_paused.sql b/migrations/20261103_assignment_remind_paused.sql
+new file mode 100644
+index 0000000..32b4361
+--- /dev/null
++++ b/migrations/20261103_assignment_remind_paused.sql
+@@ -0,0 +1,2 @@
++-- A mentor can pause the inactivity "come back" reminders for one specific mentee.
++ALTER TABLE mentorship_assignments ADD COLUMN IF NOT EXISTS remind_paused BOOLEAN NOT NULL DEFAULT FALSE;
+diff --git a/routes/mentors.js b/routes/mentors.js
+index 3a5751c..b53457f 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -629,6 +629,24 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+     res.json(data || []);
+   });
+ 
++  // PATCH /api/mentors/assignments/:id/reminders – pause or resume the
++  // "come back" inactivity reminders for ONE of my mentees.
++  router.patch('/assignments/:id/reminders', requireAuth, async (req, res) => {
++    const { id: mentor_id } = req.telegramUser;
++    if (typeof req.body?.paused !== 'boolean') return res.status(400).json({ error: 'paused must be true or false' });
++    const { data, error } = await supabase
++      .from('mentorship_assignments')
++      .update({ remind_paused: req.body.paused })
++      .eq('id', req.params.id)
++      .eq('mentor_id', mentor_id)
++      .eq('is_active', true)
++      .select('id, remind_paused')
++      .maybeSingle();
++    if (error) return res.status(500).json({ error: error.message });
++    if (!data) return res.status(404).json({ error: 'Mentee not found' });
++    res.json(data);
++  });
++
+   // GET /api/mentors/my-mentees/stats – session counts per mentee
+   router.get('/my-mentees/stats', requireAuth, async (req, res) => {
+     const { id: mentor_id } = req.telegramUser;

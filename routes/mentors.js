@@ -629,6 +629,24 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     res.json(data || []);
   });
 
+  // PATCH /api/mentors/assignments/:id/reminders – pause or resume the
+  // "come back" inactivity reminders for ONE of my mentees.
+  router.patch('/assignments/:id/reminders', requireAuth, async (req, res) => {
+    const { id: mentor_id } = req.telegramUser;
+    if (typeof req.body?.paused !== 'boolean') return res.status(400).json({ error: 'paused must be true or false' });
+    const { data, error } = await supabase
+      .from('mentorship_assignments')
+      .update({ remind_paused: req.body.paused })
+      .eq('id', req.params.id)
+      .eq('mentor_id', mentor_id)
+      .eq('is_active', true)
+      .select('id, remind_paused')
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data) return res.status(404).json({ error: 'Mentee not found' });
+    res.json(data);
+  });
+
   // GET /api/mentors/my-mentees/stats – session counts per mentee
   router.get('/my-mentees/stats', requireAuth, async (req, res) => {
     const { id: mentor_id } = req.telegramUser;

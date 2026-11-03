@@ -345,6 +345,8 @@ const MENTEE_ICONS = {
   pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   transfer: '<path d="M7 3v14"/><path d="M3 7l4-4 4 4"/><path d="M17 21V7"/><path d="M21 17l-4 4-4-4"/>',
   userMinus: '<path d="M14 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-4A3.5 3.5 0 0 0 3 17.5V19"/><circle cx="8.5" cy="7.5" r="3.5"/><path d="M17 10h5"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="M2 2l20 20"/>',
   more: '<circle cx="12" cy="5" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.7" fill="currentColor" stroke="none"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   sliders: '<line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="1.6" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="1.6" fill="currentColor" stroke="none"/>',
@@ -7715,14 +7717,18 @@ function renderMenteeActivity(user) {
 }
 
 /** Chip row under the card header: Bible streak, plus the follow-up flag when it applies. */
-function renderMenteeStats(user) {
+function renderMenteeStats(user, remindPaused) {
   const needsFollowup = menteeActivityMeta(user).needsFollowup;
   const chip = needsFollowup
     ? `<span class="mentee-followup-pill">${t('mentee_needs_followup')}</span>`
     : '';
+  const pausedChip = remindPaused
+    ? `<span class="mentee-reminder-pill">${menteeIcon('bellOff', 12)}${t('mentee_reminders_paused')}</span>`
+    : '';
   return `<div class="mentee-card-stats">
     ${renderMenteeStreakBadge(user.telegram_id)}
     ${chip}
+    ${pausedChip}
   </div>`;
 }
 
@@ -7848,6 +7854,26 @@ async function loadMyMentees() {
   } catch (e) { showToast(e.message, 'error'); }
 }
 
+/** Pause or resume the inactivity reminders for one mentee (mentor's choice). */
+async function toggleMenteeReminders(assignId) {
+  haptic('light');
+  const row = _myMenteesCache.find(x => String(x.id) === String(assignId));
+  if (!row) return;
+  const next = !row.remind_paused;
+  row.remind_paused = next;
+  renderMenteesList();
+  try {
+    await apiFetch(`/api/mentors/assignments/${encodeURIComponent(assignId)}/reminders`, { method: 'PATCH', body: { paused: next } });
+    haptic('success');
+    showToast(next ? t('mentee_reminders_paused_toast') : t('mentee_reminders_resumed_toast'), 'success');
+  } catch (e) {
+    row.remind_paused = !next;
+    renderMenteesList();
+    haptic('error');
+    showToast(e.message, 'error');
+  }
+}
+
 function renderMenteesList() {
   const container = $('menteesList');
   const mentees = sortedMentees();
@@ -7890,11 +7916,12 @@ function renderMenteesList() {
               <button type="button" class="mentee-actions-btn" data-dropdown-toggle aria-haspopup="menu" aria-label="${t('mentee_actions_label')}" title="${t('mentee_actions_label')}">${menteeIcon('more', 18)}</button>
               <div class="premium-dropdown-menu" data-dropdown-menu>
                 <button type="button" class="dropdown-item" onclick="openTransferModal('${assignId}')">${menteeIcon('transfer', 14)}${t('btn_transfer')}</button>
+                <button type="button" class="dropdown-item" onclick="toggleMenteeReminders('${assignId}')">${menteeIcon(m.remind_paused ? 'bell' : 'bellOff', 14)}${m.remind_paused ? t('btn_resume_reminders') : t('btn_pause_reminders')}</button>
                 <button type="button" class="dropdown-item" style="color:var(--danger)" onclick="endMentorship('${assignId}')">${menteeIcon('userMinus', 14)}${t('btn_end')}</button>
               </div>
             </div>
           </div>
-          ${renderMenteeStats(user)}
+          ${renderMenteeStats(user, m.remind_paused)}
         </div>
 
         <div class="mentee-card-body">

@@ -14628,3 +14628,7 @@ body.kb-open .ticket-composer { padding-bottom: 10px; }
 .sr-lobby .sr-primary { min-height: 52px; font-weight: 800; }
 .sr-lobby .sr-secondary { min-height: 48px; }
 .sr-lobby .sr-link { align-self: center; padding: 6px 12px; opacity: .55; font-size: var(--fs-xs); }
+
+/* Mentee card: "Reminders paused" chip (mentor paused inactivity reminders for this mentee) */
+.mentee-card-stats .mentee-reminder-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: var(--fs-xs); font-weight: 700; color: var(--text2); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.10); }
+[data-theme="light"] .mentee-card-stats .mentee-reminder-pill { background: rgba(0, 0, 0, 0.04); border-color: rgba(0, 0, 0, 0.12); color: #5A5650; }
