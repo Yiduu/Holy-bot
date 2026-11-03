@@ -1,0 +1,162 @@
+diff --git a/bot.js b/bot.js
+index aae3887..091e4cc 100644
+--- a/bot.js
++++ b/bot.js
+@@ -3573,11 +3573,15 @@ setInterval(async () => {
+     .in('telegram_id', [...menteeIds, ...mentorIds]);
+   const settingsMap = new Map((settingsRows || []).map(r => [String(r.telegram_id), r]));
+   const menteeMap = new Map(mentees.map(u => [String(u.telegram_id), u]));
++  const { data: mentorFlags } = await supabase
++    .from('users').select('telegram_id, remind_inactive_mentees').in('telegram_id', mentorIds);
++  const remindOff = new Set((mentorFlags || []).filter(m => m.remind_inactive_mentees === false).map(m => String(m.telegram_id)));
+ 
+   let sent = 0;
+   for (const a of assignments) {
+     const u = menteeMap.get(String(a.user_id));
+     if (!u) continue; // banned, or user fetch missed them
++    if (remindOff.has(String(a.mentor_id))) continue; // mentor turned reminders off
+ 
+     const daysInactive = (now.getTime() - new Date(u.last_active).getTime()) / (24 * 60 * 60 * 1000);
+     const target = MENTEE_INACTIVITY_TIERS.find(t => daysInactive >= t.days);
+diff --git a/frontend/app.js b/frontend/app.js
+index d462209..52e8171 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -6365,6 +6365,7 @@ async function loadSettings() {
+       if (acceptToggle) {
+         acceptToggle.checked = s.accepting_requests !== false;
+       }
++      if ($('toggleRemindInactive')) { $('toggleRemindInactive').checked = s.remind_inactive_mentees !== false; syncRemindInactiveSub(); }
+     }
+ 
+     // Keep the mentor's own rating fresh: mentees can rate at any time, and
+@@ -6759,6 +6760,7 @@ async function saveSettings() {
+   };
+   if (currentUser?.role === 'mentor') {
+     body.accepting_requests = $('toggleAcceptingRequests')?.checked;
++    body.remind_inactive_mentees = $('toggleRemindInactive')?.checked;
+     body.preferred_mentee_sex = $('settingMenteeSex')?.value;
+   }
+   try {
+@@ -6862,6 +6864,30 @@ function toggleFaqItem(el) {
+   if (el) el.classList.toggle('open');
+ }
+ 
++function syncRemindInactiveSub() {
++  const el = $('toggleRemindInactive'), sub = $('remindInactiveSub');
++  if (!el || !sub) return;
++  sub.textContent = el.checked ? t('remind_inactive_sub_on') : t('remind_inactive_sub_off');
++}
++
++async function toggleRemindInactive() {
++  haptic('light');
++  const el = $('toggleRemindInactive');
++  if (!el) return;
++  const nextValue = el.checked;
++  syncRemindInactiveSub();
++  try {
++    await apiFetch('/api/users/settings', { method: 'PATCH', body: { remind_inactive_mentees: nextValue } });
++    haptic('success');
++    showToast(t('remind_inactive_saved'), 'success');
++  } catch (e) {
++    haptic('error');
++    el.checked = !nextValue;
++    syncRemindInactiveSub();
++    showToast(e.message, 'error');
++  }
++}
++
+ async function toggleAcceptingRequests() {
+   haptic('light');
+   const el = $('toggleAcceptingRequests');
+diff --git a/frontend/index.html b/frontend/index.html
+index d693870..a8435b1 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -2125,6 +2125,12 @@
+           <span class="ps-switch"><input class="ps-switch-input" id="toggleAcceptingRequests" type="checkbox" checked onchange="toggleAcceptingRequests()" /><label class="ps-switch-track" for="toggleAcceptingRequests" aria-label="Accept New Requests"><span class="ps-switch-knob"></span></label></span>
+         </div>
+ 
++        <div class="ps-card ps-row">
++          <span class="ps-tile"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9 M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span>
++          <span class="ps-row-text"><span class="ps-row-title" data-i18n="Remind Inactive Mentees">Remind Inactive Mentees</span><span class="ps-row-sub" id="remindInactiveSub">Gently invite your mentees back when they go quiet.</span></span>
++          <span class="ps-switch"><input class="ps-switch-input" id="toggleRemindInactive" type="checkbox" checked onchange="toggleRemindInactive()" /><label class="ps-switch-track" for="toggleRemindInactive" aria-label="Remind Inactive Mentees"><span class="ps-switch-knob"></span></label></span>
++        </div>
++
+         <div class="ps-card">
+           <span class="ps-label" data-i18n="settings_expertise_topics_label">Topics to Mentor</span>
+           <div class="ps-tags" id="mentorTopicPills"></div>
+diff --git a/frontend/locales.js b/frontend/locales.js
+index 4d5b7ca..c1feac8 100644
+--- a/frontend/locales.js
++++ b/frontend/locales.js
+@@ -617,6 +617,10 @@ const I18N = {
+     "Mentees I Mentor": "Mentees I Mentor",
+     "Max Mentees": "Max Mentees",
+     "Accept New Requests": "Accept New Requests",
++    "Remind Inactive Mentees": "Remind Inactive Mentees",
++    "remind_inactive_sub_on": "Gently invite your mentees back when they go quiet.",
++    "remind_inactive_sub_off": "Off. Your mentees will not get \"come back\" reminders.",
++    "remind_inactive_saved": "Reminder setting saved.",
+     "Save Changes": "Save Changes",
+     "Both": "Both",
+     "Male only": "Male only",
+@@ -1525,6 +1529,10 @@ const I18N = {
+     "Mentees I Mentor": "የማማክራቸው ተመካሪዎች",
+     "Max Mentees": "ከፍተኛ የተመካሪዎች ብዛት",
+     "Accept New Requests": "አዳዲስ ጥያቄዎችን ተቀበል",
++    "Remind Inactive Mentees": "ያልተመለሱ ተመካሪዎችን አስታውስ",
++    "remind_inactive_sub_on": "ዝም ያሉ ተመካሪዎችዎን በትህትና ወደ ውይይት ይጋብዙ።",
++    "remind_inactive_sub_off": "ጠፍቷል። ተመካሪዎችዎ የመመለሻ ማስታወሻ አይደርሳቸውም።",
++    "remind_inactive_saved": "የማስታወሻ ቅንብር ተቀምጧል።",
+     "Save Changes": "ለውጦችን አስቀምጥ",
+     "Both": "ሁለቱም",
+     "Male only": "ወንዶች ብቻ",
+diff --git a/migrations/20261103_mentor_remind_inactive_mentees.sql b/migrations/20261103_mentor_remind_inactive_mentees.sql
+new file mode 100644
+index 0000000..a60f744
+--- /dev/null
++++ b/migrations/20261103_mentor_remind_inactive_mentees.sql
+@@ -0,0 +1,2 @@
++-- Mentors can switch off the "come back" inactivity reminders sent to their mentees.
++ALTER TABLE users ADD COLUMN IF NOT EXISTS remind_inactive_mentees BOOLEAN NOT NULL DEFAULT TRUE;
+diff --git a/routes/users.js b/routes/users.js
+index 2c6f24f..f6aff1d 100644
+--- a/routes/users.js
++++ b/routes/users.js
+@@ -42,12 +42,13 @@ module.exports = function userRoutes(supabase, requireAuth) {
+     const { id } = req.telegramUser;
+     const [settingsRes, userRes] = await Promise.all([
+       supabase.from('user_settings').select('*').eq('telegram_id', id).single(),
+-      supabase.from('users').select('accepting_requests, preferred_mentee_sex, rating, rating_count').eq('telegram_id', id).single()
++      supabase.from('users').select('accepting_requests, remind_inactive_mentees, preferred_mentee_sex, rating, rating_count').eq('telegram_id', id).single()
+     ]);
+     if (settingsRes.error) return res.status(500).json({ error: settingsRes.error.message });
+     const merged = {
+       ...settingsRes.data,
+       accepting_requests: userRes.data ? userRes.data.accepting_requests !== false : true,
++      remind_inactive_mentees: userRes.data ? userRes.data.remind_inactive_mentees !== false : true,
+       preferred_mentee_sex: userRes.data?.preferred_mentee_sex || 'prefer_not',
+       // The mentor's own average + number of ratings (same aggregate mentees
+       // see on mentor cards). Never includes who rated.
+@@ -112,6 +113,12 @@ module.exports = function userRoutes(supabase, requireAuth) {
+       );
+     }
+ 
++    if (req.body.remind_inactive_mentees !== undefined) {
++      promises.push(
++        supabase.from('users').update({ remind_inactive_mentees: req.body.remind_inactive_mentees !== false }).eq('telegram_id', id)
++      );
++    }
++
+     if (req.body.preferred_mentee_sex !== undefined) {
+       const valid = ['M', 'F', 'prefer_not'];
+       if (!valid.includes(req.body.preferred_mentee_sex)) {
+@@ -134,6 +141,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
+ 
+     const merged = {
+       ...settingsResult.data,
++      ...(req.body.remind_inactive_mentees !== undefined && { remind_inactive_mentees: req.body.remind_inactive_mentees !== false }),
+       accepting_requests: req.body.accepting_requests !== undefined
+         ? req.body.accepting_requests
+         : (await supabase.from('users').select('accepting_requests').eq('telegram_id', id).single()).data?.accepting_requests !== false,

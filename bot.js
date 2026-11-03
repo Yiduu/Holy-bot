@@ -3573,11 +3573,15 @@ setInterval(async () => {
     .in('telegram_id', [...menteeIds, ...mentorIds]);
   const settingsMap = new Map((settingsRows || []).map(r => [String(r.telegram_id), r]));
   const menteeMap = new Map(mentees.map(u => [String(u.telegram_id), u]));
+  const { data: mentorFlags } = await supabase
+    .from('users').select('telegram_id, remind_inactive_mentees').in('telegram_id', mentorIds);
+  const remindOff = new Set((mentorFlags || []).filter(m => m.remind_inactive_mentees === false).map(m => String(m.telegram_id)));
 
   let sent = 0;
   for (const a of assignments) {
     const u = menteeMap.get(String(a.user_id));
     if (!u) continue; // banned, or user fetch missed them
+    if (remindOff.has(String(a.mentor_id))) continue; // mentor turned reminders off
 
     const daysInactive = (now.getTime() - new Date(u.last_active).getTime()) / (24 * 60 * 60 * 1000);
     const target = MENTEE_INACTIVITY_TIERS.find(t => daysInactive >= t.days);

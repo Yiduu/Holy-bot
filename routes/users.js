@@ -42,12 +42,13 @@ module.exports = function userRoutes(supabase, requireAuth) {
     const { id } = req.telegramUser;
     const [settingsRes, userRes] = await Promise.all([
       supabase.from('user_settings').select('*').eq('telegram_id', id).single(),
-      supabase.from('users').select('accepting_requests, preferred_mentee_sex, rating, rating_count').eq('telegram_id', id).single()
+      supabase.from('users').select('accepting_requests, remind_inactive_mentees, preferred_mentee_sex, rating, rating_count').eq('telegram_id', id).single()
     ]);
     if (settingsRes.error) return res.status(500).json({ error: settingsRes.error.message });
     const merged = {
       ...settingsRes.data,
       accepting_requests: userRes.data ? userRes.data.accepting_requests !== false : true,
+      remind_inactive_mentees: userRes.data ? userRes.data.remind_inactive_mentees !== false : true,
       preferred_mentee_sex: userRes.data?.preferred_mentee_sex || 'prefer_not',
       // The mentor's own average + number of ratings (same aggregate mentees
       // see on mentor cards). Never includes who rated.
@@ -112,6 +113,12 @@ module.exports = function userRoutes(supabase, requireAuth) {
       );
     }
 
+    if (req.body.remind_inactive_mentees !== undefined) {
+      promises.push(
+        supabase.from('users').update({ remind_inactive_mentees: req.body.remind_inactive_mentees !== false }).eq('telegram_id', id)
+      );
+    }
+
     if (req.body.preferred_mentee_sex !== undefined) {
       const valid = ['M', 'F', 'prefer_not'];
       if (!valid.includes(req.body.preferred_mentee_sex)) {
@@ -134,6 +141,7 @@ module.exports = function userRoutes(supabase, requireAuth) {
 
     const merged = {
       ...settingsResult.data,
+      ...(req.body.remind_inactive_mentees !== undefined && { remind_inactive_mentees: req.body.remind_inactive_mentees !== false }),
       accepting_requests: req.body.accepting_requests !== undefined
         ? req.body.accepting_requests
         : (await supabase.from('users').select('accepting_requests').eq('telegram_id', id).single()).data?.accepting_requests !== false,

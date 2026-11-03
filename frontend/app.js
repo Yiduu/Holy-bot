@@ -6365,6 +6365,7 @@ async function loadSettings() {
       if (acceptToggle) {
         acceptToggle.checked = s.accepting_requests !== false;
       }
+      if ($('toggleRemindInactive')) { $('toggleRemindInactive').checked = s.remind_inactive_mentees !== false; syncRemindInactiveSub(); }
     }
 
     // Keep the mentor's own rating fresh: mentees can rate at any time, and
@@ -6759,6 +6760,7 @@ async function saveSettings() {
   };
   if (currentUser?.role === 'mentor') {
     body.accepting_requests = $('toggleAcceptingRequests')?.checked;
+    body.remind_inactive_mentees = $('toggleRemindInactive')?.checked;
     body.preferred_mentee_sex = $('settingMenteeSex')?.value;
   }
   try {
@@ -6860,6 +6862,30 @@ function closeFaqModal() {
 function toggleFaqItem(el) {
   haptic('selection');
   if (el) el.classList.toggle('open');
+}
+
+function syncRemindInactiveSub() {
+  const el = $('toggleRemindInactive'), sub = $('remindInactiveSub');
+  if (!el || !sub) return;
+  sub.textContent = el.checked ? t('remind_inactive_sub_on') : t('remind_inactive_sub_off');
+}
+
+async function toggleRemindInactive() {
+  haptic('light');
+  const el = $('toggleRemindInactive');
+  if (!el) return;
+  const nextValue = el.checked;
+  syncRemindInactiveSub();
+  try {
+    await apiFetch('/api/users/settings', { method: 'PATCH', body: { remind_inactive_mentees: nextValue } });
+    haptic('success');
+    showToast(t('remind_inactive_saved'), 'success');
+  } catch (e) {
+    haptic('error');
+    el.checked = !nextValue;
+    syncRemindInactiveSub();
+    showToast(e.message, 'error');
+  }
 }
 
 async function toggleAcceptingRequests() {
