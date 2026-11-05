@@ -1,0 +1,1029 @@
+diff --git a/frontend/guest-mode.css b/frontend/guest-mode.css
+index e4dd2a3..d98e9e2 100644
+--- a/frontend/guest-mode.css
++++ b/frontend/guest-mode.css
+@@ -36,10 +36,6 @@
+ 
+ /* push the app down so the bar never covers a header */
+ body.guest-mode #app { padding-top: calc(var(--safe-top, 0px) + 48px); }
+-body.guest-mode #guestBar:has(.guest-bar-actions) ~ #app { padding-top: calc(var(--safe-top, 0px) + 92px); }
+-
+-/* chat is read-only in the preview */
+-body.guest-mode #chatInputRow { display: none !important; }
+ 
+ /* ── goal composer sheet ── */
+ .guest-sheet { position: fixed; inset: 0; z-index: 8500; display: flex; flex-direction: column; background: var(--bg); }
+@@ -55,12 +51,6 @@ body.guest-mode #chatInputRow { display: none !important; }
+   @keyframes guestIn { from { transform: translateY(-100%); } to { transform: none; } }
+ }
+ 
+-/* ── Home header button (beside the language toggle) ── */
+-.guest-header-btn { gap: 6px; color: var(--gold); border-color: var(--gold); background: var(--gold-dim); }
+-.guest-header-btn:hover { color: var(--gold); }
+-.guest-header-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+-@media (max-width: 359px) { .guest-header-btn #guestHeaderLbl { display: none; } }
+-
+ /* ── persona picker (bottom sheet) ── */
+ .guest-pick { position: fixed; inset: 0; z-index: 8400; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, .55); }
+ .guest-pick-card {
+@@ -70,3 +60,63 @@ body.guest-mode #chatInputRow { display: none !important; }
+ .guest-pick-actions { display: flex; gap: 10px; align-items: center; }
+ .guest-pick-actions .btn { flex: 1; }
+ @media (prefers-reduced-motion: no-preference) { .guest-pick-card { animation: guestPickIn .2s ease-out; } @keyframes guestPickIn { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } } }
++
++/* ── Home entry card (mentors) ── */
++.guest-home {
++  position: relative; margin-bottom: 16px; padding: 16px; border-radius: 18px; overflow: hidden;
++  background: linear-gradient(160deg, var(--gold-dim), transparent 70%), var(--bg2, var(--surface));
++  border: 1px solid var(--border-dim); box-shadow: var(--shadow-sm);
++}
++.guest-home::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--gold); }
++.guest-home-top { display: flex; align-items: center; gap: 12px; }
++.guest-home-icon {
++  flex: 0 0 auto; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
++  color: var(--gold); background: var(--gold-dim); border: 1px solid var(--gold);
++}
++.guest-home-copy { min-width: 0; }
++.guest-home-eyebrow { color: var(--gold); font-size: var(--fs-2xs, 11px); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
++.guest-home-title { margin: 2px 0 0; color: var(--text); font-size: var(--fs-md, 16px); font-weight: 700; line-height: 1.25; }
++.guest-home-sub { margin: 10px 0 0; color: var(--text2); font-size: var(--fs-sm, 13px); line-height: 1.5; }
++.guest-home-feats { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 14px; padding: 0; }
++.guest-home-feats li {
++  padding: 4px 10px; border-radius: 999px; font-size: var(--fs-xs, 12px); font-weight: 600; color: var(--text2);
++  border: 1px solid var(--border-dim); background: rgba(var(--bg2-rgb), .5);
++}
++.guest-home-cta { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; }
++.guest-home-cta svg { transition: transform .18s ease; }
++.guest-home-cta:hover svg, .guest-home-cta:focus-visible svg { transform: translateX(3px); }
++@media (prefers-reduced-motion: reduce) { .guest-home-cta svg { transition: none; } }
++
++/* ── Test guide sheet ── */
++.guest-pick { z-index: 8600; }
++.guest-guide-card { max-height: 86vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
++.guest-guide-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
++.guest-steps { display: flex; flex-direction: column; gap: 10px; }
++.guest-step { display: flex; gap: 12px; padding: 12px; border-radius: 14px; border: 1px solid var(--border-dim); }
++.guest-step.is-now { border-color: var(--gold); background: var(--gold-dim); }
++.guest-step.is-locked { opacity: .55; }
++.guest-step-n {
++  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
++  font-size: var(--fs-xs, 12px); font-weight: 700; color: var(--text2); border: 1px solid var(--border-dim);
++}
++.guest-step.is-now .guest-step-n { color: var(--gold); border-color: var(--gold); }
++.guest-step.is-done .guest-step-n { background: var(--gold); border-color: var(--gold); color: var(--bg); }
++.guest-step-main { flex: 1; min-width: 0; }
++.guest-step-title { color: var(--text); font-weight: 700; font-size: var(--fs-sm, 13px); }
++.guest-step-desc { color: var(--text2); font-size: var(--fs-xs, 12px); line-height: 1.45; margin-top: 2px; }
++.guest-step-body { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
++.guest-step-hint { flex-basis: 100%; color: var(--text3); font-size: var(--fs-xs, 12px); line-height: 1.4; }
++.guest-act.is-primary { background: var(--gold); color: var(--bg); border-color: var(--gold); }
++.guest-act:disabled { opacity: .5; cursor: default; }
++.guest-compose { display: flex; gap: 8px; flex-basis: 100%; min-width: 0; }
++.guest-compose .guest-act { flex: 0 0 auto; }
++.guest-input {
++  flex: 1 1 0; width: 0; min-width: 0; box-sizing: border-box; min-height: 34px; padding: 4px 12px; border-radius: 999px; font: inherit; font-size: 16px;
++  color: var(--text); background: transparent; border: 1px solid var(--border-dim);
++}
++.guest-input:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
++.guest-guide-btn { position: relative; }
++.guest-badge {
++  position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px;
++  display: grid; place-items: center; font-style: normal; font-size: 10px; font-weight: 700; background: var(--danger, #d9534f); color: #fff;
++}
+diff --git a/frontend/guest-mode.js b/frontend/guest-mode.js
+index 5f31348..8db2ae1 100644
+--- a/frontend/guest-mode.js
++++ b/frontend/guest-mode.js
+@@ -1,10 +1,12 @@
+-// Guest mode for mentors ("preview as a mentee").
++// Guest mode for mentors ("try the app as a mentee").
+ //
+-// A mentor taps "Start preview" on the My Mentees page and the app switches to
+-// the real mentee screens (dashboard, find a mentor, requests, goals, streak,
++// A mentor taps "Try guest mode" on the Home page and the app switches to the
++// real mentee screens (find a mentor, requests, chat, goals, sessions, streak,
+ // journal). apiFetch (app.js) sends every call to /api/guest/*, which only
+ // reads and writes an in-memory sandbox. Nothing here can create a real
+-// request, message or notification. Exit restores the mentor account.
++// request, message or notification. The "Test guide" sheet lets the mentor play
++// the other side (accept, reply, set goals, start a live session) so every
++// feature can be tried end to end. Exit restores the mentor account.
+ //
+ // Loaded after app.js and goals.js. Uses window.__holyBridge from app.js.
+ (function () {
+@@ -21,8 +23,21 @@
+       goalTitle: 'Set a goal as the mentor', done: 'Done',
+       blocked: 'Not available in guest preview.', starting: 'Starting…', failed: "Couldn't start the preview",
+       ending: 'Exit guest preview?', endBody: 'Everything you tried here will be cleared.', stay: 'Stay', leave: 'Exit',
+-      readOnlyChat: 'Chat is read-only in the preview.',
+       guestBtn: 'Guest', pickTitle: 'Preview as a mentee', cancel: 'Cancel',
++      homeEyebrow: 'For mentors', homeTitle: 'Experience Holy Helper as a mentee',
++      homeSub: 'Run the full journey in a safe sandbox. Nobody is contacted and nothing is saved.',
++      homeCta: 'Try guest mode', f1: 'Request', f2: 'Chat', f3: 'Goals', f4: 'Live session',
++      guide: 'Test guide', guideSub: 'Play both sides to try every feature.',
++      s1: 'Send a mentor request', s1d: 'Pick a mentor from the list and send a request.', s1b: 'Find a mentor',
++      s2: 'Mentor responds', s2d: 'You are the mentor now. Accept or decline.', s2done: 'Accepted by {n}', s2lock: 'Send a request first.',
++      acceptB: 'Accept', declineB: 'Decline', declined: 'Request declined (preview).',
++      s3: 'Chat', s3d: 'Message your mentor. They reply on their own, or write as the mentor below.', s3b: 'Open chat',
++      mentorPh: 'Write as your mentor…', send: 'Send', sent: 'Sent as your mentor.',
++      s4: 'Goals', s4d: 'Set a goal as the mentor, then tick it off as the mentee.', s4b: 'Set a goal', goalsN: '{n} set',
++      s5: 'Live session', s5d: 'Start a call as the mentor and join it as the mentee.', startNow: 'Start now', in10: 'In 10 min',
++      openSessions: 'Open Sessions', mentorSide: 'Open mentor side', endSession: 'End session', sessionLive: 'Live now', sessionSoon: 'Scheduled',
++      sessionHint: 'Open the mentor side on another device to see a real two-person call.',
++      locked: 'Unlocks after your request is accepted.', sessionInvite: 'Your mentor started a live session.',
+     },
+     am: {
+       title: 'እንደ ተመካሪ ቅድመ እይታ', sub: 'መተግበሪያውን ተመካሪ እንደሚያየው ይመልከቱ። አማካሪ ይፈልጉ፣ ጥያቄ ይላኩ፣ ግቦችን ያዘጋጁ እና ሁሉንም ባህሪያት ይሞክሩ። ለእውነተኛ ሰዎች ምንም አይላክም።',
+@@ -34,8 +49,21 @@
+       goalTitle: 'እንደ አማካሪ ግብ አዘጋጅ', done: 'ተጠናቀቀ',
+       blocked: 'በእንግዳ ቅድመ እይታ ውስጥ አይገኝም።', starting: 'በመጀመር ላይ…', failed: 'ቅድመ እይታውን መጀመር አልተቻለም',
+       ending: 'ከእንግዳ ቅድመ እይታ ይውጡ?', endBody: 'እዚህ የሞከሩት ሁሉ ይጸዳል።', stay: 'ቆይ', leave: 'ውጣ',
+-      readOnlyChat: 'በቅድመ እይታው ውይይት ለማንበብ ብቻ ነው።',
+       guestBtn: 'እንግዳ', pickTitle: 'እንደ ተመካሪ ቅድመ እይታ', cancel: 'ተው',
++      homeEyebrow: 'ለአማካሪዎች', homeTitle: 'ሆሊ ሄልፐርን እንደ ተመካሪ ይለማመዱ',
++      homeSub: 'ሙሉውን ጉዞ ደህንነቱ በተጠበቀ ሙከራ ውስጥ ይሞክሩ። ማንም አይደወልም፣ ምንም አይቀመጥም።',
++      homeCta: 'የእንግዳ ሁነታን ሞክር', f1: 'ጥያቄ', f2: 'ውይይት', f3: 'ግቦች', f4: 'ቀጥታ ክፍለ ጊዜ',
++      guide: 'የሙከራ መመሪያ', guideSub: 'ሁሉንም ባህሪያት ለመሞከር ሁለቱንም ወገን ይጫወቱ።',
++      s1: 'የአማካሪ ጥያቄ ይላኩ', s1d: 'ከዝርዝሩ አማካሪ መርጠው ጥያቄ ይላኩ።', s1b: 'አማካሪ ፈልግ',
++      s2: 'አማካሪው ምላሽ ይሰጣል', s2d: 'አሁን እርስዎ አማካሪው ነዎት። ይቀበሉ ወይም ውድቅ ያድርጉ።', s2done: 'በ{n} ተቀባይነት አግኝቷል', s2lock: 'መጀመሪያ ጥያቄ ይላኩ።',
++      acceptB: 'ተቀበል', declineB: 'ውድቅ አድርግ', declined: 'ጥያቄው ውድቅ ሆኗል (ቅድመ እይታ)።',
++      s3: 'ውይይት', s3d: 'ለአማካሪዎ መልእክት ይላኩ። እሱ በራሱ ይመልሳል፣ ወይም ከታች እንደ አማካሪ ይጻፉ።', s3b: 'ውይይት ክፈት',
++      mentorPh: 'እንደ አማካሪዎ ይጻፉ…', send: 'ላክ', sent: 'እንደ አማካሪዎ ተልኳል።',
++      s4: 'ግቦች', s4d: 'እንደ አማካሪ ግብ ያዘጋጁ፣ ከዚያ እንደ ተመካሪ ምልክት ያድርጉ።', s4b: 'ግብ አዘጋጅ', goalsN: '{n} ተዘጋጅቷል',
++      s5: 'ቀጥታ ክፍለ ጊዜ', s5d: 'እንደ አማካሪ ጥሪ ይጀምሩና እንደ ተመካሪ ይቀላቀሉ።', startNow: 'አሁን ጀምር', in10: 'በ10 ደቂቃ',
++      openSessions: 'ክፍለ ጊዜዎችን ክፈት', mentorSide: 'የአማካሪውን ጎን ክፈት', endSession: 'ክፍለ ጊዜውን ጨርስ', sessionLive: 'አሁን ቀጥታ', sessionSoon: 'ተይዟል',
++      sessionHint: 'እውነተኛ የሁለት ሰው ጥሪ ለማየት የአማካሪውን ጎን በሌላ መሳሪያ ይክፈቱ።',
++      locked: 'ጥያቄዎ ከተቀበለ በኋላ ይከፈታል።', sessionInvite: 'አማካሪዎ ቀጥታ ክፍለ ጊዜ ጀምሯል።',
+     },
+   };
+   const tr = k => (STR[localStorage.getItem('language')] || STR.en)[k] || STR.en[k] || k;
+@@ -98,28 +126,29 @@
+   }
+ 
+   document.addEventListener('click', e => {
+-    if (e.target.closest('#guestHeaderBtn')) { openPicker(); return; }
++    if (e.target.closest('#guestHomeStart')) { openPicker(); return; }
+     const pick = e.target.closest('[data-guest-pick]');
+     if (pick) { G.sex = pick.dataset.guestPick; paintPicker(); return; }
+     if (e.target.closest('#guestPickStart')) { closePicker(); G.enter(); return; }
+     if (e.target.closest('#guestPickCancel') || e.target.id === 'guestPickSheet') { closePicker(); return; }
+     if (e.target.closest('#guestExitBtn')) { confirmExit(); return; }
+-    if (e.target.closest('#guestAcceptBtn')) { simulateAccept(); return; }
+-    if (e.target.closest('#guestGoalBtn')) { openGoalSheet(); return; }
++    if (e.target.closest('#guestGuideBtn')) { openGuide(); return; }
++    if (e.target.closest('#guestGuideClose') || e.target.id === 'guestGuide') { closeGuide(); return; }
++    const act = e.target.closest('[data-guest-act]');
++    if (act) { runAction(act.dataset.guestAct, act); return; }
+     if (e.target.closest('#guestGoalClose')) { closeGoalSheet(); return; }
+   });
+ 
+-  // ── Header button on the Home page (beside the language toggle) ─────────
++  // ── Entry card on the Home page ─────────────────────────────────────────
+   // Shown only to mentors, and hidden while a preview is running (the preview
+   // bar has its own Exit). app.js calls G.syncEntry() whenever the role changes.
+   function syncEntry() {
+-    const btn = $('guestHeaderBtn');
+-    if (!btn) return;
++    const card = $('guestHomeCard');
++    if (!card) return;
+     const mentor = bridge()?.getUser?.()?.role === 'mentor';
+-    btn.style.display = mentor && !G.active ? 'flex' : 'none';
+-    const lbl = $('guestHeaderLbl');
+-    if (lbl) lbl.textContent = tr('guestBtn');
+-    btn.setAttribute('aria-label', tr('title'));
++    card.style.display = mentor && !G.active ? '' : 'none';
++    card.querySelectorAll('[data-guest-t]').forEach(el => { el.textContent = tr(el.dataset.guestT); });
++    $('guestHomeStart')?.setAttribute('aria-label', tr('homeCta'));
+   }
+   G.syncEntry = syncEntry;
+ 
+@@ -160,7 +189,7 @@
+     const me = b?.getUser();
+     if (!b || me?.role !== 'mentor') return toast(tr('blocked'), 'error');
+     try {
+-      const { user } = await apiFetch('/api/guest/start', { method: 'POST', body: { sex: G.sex } });
++      const { user } = await apiFetch('/api/guest/start', { method: 'POST', body: { sex: G.sex, lang: localStorage.getItem('language') === 'am' ? 'am' : 'en' } });
+       G._mentorUser = me;
+       G.active = true;
+       b.setUser(user);
+@@ -171,7 +200,7 @@
+       mountBar();
+       b.navigate('dashboard');
+       refreshBar();
+-      G._poll = setInterval(refreshBar, 4000);
++      G._poll = setInterval(refreshBar, 2000);
+     } catch (e) {
+       toast(e.message || tr('failed'), 'error');
+     }
+@@ -180,7 +209,7 @@
+   G.exit = async function () {
+     if (!G.active) return;
+     clearInterval(G._poll); G._poll = null;
+-    closeGoalSheet();
++    closeGoalSheet(); closeGuide();
+     try { await apiFetch('/api/guest/end', { method: 'POST' }); } catch { /* sandbox expires on its own */ }
+     G.active = false;
+     muteSocket(false);
+@@ -211,21 +240,136 @@
+   }
+   async function refreshBar() {
+     const bar = $('guestBar');
+-    if (!bar || !G.active) return;
++    if (!bar || !G.active || G._busy) return;
++    G._busy = true;
+     let st = null;
+-    try { st = await apiFetch('/api/guest/state'); } catch { return; }
++    try { st = await apiFetch('/api/guest/state'); } catch { G._busy = false; return; }
++    G._busy = false;
++    if (!G.active) return;
+     if (!st?.active) { G.exit(); return; } // sandbox expired
+     G._state = st;
+-    const actions = [];
+-    if (st.pending?.length) actions.push(`<button type="button" class="guest-act" id="guestAcceptBtn">${tr('accept')}</button>`);
+-    if (st.has_mentor) actions.push(`<button type="button" class="guest-act" id="guestGoalBtn">${tr('setGoal')}</button>`);
+-    bar.innerHTML = `
+-      <div class="guest-bar-main">
+-        <span class="guest-dot" aria-hidden="true"></span>
+-        <span class="guest-bar-text"><b>${tr('bar')}</b><span> · ${tr('barSub')}</span></span>
+-        <button type="button" class="guest-exit" id="guestExitBtn">${tr('exit')}</button>
+-      </div>
+-      ${actions.length ? `<div class="guest-bar-actions">${actions.join('')}</div>` : ''}`;
++    replay(st.events || []);
++    const needs = st.pending?.length || 0;
++    const key = needs + ':' + tr('guide');
++    if (bar.dataset.key !== key) {
++      bar.dataset.key = key;
++      bar.innerHTML = `
++        <div class="guest-bar-main">
++          <span class="guest-dot" aria-hidden="true"></span>
++          <span class="guest-bar-text"><b>${tr('bar')}</b><span> · ${tr('barSub')}</span></span>
++          <button type="button" class="guest-act guest-guide-btn" id="guestGuideBtn">${tr('guide')}${needs ? `<i class="guest-badge" aria-hidden="true">${needs}</i>` : ''}</button>
++          <button type="button" class="guest-exit" id="guestExitBtn">${tr('exit')}</button>
++        </div>`;
++    }
++    if ($('guestGuide')) paintGuide();
++  }
++
++  // Replay simulated mentor events through the app's own socket handlers, so
++  // the mentee screens react exactly as they do to a real mentor.
++  function replay(events) {
++    const sock = bridge()?.getSocket?.();
++    for (const { event, payload } of events) {
++      if (event === 'mentorship_request_updated' && payload?.status === 'rejected') toast(tr('declined'), 'info');
++      try { (sock?.listeners?.(event) || []).forEach(fn => fn(payload)); } catch (e) { console.warn('[guest] replay failed', event, e); }
++    }
++  }
++
++  // ── Test guide: play the mentor's side of every step ────────────────────
++  const post = (path, body) => apiFetch('/api/guest/' + path, { method: 'POST', body: body || {} });
++  const fill = (k, v) => tr(k).replace('{n}', v);
++
++  function openGuide() {
++    if ($('guestGuide')) return;
++    const el = document.createElement('div');
++    el.id = 'guestGuide';
++    el.className = 'guest-pick';
++    el.setAttribute('role', 'dialog');
++    el.setAttribute('aria-modal', 'true');
++    el.innerHTML = `
++      <div class="guest-pick-card guest-guide-card">
++        <div class="guest-guide-head">
++          <div><div class="guest-entry-title">${tr('guide')}</div><div class="guest-entry-sub">${tr('guideSub')}</div></div>
++          <button type="button" class="guest-act" id="guestGuideClose">${tr('done')}</button>
++        </div>
++        <div id="guestSteps" class="guest-steps"></div>
++      </div>`;
++    document.body.appendChild(el);
++    paintGuide(true);
++  }
++  function closeGuide() { $('guestGuide')?.remove(); }
++
++  function paintGuide(force) {
++    const box = $('guestSteps'), st = G._state;
++    if (!box || !st) return;
++    // Don't rebuild while the tester is typing a mentor message.
++    const typing = box.querySelector('#guestMentorMsg');
++    const key = JSON.stringify([st.requested, st.pending?.length, st.has_mentor, st.goals, st.session?.status, st.session?.id, st.rejected, tr('guide')]);
++    if (!force && box.dataset.key === key) return;
++    const draft = typing?.value || '';
++    box.dataset.key = key;
++    const has = st.has_mentor, asked = st.requested > 0 || has;
++    const btn = (act, label, cls) => `<button type="button" class="guest-act${cls ? ' ' + cls : ''}" data-guest-act="${act}">${label}</button>`;
++    const step = (n, title, desc, state, body) => `
++      <div class="guest-step is-${state}">
++        <span class="guest-step-n" aria-hidden="true">${state === 'done' ? '✓' : n}</span>
++        <div class="guest-step-main">
++          <div class="guest-step-title">${title}</div>
++          <div class="guest-step-desc">${desc}</div>
++          ${body ? `<div class="guest-step-body">${body}</div>` : ''}
++        </div>
++      </div>`;
++    const ses = st.session;
++    const steps = [
++      step(1, tr('s1'), tr('s1d'), asked ? 'done' : 'now', asked ? '' : btn('find', tr('s1b'), 'is-primary')),
++      step(2, tr('s2'), has ? fill('s2done', esc(st.mentor_name || '')) : (st.pending?.length ? tr('s2d') : tr('s2lock')),
++        has ? 'done' : (st.pending?.length ? 'now' : 'locked'),
++        st.pending?.length ? btn('accept', tr('acceptB'), 'is-primary') + btn('decline', tr('declineB')) : ''),
++      step(3, tr('s3'), has ? tr('s3d') : tr('locked'), has ? 'now' : 'locked', has ? `
++        ${btn('chat', tr('s3b'))}
++        <div class="guest-compose"><input id="guestMentorMsg" class="guest-input" type="text" maxlength="500" placeholder="${esc(tr('mentorPh'))}" />${btn('say', tr('send'), 'is-primary')}</div>` : ''),
++      step(4, tr('s4'), has ? (st.goals ? fill('goalsN', st.goals) : tr('s4d')) : tr('locked'), has ? (st.goals ? 'done' : 'now') : 'locked',
++        has ? btn('goal', tr('s4b'), st.goals ? '' : 'is-primary') : ''),
++      step(5, tr('s5'), has ? (ses ? `${ses.status === 'active' ? tr('sessionLive') : tr('sessionSoon')} · ${esc(ses.title)}` : tr('s5d')) : tr('locked'),
++        has ? (ses ? 'done' : 'now') : 'locked',
++        !has ? '' : ses
++          ? btn('sessions', tr('openSessions'), 'is-primary') + btn('mentor-side', tr('mentorSide')) + btn('end-session', tr('endSession')) + `<div class="guest-step-hint">${tr('sessionHint')}</div>`
++          : btn('start-now', tr('startNow'), 'is-primary') + btn('start-10', tr('in10'))),
++    ];
++    box.innerHTML = steps.join('');
++    const again = box.querySelector('#guestMentorMsg');
++    if (again && draft) again.value = draft;
++  }
++
++  async function runAction(act, el) {
++    const st = G._state || {};
++    if (el) el.disabled = true;
++    const b = bridge();
++    try {
++      if (act === 'find') { closeGuide(); b.navigate('mentors'); }
++      else if (act === 'accept') { await simulateAccept(); }
++      else if (act === 'decline') {
++        const first = st.pending?.[0];
++        if (first) { await post('sim/decline', { request_id: first.id }); toast(tr('declined'), 'info'); await refreshBar(); closeGuide(); b.resetViews(); b.navigate('mentors'); }
++      }
++      else if (act === 'chat') { closeGuide(); b.navigate('chat'); }
++      else if (act === 'say') {
++        const input = $('guestMentorMsg'); const text = input?.value.trim();
++        if (text) { await post('sim/message', { content: text }); input.value = ''; toast(tr('sent'), 'success'); }
++      }
++      else if (act === 'goal') { closeGuide(); openGoalSheet(); }
++      else if (act === 'start-now' || act === 'start-10') {
++        await post('sim/session', { in_minutes: act === 'start-10' ? 10 : 0 });
++        await refreshBar();
++      }
++      else if (act === 'sessions') { closeGuide(); b.navigate('sessions'); }
++      else if (act === 'mentor-side' && st.session?.mentor_link) {
++        const tg = window.Telegram?.WebApp;
++        if (tg?.openLink) { try { tg.openLink(st.session.mentor_link); } catch { window.open(st.session.mentor_link, '_blank'); } }
++        else window.open(st.session.mentor_link, '_blank');
++      }
++      else if (act === 'end-session') { await post('sim/session/end'); await refreshBar(); if (typeof window.loadSessions === 'function') window.loadSessions(); }
++    } catch (e) { toast(e.message || tr('failed'), 'error'); }
++    finally { if (el?.isConnected) el.disabled = false; }
+   }
+ 
+   async function simulateAccept() {
+@@ -236,7 +380,7 @@
+       toast(tr('accepted'), 'success');
+       await refreshBar();
+       bridge().resetViews();
+-      bridge().navigate('dashboard');
++      if (typeof window.updateMessageBadge === 'function') window.updateMessageBadge();
+     } catch (e) { toast(e.message, 'error'); }
+   }
+ 
+@@ -264,12 +408,11 @@
+     if (G.active && typeof window.loadDashboard === 'function') window.loadDashboard();
+   }
+ 
+-  // The chat composer is hidden by CSS in guest mode; this is the matching server-side no-op.
+   document.addEventListener('DOMContentLoaded', syncEntry);
+   syncEntry();
+   if (typeof window.toggleLanguage === 'function') {
+     const origToggle = window.toggleLanguage;
+     window.toggleLanguage = function () { const r = origToggle.apply(this, arguments); setTimeout(syncEntry, 50); return r; };
+   }
+-  console.log('[guest] guest-mode.js loaded; header button:', !!$('guestHeaderBtn'));
++  console.log('[guest] guest-mode.js loaded; home card:', !!$('guestHomeCard'));
+ })();
+diff --git a/frontend/index.html b/frontend/index.html
+index 90e9962..047b816 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -17,7 +17,7 @@
+   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
+   <link rel="stylesheet" href="styles.css?v=3.8" />
+   <link rel="stylesheet" href="goals.css?v=1.5" />
+-  <link rel="stylesheet" href="guest-mode.css?v=1.2" />
++  <link rel="stylesheet" href="guest-mode.css?v=1.3" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+ 
+@@ -505,10 +505,6 @@
+         <div class="header-actions">
+           <button id="adminBtn" class="btn btn-sm btn-outline hidden" data-i18n="btn_admin"
+             onclick="window.location='/admin.html'">Admin</button>
+-          <button id="guestHeaderBtn" type="button" class="lang-toggle-btn guest-header-btn" style="display:none"
+-            aria-label="Guest preview">
+-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+-            <span id="guestHeaderLbl">Guest</span></button>
+           <button id="langBtnDash" class="lang-toggle-btn" onclick="toggleLanguage()"
+             aria-label="Switch language">EN</button>
+           <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon" class="theme-icon-svg">
+@@ -522,6 +518,26 @@
+         </div>
+       </div>
+       <div class="page-content">
++        <!-- Guest mode entry (mentors only; shown by guest-mode.js) -->
++        <section id="guestHomeCard" class="guest-home" style="display:none" aria-labelledby="guestHomeTitle">
++          <div class="guest-home-top">
++            <span class="guest-home-icon" aria-hidden="true">
++              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
++            </span>
++            <div class="guest-home-copy">
++              <div class="guest-home-eyebrow" data-guest-t="homeEyebrow">For mentors</div>
++              <h2 id="guestHomeTitle" class="guest-home-title" data-guest-t="homeTitle">Experience Holy Helper as a mentee</h2>
++            </div>
++          </div>
++          <p class="guest-home-sub" data-guest-t="homeSub">Run the full journey in a safe sandbox. Nobody is contacted and nothing is saved.</p>
++          <ul class="guest-home-feats" aria-hidden="true">
++            <li data-guest-t="f1">Request</li><li data-guest-t="f2">Chat</li><li data-guest-t="f3">Goals</li><li data-guest-t="f4">Live session</li>
++          </ul>
++          <button id="guestHomeStart" type="button" class="btn btn-primary guest-home-cta">
++            <span data-guest-t="homeCta">Try guest mode</span>
++            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
++          </button>
++        </section>
+         <!-- Daily Verse -->
+         <div class="verse-card">
+           <div class="verse-card-head">
+@@ -2525,7 +2541,7 @@
+   <script src="locales.js?v=2.1"></script>
+   <script src="app.js?v=4.2"></script>
+   <script src="goals.js?v=1.5"></script>
+-  <script src="guest-mode.js?v=1.2"></script>
++  <script src="guest-mode.js?v=1.3"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="audio-call.js?v=1.0"></script>
+   <script src="session-room.js?v=1.8"></script>
+diff --git a/routes/guest.js b/routes/guest.js
+index b36e18d..ca72cbe 100644
+--- a/routes/guest.js
++++ b/routes/guest.js
+@@ -11,6 +11,7 @@
+ 
+ const express = require('express');
+ const sandbox = require('../utils/guestSandbox');
++const { JITSI_DOMAIN, isPublicJitsi, generateJitsiJWT } = require('../utils');
+ 
+ const SAMPLE_VERSE = {
+   text: 'Your word is a lamp to my feet and a light to my path.',
+@@ -44,17 +45,42 @@ module.exports = (supabase, requireAuth, mentorsRouter) => {
+ 
+   // ── lifecycle ─────────────────────────────────────────────────────────
+   router.post('/start', (req, res) => {
+-    const s = sandbox.start(req.telegramUser.id, req.body?.sex);
++    const s = sandbox.start(req.telegramUser.id, req.body?.sex, req.body?.lang);
+     res.json({ user: sandbox.userView(s) });
+   });
+   router.post('/end', (req, res) => { sandbox.end(req.telegramUser.id); res.json({ success: true }); });
++  // Polled by the preview bar. Besides the checklist state it hands back any
++  // simulated mentor events that have come due (typing, replies, invites).
+   router.get('/state', (req, res) => {
+     const s = sb(req);
+-    res.json({ active: !!s, user: s ? sandbox.userView(s) : null,
+-      has_mentor: !!s?.assignment, pending: s ? s.requests.filter(r => r.status === 'pending').map(r => ({
+-        id: r.id, mentor_name: r.mentor.user_settings?.display_name || r.mentor.anonymous_id })) : [] });
++    if (!s) return res.json({ active: false, user: null, has_mentor: false, pending: [], events: [] });
++    const events = sandbox.flushDue(s);
++    const ses = sandbox.sessionView(s);
++    const mentorName = s.assignment ? (s.assignment.mentor.user_settings?.display_name || s.assignment.mentor.anonymous_id) : null;
++    res.json({
++      active: true, user: sandbox.userView(s), has_mentor: !!s.assignment, mentor_name: mentorName,
++      pending: s.requests.filter(r => r.status === 'pending').map(r => ({
++        id: r.id, mentor_name: r.mentor.user_settings?.display_name || r.mentor.anonymous_id })),
++      requested: s.requests.length, rejected: s.requests.filter(r => r.status === 'rejected').length,
++      goals: s.goals.length, messages_sent: s.messages.filter(m => m.from_id === s.persona.telegram_id).length,
++      session: ses && ses.status !== 'ended' ? { id: ses.id, title: ses.title, status: ses.status, scheduled_at: ses.scheduled_at,
++        mentor_link: mentorLink(s) } : null,
++      events,
++    });
+   });
+ 
++  // The mentor's side of the demo room, so a tester can open it on a second
++  // device and see a real two-person call. Same private room as the mentee.
++  function mentorLink(s) {
++    const ses = s.session;
++    if (!ses) return null;
++    const name = s.assignment?.mentor.user_settings?.display_name || s.assignment?.mentor.anonymous_id || 'Mentor';
++    const jwt = isPublicJitsi() ? null : generateJitsiJWT(ses.room_name, { displayName: name, moderator: true });
++    const params = ['config.disableDeepLinking=true', 'config.prejoinConfig.enabled=false',
++      `userInfo.displayName=${encodeURIComponent(name)}`, ...(jwt ? [`jwt=${jwt}`] : [])];
++    return `https://${JITSI_DOMAIN}/${ses.room_name}#${params.join('&')}`;
++  }
++
+   router.use(needSandbox);
+ 
+   // ── identity, dashboard ──────────────────────────────────────────────
+@@ -151,6 +177,27 @@ module.exports = (supabase, requireAuth, mentorsRouter) => {
+     if (r.error) return fail(res, r);
+     res.json({ success: true });
+   });
++  // ── "Act as my mentor" controls (each one only touches the sandbox) ────
++  router.post('/sim/decline', (req, res) => {
++    const r = sandbox.simulateDecline(req.sbx, String(req.body?.request_id || ''), req.body?.reason);
++    if (r.error) return fail(res, r);
++    res.json({ success: true });
++  });
++  router.post('/sim/message', (req, res) => {
++    const r = sandbox.mentorSays(req.sbx, req.body?.content);
++    if (r.error) return fail(res, r);
++    res.json({ success: true });
++  });
++  router.post('/sim/session', (req, res) => {
++    const r = sandbox.startSession(req.sbx, { inMinutes: req.body?.in_minutes, title: req.body?.title });
++    if (r.error) return fail(res, r);
++    res.status(201).json({ session: r.session, mentor_link: mentorLink(req.sbx) });
++  });
++  router.post('/sim/session/end', (req, res) => {
++    const r = sandbox.endSession(req.sbx);
++    if (r.error) return fail(res, r);
++    res.json({ success: true });
++  });
+   router.post('/mentors/waitlist', (req, res) => { req.sbx.waitlist.add(Number(req.body?.mentor_id)); res.json({ success: true }); });
+   router.delete('/mentors/waitlist/:id', (req, res) => { req.sbx.waitlist.delete(Number(req.params.id)); res.json({ success: true }); });
+   router.get('/mentors/my-requests', (req, res) => res.json([]));
+@@ -200,15 +247,83 @@ module.exports = (supabase, requireAuth, mentorsRouter) => {
+     res.json({ success: true });
+   });
+ 
+-  // ── messages: read-only preview (the composer is hidden client-side) ───
++  // ── messages: a real chat against the sandbox ─────────────────────────
++  // The simulated mentor answers a few seconds after each message (see
++  // sandbox.menteeSendMessage); replies reach the screen through /state events.
+   router.get('/messages/unread/count', (req, res) =>
+-    res.json({ count: req.sbx.messages.filter(m => !m.is_read).length }));
+-  router.post('/messages/read/:id', (req, res) => { req.sbx.messages.forEach(m => { m.is_read = true; }); res.json({ success: true }); });
+-  router.get('/messages/:id', (req, res) => res.json(req.sbx.messages));
++    res.json({ count: req.sbx.messages.filter(m => !m.is_read && m.from_id !== req.sbx.persona.telegram_id).length }));
++  router.post('/messages/read/:id', (req, res) => {
++    const now = new Date().toISOString();
++    req.sbx.messages.forEach(m => { if (m.from_id !== req.sbx.persona.telegram_id) { m.is_read = true; m.read_at = m.read_at || now; } });
++    res.json({ success: true });
++  });
++  router.post('/messages', (req, res) => {
++    const r = sandbox.menteeSendMessage(req.sbx, req.body || {});
++    if (r.error) return fail(res, r);
++    res.status(201).json(r.message);
++  });
++  router.patch('/messages/:id', (req, res) => {
++    const r = sandbox.editMessage(req.sbx, req.params.id, req.body?.content);
++    if (r.error) return fail(res, r);
++    res.json(r.message);
++  });
++  router.delete('/messages/:id', (req, res) => {
++    if (!sandbox.deleteMessage(req.sbx, req.params.id)) return res.status(404).json({ error: 'Message not found' });
++    res.json({ success: true });
++  });
++  router.get('/messages/:id', (req, res) => {
++    if (!req.sbx.assignment) return res.status(403).json({ error: 'No active mentorship with this user' });
++    const now = new Date().toISOString();
++    req.sbx.messages.forEach(m => { if (m.from_id !== req.sbx.persona.telegram_id) { m.is_read = true; m.read_at = m.read_at || now; } });
++    res.json(req.sbx.messages);
++  });
+ 
+-  // ── sessions: none in the preview ─────────────────────────────────────
+-  router.get('/sessions/my', (req, res) => res.json([]));
++  // ── sessions: one demo live session the "mentor" can start ─────────────
++  const EARLY_JOIN_MS = 5 * 60 * 1000;
++  const sesById = (req, res) => {
++    const v = sandbox.sessionView(req.sbx);
++    if (!v || v.id !== req.params.id) { res.status(404).json({ error: 'We could not find this session', code: 'not_found' }); return null; }
++    if (v.status === 'ended') { res.status(410).json({ error: 'This session has already ended.', code: 'ended' }); return null; }
++    return v;
++  };
++  router.get('/sessions/clock', (req, res) => res.json({ now: new Date().toISOString() }));
++  router.get('/sessions/my', (req, res) => {
++    const v = sandbox.sessionView(req.sbx);
++    res.json(v ? [{ session_id: v.id, telegram_id: req.sbx.persona.telegram_id, joined_at: null, left_at: null, session: v }] : []);
++  });
+   router.get('/sessions/upcoming', (req, res) => res.json([]));
++  router.delete('/sessions/my', (req, res) => {
++    if (req.sbx.session && sandbox.sessionView(req.sbx).status === 'ended') req.sbx.session = null;
++    res.json({ success: true, count: 0 });
++  });
++  router.get('/sessions/:id/join', (req, res) => {
++    const v = sesById(req, res); if (!v) return;
++    const startMs = new Date(v.scheduled_at).getTime();
++    if (v.status === 'scheduled' && startMs - Date.now() > EARLY_JOIN_MS) {
++      return res.status(403).json({ error: 'This session has not started yet. Please wait a little.', code: 'too_early',
++        starts_at: v.scheduled_at, opens_at: new Date(startMs - EARLY_JOIN_MS).toISOString(), server_time: new Date().toISOString() });
++    }
++    const ses = req.sbx.session;
++    const me = req.sbx.settings.display_name || req.sbx.persona.anonymous_id;
++    const jwt = isPublicJitsi() ? null : generateJitsiJWT(ses.room_name, { displayName: me, moderator: false });
++    res.json({ session_id: v.id, room_name: ses.room_name, room_password: ses.room_password, ...(jwt && { jitsi_token: jwt }),
++      jitsi_domain: JITSI_DOMAIN, display_name: me, is_moderator: false, title: v.title, is_group: false,
++      scheduled_at: v.scheduled_at, status: 'active', host_name: v.host.user_settings.display_name,
++      host_present: true, call_mode: ses.call_mode || 'video', server_time: new Date().toISOString() });
++  });
++  router.post('/sessions/:id/heartbeat', (req, res) => {
++    const v = sandbox.sessionView(req.sbx);
++    if (!v || v.id !== req.params.id) return res.status(404).json({ error: 'We could not find this session' });
++    res.json({ status: v.status, ended: v.status === 'ended', host_present: true, present_count: 2,
++      call_mode: req.sbx.session.call_mode || 'video', server_time: new Date().toISOString() });
++  });
++  router.post('/sessions/:id/leave', (req, res) => res.json({ success: true, ended: false }));
++  router.post('/sessions/:id/call-mode', (req, res) => {
++    if (req.sbx.session && ['audio', 'video'].includes(req.body?.mode)) req.sbx.session.call_mode = req.body.mode;
++    res.json({ success: true, mode: req.sbx.session?.call_mode || 'video' });
++  });
++  router.get('/sessions/:id/ice', (req, res) => res.json({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }));
++  router.post('/sessions/:id/signal', (req, res) => res.json({ success: true }));
+ 
+   // ── support: nothing is ever sent to the real support team ─────────────
+   router.get('/support', (req, res) => res.json([]));
+diff --git a/tests/guest-mode.routes.test.js b/tests/guest-mode.routes.test.js
+index 3477a50..dcb5e66 100644
+--- a/tests/guest-mode.routes.test.js
++++ b/tests/guest-mode.routes.test.js
+@@ -6,6 +6,7 @@ const http = require('http');
+ const express = require('express');
+ const R = require('../utils/goalRules');
+ const guestRoutes = require('../routes/guest');
++const sandbox = require('../utils/guestSandbox');
+ 
+ const writes = [];
+ function fakeSupabase(role) {
+@@ -95,6 +96,56 @@ async function boot(role) {
+   assert.strictEqual(ticked.body.stats.done, 1);
+   assert.strictEqual((await s.call('GET', '/goals/mine')).body.length, 1);
+ 
++  // Chat: refused before a mentor accepts (checked earlier), a real conversation after.
++  const sent = await s.call('POST', '/messages', { to_id: 77, content: 'Hello, I need prayer', client_id: 'c1' });
++  assert.strictEqual(sent.status, 201);
++  assert.strictEqual((await s.call('POST', '/messages', { to_id: 77, content: 'Hello, I need prayer', client_id: 'c1' })).body.id, sent.body.id, 'retry with the same client_id is idempotent');
++  assert.strictEqual((await s.call('POST', '/messages', { to_id: 77, content: '   ' })).status, 400);
++  assert.strictEqual((await s.call('GET', '/state')).body.events.length, 0, 'mentor has not answered yet');
++  sandbox.get(1).outbox.forEach(i => { i.due = 0; });              // fast-forward the mentor's typing delay
++  const ev = (await s.call('GET', '/state')).body.events;
++  assert.deepStrictEqual(ev.map(e => e.event), ['typing', 'new_message']);
++  assert.ok(/pray/i.test(ev[1].payload.content), 'reply follows the topic');
++  assert.strictEqual((await s.call('GET', '/messages/unread/count')).body.count, 1, 'the mentor reply is unread (welcome was read earlier)');
++  assert.strictEqual((await s.call('GET', '/messages/77')).body.length, 3);
++  assert.strictEqual((await s.call('GET', '/messages/unread/count')).body.count, 0, 'opening the chat marks mentor messages read');
++  assert.strictEqual((await s.call('PATCH', `/messages/${sent.body.id}`, { content: 'edited' })).body.content, 'edited');
++  assert.strictEqual((await s.call('DELETE', `/messages/${sent.body.id}`)).status, 200);
++  // The tester can also speak as the mentor.
++  assert.strictEqual((await s.call('POST', '/sim/message', { content: 'Hi from the mentor' })).status, 200);
++  assert.strictEqual((await s.call('GET', '/state')).body.events[0].payload.content, 'Hi from the mentor');
++
++  // Live session: invite → too early when scheduled → joinable now → heartbeat → end.
++  const later = await s.call('POST', '/sim/session', { in_minutes: 10 });
++  assert.strictEqual(later.status, 201);
++  assert.strictEqual((await s.call('POST', '/sim/session', {})).status, 409, 'only one demo session at a time');
++  assert.strictEqual((await s.call('GET', '/sessions/my')).body[0].session.status, 'scheduled');
++  const early = await s.call('GET', `/sessions/${later.body.session.id}/join`);
++  assert.strictEqual(early.status, 403);
++  assert.strictEqual(early.body.code, 'too_early', 'the room opens 5 minutes before the start, like the real one');
++  await s.call('POST', '/sim/session/end');
++  const now = await s.call('POST', '/sim/session', { title: 'Weekly check-in' });
++  assert.strictEqual(now.body.session.status, 'active');
++  assert.ok(now.body.mentor_link.includes('/holy-guest-'));
++  sandbox.get(1).outbox.forEach(i => { i.due = 0; });
++  assert.ok((await s.call('GET', '/state')).body.events.some(e => e.event === 'session_invite'));
++  const joined = await s.call('GET', `/sessions/${now.body.session.id}/join`);
++  assert.strictEqual(joined.body.host_present, true);
++  assert.strictEqual(joined.body.is_moderator, false);
++  assert.ok(joined.body.room_name.startsWith('holy-guest-'));
++  assert.strictEqual((await s.call('POST', `/sessions/${now.body.session.id}/heartbeat`, {})).body.present_count, 2);
++  await s.call('POST', '/sim/session/end');
++  assert.strictEqual((await s.call('GET', `/sessions/${now.body.session.id}/join`)).status, 410);
++
++  // Decline path (second request on a fresh sandbox state).
++  await s.call('POST', '/users/end-mentorship');
++  const req2 = await s.call('POST', '/mentors/request', { mentor_id: 77 });
++  assert.strictEqual((await s.call('POST', '/sim/decline', { request_id: req2.body.id })).status, 200);
++  assert.strictEqual((await s.call('GET', '/state')).body.pending.length, 0);
++  assert.strictEqual((await s.call('POST', '/mentors/request', { mentor_id: 77 })).status, 201, 'can ask again after a decline');
++  const req3 = (await s.call('GET', '/state')).body.pending[0];
++  await s.call('POST', '/simulate-accept', { request_id: req3.id });
++
+   // Streak + journal live only in the sandbox.
+   assert.strictEqual((await s.call('POST', '/streaks/mark')).body.current_streak, 1);
+   const j = await s.call('POST', '/journal', { content: 'hello', mood: 'ok' });
+@@ -103,7 +154,6 @@ async function boot(role) {
+ 
+   // Unmapped writes are refused; unmapped reads are harmless.
+   assert.strictEqual((await s.call('POST', '/avatar')).status, 403);
+-  assert.strictEqual((await s.call('POST', '/messages', { to_id: 77, content: 'hi' })).status, 403);
+   assert.strictEqual((await s.call('GET', '/something/else')).status, 200);
+ 
+   // Sandboxes are per mentor and discarded on exit.
+diff --git a/tests/guest-mode.ui.test.js b/tests/guest-mode.ui.test.js
+index 39a0f00..5b51c3a 100644
+--- a/tests/guest-mode.ui.test.js
++++ b/tests/guest-mode.ui.test.js
+@@ -6,20 +6,24 @@ const fs = require('fs');
+ const path = require('path');
+ const { JSDOM } = require('jsdom');
+ 
+-const html = '<!doctype html><body><div id="app"><div class="page-content"><div id="menteeStats"></div><div id="menteesList"></div></div><div id="chatInputRow"></div></div></body>';
++const html = '<!doctype html><body><div id="app"><div class="page-content"><section id="guestHomeCard" style="display:none"><span data-guest-t="homeCta"></span><button id="guestHomeStart" type="button"></button></section><div id="menteesList"></div></div></div></body>';
+ const dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'http://localhost/' });
+ const w = dom.window;
+ 
+ const mentor = { telegram_id: 1, role: 'mentor' };
+ const guestUser = { telegram_id: 9000000000001, role: 'user', is_guest: true };
++let hasMentor = false; const stateEvents = [];
+ let user = mentor, resets = 0; const navs = [], api = [], realFetches = [];
+-w.__holyBridge = { getUser: () => user, setUser: u => { user = u; }, getSocket: () => null, resetViews: () => { resets++; }, navigate: p => navs.push(p) };
++const replayed = [];
++const fakeSocket = { listeners: ev => [p => replayed.push([ev, p])] };
++w.__holyBridge = { getUser: () => user, setUser: u => { user = u; }, getSocket: () => fakeSocket, resetViews: () => { resets++; }, navigate: p => navs.push(p) };
+ w.showToast = () => {};
+ w.Telegram = { WebApp: { showConfirm: (_m, cb) => cb(true) } };
+ w.apiFetch = async (p, o = {}) => {
+   api.push([o.method || 'GET', p]);
+   if (p === '/api/guest/start') return { user: guestUser };
+-  if (p === '/api/guest/state') return { active: true, has_mentor: false, pending: [{ id: 'r1' }] };
++  if (p === '/api/guest/state') return { active: true, has_mentor: hasMentor, pending: hasMentor ? [] : [{ id: 'r1' }], requested: 1, goals: 0,
++    session: null, events: stateEvents.splice(0) };
+   return { success: true };
+ };
+ w.fetch = async (url, init) => { realFetches.push([url, init?.method || 'GET']); return { ok: true, status: 200 }; };
+@@ -30,13 +34,20 @@ const G = w.HolyGuest;
+ 
+ (async () => {
+   await new Promise(r => setTimeout(r, 20));   // DOMContentLoaded
+-  // Entry card is on the mentees page and lets the mentor pick a persona.
+-  const card = w.document.getElementById('guestEntryCard');
+-  assert.ok(card, 'entry card rendered');
++  // Home card shows for mentors only, and opens the persona picker.
++  const card = w.document.getElementById('guestHomeCard');
++  assert.strictEqual(card.style.display, '', 'mentor sees the entry card');
+   assert.strictEqual(w.document.getElementById('menteesList').children.length, 0, 'does not touch the mentees list');
+-  w.document.querySelector('[data-guest-sex="F"]').click();
++  user = { telegram_id: 5, role: 'user' }; G.syncEntry();
++  assert.strictEqual(card.style.display, 'none', 'mentees never see it');
++  user = mentor; G.syncEntry();
++  w.document.getElementById('guestHomeStart').click();
++  assert.ok(w.document.getElementById('guestPickSheet'), 'picker opens');
++  w.document.querySelector('[data-guest-pick="F"]').click();
+   assert.strictEqual(G.sex, 'F');
+-  assert.ok(w.document.querySelector('[data-guest-sex="F"]').classList.contains('is-on'));
++  assert.ok(w.document.querySelector('[data-guest-pick="F"]').classList.contains('is-on'));
++  w.document.getElementById('guestPickCancel').click();
++  assert.ok(!w.document.getElementById('guestPickSheet'));
+ 
+   // Nothing is blocked before the preview starts.
+   await w.fetch('/api/mentors/request', { method: 'POST' });
+@@ -51,8 +62,30 @@ const G = w.HolyGuest;
+   assert.deepStrictEqual(navs, ['dashboard']);
+   assert.ok(api.some(([m, p]) => m === 'POST' && p === '/api/guest/start'));
+   await new Promise(r => setTimeout(r, 20));
+-  assert.ok(w.document.getElementById('guestAcceptBtn'), 'pending request shows "Simulate acceptance"');
+-  assert.ok(!w.document.getElementById('guestGoalBtn'), 'goal button only after a mentor accepts');
++  assert.strictEqual(card.style.display, 'none', 'card hides during the preview');
++  assert.ok(w.document.querySelector('.guest-badge'), 'pending request flags the guide button');
++
++  // Test guide: step list, accept as the mentor, and simulated events replayed through the app's socket handlers.
++  w.document.getElementById('guestGuideBtn').click();
++  assert.ok(w.document.getElementById('guestGuide'));
++  assert.ok(w.document.querySelector('[data-guest-act="accept"]'), 'mentor can accept');
++  assert.ok(w.document.querySelector('[data-guest-act="decline"]'), 'mentor can decline');
++  assert.ok(!w.document.querySelector('[data-guest-act="goal"]'), 'goals locked until accepted');
++  w.document.querySelector('[data-guest-act="accept"]').click();
++  await new Promise(r => setTimeout(r, 30));
++  assert.ok(api.some(([m, p]) => m === 'POST' && p === '/api/guest/simulate-accept'));
++  hasMentor = true;
++  stateEvents.push({ event: 'new_message', payload: { id: 'm1', content: 'hi' } });
++  await new Promise(r => setTimeout(r, 2100));
++  assert.deepStrictEqual(replayed[0], ['new_message', { id: 'm1', content: 'hi' }], 'mentor reply is delivered to the chat handler');
++  assert.ok(w.document.querySelector('[data-guest-act="goal"]'), 'goal step unlocked');
++  assert.ok(w.document.querySelector('[data-guest-act="start-now"]'), 'live session step unlocked');
++  w.document.getElementById('guestMentorMsg').value = 'Welcome!';
++  w.document.querySelector('[data-guest-act="say"]').click();
++  await new Promise(r => setTimeout(r, 20));
++  assert.ok(api.some(([m, p]) => m === 'POST' && p === '/api/guest/sim/message'));
++  w.document.getElementById('guestGuideClose').click();
++  assert.ok(!w.document.getElementById('guestGuide'));
+ 
+   // Direct writes to real endpoints are refused while active; guest + read-only media pass.
+   const blocked = await w.fetch('/api/avatar', { method: 'POST' });
+diff --git a/utils/guestSandbox.js b/utils/guestSandbox.js
+index 3bbd155..c8339f5 100644
+--- a/utils/guestSandbox.js
++++ b/utils/guestSandbox.js
+@@ -27,11 +27,15 @@ function sweep() {
+   while (stores.size > MAX_SANDBOXES) stores.delete(stores.keys().next().value);
+ }
+ 
+-function create(mentorId, sex) {
++function create(mentorId, sex, lang) {
+   const menteeId = GUEST_BASE_ID + (Number(mentorId) % 1000000);
+   return {
+     mentorId: String(mentorId),
+     touched: Date.now(),
++    lang: lang === 'am' ? 'am' : 'en',
++    outbox: [],              // timed simulated events (mentor typing, replies, invites)
++    session: null,           // the one demo live session, if any
++    replyCount: 0,
+     persona: {
+       telegram_id: menteeId,
+       anonymous_id: 'Guest_Mentee',
+@@ -52,9 +56,9 @@ function create(mentorId, sex) {
+ 
+ function get(mentorId) { const s = stores.get(String(mentorId)); if (s) s.touched = Date.now(); return s || null; }
+ 
+-function start(mentorId, sex) {
++function start(mentorId, sex, lang) {
+   sweep();
+-  const s = create(mentorId, sex);
++  const s = create(mentorId, sex, lang);
+   stores.set(String(mentorId), s);
+   return s;
+ }
+@@ -100,13 +104,179 @@ function simulateAccept(s, requestId) {
+   s.assignment = { id: nid(), mentor: r.mentor, started_at: new Date().toISOString() };
+   s.messages.push({
+     id: nid(), from_id: r.mentor.telegram_id, to_id: s.persona.telegram_id,
+-    content: 'Welcome! (Preview message) This is how a first message from your mentor looks.',
++    content: (REPLIES[s.lang] || REPLIES.en).welcome,
+     created_at: new Date().toISOString(), is_read: false,
+   });
+   return { assignment: s.assignment };
+ }
+ 
+-function endAssignment(s) { s.assignment = null; s.goals = []; s.tasks = []; s.messages = []; }
++function endAssignment(s) { s.assignment = null; s.goals = []; s.tasks = []; s.messages = []; s.session = null; s.outbox = []; }
++
++
++// ── Simulated mentor ─────────────────────────────────────────────────────
++// Everything the mentor "does" is queued on s.outbox with a due time and handed
++// to the client by flushDue(), which the preview polls. The client replays each
++// item through the app's normal socket handlers, so the mentee screens react
++// exactly as they do to a real mentor. Nothing here reaches a real person.
++const REPLIES = {
++  en: {
++    greet: ['Hello, and welcome! I\'m glad you reached out. How are you doing today?',
++            'Peace to you! It\'s good to hear from you. What\'s on your heart this week?'],
++    thanks: ['You\'re most welcome. I\'m here whenever you need me.', 'Glad to help. Keep going, you\'re doing well.'],
++    pray: ['I\'ll be praying for you. Take one small step today and tell me how it went.',
++           'Prayer is a great place to start. Let\'s also pick one thing you can do today.'],
++    goal: ['Good idea. Tell me what you want to work on and I\'ll set it up as a goal for you.',
++           'Let\'s make it small and clear so you can finish it. What would a good first week look like?'],
++    session: ['Let\'s meet live. I\'ll start a session, so watch for the invite.',
++              'A call would help. Check the Sessions tab, I\'ll be there shortly.'],
++    fallback: ['Thank you for sharing that. Tell me a little more, I want to understand.',
++               'I hear you. What do you think is the first small step you could take?',
++               'That takes courage to say. How has it been affecting your week?',
++               'Thanks for trusting me with this. Let\'s take it one day at a time.'],
++    welcome: 'Welcome! I\'m glad to be walking with you. Tell me a little about what you\'d like support with.',
++  },
++  am: {
++    greet: ['ሰላም! እንኳን ደህና መጡ። ዛሬ እንዴት ነዎት?', 'ሰላም ለእርስዎ! መልእክትዎን በማግኘቴ ደስ ብሎኛል። በዚህ ሳምንት ልብዎ ላይ ያለው ምንድን ነው?'],
++    thanks: ['ምንም አይደለም። በፈለጉ ጊዜ እዚህ ነኝ።', 'በመርዳቴ ደስ ብሎኛል። ቀጥሉ፣ መልካም እየሰሩ ነው።'],
++    pray: ['እጸልይልዎታለሁ። ዛሬ አንድ ትንሽ እርምጃ ይውሰዱና እንዴት እንደነበር ይንገሩኝ።',
++           'ጸሎት ጥሩ መነሻ ነው። ዛሬ ሊያደርጉት የሚችሉትን አንድ ነገር እንምረጥ።'],
++    goal: ['ጥሩ ሀሳብ ነው። ምን ላይ መስራት እንደሚፈልጉ ይንገሩኝና ግብ አድርጌ አዘጋጅልዎታለሁ።',
++           'ትንሽና ግልጽ እናድርገው። ጥሩ የመጀመሪያ ሳምንት ምን ይመስላል?'],
++    session: ['በቀጥታ እንገናኝ። ክፍለ ጊዜ እጀምራለሁ፣ ግብዣውን ይጠብቁ።', 'ጥሪ ይጠቅመናል። የክፍለ ጊዜዎች ገጽን ይመልከቱ፣ በቅርቡ እመጣለሁ።'],
++    fallback: ['ስላካፈሉኝ አመሰግናለሁ። ትንሽ ተጨማሪ ይንገሩኝ፣ ልረዳዎ እፈልጋለሁ።',
++               'እሰማዎታለሁ። ሊወስዱት የሚችሉት የመጀመሪያ ትንሽ እርምጃ ምንድን ነው ብለው ያስባሉ?',
++               'ይህን መናገር ድፍረት ይጠይቃል። በሳምንትዎ ላይ እንዴት ተጽዕኖ አድርጓል?',
++               'ስላመኑኝ አመሰግናለሁ። አንድ ቀን በአንድ ቀን እንሂድ።'],
++    welcome: 'እንኳን ደህና መጡ! አብሬዎት በመጓዜ ደስ ብሎኛል። በምን ድጋፍ እንደሚፈልጉ ትንሽ ይንገሩኝ።',
++  },
++};
++
++function pickReply(s, text) {
++  const set = REPLIES[s.lang] || REPLIES.en;
++  const t = String(text || '').toLowerCase();
++  let key = 'fallback';
++  if (/pray|prayer|ጸሎት|ጸልይ/.test(t)) key = 'pray';
++  else if (/goal|plan|habit|ግብ|እቅድ/.test(t)) key = 'goal';
++  else if (/session|call|meet|live|ክፍለ|ጥሪ|ቀጥታ/.test(t)) key = 'session';
++  else if (/thank|thanks|አመሰግን/.test(t)) key = 'thanks';
++  else if (/\b(hi|hello|hey|peace|good (morning|evening))\b|ሰላም|ሀሎ/.test(t)) key = 'greet';
++  const list = set[key];
++  return list[s.replyCount++ % list.length];
++}
++
++function mentorMessage(s, content, delayMs) {
++  const m = { id: nid(), from_id: s.assignment.mentor.telegram_id, to_id: s.persona.telegram_id, content,
++    created_at: null, is_read: false, read_at: null, is_deleted: false };
++  s.outbox.push({ due: Date.now() + (delayMs || 0), type: 'message', msg: m });
++}
++
++// Pending events whose time has come. Applies them to the sandbox and returns
++// what the client should replay: [{ event, payload }].
++function flushDue(s) {
++  const now = Date.now();
++  const out = [], keep = [];
++  s.outbox.sort((a, b) => a.due - b.due);
++  for (const it of s.outbox) {
++    if (it.due > now) { keep.push(it); continue; }
++    if (it.type === 'message') {
++      if (!s.assignment) continue;
++      it.msg.created_at = new Date().toISOString();
++      s.messages.push(it.msg);
++      out.push({ event: 'new_message', payload: { ...it.msg } });
++    } else if (it.type === 'typing') {
++      if (s.assignment) out.push({ event: 'typing', payload: { from_id: s.assignment.mentor.telegram_id, action: 'typing' } });
++    } else if (it.type === 'event') {
++      out.push({ event: it.event, payload: it.payload });
++    }
++  }
++  s.outbox = keep;
++  return out;
++}
++
++function menteeSendMessage(s, { content, parent_id, client_id }) {
++  if (!s.assignment) return { status: 403, error: 'No active mentorship with this user' };
++  const text = String(content || '').trim();
++  if (!text) return { status: 400, error: 'to_id and content required' };
++  if (text.length > 2000) return { status: 400, error: 'Message too long' };
++  if (s.messages.length >= 500) return { status: 400, error: 'Preview limit reached.' };
++  if (client_id) {
++    const dup = s.messages.find(m => m.client_id === client_id);
++    if (dup) return { message: dup };
++  }
++  const m = { id: nid(), from_id: s.persona.telegram_id, to_id: s.assignment.mentor.telegram_id, content: text,
++    created_at: new Date().toISOString(), is_read: false, read_at: null, is_deleted: false,
++    parent_id: parent_id || null, ...(client_id ? { client_id } : {}) };
++  s.messages.push(m);
++  // The mentor "reads" it, types for a moment, then answers.
++  const typingAt = 1200, replyAt = 3000 + Math.min(text.length * 20, 2000);
++  s.outbox = s.outbox.filter(x => x.type !== 'typing');
++  s.outbox.push({ due: Date.now() + typingAt, type: 'typing' });
++  mentorMessage(s, pickReply(s, text), replyAt);
++  return { message: m };
++}
++
++function editMessage(s, id, content) {
++  const m = s.messages.find(x => String(x.id) === String(id) && x.from_id === s.persona.telegram_id);
++  if (!m) return { status: 404, error: 'Message not found' };
++  const text = String(content || '').trim();
++  if (!text) return { status: 400, error: 'Content required' };
++  m.content = text.slice(0, 2000); m.edited_at = new Date().toISOString();
++  return { message: m };
++}
++function deleteMessage(s, id) {
++  const i = s.messages.findIndex(x => String(x.id) === String(id) && x.from_id === s.persona.telegram_id);
++  if (i < 0) return false;
++  s.messages.splice(i, 1);
++  return true;
++}
++
++// Mentor-side controls ("act as my mentor"): the tester drives these by hand.
++function simulateDecline(s, requestId, reason) {
++  const r = s.requests.find(x => x.id === requestId && x.status === 'pending');
++  if (!r) return { status: 404, error: 'Request not found' };
++  r.status = 'rejected';
++  r.reason = String(reason || '').slice(0, 300) || null;
++  s.outbox.push({ due: Date.now(), type: 'event', event: 'mentorship_request_updated', payload: { requestId: r.id, status: 'rejected' } });
++  return { request: r };
++}
++function mentorSays(s, content) {
++  if (!s.assignment) return { status: 409, error: 'Accept a request first.' };
++  const text = String(content || '').trim();
++  if (!text) return { status: 400, error: 'Write a message first.' };
++  mentorMessage(s, text.slice(0, 2000), 0);
++  return { ok: true };
++}
++
++// ── Demo live session ────────────────────────────────────────────────────
++const sessionStatus = ses => (ses.status === 'scheduled' && Date.now() >= new Date(ses.scheduled_at).getTime()) ? 'active' : ses.status;
++function sessionView(s) {
++  if (!s.session) return null;
++  const m = s.assignment?.mentor;
++  return { id: s.session.id, title: s.session.title, is_group: false, host_id: s.session.host_id,
++    max_participants: 2, scheduled_at: s.session.scheduled_at, started_at: s.session.started_at, ended_at: s.session.ended_at,
++    status: sessionStatus(s.session),
++    host: { anonymous_id: m?.anonymous_id || 'Mentor', user_settings: { display_name: m?.user_settings?.display_name || m?.anonymous_id || 'Mentor' } } };
++}
++function startSession(s, { inMinutes, title } = {}) {
++  if (!s.assignment) return { status: 409, error: 'Accept a request first.' };
++  if (s.session && sessionStatus(s.session) !== 'ended') return { status: 409, error: 'A session is already open. End it first.' };
++  const mins = Math.max(0, Math.min(Number(inMinutes) || 0, 60));
++  const at = new Date(Date.now() + mins * 60000);
++  const rand = () => Math.random().toString(36).slice(2, 10);
++  s.session = { id: nid(), title: String(title || '').trim().slice(0, 120) || '1-on-1 Session', host_id: s.assignment.mentor.telegram_id,
++    scheduled_at: at.toISOString(), started_at: mins ? null : at.toISOString(), ended_at: null,
++    status: mins ? 'scheduled' : 'active', room_name: `holy-guest-${rand()}${rand()}`, room_password: rand() + rand(), call_mode: 'video' };
++  const v = sessionView(s);
++  s.outbox.push({ due: Date.now() + 300, type: 'event', event: 'session_invite',
++    payload: { session_id: v.id, host: v.host.user_settings.display_name, title: v.title, scheduled_at: v.scheduled_at } });
++  return { session: v };
++}
++function endSession(s) {
++  if (!s.session || sessionStatus(s.session) === 'ended') return { status: 404, error: 'No open session.' };
++  s.session.status = 'ended'; s.session.ended_at = new Date().toISOString();
++  s.outbox.push({ due: Date.now(), type: 'event', event: 'session_ended', payload: { session_id: s.session.id, reason: 'host' } });
++  return { ok: true };
++}
+ 
+ // ── Goals (same rules as routes/goals.js, in memory) ────────────────────
+ const goalView = (s, g) => {
+@@ -261,7 +431,9 @@ function deleteJournal(s, id) {
+ 
+ module.exports = {
+   GUEST_BASE_ID, start, get, end, userView,
+-  addRequest, pendingMentorIds, cancelRequest, simulateAccept, endAssignment,
++  addRequest, pendingMentorIds, cancelRequest, simulateAccept, simulateDecline, endAssignment,
++  flushDue, menteeSendMessage, editMessage, deleteMessage, mentorSays,
++  sessionView, startSession, endSession,
+   listGoals, createGoal, deleteGoal, setTaskDone,
+   streakView, markStreak, addJournal, updateJournal, deleteJournal,
+ };
