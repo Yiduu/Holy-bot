@@ -18,11 +18,11 @@
 /* ── preview bar: always visible while in guest mode ── */
 .guest-bar {
   position: fixed; left: 0; right: 0; top: 0; z-index: 8000;
-  padding: calc(var(--safe-top, 0px) + 6px) 12px 8px;
+  padding: var(--safe-top, 0px) 12px 0; height: var(--guest-bar-h, 44px); box-sizing: border-box; display: flex; align-items: center;
   background: rgba(var(--bg2-rgb), .96); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--gold); box-shadow: var(--shadow-sm);
 }
-.guest-bar-main { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.guest-bar-main { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; }
 .guest-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); flex: 0 0 auto; box-shadow: 0 0 0 4px var(--gold-dim); }
 .guest-bar-text { flex: 1; min-width: 0; color: var(--text); font-size: var(--fs-xs, 12px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .guest-bar-text span { color: var(--text2); }
@@ -34,8 +34,12 @@
 .guest-bar-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .guest-act { background: var(--gold-dim); }
 
-/* push the app down so the bar never covers a header */
-body.guest-mode #app { padding-top: calc(var(--safe-top, 0px) + 48px); }
+/* The bar takes the top safe area, so the app below it must not add it again
+   (that double offset pushed every screen down on phones). */
+body.guest-mode #app {
+  --safe-top: 0px;
+  box-sizing: border-box; height: 100%; padding-top: var(--guest-bar-h, 44px);
+}
 
 /* ── goal composer sheet ── */
 .guest-sheet { position: fixed; inset: 0; z-index: 8500; display: flex; flex-direction: column; background: var(--bg); }
@@ -61,31 +65,16 @@ body.guest-mode #app { padding-top: calc(var(--safe-top, 0px) + 48px); }
 .guest-pick-actions .btn { flex: 1; }
 @media (prefers-reduced-motion: no-preference) { .guest-pick-card { animation: guestPickIn .2s ease-out; } @keyframes guestPickIn { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } } }
 
-/* ── Home entry card (mentors) ── */
-.guest-home {
-  position: relative; margin-bottom: 16px; padding: 16px; border-radius: 18px; overflow: hidden;
-  background: linear-gradient(160deg, var(--gold-dim), transparent 70%), var(--bg2, var(--surface));
-  border: 1px solid var(--border-dim); box-shadow: var(--shadow-sm);
-}
-.guest-home::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--gold); }
-.guest-home-top { display: flex; align-items: center; gap: 12px; }
-.guest-home-icon {
-  flex: 0 0 auto; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
+/* ── Home header button (beside the language toggle) ── */
+.guest-header-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: var(--fs-xs, 12px); font-weight: 700; letter-spacing: .01em; white-space: nowrap;
   color: var(--gold); background: var(--gold-dim); border: 1px solid var(--gold);
+  transition: background .15s ease, transform .1s ease;
 }
-.guest-home-copy { min-width: 0; }
-.guest-home-eyebrow { color: var(--gold); font-size: var(--fs-2xs, 11px); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.guest-home-title { margin: 2px 0 0; color: var(--text); font-size: var(--fs-md, 16px); font-weight: 700; line-height: 1.25; }
-.guest-home-sub { margin: 10px 0 0; color: var(--text2); font-size: var(--fs-sm, 13px); line-height: 1.5; }
-.guest-home-feats { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 14px; padding: 0; }
-.guest-home-feats li {
-  padding: 4px 10px; border-radius: 999px; font-size: var(--fs-xs, 12px); font-weight: 600; color: var(--text2);
-  border: 1px solid var(--border-dim); background: rgba(var(--bg2-rgb), .5);
-}
-.guest-home-cta { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; }
-.guest-home-cta svg { transition: transform .18s ease; }
-.guest-home-cta:hover svg, .guest-home-cta:focus-visible svg { transform: translateX(3px); }
-@media (prefers-reduced-motion: reduce) { .guest-home-cta svg { transition: none; } }
+.guest-header-btn:active { transform: scale(.97); }
+.guest-header-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+@media (max-width: 359px) { .guest-header-btn #guestHeaderLbl { display: none; } .guest-header-btn { padding: 0 9px; } }
 
 /* ── Test guide sheet ── */
 .guest-pick { z-index: 8600; }

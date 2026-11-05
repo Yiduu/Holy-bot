@@ -78,7 +78,6 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       .select('telegram_id, anonymous_id, sex, age_range, preferred_mentee_sex, accepting_requests, rating, rating_count, photo_file_id, photo_updated_at, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
       .eq('is_banned', false);
-    if (gctx) query = query.neq('telegram_id', gctx.selfId);   // a guest can't request themselves
 
     // Hide mentors an admin has suspended (Mentor Control System) from
     // mentee-facing discovery, without touching their role or history.
@@ -100,8 +99,11 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       // Show this mentor if:  their preference matches the mentee's sex
       //                    OR their preference is 'prefer_not' (both sexes welcome)
       //                    OR they have no preference set yet (NULL → both)
+      // Guest mode: the previewing mentor always sees their own card, so they
+      // can request themselves and play both sides of the flow.
       query = query.or(
-        `preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.prefer_not,preferred_mentee_sex.is.null`
+        `preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.prefer_not,preferred_mentee_sex.is.null` +
+        (gctx ? `,telegram_id.eq.${gctx.selfId}` : '')
       );
     }
 

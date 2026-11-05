@@ -505,6 +505,9 @@
         <div class="header-actions">
           <button id="adminBtn" class="btn btn-sm btn-outline hidden" data-i18n="btn_admin"
             onclick="window.location='/admin.html'">Admin</button>
+          <button id="guestHeaderBtn" type="button" class="guest-header-btn" style="display:none" aria-label="Guest mode">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span id="guestHeaderLbl" data-guest-t="guestBtn">Guest mode</span></button>
           <button id="langBtnDash" class="lang-toggle-btn" onclick="toggleLanguage()"
             aria-label="Switch language">EN</button>
           <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon" class="theme-icon-svg">
@@ -518,26 +521,6 @@
         </div>
       </div>
       <div class="page-content">
-        <!-- Guest mode entry (mentors only; shown by guest-mode.js) -->
-        <section id="guestHomeCard" class="guest-home" style="display:none" aria-labelledby="guestHomeTitle">
-          <div class="guest-home-top">
-            <span class="guest-home-icon" aria-hidden="true">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            </span>
-            <div class="guest-home-copy">
-              <div class="guest-home-eyebrow" data-guest-t="homeEyebrow">For mentors</div>
-              <h2 id="guestHomeTitle" class="guest-home-title" data-guest-t="homeTitle">Experience Holy Helper as a mentee</h2>
-            </div>
-          </div>
-          <p class="guest-home-sub" data-guest-t="homeSub">Run the full journey in a safe sandbox. Nobody is contacted and nothing is saved.</p>
-          <ul class="guest-home-feats" aria-hidden="true">
-            <li data-guest-t="f1">Request</li><li data-guest-t="f2">Chat</li><li data-guest-t="f3">Goals</li><li data-guest-t="f4">Live session</li>
-          </ul>
-          <button id="guestHomeStart" type="button" class="btn btn-primary guest-home-cta">
-            <span data-guest-t="homeCta">Try guest mode</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-          </button>
-        </section>
         <!-- Daily Verse -->
         <div class="verse-card">
           <div class="verse-card-head">

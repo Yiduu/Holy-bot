@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 
-const html = '<!doctype html><body><div id="app"><div class="page-content"><section id="guestHomeCard" style="display:none"><span data-guest-t="homeCta"></span><button id="guestHomeStart" type="button"></button></section><div id="menteesList"></div></div></div></body>';
+const html = '<!doctype html><body><div id="app"><div class="page-content"><button id="guestHeaderBtn" type="button" style="display:none"><span id="guestHeaderLbl"></span></button><div id="menteesList"></div></div></div></body>';
 const dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'http://localhost/' });
 const w = dom.window;
 
@@ -35,13 +35,13 @@ const G = w.HolyGuest;
 (async () => {
   await new Promise(r => setTimeout(r, 20));   // DOMContentLoaded
   // Home card shows for mentors only, and opens the persona picker.
-  const card = w.document.getElementById('guestHomeCard');
-  assert.strictEqual(card.style.display, '', 'mentor sees the entry card');
+  const card = w.document.getElementById('guestHeaderBtn');
+  assert.strictEqual(card.style.display, 'inline-flex', 'mentor sees the header button');
   assert.strictEqual(w.document.getElementById('menteesList').children.length, 0, 'does not touch the mentees list');
   user = { telegram_id: 5, role: 'user' }; G.syncEntry();
   assert.strictEqual(card.style.display, 'none', 'mentees never see it');
   user = mentor; G.syncEntry();
-  w.document.getElementById('guestHomeStart').click();
+  w.document.getElementById('guestHeaderBtn').click();
   assert.ok(w.document.getElementById('guestPickSheet'), 'picker opens');
   w.document.querySelector('[data-guest-pick="F"]').click();
   assert.strictEqual(G.sex, 'F');
@@ -62,7 +62,7 @@ const G = w.HolyGuest;
   assert.deepStrictEqual(navs, ['dashboard']);
   assert.ok(api.some(([m, p]) => m === 'POST' && p === '/api/guest/start'));
   await new Promise(r => setTimeout(r, 20));
-  assert.strictEqual(card.style.display, 'none', 'card hides during the preview');
+  assert.strictEqual(card.style.display, 'none', 'button hides during the preview');
   assert.ok(w.document.querySelector('.guest-badge'), 'pending request flags the guide button');
 
   // Test guide: step list, accept as the mentor, and simulated events replayed through the app's socket handlers.
