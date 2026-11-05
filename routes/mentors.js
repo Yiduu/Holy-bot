@@ -44,8 +44,12 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     // When a mentor is choosing who to transfer a mentee to (?for_mentee=<id>),
     // the preference check must use that MENTEE's sex, not the mentor's own.
     // Only honoured if the caller really has that mentee assigned.
+    // Guest mode (routes/guest.js) sets req.guestContext: a mentor previewing the
+    // mentee experience. The list is the real one, filtered as for the guest's
+    // chosen persona; nothing about the guest is read from or written to the DB.
+    const gctx = req.guestContext || null;
     let sexSourceId = req.telegramUser.id;
-    const forMentee = parseInt(req.query.for_mentee, 10);
+    const forMentee = gctx ? 0 : parseInt(req.query.for_mentee, 10);
     if (forMentee) {
       const { data: owns } = await supabase
         .from('mentorship_assignments')
@@ -57,7 +61,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
         .maybeSingle();
       if (owns) sexSourceId = forMentee;
     }
-    const { data: userData } = await supabase
+    const { data: userData } = gctx ? { data: { sex: gctx.sex } } : await supabase
       .from('users')
       .select('sex')
       .eq('telegram_id', sexSourceId)
@@ -74,6 +78,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
       .select('telegram_id, anonymous_id, sex, age_range, preferred_mentee_sex, accepting_requests, rating, rating_count, photo_file_id, photo_updated_at, user_settings(bio, specialization, max_mentees, display_name)')
       .eq('role', 'mentor')
       .eq('is_banned', false);
+    if (gctx) query = query.neq('telegram_id', gctx.selfId);   // a guest can't request themselves
 
     // Hide mentors an admin has suspended (Mentor Control System) from
     // mentee-facing discovery, without touching their role or history.
@@ -133,20 +138,20 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
     // So the frontend can render "Pending" instead of "Request" for mentors
     // this user has already messaged — including after a page refresh, not
     // just right after clicking (client-side-only state would reset on reload).
-    const { data: pendingRows } = await supabase
+    const { data: pendingRows } = gctx ? { data: [] } : await supabase
       .from('mentorship_requests')
       .select('mentor_id')
       .eq('user_id', req.telegramUser.id)
       .eq('status', 'pending');
-    const pendingMentorIds = new Set((pendingRows || []).map(r => r.mentor_id));
+    const pendingMentorIds = gctx ? new Set(gctx.pendingIds) : new Set((pendingRows || []).map(r => r.mentor_id));
 
     // Mentors this user asked to be notified about ("Notify me" on a full
     // mentor). A missing table (migration not run yet) just means "none".
-    const { data: waitRows } = await supabase
+    const { data: waitRows } = gctx ? { data: [] } : await supabase
       .from('mentor_waitlist')
       .select('mentor_id')
       .eq('user_id', req.telegramUser.id);
-    const waitlistedMentorIds = new Set((waitRows || []).map(r => r.mentor_id));
+    const waitlistedMentorIds = gctx ? new Set(gctx.waitlistIds) : new Set((waitRows || []).map(r => r.mentor_id));
 
     // Enrich with mentee counts and expertise topics. Batched: three queries
     // for the whole list instead of three per mentor, so this page costs the

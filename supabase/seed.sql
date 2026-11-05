@@ -1,6 +1,4 @@
--- ============================================================
--- Seed: Daily Bible Verses (100 verses for recovery)
--- ============================================================
+
 
 INSERT INTO daily_verses (reference, text, theme) VALUES
 

@@ -43,6 +43,31 @@ thing from a dashboard in the Mini App.
 - English and Amharic UI strings (`local/en.json`, `local/am.json`,
   `frontend/locales.js`)
 
+## Guest mode (mentors preview the mentee side)
+
+On **My Mentees**, a mentor can tap **Start preview** to use the app exactly as
+a mentee does: the Home dashboard, **Find a mentor** (the real directory,
+filtered for the persona they pick: male, female or not specified), sending a
+request, goals, Bible streak and journal.
+
+- A top bar stays visible the whole time with **Exit**.
+- After sending a request, **Simulate acceptance** unlocks the mentor view:
+  the mentor card, a sample first message, and **Set a goal as my mentor**,
+  which opens the real goal composer and shows the result on the mentee
+  dashboard immediately.
+- Nothing is real. The preview lives in memory (`utils/guestSandbox.js`),
+  guest ids start at 9000000000000 so they can't collide with Telegram ids,
+  and it is dropped on exit, on restart, or after 6 hours idle. No request,
+  message or notification is ever sent, and the database is never written.
+  Real mentors are only *read* to build the directory.
+- Only users whose role is `mentor` can start it (checked on every call).
+- Chat is read-only in the preview and sessions are empty.
+
+How it works: while active, `apiFetch` sends every `/api/*` call to
+`/api/guest/*` (`routes/guest.js`), and `frontend/guest-mode.js` also blocks any
+direct `fetch`/XHR write to a real endpoint (avatar upload, chat attachments).
+Tests: `tests/guest-mode.routes.test.js`, `tests/guest-mode.ui.test.js`.
+
 ## Setup
 
 ### 1. Environment variables

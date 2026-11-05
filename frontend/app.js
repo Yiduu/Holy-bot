@@ -137,6 +137,11 @@ function getTelegramData() {
 // dropped keep-alive connection). POSTs are never retried here; callers that
 // retry must do so idempotently (see sendMessage + client_id).
 async function apiFetch(path, opts = {}) {
+  // Guest mode (mentor previewing the mentee experience): every /api call is
+  // sent to the sandbox under /api/guest instead, so real data is never touched.
+  if (window.HolyGuest?.active && typeof path === 'string' && path.startsWith('/api/') && !path.startsWith('/api/guest/')) {
+    path = '/api/guest/' + path.slice(5);
+  }
   const { timeout, retry, ...fetchOpts } = opts;
   const method = (fetchOpts.method || 'GET').toUpperCase();
   const timeoutMs = timeout ?? 20000;
@@ -2601,15 +2606,37 @@ function startApp() {
     $('adminBtn')?.classList.remove('hidden');
   }
 
-  if (currentUser?.role === 'mentor') {
-    $('nav-requests')?.classList.remove('hidden');
-    $('nav-my-mentees')?.style.setProperty('display', 'flex');
-    document.querySelectorAll('.mentor-hidden').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('.mentor-only').forEach(el => el.classList.remove('hidden'));
-  }
+  if (currentUser?.role === 'mentor') applyRoleChrome();
 
   applyLanguage();
 }
+
+// Show/hide the mentor-only and mentee-only navigation for the current role.
+// Also used by guest mode when a mentor switches to the mentee preview and back.
+function applyRoleChrome() {
+  const mentor = currentUser?.role === 'mentor';
+  $('nav-requests')?.classList.toggle('hidden', !mentor);
+  $('nav-my-mentees')?.style.setProperty('display', mentor ? 'flex' : 'none');
+  document.querySelectorAll('.mentor-hidden').forEach(el => el.style.display = mentor ? 'none' : '');
+  document.querySelectorAll('.mentor-only').forEach(el => el.classList.toggle('hidden', !mentor));
+}
+
+// Small seam for frontend/guest-mode.js (the file-scope `let`s above are not on window).
+window.__holyBridge = {
+  getUser: () => currentUser,
+  getSocket: () => socket,
+  setUser: u => { currentUser = u; },
+  // Drop everything cached for the previous role so the other role's screens load fresh.
+  resetViews() {
+    mentorsCache = []; hasActiveMentorState = false; activeMentorData = null;
+    myMentorTopicIds = new Set(); myGoalsCache = []; _myMenteesCache = [];
+    ['mentorsList', 'requestsList', 'referralsList', 'menteesList', 'activeMentorContainer', 'myGoalsList']
+      .forEach(id => { const el = $(id); if (el) { el.innerHTML = ''; delete el.dataset.drawn; } });
+    applyRoleChrome();
+    updateProfileIdentity?.();
+  },
+  navigate: p => navigate(p),
+};
 
 function keepAlive() {
   setInterval(() => fetch(`${API}/health`).catch(() => { }), 4 * 60 * 1000);

@@ -1,0 +1,1264 @@
+diff --git a/README.md b/README.md
+index feec75d..4074ffd 100644
+--- a/README.md
++++ b/README.md
+@@ -43,6 +43,31 @@ thing from a dashboard in the Mini App.
+ - English and Amharic UI strings (`local/en.json`, `local/am.json`,
+   `frontend/locales.js`)
+ 
++## Guest mode (mentors preview the mentee side)
++
++On **My Mentees**, a mentor can tap **Start preview** to use the app exactly as
++a mentee does: the Home dashboard, **Find a mentor** (the real directory,
++filtered for the persona they pick: male, female or not specified), sending a
++request, goals, Bible streak and journal.
++
++- A top bar stays visible the whole time with **Exit**.
++- After sending a request, **Simulate acceptance** unlocks the mentor view:
++  the mentor card, a sample first message, and **Set a goal as my mentor**,
++  which opens the real goal composer and shows the result on the mentee
++  dashboard immediately.
++- Nothing is real. The preview lives in memory (`utils/guestSandbox.js`),
++  guest ids start at 9000000000000 so they can't collide with Telegram ids,
++  and it is dropped on exit, on restart, or after 6 hours idle. No request,
++  message or notification is ever sent, and the database is never written.
++  Real mentors are only *read* to build the directory.
++- Only users whose role is `mentor` can start it (checked on every call).
++- Chat is read-only in the preview and sessions are empty.
++
++How it works: while active, `apiFetch` sends every `/api/*` call to
++`/api/guest/*` (`routes/guest.js`), and `frontend/guest-mode.js` also blocks any
++direct `fetch`/XHR write to a real endpoint (avatar upload, chat attachments).
++Tests: `tests/guest-mode.routes.test.js`, `tests/guest-mode.ui.test.js`.
++
+ ## Setup
+ 
+ ### 1. Environment variables
+diff --git a/frontend/app.js b/frontend/app.js
+index 9e49bb9..3a49a04 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -137,6 +137,11 @@ function getTelegramData() {
+ // dropped keep-alive connection). POSTs are never retried here; callers that
+ // retry must do so idempotently (see sendMessage + client_id).
+ async function apiFetch(path, opts = {}) {
++  // Guest mode (mentor previewing the mentee experience): every /api call is
++  // sent to the sandbox under /api/guest instead, so real data is never touched.
++  if (window.HolyGuest?.active && typeof path === 'string' && path.startsWith('/api/') && !path.startsWith('/api/guest/')) {
++    path = '/api/guest/' + path.slice(5);
++  }
+   const { timeout, retry, ...fetchOpts } = opts;
+   const method = (fetchOpts.method || 'GET').toUpperCase();
+   const timeoutMs = timeout ?? 20000;
+@@ -2601,16 +2606,38 @@ function startApp() {
+     $('adminBtn')?.classList.remove('hidden');
+   }
+ 
+-  if (currentUser?.role === 'mentor') {
+-    $('nav-requests')?.classList.remove('hidden');
+-    $('nav-my-mentees')?.style.setProperty('display', 'flex');
+-    document.querySelectorAll('.mentor-hidden').forEach(el => el.style.display = 'none');
+-    document.querySelectorAll('.mentor-only').forEach(el => el.classList.remove('hidden'));
+-  }
++  if (currentUser?.role === 'mentor') applyRoleChrome();
+ 
+   applyLanguage();
+ }
+ 
++// Show/hide the mentor-only and mentee-only navigation for the current role.
++// Also used by guest mode when a mentor switches to the mentee preview and back.
++function applyRoleChrome() {
++  const mentor = currentUser?.role === 'mentor';
++  $('nav-requests')?.classList.toggle('hidden', !mentor);
++  $('nav-my-mentees')?.style.setProperty('display', mentor ? 'flex' : 'none');
++  document.querySelectorAll('.mentor-hidden').forEach(el => el.style.display = mentor ? 'none' : '');
++  document.querySelectorAll('.mentor-only').forEach(el => el.classList.toggle('hidden', !mentor));
++}
++
++// Small seam for frontend/guest-mode.js (the file-scope `let`s above are not on window).
++window.__holyBridge = {
++  getUser: () => currentUser,
++  getSocket: () => socket,
++  setUser: u => { currentUser = u; },
++  // Drop everything cached for the previous role so the other role's screens load fresh.
++  resetViews() {
++    mentorsCache = []; hasActiveMentorState = false; activeMentorData = null;
++    myMentorTopicIds = new Set(); myGoalsCache = []; _myMenteesCache = [];
++    ['mentorsList', 'requestsList', 'referralsList', 'menteesList', 'activeMentorContainer', 'myGoalsList']
++      .forEach(id => { const el = $(id); if (el) { el.innerHTML = ''; delete el.dataset.drawn; } });
++    applyRoleChrome();
++    updateProfileIdentity?.();
++  },
++  navigate: p => navigate(p),
++};
++
+ function keepAlive() {
+   setInterval(() => fetch(`${API}/health`).catch(() => { }), 4 * 60 * 1000);
+ }
+diff --git a/frontend/guest-mode.css b/frontend/guest-mode.css
+new file mode 100644
+index 0000000..0a724a1
+--- /dev/null
++++ b/frontend/guest-mode.css
+@@ -0,0 +1,62 @@
++/* Guest mode (mentor previews the app as a mentee). Built on the app's own
++   tokens, so it follows the light and dark themes automatically. */
++
++/* ── entry card (My Mentees page) ── */
++.guest-entry { border: 1px dashed var(--border); background: var(--surface); }
++.guest-entry-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
++.guest-entry-icon {
++  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
++  color: var(--gold); background: var(--gold-dim);
++}
++.guest-entry-title { font-weight: 700; color: var(--text); font-size: var(--fs-md, 16px); }
++.guest-entry-sub { color: var(--text2); font-size: var(--fs-sm, 13px); line-height: 1.45; margin-top: 2px; }
++.guest-entry-label { color: var(--text3); font-size: var(--fs-xs, 12px); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 8px; }
++.guest-chips { display: flex; gap: 8px; flex-wrap: wrap; }
++.guest-chip {
++  flex: 1 1 0; min-width: 84px; min-height: 40px; padding: 8px 12px; border-radius: 999px; cursor: pointer;
++  border: 1px solid var(--border-dim); background: transparent; color: var(--text2); font: inherit; font-weight: 600;
++}
++.guest-chip.is-on { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); }
++.guest-chip:focus-visible, .guest-act:focus-visible, .guest-exit:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
++.guest-entry-note { color: var(--text3); font-size: var(--fs-xs, 12px); margin: 10px 0 14px; line-height: 1.4; }
++.guest-start { width: 100%; }
++
++/* ── preview bar: always visible while in guest mode ── */
++.guest-bar {
++  position: fixed; left: 0; right: 0; top: 0; z-index: 8000;
++  padding: calc(var(--safe-top, 0px) + 6px) 12px 8px;
++  background: rgba(var(--bg2-rgb), .96); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
++  border-bottom: 1px solid var(--gold); box-shadow: var(--shadow-sm);
++}
++.guest-bar-main { display: flex; align-items: center; gap: 8px; min-height: 32px; }
++.guest-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); flex: 0 0 auto; box-shadow: 0 0 0 4px var(--gold-dim); }
++.guest-bar-text { flex: 1; min-width: 0; color: var(--text); font-size: var(--fs-xs, 12px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
++.guest-bar-text span { color: var(--text2); }
++.guest-exit, .guest-act {
++  min-height: 32px; padding: 4px 12px; border-radius: 999px; cursor: pointer; font: inherit; font-size: var(--fs-xs, 12px); font-weight: 700;
++  border: 1px solid var(--gold); color: var(--gold); background: transparent;
++}
++.guest-exit { color: var(--text); border-color: var(--border-dim); }
++.guest-bar-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
++.guest-act { background: var(--gold-dim); }
++
++/* push the app down so the bar never covers a header */
++body.guest-mode #app { padding-top: calc(var(--safe-top, 0px) + 48px); }
++body.guest-mode #guestBar:has(.guest-bar-actions) ~ #app { padding-top: calc(var(--safe-top, 0px) + 92px); }
++
++/* chat is read-only in the preview */
++body.guest-mode #chatInputRow { display: none !important; }
++
++/* ── goal composer sheet ── */
++.guest-sheet { position: fixed; inset: 0; z-index: 8500; display: flex; flex-direction: column; background: var(--bg); }
++.guest-sheet-head {
++  display: flex; align-items: center; justify-content: space-between; gap: 12px;
++  padding: calc(var(--safe-top, 0px) + 10px) 14px 10px; border-bottom: 1px solid var(--border-dim);
++}
++.guest-sheet-title { font-weight: 700; color: var(--text); }
++.guest-sheet-body { flex: 1; overflow-y: auto; padding: 14px 14px calc(var(--safe-bottom, 0px) + 24px); -webkit-overflow-scrolling: touch; }
++
++@media (prefers-reduced-motion: no-preference) {
++  .guest-bar { animation: guestIn .22s ease-out; }
++  @keyframes guestIn { from { transform: translateY(-100%); } to { transform: none; } }
++}
+diff --git a/frontend/guest-mode.js b/frontend/guest-mode.js
+new file mode 100644
+index 0000000..232c6b1
+--- /dev/null
++++ b/frontend/guest-mode.js
+@@ -0,0 +1,250 @@
++// Guest mode for mentors ("preview as a mentee").
++//
++// A mentor taps "Start preview" on the My Mentees page and the app switches to
++// the real mentee screens (dashboard, find a mentor, requests, goals, streak,
++// journal). apiFetch (app.js) sends every call to /api/guest/*, which only
++// reads and writes an in-memory sandbox. Nothing here can create a real
++// request, message or notification. Exit restores the mentor account.
++//
++// Loaded after app.js and goals.js. Uses window.__holyBridge from app.js.
++(function () {
++  'use strict';
++
++  const STR = {
++    en: {
++      title: 'Preview as a mentee', sub: 'See the app exactly as a mentee does. Find a mentor, send a request, set up goals and try every feature. Nothing is sent to real people.',
++      pick: 'Preview as', m: 'Male', f: 'Female', n: 'Not specified', start: 'Start preview',
++      note: 'Mentors only see you if their mentee preference matches the option you pick.',
++      bar: 'Guest preview', barSub: 'Nothing here is real',
++      exit: 'Exit', accept: 'Simulate acceptance', setGoal: 'Set a goal as my mentor',
++      accepted: 'Your mentor accepted (preview). Chat and goals are now unlocked.',
++      goalTitle: 'Set a goal as the mentor', done: 'Done',
++      blocked: 'Not available in guest preview.', starting: 'Starting…', failed: "Couldn't start the preview",
++      ending: 'Exit guest preview?', endBody: 'Everything you tried here will be cleared.', stay: 'Stay', leave: 'Exit',
++      readOnlyChat: 'Chat is read-only in the preview.',
++    },
++    am: {
++      title: 'እንደ ተመካሪ ቅድመ እይታ', sub: 'መተግበሪያውን ተመካሪ እንደሚያየው ይመልከቱ። አማካሪ ይፈልጉ፣ ጥያቄ ይላኩ፣ ግቦችን ያዘጋጁ እና ሁሉንም ባህሪያት ይሞክሩ። ለእውነተኛ ሰዎች ምንም አይላክም።',
++      pick: 'እንደ', m: 'ወንድ', f: 'ሴት', n: 'ያልተገለጸ', start: 'ቅድመ እይታ ጀምር',
++      note: 'አማካሪዎች የሚያዩዎት የተመካሪ ምርጫቸው ከመረጡት አማራጭ ጋር ሲዛመድ ብቻ ነው።',
++      bar: 'የእንግዳ ቅድመ እይታ', barSub: 'እዚህ ያለው ምንም እውነተኛ አይደለም',
++      exit: 'ውጣ', accept: 'ተቀባይነትን አስመስል', setGoal: 'እንደ አማካሪዬ ግብ አዘጋጅ',
++      accepted: 'አማካሪዎ ተቀብለዋል (ቅድመ እይታ)። ውይይት እና ግቦች ተከፍተዋል።',
++      goalTitle: 'እንደ አማካሪ ግብ አዘጋጅ', done: 'ተጠናቀቀ',
++      blocked: 'በእንግዳ ቅድመ እይታ ውስጥ አይገኝም።', starting: 'በመጀመር ላይ…', failed: 'ቅድመ እይታውን መጀመር አልተቻለም',
++      ending: 'ከእንግዳ ቅድመ እይታ ይውጡ?', endBody: 'እዚህ የሞከሩት ሁሉ ይጸዳል።', stay: 'ቆይ', leave: 'ውጣ',
++      readOnlyChat: 'በቅድመ እይታው ውይይት ለማንበብ ብቻ ነው።',
++    },
++  };
++  const tr = k => (STR[localStorage.getItem('language')] || STR.en)[k] || STR.en[k] || k;
++  const esc = s => (window.escapeHtml ? window.escapeHtml(String(s)) : String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
++  const $ = id => document.getElementById(id);
++  const bridge = () => window.__holyBridge;
++  const toast = (m, type) => (window.showToast ? window.showToast(m, type || 'info') : console.log(m));
++
++  const G = window.HolyGuest = { active: false, sex: 'prefer_not', _mentorUser: null, _poll: null };
++
++  // ── Hard guard: while the preview runs, nothing may write to real endpoints ──
++  // apiFetch already rewrites to /api/guest; this catches the direct fetch/XHR
++  // paths (avatar upload, chat attachments) so they can never reach real data.
++  function isRealApiWrite(url, method) {
++    let path = '';
++    try { path = new URL(url, location.origin).pathname; } catch { return false; }
++    if (!path.startsWith('/api/') || path.startsWith('/api/guest/')) return false;
++    if (/^\/api\/(avatar\/|messages\/file\/)/.test(path) && (!method || method === 'GET')) return false; // read-only media
++    return true;
++  }
++  const realFetch = window.fetch.bind(window);
++  window.fetch = function (input, init) {
++    if (G.active) {
++      const url = typeof input === 'string' ? input : input?.url;
++      const method = String(init?.method || (typeof input !== 'string' && input?.method) || 'GET').toUpperCase();
++      if (isRealApiWrite(url, method)) {
++        return Promise.resolve(new Response(JSON.stringify({ error: tr('blocked'), code: 'guest_blocked' }),
++          { status: 403, headers: { 'Content-Type': 'application/json' } }));
++      }
++    }
++    return realFetch(input, init);
++  };
++  const realOpen = XMLHttpRequest.prototype.open;
++  XMLHttpRequest.prototype.open = function (method, url, ...rest) {
++    if (G.active && isRealApiWrite(url, String(method).toUpperCase())) {
++      this.__blocked = true;
++      return realOpen.call(this, method, 'about:blank', ...rest);
++    }
++    return realOpen.call(this, method, url, ...rest);
++  };
++  const realSend = XMLHttpRequest.prototype.send;
++  XMLHttpRequest.prototype.send = function (...a) {
++    if (this.__blocked) { setTimeout(() => { try { this.onerror && this.onerror(new Error('blocked')); } catch { } }, 0); return; }
++    return realSend.apply(this, a);
++  };
++
++  // Real-time events belong to the real account; ignore them during the preview
++  // so a live message or request can't be drawn inside the mentee screens.
++  function muteSocket(on) {
++    try {
++      const sock = window.__holyBridge?.getSocket?.();
++      if (!sock) return;
++      if (on && !sock.__origOnevent) {
++        sock.__origOnevent = sock.onevent;
++        sock.onevent = function (packet) { if (!G.active) return sock.__origOnevent.call(this, packet); };
++      } else if (!on && sock.__origOnevent) {
++        sock.onevent = sock.__origOnevent; delete sock.__origOnevent;
++      }
++    } catch (e) { console.warn('[guest] socket mute failed', e); }
++  }
++
++  // ── Entry card on the My Mentees page ───────────────────────────────────
++  function mountEntryCard() {
++    const stats = $('menteeStats');
++    if (!stats || $('guestEntryCard')) return;
++    const card = document.createElement('div');
++    card.id = 'guestEntryCard';
++    card.className = 'card mb-16 guest-entry';
++    stats.parentNode.insertBefore(card, stats);
++    paintEntry();
++  }
++  function paintEntry() {
++    const card = $('guestEntryCard');
++    if (!card) return;
++    const opt = (v, k) => `<button type="button" class="guest-chip${G.sex === v ? ' is-on' : ''}" data-guest-sex="${v}" aria-pressed="${G.sex === v}">${tr(k)}</button>`;
++    card.innerHTML = `
++      <div class="guest-entry-head">
++        <span class="guest-entry-icon" aria-hidden="true">
++          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
++        </span>
++        <div><div class="guest-entry-title">${tr('title')}</div><div class="guest-entry-sub">${tr('sub')}</div></div>
++      </div>
++      <div class="guest-entry-label">${tr('pick')}</div>
++      <div class="guest-chips" role="group">${opt('M', 'm')}${opt('F', 'f')}${opt('prefer_not', 'n')}</div>
++      <div class="guest-entry-note">${tr('note')}</div>
++      <button type="button" class="btn btn-primary guest-start" id="guestStartBtn">${tr('start')}</button>`;
++  }
++  document.addEventListener('click', e => {
++    const chip = e.target.closest('[data-guest-sex]');
++    if (chip) { G.sex = chip.dataset.guestSex; paintEntry(); return; }
++    if (e.target.closest('#guestStartBtn')) { G.enter(); return; }
++    if (e.target.closest('#guestExitBtn')) { confirmExit(); return; }
++    if (e.target.closest('#guestAcceptBtn')) { simulateAccept(); return; }
++    if (e.target.closest('#guestGoalBtn')) { openGoalSheet(); return; }
++    if (e.target.closest('#guestGoalClose')) { closeGoalSheet(); return; }
++  });
++
++  // ── Enter / exit ────────────────────────────────────────────────────────
++  G.enter = async function () {
++    if (G.active) return;
++    const b = bridge();
++    const me = b?.getUser();
++    if (!b || me?.role !== 'mentor') return toast(tr('blocked'), 'error');
++    const btn = $('guestStartBtn');
++    if (btn) { btn.disabled = true; btn.textContent = tr('starting'); }
++    try {
++      const { user } = await apiFetch('/api/guest/start', { method: 'POST', body: { sex: G.sex } });
++      G._mentorUser = me;
++      G.active = true;
++      b.setUser(user);
++      muteSocket(true);
++      document.body.classList.add('guest-mode');
++      b.resetViews();
++      mountBar();
++      b.navigate('dashboard');
++      refreshBar();
++      G._poll = setInterval(refreshBar, 4000);
++    } catch (e) {
++      toast(e.message || tr('failed'), 'error');
++      if (btn) { btn.disabled = false; btn.textContent = tr('start'); }
++    }
++  };
++
++  G.exit = async function () {
++    if (!G.active) return;
++    clearInterval(G._poll); G._poll = null;
++    closeGoalSheet();
++    try { await apiFetch('/api/guest/end', { method: 'POST' }); } catch { /* sandbox expires on its own */ }
++    G.active = false;
++    muteSocket(false);
++    const b = bridge();
++    b.setUser(G._mentorUser); G._mentorUser = null;
++    document.body.classList.remove('guest-mode');
++    $('guestBar')?.remove();
++    b.resetViews();
++    b.navigate('my-mentees');
++    paintEntry();
++  };
++
++  function confirmExit() {
++    const tg = window.Telegram?.WebApp;
++    if (tg?.showConfirm) { tg.showConfirm(`${tr('ending')}\n${tr('endBody')}`, ok => { if (ok) G.exit(); }); return; }
++    if (window.confirm(`${tr('ending')}\n${tr('endBody')}`)) G.exit();
++  }
++
++  // ── Preview bar ─────────────────────────────────────────────────────────
++  function mountBar() {
++    if ($('guestBar')) return;
++    const bar = document.createElement('div');
++    bar.id = 'guestBar';
++    bar.className = 'guest-bar';
++    bar.setAttribute('role', 'region');
++    bar.setAttribute('aria-label', tr('bar'));
++    document.body.appendChild(bar);
++  }
++  async function refreshBar() {
++    const bar = $('guestBar');
++    if (!bar || !G.active) return;
++    let st = null;
++    try { st = await apiFetch('/api/guest/state'); } catch { return; }
++    if (!st?.active) { G.exit(); return; } // sandbox expired
++    G._state = st;
++    const actions = [];
++    if (st.pending?.length) actions.push(`<button type="button" class="guest-act" id="guestAcceptBtn">${tr('accept')}</button>`);
++    if (st.has_mentor) actions.push(`<button type="button" class="guest-act" id="guestGoalBtn">${tr('setGoal')}</button>`);
++    bar.innerHTML = `
++      <div class="guest-bar-main">
++        <span class="guest-dot" aria-hidden="true"></span>
++        <span class="guest-bar-text"><b>${tr('bar')}</b><span> · ${tr('barSub')}</span></span>
++        <button type="button" class="guest-exit" id="guestExitBtn">${tr('exit')}</button>
++      </div>
++      ${actions.length ? `<div class="guest-bar-actions">${actions.join('')}</div>` : ''}`;
++  }
++
++  async function simulateAccept() {
++    const first = G._state?.pending?.[0];
++    if (!first) return;
++    try {
++      await apiFetch('/api/guest/simulate-accept', { method: 'POST', body: { request_id: first.id } });
++      toast(tr('accepted'), 'success');
++      await refreshBar();
++      bridge().resetViews();
++      bridge().navigate('dashboard');
++    } catch (e) { toast(e.message, 'error'); }
++  }
++
++  // ── "Set a goal as my mentor": the real mentor goal composer, aimed at the sandbox ──
++  function openGoalSheet() {
++    if (!window.HolyGoals || $('guestGoalSheet')) return;
++    const me = bridge().getUser();
++    const sheet = document.createElement('div');
++    sheet.id = 'guestGoalSheet';
++    sheet.className = 'guest-sheet';
++    sheet.innerHTML = `
++      <div class="guest-sheet-head">
++        <div class="guest-sheet-title">${tr('goalTitle')}</div>
++        <button type="button" class="guest-act" id="guestGoalClose">${tr('done')}</button>
++      </div>
++      <div class="guest-sheet-body"><div id="guestGoalPanel"></div></div>`;
++    document.body.appendChild(sheet);
++    window.HolyGoals.mountMentor($('guestGoalPanel'), me.telegram_id);
++  }
++  function closeGoalSheet() {
++    const sheet = $('guestGoalSheet');
++    if (!sheet) return;
++    sheet.remove();
++    // Redraw the mentee's own goals card with whatever was just created.
++    if (G.active && typeof window.loadDashboard === 'function') window.loadDashboard();
++  }
++
++  // The chat composer is hidden by CSS in guest mode; this is the matching server-side no-op.
++  document.addEventListener('DOMContentLoaded', mountEntryCard);
++  if (document.readyState !== 'loading') mountEntryCard();
++})();
+diff --git a/frontend/index.html b/frontend/index.html
+index a8435b1..cb4d737 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -17,6 +17,7 @@
+   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
+   <link rel="stylesheet" href="styles.css?v=3.8" />
+   <link rel="stylesheet" href="goals.css?v=1.5" />
++  <link rel="stylesheet" href="guest-mode.css?v=1.0" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+ 
+@@ -2520,6 +2521,7 @@
+   <script src="locales.js?v=2.1"></script>
+   <script src="app.js?v=4.0"></script>
+   <script src="goals.js?v=1.5"></script>
++  <script src="guest-mode.js?v=1.0"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="audio-call.js?v=1.0"></script>
+   <script src="session-room.js?v=1.8"></script>
+diff --git a/package.json b/package.json
+index 7d61a52..7827f54 100644
+--- a/package.json
++++ b/package.json
+@@ -6,7 +6,7 @@
+     "scripts": {
+         "start": "node server.js",
+         "dev": "nodemon server.js",
+-        "test": "node tests/sessions.lifecycle.test.js && node tests/mentorship-health.test.js && node tests/admin-health.routes.test.js && node tests/session-room.client.test.js && node tests/audio-call.test.js && node tests/waitlist.test.js && node tests/mentors-page.test.js && node tests/chat-attachments.test.js && node tests/chat-recorder.test.js && node tests/voice-transcode.test.js && node tests/app-height.test.js && node tests/chat-floating-date.test.js && node tests/goals.rules.test.js && node tests/goal-reminders.test.js && node tests/goals-reminders-ui.test.js && node tests/goals-ui.test.js"
++        "test": "node tests/sessions.lifecycle.test.js && node tests/mentorship-health.test.js && node tests/admin-health.routes.test.js && node tests/session-room.client.test.js && node tests/audio-call.test.js && node tests/waitlist.test.js && node tests/mentors-page.test.js && node tests/chat-attachments.test.js && node tests/chat-recorder.test.js && node tests/voice-transcode.test.js && node tests/app-height.test.js && node tests/chat-floating-date.test.js && node tests/goals.rules.test.js && node tests/goal-reminders.test.js && node tests/goals-reminders-ui.test.js && node tests/goals-ui.test.js && node tests/guest-mode.routes.test.js && node tests/guest-mode.ui.test.js"
+     },
+     "engines": {
+         "node": ">=18.0.0"
+diff --git a/routes/guest.js b/routes/guest.js
+new file mode 100644
+index 0000000..b36e18d
+--- /dev/null
++++ b/routes/guest.js
+@@ -0,0 +1,224 @@
++'use strict';
++
++// Guest mode for mentors: "preview the app as a mentee".
++//
++// Mounted at /api/guest. The client (frontend/guest-mode.js) rewrites every
++// /api/<x> call to /api/guest/<x> while guest mode is on, so the real mentee
++// screens run unchanged but can only ever talk to this file. Everything here
++// reads/writes the in-memory sandbox (utils/guestSandbox.js). The only real
++// data touched is READ-ONLY: the real mentor directory and the topic list.
++// No notifications, no bot messages, no real requests are ever created.
++
++const express = require('express');
++const sandbox = require('../utils/guestSandbox');
++
++const SAMPLE_VERSE = {
++  text: 'Your word is a lamp to my feet and a light to my path.',
++  reference: 'Psalm 119:105',
++};
++
++module.exports = (supabase, requireAuth, mentorsRouter) => {
++  const router = express.Router();
++  const fail = (res, e) => res.status(e.status || 500).json({ error: e.message || e.error || 'Server error' });
++  const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(e => fail(res, e));
++
++  // Only mentors may use guest mode. Re-checked on every call.
++  const mentorOnly = wrap(async (req, res, next) => {
++    const { data } = await supabase.from('users').select('role, is_banned')
++      .eq('telegram_id', req.telegramUser.id).maybeSingle();
++    if (!data || data.role !== 'mentor' || data.is_banned) {
++      return res.status(403).json({ error: 'Guest mode is only available to mentors.' });
++    }
++    next();
++  });
++  router.use(requireAuth, mentorOnly);
++
++  const sb = req => sandbox.get(req.telegramUser.id);
++  // Routes below need a running sandbox.
++  const needSandbox = (req, res, next) => {
++    const s = sb(req);
++    if (!s) return res.status(409).json({ error: 'Guest mode is not active.', code: 'guest_inactive' });
++    req.sbx = s;
++    next();
++  };
++
++  // ── lifecycle ─────────────────────────────────────────────────────────
++  router.post('/start', (req, res) => {
++    const s = sandbox.start(req.telegramUser.id, req.body?.sex);
++    res.json({ user: sandbox.userView(s) });
++  });
++  router.post('/end', (req, res) => { sandbox.end(req.telegramUser.id); res.json({ success: true }); });
++  router.get('/state', (req, res) => {
++    const s = sb(req);
++    res.json({ active: !!s, user: s ? sandbox.userView(s) : null,
++      has_mentor: !!s?.assignment, pending: s ? s.requests.filter(r => r.status === 'pending').map(r => ({
++        id: r.id, mentor_name: r.mentor.user_settings?.display_name || r.mentor.anonymous_id })) : [] });
++  });
++
++  router.use(needSandbox);
++
++  // ── identity, dashboard ──────────────────────────────────────────────
++  router.get('/auth/me', (req, res) => res.json({ registered: true, user: sandbox.userView(req.sbx), admin_id: null }));
++  router.get('/auth/verse', (req, res) => res.json(SAMPLE_VERSE));
++  router.get('/users/stats', wrap(async (req, res) => {
++    const [u, m] = await Promise.all([
++      supabase.from('users').select('telegram_id', { count: 'exact', head: true }).eq('is_banned', false),
++      supabase.from('users').select('telegram_id', { count: 'exact', head: true }).eq('role', 'mentor').eq('is_banned', false),
++    ]);
++    res.json({ total_users: u.count || 0, active_mentors: m.count || 0, sessions_today: 0 });
++  }));
++  router.get('/users/settings', (req, res) => res.json({ ...req.sbx.settings, telegram_id: req.sbx.persona.telegram_id }));
++  router.patch('/users/settings', (req, res) => {
++    const ok = ['display_name', 'notify_messages', 'notify_sessions', 'notify_daily_verse', 'notify_streak_reminder'];
++    for (const k of ok) if (req.body?.[k] !== undefined) req.sbx.settings[k] = req.body[k];
++    res.json({ ...req.sbx.settings });
++  });
++  router.get('/users/pending-rating', (req, res) => res.json(null));
++  router.post('/users/skip-rating', (req, res) => res.json({ success: true }));
++  router.get('/users/my-mentor', (req, res) => {
++    const a = req.sbx.assignment;
++    res.json(a ? { id: a.id, user_id: req.sbx.persona.telegram_id, mentor_id: a.mentor.telegram_id,
++      is_active: true, started_at: a.started_at, mentor: a.mentor } : null);
++  });
++  router.get('/users/chat-partner', (req, res) => {
++    const a = req.sbx.assignment;
++    if (!a) return res.json({ type: 'none' });
++    const m = a.mentor;
++    const unread = req.sbx.messages.filter(x => !x.is_read && x.from_id === m.telegram_id).length;
++    res.json({ type: 'single', partner: { telegram_id: m.telegram_id, anonymous_id: m.anonymous_id,
++      display_name: m.user_settings?.display_name || m.anonymous_id, last_active: new Date().toISOString(),
++      photo_file_id: m.photo_file_id, photo_updated_at: m.photo_updated_at, unread_count: unread } });
++  });
++  router.post('/users/end-mentorship', (req, res) => { sandbox.endAssignment(req.sbx); res.json({ success: true }); });
++  router.post('/users/end-mentorship-and-rate', (req, res) => { sandbox.endAssignment(req.sbx); res.json({ success: true }); });
++
++  // ── topics (read-only real list; the guest's own choice is sandboxed) ──
++  router.get('/topics', wrap(async (req, res) => {
++    const { data, error } = await supabase.from('topics').select('*').eq('is_active', true).order('name', { ascending: true });
++    if (error) return res.status(500).json({ error: error.message });
++    res.json(data);
++  }));
++  router.get('/topics/my', wrap(async (req, res) => {
++    const ids = req.sbx.topics;
++    if (!ids.length) return res.json([]);
++    const { data } = await supabase.from('topics').select('*').in('id', ids);
++    res.json((data || []).map(t => ({ topic_id: t.id, topics: t })));
++  }));
++  router.post('/topics/my', (req, res) => {
++    const ids = Array.isArray(req.body?.topic_ids) ? req.body.topic_ids.map(Number).filter(Number.isFinite).slice(0, 20) : [];
++    req.sbx.topics = ids;
++    res.json({ success: true });
++  });
++
++  // ── mentor discovery + requests ───────────────────────────────────────
++  // The real directory, filtered for the guest persona (see routes/mentors.js).
++  router.get('/mentors', (req, res, next) => {
++    req.guestContext = {
++      sex: req.sbx.persona.sex,
++      selfId: req.telegramUser.id,
++      pendingIds: [...sandbox.pendingMentorIds(req.sbx)],
++      waitlistIds: [...req.sbx.waitlist],
++    };
++    req.url = '/';
++    mentorsRouter.handle(req, res, next);
++  });
++
++  router.post('/mentors/request', wrap(async (req, res) => {
++    const mentorId = Number(req.body?.mentor_id);
++    if (!mentorId) return res.status(400).json({ error: 'mentor_id required' });
++    if (String(mentorId) === String(req.telegramUser.id)) return res.status(400).json({ error: "You can't request yourself." });
++
++    // Same eligibility checks as the real endpoint (read-only), so the
++    // preview shows the real "full" / "not accepting" errors.
++    const { data: mentor } = await supabase.from('users')
++      .select('telegram_id, anonymous_id, sex, age_range, rating, rating_count, photo_file_id, photo_updated_at, accepting_requests, role, is_banned, user_settings(bio, specialization, display_name, max_mentees)')
++      .eq('telegram_id', mentorId).maybeSingle();
++    if (!mentor || mentor.role !== 'mentor' || mentor.is_banned) return res.status(404).json({ error: 'Mentor not found' });
++    if (mentor.accepting_requests === false) return res.status(409).json({ error: 'This mentor is not accepting new requests at this time.' });
++    const max = mentor.user_settings?.max_mentees || parseInt(process.env.MAX_MENTEES_DEFAULT || '3', 10);
++    const { count } = await supabase.from('mentorship_assignments').select('id', { count: 'exact', head: true })
++      .eq('mentor_id', mentorId).eq('is_active', true);
++    if ((count || 0) >= max) return res.status(409).json({ error: 'Mentor is at full capacity. Please try another mentor.' });
++
++    const { accepting_requests, role, is_banned, ...snapshot } = mentor;
++    const r = sandbox.addRequest(req.sbx, snapshot, req.body?.topic_id);
++    if (r.error) return fail(res, r);
++    res.status(201).json({ id: r.request.id, status: 'pending', preview: true });
++  }));
++
++  router.post('/simulate-accept', (req, res) => {
++    const r = sandbox.simulateAccept(req.sbx, String(req.body?.request_id || ''));
++    if (r.error) return fail(res, r);
++    res.json({ success: true });
++  });
++  router.post('/mentors/waitlist', (req, res) => { req.sbx.waitlist.add(Number(req.body?.mentor_id)); res.json({ success: true }); });
++  router.delete('/mentors/waitlist/:id', (req, res) => { req.sbx.waitlist.delete(Number(req.params.id)); res.json({ success: true }); });
++  router.get('/mentors/my-requests', (req, res) => res.json([]));
++  router.get('/mentors/referrals', (req, res) => res.json([]));
++  router.post('/mentors/rate', (req, res) => res.json({ success: true }));
++
++  // ── goals (mentee view + the "act as my mentor" composer) ──────────────
++  router.get('/goals/mine', (req, res) => res.json(req.sbx.assignment ? sandbox.listGoals(req.sbx) : []));
++  router.get('/goals/mentee/:id', (req, res) => res.json(sandbox.listGoals(req.sbx)));
++  router.post('/goals', (req, res) => {
++    const r = sandbox.createGoal(req.sbx, req.body || {});
++    if (r.error) return fail(res, r);
++    res.status(201).json(r.goal);
++  });
++  router.patch('/goals/tasks/:id', (req, res) => {
++    const r = sandbox.setTaskDone(req.sbx, req.params.id, req.body || {});
++    if (r.error) return fail(res, r);
++    res.json(r.goal);
++  });
++  router.delete('/goals/:id', (req, res) => {
++    if (!sandbox.deleteGoal(req.sbx, req.params.id)) return res.status(404).json({ error: 'Goal not found' });
++    res.json({ success: true });
++  });
++
++  // ── streak ────────────────────────────────────────────────────────────
++  router.get('/streaks', (req, res) => res.json(sandbox.streakView(req.sbx)));
++  router.post('/streaks/mark', (req, res) => res.json(sandbox.markStreak(req.sbx)));
++
++  // ── journal ───────────────────────────────────────────────────────────
++  router.get('/journal', (req, res) => res.json(req.sbx.journal));
++  router.get('/journal/by-date', (req, res) => {
++    const d = String(req.query.date || '').slice(0, 10);
++    res.json(req.sbx.journal.filter(e => e.created_at.slice(0, 10) === d));
++  });
++  router.post('/journal', (req, res) => {
++    const r = sandbox.addJournal(req.sbx, req.body || {});
++    if (r.error) return fail(res, r);
++    res.status(201).json(r.entry);
++  });
++  router.put('/journal/:id', (req, res) => {
++    const r = sandbox.updateJournal(req.sbx, req.params.id, req.body || {});
++    if (r.error) return fail(res, r);
++    res.json(r.entry);
++  });
++  router.delete('/journal/:id', (req, res) => {
++    if (!sandbox.deleteJournal(req.sbx, req.params.id)) return res.status(404).json({ error: 'Entry not found' });
++    res.json({ success: true });
++  });
++
++  // ── messages: read-only preview (the composer is hidden client-side) ───
++  router.get('/messages/unread/count', (req, res) =>
++    res.json({ count: req.sbx.messages.filter(m => !m.is_read).length }));
++  router.post('/messages/read/:id', (req, res) => { req.sbx.messages.forEach(m => { m.is_read = true; }); res.json({ success: true }); });
++  router.get('/messages/:id', (req, res) => res.json(req.sbx.messages));
++
++  // ── sessions: none in the preview ─────────────────────────────────────
++  router.get('/sessions/my', (req, res) => res.json([]));
++  router.get('/sessions/upcoming', (req, res) => res.json([]));
++
++  // ── support: nothing is ever sent to the real support team ─────────────
++  router.get('/support', (req, res) => res.json([]));
++
++  // Anything else: harmless empty read, refused write. A guest can never
++  // reach a real endpoint through this prefix.
++  router.use((req, res) => {
++    if (req.method === 'GET') return res.json([]);
++    res.status(403).json({ error: 'Not available in guest preview.', code: 'guest_blocked' });
++  });
++
++  return router;
++};
+diff --git a/routes/mentors.js b/routes/mentors.js
+index b53457f..6bbe1fc 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -44,8 +44,12 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+     // When a mentor is choosing who to transfer a mentee to (?for_mentee=<id>),
+     // the preference check must use that MENTEE's sex, not the mentor's own.
+     // Only honoured if the caller really has that mentee assigned.
++    // Guest mode (routes/guest.js) sets req.guestContext: a mentor previewing the
++    // mentee experience. The list is the real one, filtered as for the guest's
++    // chosen persona; nothing about the guest is read from or written to the DB.
++    const gctx = req.guestContext || null;
+     let sexSourceId = req.telegramUser.id;
+-    const forMentee = parseInt(req.query.for_mentee, 10);
++    const forMentee = gctx ? 0 : parseInt(req.query.for_mentee, 10);
+     if (forMentee) {
+       const { data: owns } = await supabase
+         .from('mentorship_assignments')
+@@ -57,7 +61,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+         .maybeSingle();
+       if (owns) sexSourceId = forMentee;
+     }
+-    const { data: userData } = await supabase
++    const { data: userData } = gctx ? { data: { sex: gctx.sex } } : await supabase
+       .from('users')
+       .select('sex')
+       .eq('telegram_id', sexSourceId)
+@@ -74,6 +78,7 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+       .select('telegram_id, anonymous_id, sex, age_range, preferred_mentee_sex, accepting_requests, rating, rating_count, photo_file_id, photo_updated_at, user_settings(bio, specialization, max_mentees, display_name)')
+       .eq('role', 'mentor')
+       .eq('is_banned', false);
++    if (gctx) query = query.neq('telegram_id', gctx.selfId);   // a guest can't request themselves
+ 
+     // Hide mentors an admin has suspended (Mentor Control System) from
+     // mentee-facing discovery, without touching their role or history.
+@@ -133,20 +138,20 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+     // So the frontend can render "Pending" instead of "Request" for mentors
+     // this user has already messaged — including after a page refresh, not
+     // just right after clicking (client-side-only state would reset on reload).
+-    const { data: pendingRows } = await supabase
++    const { data: pendingRows } = gctx ? { data: [] } : await supabase
+       .from('mentorship_requests')
+       .select('mentor_id')
+       .eq('user_id', req.telegramUser.id)
+       .eq('status', 'pending');
+-    const pendingMentorIds = new Set((pendingRows || []).map(r => r.mentor_id));
++    const pendingMentorIds = gctx ? new Set(gctx.pendingIds) : new Set((pendingRows || []).map(r => r.mentor_id));
+ 
+     // Mentors this user asked to be notified about ("Notify me" on a full
+     // mentor). A missing table (migration not run yet) just means "none".
+-    const { data: waitRows } = await supabase
++    const { data: waitRows } = gctx ? { data: [] } : await supabase
+       .from('mentor_waitlist')
+       .select('mentor_id')
+       .eq('user_id', req.telegramUser.id);
+-    const waitlistedMentorIds = new Set((waitRows || []).map(r => r.mentor_id));
++    const waitlistedMentorIds = gctx ? new Set(gctx.waitlistIds) : new Set((waitRows || []).map(r => r.mentor_id));
+ 
+     // Enrich with mentee counts and expertise topics. Batched: three queries
+     // for the whole list instead of three per mentor, so this page costs the
+diff --git a/server.js b/server.js
+index 00ace85..a101809 100644
+--- a/server.js
++++ b/server.js
+@@ -331,7 +331,10 @@ function requireAdmin(req, res, next) {
+ // ─── Routes ───────────────────────────────────────────────────────────────────
+ app.use('/api/auth', require('./routes/auth')(supabase, requireAuth));
+ app.use('/api/users', require('./routes/users')(supabase, requireAuth));
+-app.use('/api/mentors', require('./routes/mentors')(supabase, requireAuth, io, onlineUsers));
++const mentorsRouter = require('./routes/mentors')(supabase, requireAuth, io, onlineUsers);
++app.use('/api/mentors', mentorsRouter);
++// Mentor-only "preview as a mentee" sandbox (never touches real mentee data).
++app.use('/api/guest', require('./routes/guest')(supabase, requireAuth, mentorsRouter));
+ app.use('/api/goals', require('./routes/goals')(supabase, requireAuth));
+ app.use('/api/sessions', require('./routes/sessions')(supabase, requireAuth, io, onlineUsers));
+ app.use('/api/messages', require('./routes/messages')(supabase, requireAuth, io, onlineUsers, bot));
+diff --git a/tests/guest-mode.routes.test.js b/tests/guest-mode.routes.test.js
+new file mode 100644
+index 0000000..3477a50
+--- /dev/null
++++ b/tests/guest-mode.routes.test.js
+@@ -0,0 +1,119 @@
++'use strict';
++// Guest mode: mentor-only access, sandbox isolation, and that the real
++// mentee/goal behaviour is mirrored without ever touching the database writes.
++const assert = require('assert');
++const http = require('http');
++const express = require('express');
++const R = require('../utils/goalRules');
++const guestRoutes = require('../routes/guest');
++
++const writes = [];
++function fakeSupabase(role) {
++  const mentor = { telegram_id: 77, anonymous_id: 'Mentor_77', sex: 'M', age_range: '35-44', rating: 4.5, rating_count: 3,
++    accepting_requests: true, role: 'mentor', is_banned: false, user_settings: { display_name: 'Mentor Joe', max_mentees: 3 } };
++  const q = table => {
++    const st = { table, filters: {} };
++    const api = {
++      select: () => api, eq: (k, v) => { st.filters[k] = v; return api; }, in: () => api, order: () => api,
++      insert: () => { writes.push(['insert', table]); return api; }, update: () => { writes.push(['update', table]); return api; },
++      delete: () => { writes.push(['delete', table]); return api; },
++      maybeSingle: async () => {
++        if (table === 'users' && st.filters.telegram_id === 1) return { data: { role, is_banned: false } };
++        if (table === 'users' && st.filters.telegram_id === 77) return { data: mentor };
++        return { data: null };
++      },
++      then: (res) => res({ data: [], count: 0, error: null }),
++    };
++    return api;
++  };
++  return { from: q };
++}
++
++async function boot(role) {
++  const app = express();
++  app.use(express.json());
++  const requireAuth = (req, _res, next) => { req.telegramUser = { id: Number(req.headers['x-id'] || 1) }; next(); };
++  const mentorsRouter = express.Router();
++  mentorsRouter.get('/', (req, res) => res.json({ guest: req.guestContext }));
++  app.use('/api/guest', guestRoutes(fakeSupabase(role), requireAuth, mentorsRouter));
++  const srv = http.createServer(app);
++  await new Promise(r => srv.listen(0, r));
++  const base = `http://127.0.0.1:${srv.address().port}/api/guest`;
++  const call = async (method, p, body, id = 1) => {
++    const r = await fetch(base + p, { method, headers: { 'Content-Type': 'application/json', 'x-id': String(id) }, body: body ? JSON.stringify(body) : undefined });
++    return { status: r.status, body: await r.json() };
++  };
++  return { call, close: () => srv.close() };
++}
++
++(async () => {
++  // Non-mentors are refused everywhere.
++  let s = await boot('user');
++  assert.strictEqual((await s.call('POST', '/start', { sex: 'M' })).status, 403);
++  assert.strictEqual((await s.call('GET', '/auth/me')).status, 403);
++  s.close();
++
++  s = await boot('mentor');
++  // Needs a running sandbox first.
++  assert.strictEqual((await s.call('GET', '/streaks')).status, 409);
++
++  const start = await s.call('POST', '/start', { sex: 'F' });
++  assert.strictEqual(start.status, 200);
++  assert.strictEqual(start.body.user.role, 'user');
++  assert.strictEqual(start.body.user.sex, 'F');
++  assert.ok(start.body.user.telegram_id > 9e12, 'guest id must not collide with real Telegram ids');
++
++  // Mentor directory is the real one, filtered for the persona.
++  const list = await s.call('GET', '/mentors');
++  assert.strictEqual(list.body.guest.sex, 'F');
++  assert.strictEqual(list.body.guest.selfId, 1);
++
++  // Request → pending → duplicate refused → no goals before acceptance.
++  const req1 = await s.call('POST', '/mentors/request', { mentor_id: 77, topic_id: 1 });
++  assert.strictEqual(req1.status, 201);
++  assert.strictEqual((await s.call('POST', '/mentors/request', { mentor_id: 77 })).status, 409);
++  assert.strictEqual((await s.call('POST', '/mentors/request', { mentor_id: 1 })).status, 400, 'cannot request yourself');
++  assert.strictEqual((await s.call('POST', '/goals', { type: 'one_time', title: 'x' })).status, 403);
++  const st = await s.call('GET', '/state');
++  assert.strictEqual(st.body.pending.length, 1);
++
++  // Simulated acceptance unlocks mentor, chat and goals.
++  assert.strictEqual((await s.call('POST', '/simulate-accept', { request_id: req1.body.id })).status, 200);
++  assert.strictEqual((await s.call('GET', '/users/my-mentor')).body.mentor.telegram_id, 77);
++  assert.strictEqual((await s.call('GET', '/users/chat-partner')).body.type, 'single');
++  assert.ok((await s.call('GET', '/messages/77')).body.length >= 1);
++
++  // Goal: created as the mentor, ticked as the mentee, same rules as production.
++  const today = R.ethiopiaToday();
++  const g = await s.call('POST', '/goals', { type: 'challenge', title: 'Pray', start_date: today, end_date: R.addDays(today, 2), task_template: [{ title: 'Pray' }] });
++  assert.strictEqual(g.status, 201);
++  assert.strictEqual(g.body.tasks.length, 3);
++  const future = g.body.tasks.find(t => t.due_date > today);
++  assert.strictEqual((await s.call('PATCH', `/goals/tasks/${future.id}`, { done: true })).status, 409, "future day is locked for mentees");
++  const todayTask = g.body.tasks.find(t => t.due_date === today);
++  const ticked = await s.call('PATCH', `/goals/tasks/${todayTask.id}`, { done: true, note: 'felt good' });
++  assert.strictEqual(ticked.body.stats.done, 1);
++  assert.strictEqual((await s.call('GET', '/goals/mine')).body.length, 1);
++
++  // Streak + journal live only in the sandbox.
++  assert.strictEqual((await s.call('POST', '/streaks/mark')).body.current_streak, 1);
++  const j = await s.call('POST', '/journal', { content: 'hello', mood: 'ok' });
++  assert.strictEqual(j.status, 201);
++  assert.strictEqual((await s.call('GET', '/journal')).body.length, 1);
++
++  // Unmapped writes are refused; unmapped reads are harmless.
++  assert.strictEqual((await s.call('POST', '/avatar')).status, 403);
++  assert.strictEqual((await s.call('POST', '/messages', { to_id: 77, content: 'hi' })).status, 403);
++  assert.strictEqual((await s.call('GET', '/something/else')).status, 200);
++
++  // Sandboxes are per mentor and discarded on exit.
++  assert.strictEqual((await s.call('GET', '/state', null, 2)).status, 403, 'a different, non-mentor id gets no sandbox');
++  await s.call('POST', '/end');
++  assert.strictEqual((await s.call('GET', '/state')).body.active, false);
++  assert.strictEqual((await s.call('GET', '/streaks')).status, 409);
++
++  // The whole run never wrote to the database.
++  assert.deepStrictEqual(writes, [], 'guest mode must not write to the database');
++  s.close();
++  console.log('guest-mode.routes.test.js: ok');
++})().catch(e => { console.error(e); process.exit(1); });
+diff --git a/tests/guest-mode.ui.test.js b/tests/guest-mode.ui.test.js
+new file mode 100644
+index 0000000..39a0f00
+--- /dev/null
++++ b/tests/guest-mode.ui.test.js
+@@ -0,0 +1,100 @@
++'use strict';
++// Client side of guest mode: entry card, switching to the mentee user and back,
++// and the guard that stops direct fetch/XHR writes to real endpoints.
++const assert = require('assert');
++const fs = require('fs');
++const path = require('path');
++const { JSDOM } = require('jsdom');
++
++const html = '<!doctype html><body><div id="app"><div class="page-content"><div id="menteeStats"></div><div id="menteesList"></div></div><div id="chatInputRow"></div></div></body>';
++const dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'http://localhost/' });
++const w = dom.window;
++
++const mentor = { telegram_id: 1, role: 'mentor' };
++const guestUser = { telegram_id: 9000000000001, role: 'user', is_guest: true };
++let user = mentor, resets = 0; const navs = [], api = [], realFetches = [];
++w.__holyBridge = { getUser: () => user, setUser: u => { user = u; }, getSocket: () => null, resetViews: () => { resets++; }, navigate: p => navs.push(p) };
++w.showToast = () => {};
++w.Telegram = { WebApp: { showConfirm: (_m, cb) => cb(true) } };
++w.apiFetch = async (p, o = {}) => {
++  api.push([o.method || 'GET', p]);
++  if (p === '/api/guest/start') return { user: guestUser };
++  if (p === '/api/guest/state') return { active: true, has_mentor: false, pending: [{ id: 'r1' }] };
++  return { success: true };
++};
++w.fetch = async (url, init) => { realFetches.push([url, init?.method || 'GET']); return { ok: true, status: 200 }; };
++w.Response = function (body, init) { return { status: init.status, json: async () => JSON.parse(body) }; };
++
++w.eval(fs.readFileSync(path.join(__dirname, '../frontend/guest-mode.js'), 'utf8'));
++const G = w.HolyGuest;
++
++(async () => {
++  await new Promise(r => setTimeout(r, 20));   // DOMContentLoaded
++  // Entry card is on the mentees page and lets the mentor pick a persona.
++  const card = w.document.getElementById('guestEntryCard');
++  assert.ok(card, 'entry card rendered');
++  assert.strictEqual(w.document.getElementById('menteesList').children.length, 0, 'does not touch the mentees list');
++  w.document.querySelector('[data-guest-sex="F"]').click();
++  assert.strictEqual(G.sex, 'F');
++  assert.ok(w.document.querySelector('[data-guest-sex="F"]').classList.contains('is-on'));
++
++  // Nothing is blocked before the preview starts.
++  await w.fetch('/api/mentors/request', { method: 'POST' });
++  assert.deepStrictEqual(realFetches.pop(), ['/api/mentors/request', 'POST']);
++
++  // Start: swaps to the guest mentee, shows the bar, navigates to the dashboard.
++  await G.enter();
++  assert.strictEqual(G.active, true);
++  assert.strictEqual(user.is_guest, true);
++  assert.ok(w.document.body.classList.contains('guest-mode'));
++  assert.ok(w.document.getElementById('guestBar'));
++  assert.deepStrictEqual(navs, ['dashboard']);
++  assert.ok(api.some(([m, p]) => m === 'POST' && p === '/api/guest/start'));
++  await new Promise(r => setTimeout(r, 20));
++  assert.ok(w.document.getElementById('guestAcceptBtn'), 'pending request shows "Simulate acceptance"');
++  assert.ok(!w.document.getElementById('guestGoalBtn'), 'goal button only after a mentor accepts');
++
++  // Direct writes to real endpoints are refused while active; guest + read-only media pass.
++  const blocked = await w.fetch('/api/avatar', { method: 'POST' });
++  assert.strictEqual(blocked.status, 403);
++  await w.fetch('/api/guest/streaks/mark', { method: 'POST' });
++  await w.fetch('/api/avatar/5?v=1');
++  assert.deepStrictEqual(realFetches.map(x => x[0]), ['/api/guest/streaks/mark', '/api/avatar/5?v=1']);
++  assert.ok(!realFetches.some(([u, m]) => u === '/api/avatar' && m === 'POST'), 'real avatar upload never reached the network');
++
++  // Exit: mentor account restored, bar removed.
++  await G.exit();
++  assert.strictEqual(G.active, false);
++  assert.strictEqual(user, mentor);
++  assert.ok(!w.document.body.classList.contains('guest-mode'));
++  assert.ok(!w.document.getElementById('guestBar'));
++  assert.strictEqual(navs[navs.length - 1], 'my-mentees');
++  assert.ok(resets >= 2);
++  // After exit real writes work again.
++  realFetches.length = 0;
++  await w.fetch('/api/mentors/request', { method: 'POST' });
++  assert.strictEqual(realFetches.length, 1);
++
++  // The real apiFetch (app.js) must rewrite /api/* to /api/guest/* while active.
++  {
++    const src = fs.readFileSync(path.join(__dirname, '../frontend/app.js'), 'utf8');
++    const start = src.indexOf('async function apiFetch(');
++    const end = src.indexOf('// Fetch a binary attachment', start);
++    const sent = [];
++    const sandbox = new JSDOM('', { runScripts: 'outside-only', url: 'http://localhost/' }).window;
++    sandbox.API = ''; sandbox.socket = null;
++    sandbox.getTelegramData = () => ({ initData: 'x', user: { id: 1 } });
++    sandbox.fetch = async u => { sent.push(u); return { ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => ({}) }; };
++    sandbox.eval(src.slice(start, end) + '\nwindow.apiFetch = apiFetch;');
++    sandbox.HolyGuest = { active: false };
++    await sandbox.apiFetch('/api/mentors/request', { method: 'POST', body: {} });
++    sandbox.HolyGuest.active = true;
++    await sandbox.apiFetch('/api/mentors/request', { method: 'POST', body: {} });
++    await sandbox.apiFetch('/api/goals/mine');
++    await sandbox.apiFetch('/api/guest/state');
++    assert.deepStrictEqual(sent, ['/api/mentors/request', '/api/guest/mentors/request', '/api/guest/goals/mine', '/api/guest/state']);
++  }
++
++  console.log('guest-mode.ui.test.js: ok');
++  process.exit(0);
++})().catch(e => { console.error(e); process.exit(1); });
+diff --git a/utils/guestSandbox.js b/utils/guestSandbox.js
+new file mode 100644
+index 0000000..3bbd155
+--- /dev/null
++++ b/utils/guestSandbox.js
+@@ -0,0 +1,267 @@
++'use strict';
++
++// Guest mode sandbox: lets a mentor try the app AS A MENTEE without touching
++// real data. Everything lives in memory, keyed by the mentor's telegram id,
++// and is discarded on exit, on restart, or after IDLE_MS of inactivity.
++//
++// This module never imports supabase or the bot, so it cannot write real data
++// or notify anyone. Goal behaviour reuses the real pure rules (goalRules) so a
++// guest sees exactly what a real mentee would see.
++
++const R = require('./goalRules');
++
++const IDLE_MS = 6 * 60 * 60 * 1000;   // forget a sandbox after 6h idle
++const MAX_SANDBOXES = 200;            // hard cap so memory can't grow unbounded
++const MAX_GOALS = 20;
++const MAX_JOURNAL = 100;
++
++const GUEST_BASE_ID = 9000000000000;  // never collides with real Telegram ids
++
++const stores = new Map();
++let seq = 1;
++const nid = () => `g${Date.now().toString(36)}${(seq++).toString(36)}`;
++
++function sweep() {
++  const now = Date.now();
++  for (const [k, s] of stores) if (now - s.touched > IDLE_MS) stores.delete(k);
++  while (stores.size > MAX_SANDBOXES) stores.delete(stores.keys().next().value);
++}
++
++function create(mentorId, sex) {
++  const menteeId = GUEST_BASE_ID + (Number(mentorId) % 1000000);
++  return {
++    mentorId: String(mentorId),
++    touched: Date.now(),
++    persona: {
++      telegram_id: menteeId,
++      anonymous_id: 'Guest_Mentee',
++      sex: ['M', 'F', 'prefer_not'].includes(sex) ? sex : 'prefer_not',
++      age_range: '25-34',
++    },
++    requests: [],            // [{ id, mentor, topic_id, status, created_at }]
++    waitlist: new Set(),
++    assignment: null,        // { mentor } once a request is "accepted"
++    goals: [], tasks: [],
++    streak: { current: 0, longest: 0, last: null, log: {} },
++    journal: [],
++    messages: [],
++    topics: [],              // chosen topic ids
++    settings: { display_name: 'Guest Mentee', notify_messages: true, notify_sessions: true, notify_daily_verse: false, notify_streak_reminder: true },
++  };
++}
++
++function get(mentorId) { const s = stores.get(String(mentorId)); if (s) s.touched = Date.now(); return s || null; }
++
++function start(mentorId, sex) {
++  sweep();
++  const s = create(mentorId, sex);
++  stores.set(String(mentorId), s);
++  return s;
++}
++
++function end(mentorId) { return stores.delete(String(mentorId)); }
++
++// ── User object shaped like /api/auth/me → user ─────────────────────────
++function userView(s) {
++  const p = s.persona;
++  return {
++    telegram_id: p.telegram_id, anonymous_id: p.anonymous_id, role: 'user',
++    sex: p.sex, age_range: p.age_range, is_banned: false, is_guest: true,
++    user_settings: { ...s.settings, telegram_id: p.telegram_id },
++  };
++}
++
++// ── Mentorship simulation ────────────────────────────────────────────────
++function addRequest(s, mentor, topicId) {
++  if (s.assignment) return { status: 409, error: 'You already have a mentor in this preview.' };
++  if (s.requests.some(r => r.status === 'pending' && String(r.mentor.telegram_id) === String(mentor.telegram_id))) {
++    return { status: 409, error: 'You already have a pending request with this mentor.' };
++  }
++  const r = { id: nid(), mentor, topic_id: topicId || null, status: 'pending', created_at: new Date().toISOString() };
++  s.requests.push(r);
++  return { request: r };
++}
++
++function pendingMentorIds(s) { return new Set(s.requests.filter(r => r.status === 'pending').map(r => r.mentor.telegram_id)); }
++
++function cancelRequest(s, id) {
++  const r = s.requests.find(x => x.id === id && x.status === 'pending');
++  if (!r) return false;
++  r.status = 'cancelled';
++  return true;
++}
++
++// The mentor presses "simulate acceptance" so they can preview the rest of
++// the mentee experience (chat, goals) without involving a real mentor.
++function simulateAccept(s, requestId) {
++  const r = s.requests.find(x => x.id === requestId && x.status === 'pending');
++  if (!r) return { status: 404, error: 'Request not found' };
++  r.status = 'accepted';
++  s.assignment = { id: nid(), mentor: r.mentor, started_at: new Date().toISOString() };
++  s.messages.push({
++    id: nid(), from_id: r.mentor.telegram_id, to_id: s.persona.telegram_id,
++    content: 'Welcome! (Preview message) This is how a first message from your mentor looks.',
++    created_at: new Date().toISOString(), is_read: false,
++  });
++  return { assignment: s.assignment };
++}
++
++function endAssignment(s) { s.assignment = null; s.goals = []; s.tasks = []; s.messages = []; }
++
++// ── Goals (same rules as routes/goals.js, in memory) ────────────────────
++const goalView = (s, g) => {
++  const tasks = s.tasks.filter(t => t.goal_id === g.id)
++    .sort((a, b) => String(a.due_date || '').localeCompare(String(b.due_date || '')) || a.position - b.position);
++  return { ...g, tasks, stats: R.goalStats(tasks, R.ethiopiaToday()) };
++};
++const listGoals = s => s.goals.filter(g => g.status !== 'archived').map(g => goalView(s, g)).reverse();
++
++function createGoal(s, b) {
++  if (!s.assignment) return { status: 403, error: 'Send a request and use "Simulate acceptance" first.' };
++  if (s.goals.length >= MAX_GOALS) return { status: 400, error: 'Preview limit reached (20 goals).' };
++  const today = R.ethiopiaToday();
++  const title = String(b.title || '').trim();
++  if (!title) return { status: 400, error: 'title is required' };
++  if (title.length > 200) return { status: 400, error: 'Title is too long (max 200 characters)' };
++  if (!['one_time', 'progressive', 'challenge'].includes(b.type)) return { status: 400, error: 'Invalid goal type' };
++
++  const goal = { id: nid(), mentor_id: s.assignment.mentor.telegram_id, mentee_id: s.persona.telegram_id,
++    type: b.type, title, task_template: [], status: 'active', created_at: new Date().toISOString() };
++  let tasks = [];
++  const deadline = b.type === 'one_time' ? b.due_date : b.end_date;
++
++  if (b.type === 'challenge') {
++    if (!R.isValidDay(b.start_date) || !R.isValidDay(b.end_date)) return { status: 400, error: 'Start and end dates are required' };
++    if (b.start_date < today) return { status: 400, error: "The start date can't be in the past" };
++    const span = R.daysBetween(b.start_date, b.end_date) + 1;
++    if (span < 1 || span > R.MAX_CHALLENGE_DAYS) return { status: 400, error: `A challenge can run 1 to ${R.MAX_CHALLENGE_DAYS} days` };
++    if (b.reminder_time && !R.isValidTime(b.reminder_time)) return { status: 400, error: 'Invalid reminder time' };
++    Object.assign(goal, { start_date: b.start_date, end_date: b.end_date, reminder_time: b.reminder_time || '20:00' });
++    if (b.day_plan) {
++      const r = R.normalizeDayPlan(b.day_plan, b.start_date, b.end_date);
++      if (r.error) return { status: 400, error: r.error };
++      goal.custom_days = true;
++      tasks = R.buildChallengeTasks(goal, b.start_date, b.end_date, r.plan);
++    } else {
++      const r = R.normalizeTemplate(b.task_template, title);
++      if (r.error) return { status: 400, error: r.error };
++      goal.task_template = r.template;
++      tasks = R.buildChallengeTasks(goal);
++    }
++  } else {
++    if (deadline && (!R.isValidDay(deadline) || deadline < today)) return { status: 400, error: 'The due date must be today or later' };
++    goal.end_date = deadline || null;
++    if (b.type === 'progressive') {
++      const n = parseInt(b.target_count, 10);
++      if (!(n >= 1 && n <= R.MAX_PROGRESSIVE)) return { status: 400, error: `Target must be 1 to ${R.MAX_PROGRESSIVE}` };
++      goal.target_count = n;
++      tasks = Array.from({ length: n }, (_, i) => ({ title: `${title} (${i + 1}/${n})`.slice(0, 200), position: i, due_date: goal.end_date }));
++    } else {
++      tasks = [{ title, position: 0, due_date: goal.end_date }];
++    }
++  }
++  if (b.description) goal.description = String(b.description).trim().slice(0, 1000) || null;
++
++  s.goals.push(goal);
++  tasks.forEach(t => s.tasks.push({ status: 'pending', ...t, id: nid(), goal_id: goal.id,
++    mentor_id: goal.mentor_id, mentee_id: goal.mentee_id, created_at: goal.created_at }));
++  return { goal: goalView(s, goal) };
++}
++
++function deleteGoal(s, id) {
++  const i = s.goals.findIndex(g => g.id === id);
++  if (i < 0) return false;
++  s.goals.splice(i, 1);
++  s.tasks = s.tasks.filter(t => t.goal_id !== id);
++  return true;
++}
++
++// Mentee ticks / un-ticks a task and can leave a note. Mirrors
++// goalService.setTaskDone for the mentee actor, including its blocking rules.
++function setTaskDone(s, taskId, { done, note }) {
++  const today = R.ethiopiaToday();
++  const task = s.tasks.find(t => t.id === taskId);
++  if (!task) return { status: 404, error: 'Task not found' };
++  const goal = s.goals.find(g => g.id === task.goal_id);
++  if (!goal) return { status: 404, error: 'Goal not found' };
++
++  const blocked = R.menteeCannotSetDone(goal, task, today);
++  if (blocked) return { status: 409, error: blocked };
++
++  const now = new Date().toISOString();
++  if (typeof done === 'boolean') {
++    if (done && task.status !== 'done') {
++      Object.assign(task, { status: 'done', completed_at: now, completed_by: s.persona.telegram_id });
++    } else if (!done && task.status === 'done') {
++      Object.assign(task, { status: R.isGoalPastDue(task.due_date, today) ? 'missed' : 'pending', completed_at: null, completed_by: null });
++    }
++  }
++  if (typeof note === 'string') {
++    const clean = note.trim().slice(0, 500);
++    Object.assign(task, { note: clean || null, note_at: clean ? now : null });
++  }
++  task.updated_at = now;
++
++  const all = s.tasks.filter(t => t.goal_id === goal.id);
++  const st = R.goalStats(all, today);
++  const finished = st.total > 0 && st.pending === 0 && st.missed === 0 &&
++    (goal.type !== 'challenge' || today >= String(goal.end_date).substring(0, 10));
++  goal.status = finished ? 'completed' : 'active';
++  return { goal: goalView(s, goal) };
++}
++
++// ── Streak ───────────────────────────────────────────────────────────────
++function streakView(s) {
++  const today = R.ethiopiaToday();
++  const week = [];
++  for (let i = 6; i >= 0; i--) {
++    const d = R.addDays(today, -i);
++    week.push({ date: d, is_today: d === today, read: !!s.streak.log[d], used_freeze: false });
++  }
++  return { current_streak: s.streak.current, longest_streak: s.streak.longest, last_read_date: s.streak.last,
++    freezes_available: 0, week, notify_streak_reminder: s.settings.notify_streak_reminder !== false };
++}
++
++function markStreak(s) {
++  const today = R.ethiopiaToday();
++  const st = s.streak;
++  if (st.log[today]) return { ...streakView(s), milestone: false, freeze_used: false, was_reset: false };
++  const wasReset = !!st.last && st.last !== R.addDays(today, -1);
++  st.current = wasReset || !st.last ? 1 : st.current + 1;
++  st.longest = Math.max(st.longest, st.current);
++  st.last = today;
++  st.log[today] = true;
++  return { ...streakView(s), milestone: [7, 30, 100].includes(st.current), freeze_used: false, was_reset: wasReset };
++}
++
++// ── Journal ──────────────────────────────────────────────────────────────
++function addJournal(s, { content, mood }) {
++  const text = String(content || '').trim();
++  if (!text) return { status: 400, error: 'Content is required' };
++  if (s.journal.length >= MAX_JOURNAL) return { status: 400, error: 'Preview limit reached.' };
++  const e = { id: nid(), telegram_id: s.persona.telegram_id, content: text.slice(0, 5000), mood: mood || null,
++    created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
++  s.journal.unshift(e);
++  return { entry: e };
++}
++function updateJournal(s, id, { content, mood }) {
++  const e = s.journal.find(x => x.id === id);
++  if (!e) return { status: 404, error: 'Entry not found' };
++  if (typeof content === 'string' && content.trim()) e.content = content.trim().slice(0, 5000);
++  if (mood !== undefined) e.mood = mood;
++  e.updated_at = new Date().toISOString();
++  return { entry: e };
++}
++function deleteJournal(s, id) {
++  const i = s.journal.findIndex(x => x.id === id);
++  if (i < 0) return false;
++  s.journal.splice(i, 1);
++  return true;
++}
++
++module.exports = {
++  GUEST_BASE_ID, start, get, end, userView,
++  addRequest, pendingMentorIds, cancelRequest, simulateAccept, endAssignment,
++  listGoals, createGoal, deleteGoal, setTaskDone,
++  streakView, markStreak, addJournal, updateJournal, deleteJournal,
++};

@@ -331,7 +331,10 @@ function requireAdmin(req, res, next) {
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth')(supabase, requireAuth));
 app.use('/api/users', require('./routes/users')(supabase, requireAuth));
-app.use('/api/mentors', require('./routes/mentors')(supabase, requireAuth, io, onlineUsers));
+const mentorsRouter = require('./routes/mentors')(supabase, requireAuth, io, onlineUsers);
+app.use('/api/mentors', mentorsRouter);
+// Mentor-only "preview as a mentee" sandbox (never touches real mentee data).
+app.use('/api/guest', require('./routes/guest')(supabase, requireAuth, mentorsRouter));
 app.use('/api/goals', require('./routes/goals')(supabase, requireAuth));
 app.use('/api/sessions', require('./routes/sessions')(supabase, requireAuth, io, onlineUsers));
 app.use('/api/messages', require('./routes/messages')(supabase, requireAuth, io, onlineUsers, bot));
