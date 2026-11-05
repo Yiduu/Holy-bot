@@ -2619,6 +2619,7 @@ function applyRoleChrome() {
   $('nav-my-mentees')?.style.setProperty('display', mentor ? 'flex' : 'none');
   document.querySelectorAll('.mentor-hidden').forEach(el => el.style.display = mentor ? 'none' : '');
   document.querySelectorAll('.mentor-only').forEach(el => el.classList.toggle('hidden', !mentor));
+  window.HolyGuest?.syncEntry?.();
 }
 
 // Small seam for frontend/guest-mode.js (the file-scope `let`s above are not on window).

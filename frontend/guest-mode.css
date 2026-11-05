@@ -1,13 +1,6 @@
 /* Guest mode (mentor previews the app as a mentee). Built on the app's own
    tokens, so it follows the light and dark themes automatically. */
 
-/* ── entry card (My Mentees page) ── */
-.guest-entry { border: 1px dashed var(--border); background: var(--surface); }
-.guest-entry-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
-.guest-entry-icon {
-  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
-  color: var(--gold); background: var(--gold-dim);
-}
 .guest-entry-title { font-weight: 700; color: var(--text); font-size: var(--fs-md, 16px); }
 .guest-entry-sub { color: var(--text2); font-size: var(--fs-sm, 13px); line-height: 1.45; margin-top: 2px; }
 .guest-entry-label { color: var(--text3); font-size: var(--fs-xs, 12px); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 8px; }
@@ -19,7 +12,8 @@
 .guest-chip.is-on { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); }
 .guest-chip:focus-visible, .guest-act:focus-visible, .guest-exit:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .guest-entry-note { color: var(--text3); font-size: var(--fs-xs, 12px); margin: 10px 0 14px; line-height: 1.4; }
-.guest-start { width: 100%; }
+
+/* ── persona picker + shared bits (see below) ── */
 
 /* ── preview bar: always visible while in guest mode ── */
 .guest-bar {
@@ -60,3 +54,19 @@ body.guest-mode #chatInputRow { display: none !important; }
   .guest-bar { animation: guestIn .22s ease-out; }
   @keyframes guestIn { from { transform: translateY(-100%); } to { transform: none; } }
 }
+
+/* ── Home header button (beside the language toggle) ── */
+.guest-header-btn { gap: 6px; color: var(--gold); border-color: var(--gold); background: var(--gold-dim); }
+.guest-header-btn:hover { color: var(--gold); }
+.guest-header-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+@media (max-width: 359px) { .guest-header-btn #guestHeaderLbl { display: none; } }
+
+/* ── persona picker (bottom sheet) ── */
+.guest-pick { position: fixed; inset: 0; z-index: 8400; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, .55); }
+.guest-pick-card {
+  width: 100%; max-width: 520px; padding: 18px 16px calc(var(--safe-bottom, 0px) + 18px);
+  background: var(--bg2, var(--surface)); border: 1px solid var(--border-dim); border-bottom: 0; border-radius: 22px 22px 0 0;
+}
+.guest-pick-actions { display: flex; gap: 10px; align-items: center; }
+.guest-pick-actions .btn { flex: 1; }
+@media (prefers-reduced-motion: no-preference) { .guest-pick-card { animation: guestPickIn .2s ease-out; } @keyframes guestPickIn { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } } }

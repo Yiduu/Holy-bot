@@ -22,6 +22,7 @@
       blocked: 'Not available in guest preview.', starting: 'Starting…', failed: "Couldn't start the preview",
       ending: 'Exit guest preview?', endBody: 'Everything you tried here will be cleared.', stay: 'Stay', leave: 'Exit',
       readOnlyChat: 'Chat is read-only in the preview.',
+      guestBtn: 'Guest', pickTitle: 'Preview as a mentee', cancel: 'Cancel',
     },
     am: {
       title: 'እንደ ተመካሪ ቅድመ እይታ', sub: 'መተግበሪያውን ተመካሪ እንደሚያየው ይመልከቱ። አማካሪ ይፈልጉ፣ ጥያቄ ይላኩ፣ ግቦችን ያዘጋጁ እና ሁሉንም ባህሪያት ይሞክሩ። ለእውነተኛ ሰዎች ምንም አይላክም።',
@@ -34,6 +35,7 @@
       blocked: 'በእንግዳ ቅድመ እይታ ውስጥ አይገኝም።', starting: 'በመጀመር ላይ…', failed: 'ቅድመ እይታውን መጀመር አልተቻለም',
       ending: 'ከእንግዳ ቅድመ እይታ ይውጡ?', endBody: 'እዚህ የሞከሩት ሁሉ ይጸዳል።', stay: 'ቆይ', leave: 'ውጣ',
       readOnlyChat: 'በቅድመ እይታው ውይይት ለማንበብ ብቻ ነው።',
+      guestBtn: 'እንግዳ', pickTitle: 'እንደ ተመካሪ ቅድመ እይታ', cancel: 'ተው',
     },
   };
   const tr = k => (STR[localStorage.getItem('language')] || STR.en)[k] || STR.en[k] || k;
@@ -95,41 +97,61 @@
     } catch (e) { console.warn('[guest] socket mute failed', e); }
   }
 
-  // ── Entry card on the My Mentees page ───────────────────────────────────
-  function mountEntryCard() {
-    const stats = $('menteeStats');
-    if (!stats || $('guestEntryCard')) return;
-    const card = document.createElement('div');
-    card.id = 'guestEntryCard';
-    card.className = 'card mb-16 guest-entry';
-    stats.parentNode.insertBefore(card, stats);
-    paintEntry();
-  }
-  function paintEntry() {
-    const card = $('guestEntryCard');
-    if (!card) return;
-    const opt = (v, k) => `<button type="button" class="guest-chip${G.sex === v ? ' is-on' : ''}" data-guest-sex="${v}" aria-pressed="${G.sex === v}">${tr(k)}</button>`;
-    card.innerHTML = `
-      <div class="guest-entry-head">
-        <span class="guest-entry-icon" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        </span>
-        <div><div class="guest-entry-title">${tr('title')}</div><div class="guest-entry-sub">${tr('sub')}</div></div>
-      </div>
-      <div class="guest-entry-label">${tr('pick')}</div>
-      <div class="guest-chips" role="group">${opt('M', 'm')}${opt('F', 'f')}${opt('prefer_not', 'n')}</div>
-      <div class="guest-entry-note">${tr('note')}</div>
-      <button type="button" class="btn btn-primary guest-start" id="guestStartBtn">${tr('start')}</button>`;
-  }
   document.addEventListener('click', e => {
-    const chip = e.target.closest('[data-guest-sex]');
-    if (chip) { G.sex = chip.dataset.guestSex; paintEntry(); return; }
-    if (e.target.closest('#guestStartBtn')) { G.enter(); return; }
+    if (e.target.closest('#guestHeaderBtn')) { openPicker(); return; }
+    const pick = e.target.closest('[data-guest-pick]');
+    if (pick) { G.sex = pick.dataset.guestPick; paintPicker(); return; }
+    if (e.target.closest('#guestPickStart')) { closePicker(); G.enter(); return; }
+    if (e.target.closest('#guestPickCancel') || e.target.id === 'guestPickSheet') { closePicker(); return; }
     if (e.target.closest('#guestExitBtn')) { confirmExit(); return; }
     if (e.target.closest('#guestAcceptBtn')) { simulateAccept(); return; }
     if (e.target.closest('#guestGoalBtn')) { openGoalSheet(); return; }
     if (e.target.closest('#guestGoalClose')) { closeGoalSheet(); return; }
   });
+
+  // ── Header button on the Home page (beside the language toggle) ─────────
+  // Shown only to mentors, and hidden while a preview is running (the preview
+  // bar has its own Exit). app.js calls G.syncEntry() whenever the role changes.
+  function syncEntry() {
+    const btn = $('guestHeaderBtn');
+    if (!btn) return;
+    const mentor = bridge()?.getUser?.()?.role === 'mentor';
+    btn.style.display = mentor && !G.active ? 'flex' : 'none';
+    const lbl = $('guestHeaderLbl');
+    if (lbl) lbl.textContent = tr('guestBtn');
+    btn.setAttribute('aria-label', tr('title'));
+  }
+  G.syncEntry = syncEntry;
+
+  function paintPicker() {
+    const box = $('guestPickChips');
+    if (!box) return;
+    const opt = (v, k) => `<button type="button" class="guest-chip${G.sex === v ? ' is-on' : ''}" data-guest-pick="${v}" aria-pressed="${G.sex === v}">${tr(k)}</button>`;
+    box.innerHTML = opt('M', 'm') + opt('F', 'f') + opt('prefer_not', 'n');
+  }
+  function openPicker() {
+    if (G.active || $('guestPickSheet')) return;
+    const sheet = document.createElement('div');
+    sheet.id = 'guestPickSheet';
+    sheet.className = 'guest-pick';
+    sheet.setAttribute('role', 'dialog');
+    sheet.setAttribute('aria-modal', 'true');
+    sheet.innerHTML = `
+      <div class="guest-pick-card">
+        <div class="guest-entry-title">${tr('pickTitle')}</div>
+        <div class="guest-entry-sub">${tr('sub')}</div>
+        <div class="guest-entry-label" style="margin-top:14px">${tr('pick')}</div>
+        <div class="guest-chips" id="guestPickChips" role="group"></div>
+        <div class="guest-entry-note">${tr('note')}</div>
+        <div class="guest-pick-actions">
+          <button type="button" class="btn btn-primary" id="guestPickStart">${tr('start')}</button>
+          <button type="button" class="guest-act" id="guestPickCancel">${tr('cancel')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(sheet);
+    paintPicker();
+  }
+  function closePicker() { $('guestPickSheet')?.remove(); }
 
   // ── Enter / exit ────────────────────────────────────────────────────────
   G.enter = async function () {
@@ -137,8 +159,6 @@
     const b = bridge();
     const me = b?.getUser();
     if (!b || me?.role !== 'mentor') return toast(tr('blocked'), 'error');
-    const btn = $('guestStartBtn');
-    if (btn) { btn.disabled = true; btn.textContent = tr('starting'); }
     try {
       const { user } = await apiFetch('/api/guest/start', { method: 'POST', body: { sex: G.sex } });
       G._mentorUser = me;
@@ -146,6 +166,7 @@
       b.setUser(user);
       muteSocket(true);
       document.body.classList.add('guest-mode');
+      syncEntry();
       b.resetViews();
       mountBar();
       b.navigate('dashboard');
@@ -153,7 +174,6 @@
       G._poll = setInterval(refreshBar, 4000);
     } catch (e) {
       toast(e.message || tr('failed'), 'error');
-      if (btn) { btn.disabled = false; btn.textContent = tr('start'); }
     }
   };
 
@@ -169,8 +189,8 @@
     document.body.classList.remove('guest-mode');
     $('guestBar')?.remove();
     b.resetViews();
+    syncEntry();
     b.navigate('my-mentees');
-    paintEntry();
   };
 
   function confirmExit() {
@@ -245,6 +265,11 @@
   }
 
   // The chat composer is hidden by CSS in guest mode; this is the matching server-side no-op.
-  document.addEventListener('DOMContentLoaded', mountEntryCard);
-  if (document.readyState !== 'loading') mountEntryCard();
+  document.addEventListener('DOMContentLoaded', syncEntry);
+  syncEntry();
+  if (typeof window.toggleLanguage === 'function') {
+    const origToggle = window.toggleLanguage;
+    window.toggleLanguage = function () { const r = origToggle.apply(this, arguments); setTimeout(syncEntry, 50); return r; };
+  }
+  console.log('[guest] guest-mode.js loaded; header button:', !!$('guestHeaderBtn'));
 })();

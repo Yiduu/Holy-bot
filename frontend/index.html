@@ -17,7 +17,7 @@
   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
   <link rel="stylesheet" href="styles.css?v=3.8" />
   <link rel="stylesheet" href="goals.css?v=1.5" />
-  <link rel="stylesheet" href="guest-mode.css?v=1.0" />
+  <link rel="stylesheet" href="guest-mode.css?v=1.2" />
   <link rel="stylesheet" href="chat-media.css?v=1.0" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
@@ -505,6 +505,10 @@
         <div class="header-actions">
           <button id="adminBtn" class="btn btn-sm btn-outline hidden" data-i18n="btn_admin"
             onclick="window.location='/admin.html'">Admin</button>
+          <button id="guestHeaderBtn" type="button" class="lang-toggle-btn guest-header-btn" style="display:none"
+            aria-label="Guest preview">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span id="guestHeaderLbl">Guest</span></button>
           <button id="langBtnDash" class="lang-toggle-btn" onclick="toggleLanguage()"
             aria-label="Switch language">EN</button>
           <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon" class="theme-icon-svg">
@@ -2519,9 +2523,9 @@
   </div>
 
   <script src="locales.js?v=2.1"></script>
-  <script src="app.js?v=4.0"></script>
+  <script src="app.js?v=4.2"></script>
   <script src="goals.js?v=1.5"></script>
-  <script src="guest-mode.js?v=1.0"></script>
+  <script src="guest-mode.js?v=1.2"></script>
   <script src="chat-media.js?v=1.0"></script>
   <script src="audio-call.js?v=1.0"></script>
   <script src="session-room.js?v=1.8"></script>
