@@ -152,7 +152,9 @@ module.exports = (supabase, requireAuth, mentorsRouter) => {
   router.post('/mentors/request', wrap(async (req, res) => {
     const mentorId = Number(req.body?.mentor_id);
     if (!mentorId) return res.status(400).json({ error: 'mentor_id required' });
-    if (String(mentorId) === String(req.telegramUser.id)) return res.status(400).json({ error: "You can't request yourself." });
+    // Requesting yourself is allowed in the preview: the tester is the mentor
+    // and plays both sides. Availability limits only apply to other mentors.
+    const isSelf = String(mentorId) === String(req.telegramUser.id);
 
     // Same eligibility checks as the real endpoint (read-only), so the
     // preview shows the real "full" / "not accepting" errors.
@@ -160,8 +162,8 @@ module.exports = (supabase, requireAuth, mentorsRouter) => {
       .select('telegram_id, anonymous_id, sex, age_range, rating, rating_count, photo_file_id, photo_updated_at, accepting_requests, role, is_banned, user_settings(bio, specialization, display_name, max_mentees)')
       .eq('telegram_id', mentorId).maybeSingle();
     if (!mentor || mentor.role !== 'mentor' || mentor.is_banned) return res.status(404).json({ error: 'Mentor not found' });
-    if (mentor.accepting_requests === false) return res.status(409).json({ error: 'This mentor is not accepting new requests at this time.' });
-    const max = mentor.user_settings?.max_mentees || parseInt(process.env.MAX_MENTEES_DEFAULT || '3', 10);
+    if (!isSelf && mentor.accepting_requests === false) return res.status(409).json({ error: 'This mentor is not accepting new requests at this time.' });
+    const max = isSelf ? Infinity : (mentor.user_settings?.max_mentees || parseInt(process.env.MAX_MENTEES_DEFAULT || '3', 10));
     const { count } = await supabase.from('mentorship_assignments').select('id', { count: 'exact', head: true })
       .eq('mentor_id', mentorId).eq('is_active', true);
     if ((count || 0) >= max) return res.status(409).json({ error: 'Mentor is at full capacity. Please try another mentor.' });

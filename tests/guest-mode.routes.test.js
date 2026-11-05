@@ -73,7 +73,6 @@ async function boot(role) {
   const req1 = await s.call('POST', '/mentors/request', { mentor_id: 77, topic_id: 1 });
   assert.strictEqual(req1.status, 201);
   assert.strictEqual((await s.call('POST', '/mentors/request', { mentor_id: 77 })).status, 409);
-  assert.strictEqual((await s.call('POST', '/mentors/request', { mentor_id: 1 })).status, 400, 'cannot request yourself');
   assert.strictEqual((await s.call('POST', '/goals', { type: 'one_time', title: 'x' })).status, 403);
   const st = await s.call('GET', '/state');
   assert.strictEqual(st.body.pending.length, 1);
@@ -136,6 +135,12 @@ async function boot(role) {
   assert.strictEqual((await s.call('POST', `/sessions/${now.body.session.id}/heartbeat`, {})).body.present_count, 2);
   await s.call('POST', '/sim/session/end');
   assert.strictEqual((await s.call('GET', `/sessions/${now.body.session.id}/join`)).status, 410);
+
+  // Self request: the tester is a mentor and may request themselves to play both sides.
+  await s.call('POST', '/users/end-mentorship');
+  const me = await s.call('POST', '/mentors/request', { mentor_id: 1 });
+  assert.strictEqual(me.status, 201, 'a mentor can request themselves in the preview');
+  assert.strictEqual((await s.call('POST', '/sim/decline', { request_id: me.body.id })).status, 200);
 
   // Decline path (second request on a fresh sandbox state).
   await s.call('POST', '/users/end-mentorship');

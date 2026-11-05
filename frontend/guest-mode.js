@@ -23,7 +23,7 @@
       goalTitle: 'Set a goal as the mentor', done: 'Done',
       blocked: 'Not available in guest preview.', starting: 'Starting…', failed: "Couldn't start the preview",
       ending: 'Exit guest preview?', endBody: 'Everything you tried here will be cleared.', stay: 'Stay', leave: 'Exit',
-      guestBtn: 'Guest', pickTitle: 'Preview as a mentee', cancel: 'Cancel',
+      guestBtn: 'Guest mode', pickTitle: 'Preview as a mentee', cancel: 'Cancel',
       homeEyebrow: 'For mentors', homeTitle: 'Experience Holy Helper as a mentee',
       homeSub: 'Run the full journey in a safe sandbox. Nobody is contacted and nothing is saved.',
       homeCta: 'Try guest mode', f1: 'Request', f2: 'Chat', f3: 'Goals', f4: 'Live session',
@@ -49,7 +49,7 @@
       goalTitle: 'እንደ አማካሪ ግብ አዘጋጅ', done: 'ተጠናቀቀ',
       blocked: 'በእንግዳ ቅድመ እይታ ውስጥ አይገኝም።', starting: 'በመጀመር ላይ…', failed: 'ቅድመ እይታውን መጀመር አልተቻለም',
       ending: 'ከእንግዳ ቅድመ እይታ ይውጡ?', endBody: 'እዚህ የሞከሩት ሁሉ ይጸዳል።', stay: 'ቆይ', leave: 'ውጣ',
-      guestBtn: 'እንግዳ', pickTitle: 'እንደ ተመካሪ ቅድመ እይታ', cancel: 'ተው',
+      guestBtn: 'የእንግዳ ሁነታ', pickTitle: 'እንደ ተመካሪ ቅድመ እይታ', cancel: 'ተው',
       homeEyebrow: 'ለአማካሪዎች', homeTitle: 'ሆሊ ሄልፐርን እንደ ተመካሪ ይለማመዱ',
       homeSub: 'ሙሉውን ጉዞ ደህንነቱ በተጠበቀ ሙከራ ውስጥ ይሞክሩ። ማንም አይደወልም፣ ምንም አይቀመጥም።',
       homeCta: 'የእንግዳ ሁነታን ሞክር', f1: 'ጥያቄ', f2: 'ውይይት', f3: 'ግቦች', f4: 'ቀጥታ ክፍለ ጊዜ',
@@ -126,7 +126,7 @@
   }
 
   document.addEventListener('click', e => {
-    if (e.target.closest('#guestHomeStart')) { openPicker(); return; }
+    if (e.target.closest('#guestHeaderBtn')) { openPicker(); return; }
     const pick = e.target.closest('[data-guest-pick]');
     if (pick) { G.sex = pick.dataset.guestPick; paintPicker(); return; }
     if (e.target.closest('#guestPickStart')) { closePicker(); G.enter(); return; }
@@ -139,16 +139,17 @@
     if (e.target.closest('#guestGoalClose')) { closeGoalSheet(); return; }
   });
 
-  // ── Entry card on the Home page ─────────────────────────────────────────
+  // ── Entry button in the Home header ─────────────────────────────────────
   // Shown only to mentors, and hidden while a preview is running (the preview
   // bar has its own Exit). app.js calls G.syncEntry() whenever the role changes.
   function syncEntry() {
-    const card = $('guestHomeCard');
-    if (!card) return;
+    const btn = $('guestHeaderBtn');
+    if (!btn) return;
     const mentor = bridge()?.getUser?.()?.role === 'mentor';
-    card.style.display = mentor && !G.active ? '' : 'none';
-    card.querySelectorAll('[data-guest-t]').forEach(el => { el.textContent = tr(el.dataset.guestT); });
-    $('guestHomeStart')?.setAttribute('aria-label', tr('homeCta'));
+    btn.style.display = mentor && !G.active ? 'inline-flex' : 'none';
+    const lbl = $('guestHeaderLbl');
+    if (lbl) lbl.textContent = tr('guestBtn');
+    btn.setAttribute('aria-label', tr('title'));
   }
   G.syncEntry = syncEntry;
 
@@ -216,6 +217,7 @@
     const b = bridge();
     b.setUser(G._mentorUser); G._mentorUser = null;
     document.body.classList.remove('guest-mode');
+    document.body.style.removeProperty('--guest-bar-h');
     $('guestBar')?.remove();
     b.resetViews();
     syncEntry();
@@ -237,6 +239,7 @@
     bar.setAttribute('role', 'region');
     bar.setAttribute('aria-label', tr('bar'));
     document.body.appendChild(bar);
+    document.body.style.setProperty('--guest-bar-h', 'calc(var(--safe-top, 0px) + 44px)');
   }
   async function refreshBar() {
     const bar = $('guestBar');
@@ -414,5 +417,5 @@
     const origToggle = window.toggleLanguage;
     window.toggleLanguage = function () { const r = origToggle.apply(this, arguments); setTimeout(syncEntry, 50); return r; };
   }
-  console.log('[guest] guest-mode.js loaded; home card:', !!$('guestHomeCard'));
+  console.log('[guest] guest-mode.js loaded; header button:', !!$('guestHeaderBtn'));
 })();

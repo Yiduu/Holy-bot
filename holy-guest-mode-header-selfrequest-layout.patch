@@ -1,0 +1,307 @@
+diff --git a/frontend/guest-mode.css b/frontend/guest-mode.css
+index d98e9e2..4dd8779 100644
+--- a/frontend/guest-mode.css
++++ b/frontend/guest-mode.css
+@@ -18,11 +18,11 @@
+ /* ── preview bar: always visible while in guest mode ── */
+ .guest-bar {
+   position: fixed; left: 0; right: 0; top: 0; z-index: 8000;
+-  padding: calc(var(--safe-top, 0px) + 6px) 12px 8px;
++  padding: var(--safe-top, 0px) 12px 0; height: var(--guest-bar-h, 44px); box-sizing: border-box; display: flex; align-items: center;
+   background: rgba(var(--bg2-rgb), .96); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+   border-bottom: 1px solid var(--gold); box-shadow: var(--shadow-sm);
+ }
+-.guest-bar-main { display: flex; align-items: center; gap: 8px; min-height: 32px; }
++.guest-bar-main { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; }
+ .guest-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); flex: 0 0 auto; box-shadow: 0 0 0 4px var(--gold-dim); }
+ .guest-bar-text { flex: 1; min-width: 0; color: var(--text); font-size: var(--fs-xs, 12px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+ .guest-bar-text span { color: var(--text2); }
+@@ -34,8 +34,12 @@
+ .guest-bar-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+ .guest-act { background: var(--gold-dim); }
+ 
+-/* push the app down so the bar never covers a header */
+-body.guest-mode #app { padding-top: calc(var(--safe-top, 0px) + 48px); }
++/* The bar takes the top safe area, so the app below it must not add it again
++   (that double offset pushed every screen down on phones). */
++body.guest-mode #app {
++  --safe-top: 0px;
++  box-sizing: border-box; height: 100%; padding-top: var(--guest-bar-h, 44px);
++}
+ 
+ /* ── goal composer sheet ── */
+ .guest-sheet { position: fixed; inset: 0; z-index: 8500; display: flex; flex-direction: column; background: var(--bg); }
+@@ -61,31 +65,16 @@ body.guest-mode #app { padding-top: calc(var(--safe-top, 0px) + 48px); }
+ .guest-pick-actions .btn { flex: 1; }
+ @media (prefers-reduced-motion: no-preference) { .guest-pick-card { animation: guestPickIn .2s ease-out; } @keyframes guestPickIn { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } } }
+ 
+-/* ── Home entry card (mentors) ── */
+-.guest-home {
+-  position: relative; margin-bottom: 16px; padding: 16px; border-radius: 18px; overflow: hidden;
+-  background: linear-gradient(160deg, var(--gold-dim), transparent 70%), var(--bg2, var(--surface));
+-  border: 1px solid var(--border-dim); box-shadow: var(--shadow-sm);
+-}
+-.guest-home::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--gold); }
+-.guest-home-top { display: flex; align-items: center; gap: 12px; }
+-.guest-home-icon {
+-  flex: 0 0 auto; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center;
++/* ── Home header button (beside the language toggle) ── */
++.guest-header-btn {
++  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 999px; cursor: pointer;
++  font: inherit; font-size: var(--fs-xs, 12px); font-weight: 700; letter-spacing: .01em; white-space: nowrap;
+   color: var(--gold); background: var(--gold-dim); border: 1px solid var(--gold);
++  transition: background .15s ease, transform .1s ease;
+ }
+-.guest-home-copy { min-width: 0; }
+-.guest-home-eyebrow { color: var(--gold); font-size: var(--fs-2xs, 11px); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+-.guest-home-title { margin: 2px 0 0; color: var(--text); font-size: var(--fs-md, 16px); font-weight: 700; line-height: 1.25; }
+-.guest-home-sub { margin: 10px 0 0; color: var(--text2); font-size: var(--fs-sm, 13px); line-height: 1.5; }
+-.guest-home-feats { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 14px; padding: 0; }
+-.guest-home-feats li {
+-  padding: 4px 10px; border-radius: 999px; font-size: var(--fs-xs, 12px); font-weight: 600; color: var(--text2);
+-  border: 1px solid var(--border-dim); background: rgba(var(--bg2-rgb), .5);
+-}
+-.guest-home-cta { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; }
+-.guest-home-cta svg { transition: transform .18s ease; }
+-.guest-home-cta:hover svg, .guest-home-cta:focus-visible svg { transform: translateX(3px); }
+-@media (prefers-reduced-motion: reduce) { .guest-home-cta svg { transition: none; } }
++.guest-header-btn:active { transform: scale(.97); }
++.guest-header-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
++@media (max-width: 359px) { .guest-header-btn #guestHeaderLbl { display: none; } .guest-header-btn { padding: 0 9px; } }
+ 
+ /* ── Test guide sheet ── */
+ .guest-pick { z-index: 8600; }
+diff --git a/frontend/guest-mode.js b/frontend/guest-mode.js
+index 8db2ae1..2c0a1b5 100644
+--- a/frontend/guest-mode.js
++++ b/frontend/guest-mode.js
+@@ -23,7 +23,7 @@
+       goalTitle: 'Set a goal as the mentor', done: 'Done',
+       blocked: 'Not available in guest preview.', starting: 'Starting…', failed: "Couldn't start the preview",
+       ending: 'Exit guest preview?', endBody: 'Everything you tried here will be cleared.', stay: 'Stay', leave: 'Exit',
+-      guestBtn: 'Guest', pickTitle: 'Preview as a mentee', cancel: 'Cancel',
++      guestBtn: 'Guest mode', pickTitle: 'Preview as a mentee', cancel: 'Cancel',
+       homeEyebrow: 'For mentors', homeTitle: 'Experience Holy Helper as a mentee',
+       homeSub: 'Run the full journey in a safe sandbox. Nobody is contacted and nothing is saved.',
+       homeCta: 'Try guest mode', f1: 'Request', f2: 'Chat', f3: 'Goals', f4: 'Live session',
+@@ -49,7 +49,7 @@
+       goalTitle: 'እንደ አማካሪ ግብ አዘጋጅ', done: 'ተጠናቀቀ',
+       blocked: 'በእንግዳ ቅድመ እይታ ውስጥ አይገኝም።', starting: 'በመጀመር ላይ…', failed: 'ቅድመ እይታውን መጀመር አልተቻለም',
+       ending: 'ከእንግዳ ቅድመ እይታ ይውጡ?', endBody: 'እዚህ የሞከሩት ሁሉ ይጸዳል።', stay: 'ቆይ', leave: 'ውጣ',
+-      guestBtn: 'እንግዳ', pickTitle: 'እንደ ተመካሪ ቅድመ እይታ', cancel: 'ተው',
++      guestBtn: 'የእንግዳ ሁነታ', pickTitle: 'እንደ ተመካሪ ቅድመ እይታ', cancel: 'ተው',
+       homeEyebrow: 'ለአማካሪዎች', homeTitle: 'ሆሊ ሄልፐርን እንደ ተመካሪ ይለማመዱ',
+       homeSub: 'ሙሉውን ጉዞ ደህንነቱ በተጠበቀ ሙከራ ውስጥ ይሞክሩ። ማንም አይደወልም፣ ምንም አይቀመጥም።',
+       homeCta: 'የእንግዳ ሁነታን ሞክር', f1: 'ጥያቄ', f2: 'ውይይት', f3: 'ግቦች', f4: 'ቀጥታ ክፍለ ጊዜ',
+@@ -126,7 +126,7 @@
+   }
+ 
+   document.addEventListener('click', e => {
+-    if (e.target.closest('#guestHomeStart')) { openPicker(); return; }
++    if (e.target.closest('#guestHeaderBtn')) { openPicker(); return; }
+     const pick = e.target.closest('[data-guest-pick]');
+     if (pick) { G.sex = pick.dataset.guestPick; paintPicker(); return; }
+     if (e.target.closest('#guestPickStart')) { closePicker(); G.enter(); return; }
+@@ -139,16 +139,17 @@
+     if (e.target.closest('#guestGoalClose')) { closeGoalSheet(); return; }
+   });
+ 
+-  // ── Entry card on the Home page ─────────────────────────────────────────
++  // ── Entry button in the Home header ─────────────────────────────────────
+   // Shown only to mentors, and hidden while a preview is running (the preview
+   // bar has its own Exit). app.js calls G.syncEntry() whenever the role changes.
+   function syncEntry() {
+-    const card = $('guestHomeCard');
+-    if (!card) return;
++    const btn = $('guestHeaderBtn');
++    if (!btn) return;
+     const mentor = bridge()?.getUser?.()?.role === 'mentor';
+-    card.style.display = mentor && !G.active ? '' : 'none';
+-    card.querySelectorAll('[data-guest-t]').forEach(el => { el.textContent = tr(el.dataset.guestT); });
+-    $('guestHomeStart')?.setAttribute('aria-label', tr('homeCta'));
++    btn.style.display = mentor && !G.active ? 'inline-flex' : 'none';
++    const lbl = $('guestHeaderLbl');
++    if (lbl) lbl.textContent = tr('guestBtn');
++    btn.setAttribute('aria-label', tr('title'));
+   }
+   G.syncEntry = syncEntry;
+ 
+@@ -216,6 +217,7 @@
+     const b = bridge();
+     b.setUser(G._mentorUser); G._mentorUser = null;
+     document.body.classList.remove('guest-mode');
++    document.body.style.removeProperty('--guest-bar-h');
+     $('guestBar')?.remove();
+     b.resetViews();
+     syncEntry();
+@@ -237,6 +239,7 @@
+     bar.setAttribute('role', 'region');
+     bar.setAttribute('aria-label', tr('bar'));
+     document.body.appendChild(bar);
++    document.body.style.setProperty('--guest-bar-h', 'calc(var(--safe-top, 0px) + 44px)');
+   }
+   async function refreshBar() {
+     const bar = $('guestBar');
+@@ -414,5 +417,5 @@
+     const origToggle = window.toggleLanguage;
+     window.toggleLanguage = function () { const r = origToggle.apply(this, arguments); setTimeout(syncEntry, 50); return r; };
+   }
+-  console.log('[guest] guest-mode.js loaded; home card:', !!$('guestHomeCard'));
++  console.log('[guest] guest-mode.js loaded; header button:', !!$('guestHeaderBtn'));
+ })();
+diff --git a/frontend/index.html b/frontend/index.html
+index 047b816..9f638d6 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -505,6 +505,9 @@
+         <div class="header-actions">
+           <button id="adminBtn" class="btn btn-sm btn-outline hidden" data-i18n="btn_admin"
+             onclick="window.location='/admin.html'">Admin</button>
++          <button id="guestHeaderBtn" type="button" class="guest-header-btn" style="display:none" aria-label="Guest mode">
++            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
++            <span id="guestHeaderLbl" data-guest-t="guestBtn">Guest mode</span></button>
+           <button id="langBtnDash" class="lang-toggle-btn" onclick="toggleLanguage()"
+             aria-label="Switch language">EN</button>
+           <button class="theme-btn" onclick="toggleTheme()"><span id="themeIcon" class="theme-icon-svg">
+@@ -518,26 +521,6 @@
+         </div>
+       </div>
+       <div class="page-content">
+-        <!-- Guest mode entry (mentors only; shown by guest-mode.js) -->
+-        <section id="guestHomeCard" class="guest-home" style="display:none" aria-labelledby="guestHomeTitle">
+-          <div class="guest-home-top">
+-            <span class="guest-home-icon" aria-hidden="true">
+-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+-            </span>
+-            <div class="guest-home-copy">
+-              <div class="guest-home-eyebrow" data-guest-t="homeEyebrow">For mentors</div>
+-              <h2 id="guestHomeTitle" class="guest-home-title" data-guest-t="homeTitle">Experience Holy Helper as a mentee</h2>
+-            </div>
+-          </div>
+-          <p class="guest-home-sub" data-guest-t="homeSub">Run the full journey in a safe sandbox. Nobody is contacted and nothing is saved.</p>
+-          <ul class="guest-home-feats" aria-hidden="true">
+-            <li data-guest-t="f1">Request</li><li data-guest-t="f2">Chat</li><li data-guest-t="f3">Goals</li><li data-guest-t="f4">Live session</li>
+-          </ul>
+-          <button id="guestHomeStart" type="button" class="btn btn-primary guest-home-cta">
+-            <span data-guest-t="homeCta">Try guest mode</span>
+-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+-          </button>
+-        </section>
+         <!-- Daily Verse -->
+         <div class="verse-card">
+           <div class="verse-card-head">
+diff --git a/routes/guest.js b/routes/guest.js
+index ca72cbe..e765379 100644
+--- a/routes/guest.js
++++ b/routes/guest.js
+@@ -152,7 +152,9 @@ module.exports = (supabase, requireAuth, mentorsRouter) => {
+   router.post('/mentors/request', wrap(async (req, res) => {
+     const mentorId = Number(req.body?.mentor_id);
+     if (!mentorId) return res.status(400).json({ error: 'mentor_id required' });
+-    if (String(mentorId) === String(req.telegramUser.id)) return res.status(400).json({ error: "You can't request yourself." });
++    // Requesting yourself is allowed in the preview: the tester is the mentor
++    // and plays both sides. Availability limits only apply to other mentors.
++    const isSelf = String(mentorId) === String(req.telegramUser.id);
+ 
+     // Same eligibility checks as the real endpoint (read-only), so the
+     // preview shows the real "full" / "not accepting" errors.
+@@ -160,8 +162,8 @@ module.exports = (supabase, requireAuth, mentorsRouter) => {
+       .select('telegram_id, anonymous_id, sex, age_range, rating, rating_count, photo_file_id, photo_updated_at, accepting_requests, role, is_banned, user_settings(bio, specialization, display_name, max_mentees)')
+       .eq('telegram_id', mentorId).maybeSingle();
+     if (!mentor || mentor.role !== 'mentor' || mentor.is_banned) return res.status(404).json({ error: 'Mentor not found' });
+-    if (mentor.accepting_requests === false) return res.status(409).json({ error: 'This mentor is not accepting new requests at this time.' });
+-    const max = mentor.user_settings?.max_mentees || parseInt(process.env.MAX_MENTEES_DEFAULT || '3', 10);
++    if (!isSelf && mentor.accepting_requests === false) return res.status(409).json({ error: 'This mentor is not accepting new requests at this time.' });
++    const max = isSelf ? Infinity : (mentor.user_settings?.max_mentees || parseInt(process.env.MAX_MENTEES_DEFAULT || '3', 10));
+     const { count } = await supabase.from('mentorship_assignments').select('id', { count: 'exact', head: true })
+       .eq('mentor_id', mentorId).eq('is_active', true);
+     if ((count || 0) >= max) return res.status(409).json({ error: 'Mentor is at full capacity. Please try another mentor.' });
+diff --git a/routes/mentors.js b/routes/mentors.js
+index 6bbe1fc..8c40e9a 100644
+--- a/routes/mentors.js
++++ b/routes/mentors.js
+@@ -78,7 +78,6 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+       .select('telegram_id, anonymous_id, sex, age_range, preferred_mentee_sex, accepting_requests, rating, rating_count, photo_file_id, photo_updated_at, user_settings(bio, specialization, max_mentees, display_name)')
+       .eq('role', 'mentor')
+       .eq('is_banned', false);
+-    if (gctx) query = query.neq('telegram_id', gctx.selfId);   // a guest can't request themselves
+ 
+     // Hide mentors an admin has suspended (Mentor Control System) from
+     // mentee-facing discovery, without touching their role or history.
+@@ -100,8 +99,11 @@ module.exports = function mentorRoutes(supabase, requireAuth, io, onlineUsers) {
+       // Show this mentor if:  their preference matches the mentee's sex
+       //                    OR their preference is 'prefer_not' (both sexes welcome)
+       //                    OR they have no preference set yet (NULL → both)
++      // Guest mode: the previewing mentor always sees their own card, so they
++      // can request themselves and play both sides of the flow.
+       query = query.or(
+-        `preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.prefer_not,preferred_mentee_sex.is.null`
++        `preferred_mentee_sex.eq.${userSex},preferred_mentee_sex.eq.prefer_not,preferred_mentee_sex.is.null` +
++        (gctx ? `,telegram_id.eq.${gctx.selfId}` : '')
+       );
+     }
+ 
+diff --git a/tests/guest-mode.routes.test.js b/tests/guest-mode.routes.test.js
+index dcb5e66..b43ad3a 100644
+--- a/tests/guest-mode.routes.test.js
++++ b/tests/guest-mode.routes.test.js
+@@ -73,7 +73,6 @@ async function boot(role) {
+   const req1 = await s.call('POST', '/mentors/request', { mentor_id: 77, topic_id: 1 });
+   assert.strictEqual(req1.status, 201);
+   assert.strictEqual((await s.call('POST', '/mentors/request', { mentor_id: 77 })).status, 409);
+-  assert.strictEqual((await s.call('POST', '/mentors/request', { mentor_id: 1 })).status, 400, 'cannot request yourself');
+   assert.strictEqual((await s.call('POST', '/goals', { type: 'one_time', title: 'x' })).status, 403);
+   const st = await s.call('GET', '/state');
+   assert.strictEqual(st.body.pending.length, 1);
+@@ -137,6 +136,12 @@ async function boot(role) {
+   await s.call('POST', '/sim/session/end');
+   assert.strictEqual((await s.call('GET', `/sessions/${now.body.session.id}/join`)).status, 410);
+ 
++  // Self request: the tester is a mentor and may request themselves to play both sides.
++  await s.call('POST', '/users/end-mentorship');
++  const me = await s.call('POST', '/mentors/request', { mentor_id: 1 });
++  assert.strictEqual(me.status, 201, 'a mentor can request themselves in the preview');
++  assert.strictEqual((await s.call('POST', '/sim/decline', { request_id: me.body.id })).status, 200);
++
+   // Decline path (second request on a fresh sandbox state).
+   await s.call('POST', '/users/end-mentorship');
+   const req2 = await s.call('POST', '/mentors/request', { mentor_id: 77 });
+diff --git a/tests/guest-mode.ui.test.js b/tests/guest-mode.ui.test.js
+index 5b51c3a..143b038 100644
+--- a/tests/guest-mode.ui.test.js
++++ b/tests/guest-mode.ui.test.js
+@@ -6,7 +6,7 @@ const fs = require('fs');
+ const path = require('path');
+ const { JSDOM } = require('jsdom');
+ 
+-const html = '<!doctype html><body><div id="app"><div class="page-content"><section id="guestHomeCard" style="display:none"><span data-guest-t="homeCta"></span><button id="guestHomeStart" type="button"></button></section><div id="menteesList"></div></div></div></body>';
++const html = '<!doctype html><body><div id="app"><div class="page-content"><button id="guestHeaderBtn" type="button" style="display:none"><span id="guestHeaderLbl"></span></button><div id="menteesList"></div></div></div></body>';
+ const dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'http://localhost/' });
+ const w = dom.window;
+ 
+@@ -35,13 +35,13 @@ const G = w.HolyGuest;
+ (async () => {
+   await new Promise(r => setTimeout(r, 20));   // DOMContentLoaded
+   // Home card shows for mentors only, and opens the persona picker.
+-  const card = w.document.getElementById('guestHomeCard');
+-  assert.strictEqual(card.style.display, '', 'mentor sees the entry card');
++  const card = w.document.getElementById('guestHeaderBtn');
++  assert.strictEqual(card.style.display, 'inline-flex', 'mentor sees the header button');
+   assert.strictEqual(w.document.getElementById('menteesList').children.length, 0, 'does not touch the mentees list');
+   user = { telegram_id: 5, role: 'user' }; G.syncEntry();
+   assert.strictEqual(card.style.display, 'none', 'mentees never see it');
+   user = mentor; G.syncEntry();
+-  w.document.getElementById('guestHomeStart').click();
++  w.document.getElementById('guestHeaderBtn').click();
+   assert.ok(w.document.getElementById('guestPickSheet'), 'picker opens');
+   w.document.querySelector('[data-guest-pick="F"]').click();
+   assert.strictEqual(G.sex, 'F');
+@@ -62,7 +62,7 @@ const G = w.HolyGuest;
+   assert.deepStrictEqual(navs, ['dashboard']);
+   assert.ok(api.some(([m, p]) => m === 'POST' && p === '/api/guest/start'));
+   await new Promise(r => setTimeout(r, 20));
+-  assert.strictEqual(card.style.display, 'none', 'card hides during the preview');
++  assert.strictEqual(card.style.display, 'none', 'button hides during the preview');
+   assert.ok(w.document.querySelector('.guest-badge'), 'pending request flags the guide button');
+ 
+   // Test guide: step list, accept as the mentor, and simulated events replayed through the app's socket handlers.
