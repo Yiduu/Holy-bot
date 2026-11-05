@@ -11,6 +11,7 @@
 
 const express = require('express');
 const sandbox = require('../utils/guestSandbox');
+const { JITSI_DOMAIN, isPublicJitsi, generateJitsiJWT } = require('../utils');
 
 const SAMPLE_VERSE = {
   text: 'Your word is a lamp to my feet and a light to my path.',
@@ -44,16 +45,41 @@ module.exports = (supabase, requireAuth, mentorsRouter) => {
 
   // ── lifecycle ─────────────────────────────────────────────────────────
   router.post('/start', (req, res) => {
-    const s = sandbox.start(req.telegramUser.id, req.body?.sex);
+    const s = sandbox.start(req.telegramUser.id, req.body?.sex, req.body?.lang);
     res.json({ user: sandbox.userView(s) });
   });
   router.post('/end', (req, res) => { sandbox.end(req.telegramUser.id); res.json({ success: true }); });
+  // Polled by the preview bar. Besides the checklist state it hands back any
+  // simulated mentor events that have come due (typing, replies, invites).
   router.get('/state', (req, res) => {
     const s = sb(req);
-    res.json({ active: !!s, user: s ? sandbox.userView(s) : null,
-      has_mentor: !!s?.assignment, pending: s ? s.requests.filter(r => r.status === 'pending').map(r => ({
-        id: r.id, mentor_name: r.mentor.user_settings?.display_name || r.mentor.anonymous_id })) : [] });
+    if (!s) return res.json({ active: false, user: null, has_mentor: false, pending: [], events: [] });
+    const events = sandbox.flushDue(s);
+    const ses = sandbox.sessionView(s);
+    const mentorName = s.assignment ? (s.assignment.mentor.user_settings?.display_name || s.assignment.mentor.anonymous_id) : null;
+    res.json({
+      active: true, user: sandbox.userView(s), has_mentor: !!s.assignment, mentor_name: mentorName,
+      pending: s.requests.filter(r => r.status === 'pending').map(r => ({
+        id: r.id, mentor_name: r.mentor.user_settings?.display_name || r.mentor.anonymous_id })),
+      requested: s.requests.length, rejected: s.requests.filter(r => r.status === 'rejected').length,
+      goals: s.goals.length, messages_sent: s.messages.filter(m => m.from_id === s.persona.telegram_id).length,
+      session: ses && ses.status !== 'ended' ? { id: ses.id, title: ses.title, status: ses.status, scheduled_at: ses.scheduled_at,
+        mentor_link: mentorLink(s) } : null,
+      events,
+    });
   });
+
+  // The mentor's side of the demo room, so a tester can open it on a second
+  // device and see a real two-person call. Same private room as the mentee.
+  function mentorLink(s) {
+    const ses = s.session;
+    if (!ses) return null;
+    const name = s.assignment?.mentor.user_settings?.display_name || s.assignment?.mentor.anonymous_id || 'Mentor';
+    const jwt = isPublicJitsi() ? null : generateJitsiJWT(ses.room_name, { displayName: name, moderator: true });
+    const params = ['config.disableDeepLinking=true', 'config.prejoinConfig.enabled=false',
+      `userInfo.displayName=${encodeURIComponent(name)}`, ...(jwt ? [`jwt=${jwt}`] : [])];
+    return `https://${JITSI_DOMAIN}/${ses.room_name}#${params.join('&')}`;
+  }
 
   router.use(needSandbox);
 
@@ -151,6 +177,27 @@ module.exports = (supabase, requireAuth, mentorsRouter) => {
     if (r.error) return fail(res, r);
     res.json({ success: true });
   });
+  // ── "Act as my mentor" controls (each one only touches the sandbox) ────
+  router.post('/sim/decline', (req, res) => {
+    const r = sandbox.simulateDecline(req.sbx, String(req.body?.request_id || ''), req.body?.reason);
+    if (r.error) return fail(res, r);
+    res.json({ success: true });
+  });
+  router.post('/sim/message', (req, res) => {
+    const r = sandbox.mentorSays(req.sbx, req.body?.content);
+    if (r.error) return fail(res, r);
+    res.json({ success: true });
+  });
+  router.post('/sim/session', (req, res) => {
+    const r = sandbox.startSession(req.sbx, { inMinutes: req.body?.in_minutes, title: req.body?.title });
+    if (r.error) return fail(res, r);
+    res.status(201).json({ session: r.session, mentor_link: mentorLink(req.sbx) });
+  });
+  router.post('/sim/session/end', (req, res) => {
+    const r = sandbox.endSession(req.sbx);
+    if (r.error) return fail(res, r);
+    res.json({ success: true });
+  });
   router.post('/mentors/waitlist', (req, res) => { req.sbx.waitlist.add(Number(req.body?.mentor_id)); res.json({ success: true }); });
   router.delete('/mentors/waitlist/:id', (req, res) => { req.sbx.waitlist.delete(Number(req.params.id)); res.json({ success: true }); });
   router.get('/mentors/my-requests', (req, res) => res.json([]));
@@ -200,15 +247,83 @@ module.exports = (supabase, requireAuth, mentorsRouter) => {
     res.json({ success: true });
   });
 
-  // ── messages: read-only preview (the composer is hidden client-side) ───
+  // ── messages: a real chat against the sandbox ─────────────────────────
+  // The simulated mentor answers a few seconds after each message (see
+  // sandbox.menteeSendMessage); replies reach the screen through /state events.
   router.get('/messages/unread/count', (req, res) =>
-    res.json({ count: req.sbx.messages.filter(m => !m.is_read).length }));
-  router.post('/messages/read/:id', (req, res) => { req.sbx.messages.forEach(m => { m.is_read = true; }); res.json({ success: true }); });
-  router.get('/messages/:id', (req, res) => res.json(req.sbx.messages));
+    res.json({ count: req.sbx.messages.filter(m => !m.is_read && m.from_id !== req.sbx.persona.telegram_id).length }));
+  router.post('/messages/read/:id', (req, res) => {
+    const now = new Date().toISOString();
+    req.sbx.messages.forEach(m => { if (m.from_id !== req.sbx.persona.telegram_id) { m.is_read = true; m.read_at = m.read_at || now; } });
+    res.json({ success: true });
+  });
+  router.post('/messages', (req, res) => {
+    const r = sandbox.menteeSendMessage(req.sbx, req.body || {});
+    if (r.error) return fail(res, r);
+    res.status(201).json(r.message);
+  });
+  router.patch('/messages/:id', (req, res) => {
+    const r = sandbox.editMessage(req.sbx, req.params.id, req.body?.content);
+    if (r.error) return fail(res, r);
+    res.json(r.message);
+  });
+  router.delete('/messages/:id', (req, res) => {
+    if (!sandbox.deleteMessage(req.sbx, req.params.id)) return res.status(404).json({ error: 'Message not found' });
+    res.json({ success: true });
+  });
+  router.get('/messages/:id', (req, res) => {
+    if (!req.sbx.assignment) return res.status(403).json({ error: 'No active mentorship with this user' });
+    const now = new Date().toISOString();
+    req.sbx.messages.forEach(m => { if (m.from_id !== req.sbx.persona.telegram_id) { m.is_read = true; m.read_at = m.read_at || now; } });
+    res.json(req.sbx.messages);
+  });
 
-  // ── sessions: none in the preview ─────────────────────────────────────
-  router.get('/sessions/my', (req, res) => res.json([]));
+  // ── sessions: one demo live session the "mentor" can start ─────────────
+  const EARLY_JOIN_MS = 5 * 60 * 1000;
+  const sesById = (req, res) => {
+    const v = sandbox.sessionView(req.sbx);
+    if (!v || v.id !== req.params.id) { res.status(404).json({ error: 'We could not find this session', code: 'not_found' }); return null; }
+    if (v.status === 'ended') { res.status(410).json({ error: 'This session has already ended.', code: 'ended' }); return null; }
+    return v;
+  };
+  router.get('/sessions/clock', (req, res) => res.json({ now: new Date().toISOString() }));
+  router.get('/sessions/my', (req, res) => {
+    const v = sandbox.sessionView(req.sbx);
+    res.json(v ? [{ session_id: v.id, telegram_id: req.sbx.persona.telegram_id, joined_at: null, left_at: null, session: v }] : []);
+  });
   router.get('/sessions/upcoming', (req, res) => res.json([]));
+  router.delete('/sessions/my', (req, res) => {
+    if (req.sbx.session && sandbox.sessionView(req.sbx).status === 'ended') req.sbx.session = null;
+    res.json({ success: true, count: 0 });
+  });
+  router.get('/sessions/:id/join', (req, res) => {
+    const v = sesById(req, res); if (!v) return;
+    const startMs = new Date(v.scheduled_at).getTime();
+    if (v.status === 'scheduled' && startMs - Date.now() > EARLY_JOIN_MS) {
+      return res.status(403).json({ error: 'This session has not started yet. Please wait a little.', code: 'too_early',
+        starts_at: v.scheduled_at, opens_at: new Date(startMs - EARLY_JOIN_MS).toISOString(), server_time: new Date().toISOString() });
+    }
+    const ses = req.sbx.session;
+    const me = req.sbx.settings.display_name || req.sbx.persona.anonymous_id;
+    const jwt = isPublicJitsi() ? null : generateJitsiJWT(ses.room_name, { displayName: me, moderator: false });
+    res.json({ session_id: v.id, room_name: ses.room_name, room_password: ses.room_password, ...(jwt && { jitsi_token: jwt }),
+      jitsi_domain: JITSI_DOMAIN, display_name: me, is_moderator: false, title: v.title, is_group: false,
+      scheduled_at: v.scheduled_at, status: 'active', host_name: v.host.user_settings.display_name,
+      host_present: true, call_mode: ses.call_mode || 'video', server_time: new Date().toISOString() });
+  });
+  router.post('/sessions/:id/heartbeat', (req, res) => {
+    const v = sandbox.sessionView(req.sbx);
+    if (!v || v.id !== req.params.id) return res.status(404).json({ error: 'We could not find this session' });
+    res.json({ status: v.status, ended: v.status === 'ended', host_present: true, present_count: 2,
+      call_mode: req.sbx.session.call_mode || 'video', server_time: new Date().toISOString() });
+  });
+  router.post('/sessions/:id/leave', (req, res) => res.json({ success: true, ended: false }));
+  router.post('/sessions/:id/call-mode', (req, res) => {
+    if (req.sbx.session && ['audio', 'video'].includes(req.body?.mode)) req.sbx.session.call_mode = req.body.mode;
+    res.json({ success: true, mode: req.sbx.session?.call_mode || 'video' });
+  });
+  router.get('/sessions/:id/ice', (req, res) => res.json({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }));
+  router.post('/sessions/:id/signal', (req, res) => res.json({ success: true }));
 
   // ── support: nothing is ever sent to the real support team ─────────────
   router.get('/support', (req, res) => res.json([]));

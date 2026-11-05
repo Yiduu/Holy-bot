@@ -6,20 +6,24 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 
-const html = '<!doctype html><body><div id="app"><div class="page-content"><div id="menteeStats"></div><div id="menteesList"></div></div><div id="chatInputRow"></div></div></body>';
+const html = '<!doctype html><body><div id="app"><div class="page-content"><section id="guestHomeCard" style="display:none"><span data-guest-t="homeCta"></span><button id="guestHomeStart" type="button"></button></section><div id="menteesList"></div></div></div></body>';
 const dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'http://localhost/' });
 const w = dom.window;
 
 const mentor = { telegram_id: 1, role: 'mentor' };
 const guestUser = { telegram_id: 9000000000001, role: 'user', is_guest: true };
+let hasMentor = false; const stateEvents = [];
 let user = mentor, resets = 0; const navs = [], api = [], realFetches = [];
-w.__holyBridge = { getUser: () => user, setUser: u => { user = u; }, getSocket: () => null, resetViews: () => { resets++; }, navigate: p => navs.push(p) };
+const replayed = [];
+const fakeSocket = { listeners: ev => [p => replayed.push([ev, p])] };
+w.__holyBridge = { getUser: () => user, setUser: u => { user = u; }, getSocket: () => fakeSocket, resetViews: () => { resets++; }, navigate: p => navs.push(p) };
 w.showToast = () => {};
 w.Telegram = { WebApp: { showConfirm: (_m, cb) => cb(true) } };
 w.apiFetch = async (p, o = {}) => {
   api.push([o.method || 'GET', p]);
   if (p === '/api/guest/start') return { user: guestUser };
-  if (p === '/api/guest/state') return { active: true, has_mentor: false, pending: [{ id: 'r1' }] };
+  if (p === '/api/guest/state') return { active: true, has_mentor: hasMentor, pending: hasMentor ? [] : [{ id: 'r1' }], requested: 1, goals: 0,
+    session: null, events: stateEvents.splice(0) };
   return { success: true };
 };
 w.fetch = async (url, init) => { realFetches.push([url, init?.method || 'GET']); return { ok: true, status: 200 }; };
@@ -30,13 +34,20 @@ const G = w.HolyGuest;
 
 (async () => {
   await new Promise(r => setTimeout(r, 20));   // DOMContentLoaded
-  // Entry card is on the mentees page and lets the mentor pick a persona.
-  const card = w.document.getElementById('guestEntryCard');
-  assert.ok(card, 'entry card rendered');
+  // Home card shows for mentors only, and opens the persona picker.
+  const card = w.document.getElementById('guestHomeCard');
+  assert.strictEqual(card.style.display, '', 'mentor sees the entry card');
   assert.strictEqual(w.document.getElementById('menteesList').children.length, 0, 'does not touch the mentees list');
-  w.document.querySelector('[data-guest-sex="F"]').click();
+  user = { telegram_id: 5, role: 'user' }; G.syncEntry();
+  assert.strictEqual(card.style.display, 'none', 'mentees never see it');
+  user = mentor; G.syncEntry();
+  w.document.getElementById('guestHomeStart').click();
+  assert.ok(w.document.getElementById('guestPickSheet'), 'picker opens');
+  w.document.querySelector('[data-guest-pick="F"]').click();
   assert.strictEqual(G.sex, 'F');
-  assert.ok(w.document.querySelector('[data-guest-sex="F"]').classList.contains('is-on'));
+  assert.ok(w.document.querySelector('[data-guest-pick="F"]').classList.contains('is-on'));
+  w.document.getElementById('guestPickCancel').click();
+  assert.ok(!w.document.getElementById('guestPickSheet'));
 
   // Nothing is blocked before the preview starts.
   await w.fetch('/api/mentors/request', { method: 'POST' });
@@ -51,8 +62,30 @@ const G = w.HolyGuest;
   assert.deepStrictEqual(navs, ['dashboard']);
   assert.ok(api.some(([m, p]) => m === 'POST' && p === '/api/guest/start'));
   await new Promise(r => setTimeout(r, 20));
-  assert.ok(w.document.getElementById('guestAcceptBtn'), 'pending request shows "Simulate acceptance"');
-  assert.ok(!w.document.getElementById('guestGoalBtn'), 'goal button only after a mentor accepts');
+  assert.strictEqual(card.style.display, 'none', 'card hides during the preview');
+  assert.ok(w.document.querySelector('.guest-badge'), 'pending request flags the guide button');
+
+  // Test guide: step list, accept as the mentor, and simulated events replayed through the app's socket handlers.
+  w.document.getElementById('guestGuideBtn').click();
+  assert.ok(w.document.getElementById('guestGuide'));
+  assert.ok(w.document.querySelector('[data-guest-act="accept"]'), 'mentor can accept');
+  assert.ok(w.document.querySelector('[data-guest-act="decline"]'), 'mentor can decline');
+  assert.ok(!w.document.querySelector('[data-guest-act="goal"]'), 'goals locked until accepted');
+  w.document.querySelector('[data-guest-act="accept"]').click();
+  await new Promise(r => setTimeout(r, 30));
+  assert.ok(api.some(([m, p]) => m === 'POST' && p === '/api/guest/simulate-accept'));
+  hasMentor = true;
+  stateEvents.push({ event: 'new_message', payload: { id: 'm1', content: 'hi' } });
+  await new Promise(r => setTimeout(r, 2100));
+  assert.deepStrictEqual(replayed[0], ['new_message', { id: 'm1', content: 'hi' }], 'mentor reply is delivered to the chat handler');
+  assert.ok(w.document.querySelector('[data-guest-act="goal"]'), 'goal step unlocked');
+  assert.ok(w.document.querySelector('[data-guest-act="start-now"]'), 'live session step unlocked');
+  w.document.getElementById('guestMentorMsg').value = 'Welcome!';
+  w.document.querySelector('[data-guest-act="say"]').click();
+  await new Promise(r => setTimeout(r, 20));
+  assert.ok(api.some(([m, p]) => m === 'POST' && p === '/api/guest/sim/message'));
+  w.document.getElementById('guestGuideClose').click();
+  assert.ok(!w.document.getElementById('guestGuide'));
 
   // Direct writes to real endpoints are refused while active; guest + read-only media pass.
   const blocked = await w.fetch('/api/avatar', { method: 'POST' });

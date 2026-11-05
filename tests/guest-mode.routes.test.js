@@ -6,6 +6,7 @@ const http = require('http');
 const express = require('express');
 const R = require('../utils/goalRules');
 const guestRoutes = require('../routes/guest');
+const sandbox = require('../utils/guestSandbox');
 
 const writes = [];
 function fakeSupabase(role) {
@@ -95,6 +96,56 @@ async function boot(role) {
   assert.strictEqual(ticked.body.stats.done, 1);
   assert.strictEqual((await s.call('GET', '/goals/mine')).body.length, 1);
 
+  // Chat: refused before a mentor accepts (checked earlier), a real conversation after.
+  const sent = await s.call('POST', '/messages', { to_id: 77, content: 'Hello, I need prayer', client_id: 'c1' });
+  assert.strictEqual(sent.status, 201);
+  assert.strictEqual((await s.call('POST', '/messages', { to_id: 77, content: 'Hello, I need prayer', client_id: 'c1' })).body.id, sent.body.id, 'retry with the same client_id is idempotent');
+  assert.strictEqual((await s.call('POST', '/messages', { to_id: 77, content: '   ' })).status, 400);
+  assert.strictEqual((await s.call('GET', '/state')).body.events.length, 0, 'mentor has not answered yet');
+  sandbox.get(1).outbox.forEach(i => { i.due = 0; });              // fast-forward the mentor's typing delay
+  const ev = (await s.call('GET', '/state')).body.events;
+  assert.deepStrictEqual(ev.map(e => e.event), ['typing', 'new_message']);
+  assert.ok(/pray/i.test(ev[1].payload.content), 'reply follows the topic');
+  assert.strictEqual((await s.call('GET', '/messages/unread/count')).body.count, 1, 'the mentor reply is unread (welcome was read earlier)');
+  assert.strictEqual((await s.call('GET', '/messages/77')).body.length, 3);
+  assert.strictEqual((await s.call('GET', '/messages/unread/count')).body.count, 0, 'opening the chat marks mentor messages read');
+  assert.strictEqual((await s.call('PATCH', `/messages/${sent.body.id}`, { content: 'edited' })).body.content, 'edited');
+  assert.strictEqual((await s.call('DELETE', `/messages/${sent.body.id}`)).status, 200);
+  // The tester can also speak as the mentor.
+  assert.strictEqual((await s.call('POST', '/sim/message', { content: 'Hi from the mentor' })).status, 200);
+  assert.strictEqual((await s.call('GET', '/state')).body.events[0].payload.content, 'Hi from the mentor');
+
+  // Live session: invite → too early when scheduled → joinable now → heartbeat → end.
+  const later = await s.call('POST', '/sim/session', { in_minutes: 10 });
+  assert.strictEqual(later.status, 201);
+  assert.strictEqual((await s.call('POST', '/sim/session', {})).status, 409, 'only one demo session at a time');
+  assert.strictEqual((await s.call('GET', '/sessions/my')).body[0].session.status, 'scheduled');
+  const early = await s.call('GET', `/sessions/${later.body.session.id}/join`);
+  assert.strictEqual(early.status, 403);
+  assert.strictEqual(early.body.code, 'too_early', 'the room opens 5 minutes before the start, like the real one');
+  await s.call('POST', '/sim/session/end');
+  const now = await s.call('POST', '/sim/session', { title: 'Weekly check-in' });
+  assert.strictEqual(now.body.session.status, 'active');
+  assert.ok(now.body.mentor_link.includes('/holy-guest-'));
+  sandbox.get(1).outbox.forEach(i => { i.due = 0; });
+  assert.ok((await s.call('GET', '/state')).body.events.some(e => e.event === 'session_invite'));
+  const joined = await s.call('GET', `/sessions/${now.body.session.id}/join`);
+  assert.strictEqual(joined.body.host_present, true);
+  assert.strictEqual(joined.body.is_moderator, false);
+  assert.ok(joined.body.room_name.startsWith('holy-guest-'));
+  assert.strictEqual((await s.call('POST', `/sessions/${now.body.session.id}/heartbeat`, {})).body.present_count, 2);
+  await s.call('POST', '/sim/session/end');
+  assert.strictEqual((await s.call('GET', `/sessions/${now.body.session.id}/join`)).status, 410);
+
+  // Decline path (second request on a fresh sandbox state).
+  await s.call('POST', '/users/end-mentorship');
+  const req2 = await s.call('POST', '/mentors/request', { mentor_id: 77 });
+  assert.strictEqual((await s.call('POST', '/sim/decline', { request_id: req2.body.id })).status, 200);
+  assert.strictEqual((await s.call('GET', '/state')).body.pending.length, 0);
+  assert.strictEqual((await s.call('POST', '/mentors/request', { mentor_id: 77 })).status, 201, 'can ask again after a decline');
+  const req3 = (await s.call('GET', '/state')).body.pending[0];
+  await s.call('POST', '/simulate-accept', { request_id: req3.id });
+
   // Streak + journal live only in the sandbox.
   assert.strictEqual((await s.call('POST', '/streaks/mark')).body.current_streak, 1);
   const j = await s.call('POST', '/journal', { content: 'hello', mood: 'ok' });
@@ -103,7 +154,6 @@ async function boot(role) {
 
   // Unmapped writes are refused; unmapped reads are harmless.
   assert.strictEqual((await s.call('POST', '/avatar')).status, 403);
-  assert.strictEqual((await s.call('POST', '/messages', { to_id: 77, content: 'hi' })).status, 403);
   assert.strictEqual((await s.call('GET', '/something/else')).status, 200);
 
   // Sandboxes are per mentor and discarded on exit.
