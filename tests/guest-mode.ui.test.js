@@ -41,20 +41,18 @@ const G = w.HolyGuest;
   user = { telegram_id: 5, role: 'user' }; G.syncEntry();
   assert.strictEqual(card.style.display, 'none', 'mentees never see it');
   user = mentor; G.syncEntry();
-  w.document.getElementById('guestHeaderBtn').click();
-  assert.ok(w.document.getElementById('guestPickSheet'), 'picker opens');
-  w.document.querySelector('[data-guest-pick="F"]').click();
-  assert.strictEqual(G.sex, 'F');
-  assert.ok(w.document.querySelector('[data-guest-pick="F"]').classList.contains('is-on'));
-  w.document.getElementById('guestPickCancel').click();
-  assert.ok(!w.document.getElementById('guestPickSheet'));
+  assert.strictEqual(w.document.getElementById('guestHeaderLbl').textContent, 'Guest', 'button reads just "Guest"');
 
   // Nothing is blocked before the preview starts.
   await w.fetch('/api/mentors/request', { method: 'POST' });
   assert.deepStrictEqual(realFetches.pop(), ['/api/mentors/request', 'POST']);
 
-  // Start: swaps to the guest mentee, shows the bar, navigates to the dashboard.
-  await G.enter();
+  // One tap on Guest starts it: no picker in between. A double tap starts it once.
+  w.document.getElementById('guestHeaderBtn').click();
+  w.document.getElementById('guestHeaderBtn').click();
+  assert.ok(!w.document.getElementById('guestPickSheet'), 'no picker page');
+  await new Promise(r => setTimeout(r, 20));
+  assert.strictEqual(api.filter(([m, p]) => m === 'POST' && p === '/api/guest/start').length, 1, 'started once');
   assert.strictEqual(G.active, true);
   assert.strictEqual(user.is_guest, true);
   assert.ok(w.document.body.classList.contains('guest-mode'));

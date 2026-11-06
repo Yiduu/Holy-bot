@@ -43,12 +43,12 @@ thing from a dashboard in the Mini App.
 - English and Amharic UI strings (`local/en.json`, `local/am.json`,
   `frontend/locales.js`)
 
-## Guest mode (mentors preview the mentee side)
+## Guest (mentors preview the mentee side)
 
-On **My Mentees**, a mentor can tap **Start preview** to use the app exactly as
-a mentee does: the Home dashboard, **Find a mentor** (the real directory,
-filtered for the persona they pick: male, female or not specified), sending a
-request, goals, Bible streak and journal.
+A mentor taps **Guest** in the Home header and lands straight in the mentee
+app, with no page in between: the Home dashboard, **Find a mentor** (the real
+directory, shown as a mentee with no gender specified), sending a request,
+goals, Bible streak and journal.
 
 - A top bar stays visible the whole time with **Exit**.
 - After sending a request, **Simulate acceptance** unlocks the mentor view:

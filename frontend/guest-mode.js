@@ -1,6 +1,6 @@
-// Guest mode for mentors ("try the app as a mentee").
+// Guest for mentors ("try the app as a mentee").
 //
-// A mentor taps "Try guest mode" on the Home page and the app switches to the
+// A mentor taps "Guest" in the Home header and the app switches straight to the
 // real mentee screens (find a mentor, requests, chat, goals, sessions, streak,
 // journal). apiFetch (app.js) sends every call to /api/guest/*, which only
 // reads and writes an in-memory sandbox. Nothing here can create a real
@@ -14,56 +14,40 @@
 
   const STR = {
     en: {
-      title: 'Preview as a mentee', sub: 'See the app exactly as a mentee does. Find a mentor, send a request, set up goals and try every feature. Nothing is sent to real people.',
-      pick: 'Preview as', m: 'Male', f: 'Female', n: 'Not specified', start: 'Start preview',
-      note: 'Mentors only see you if their mentee preference matches the option you pick.',
-      bar: 'Guest preview', barSub: 'Nothing here is real',
-      exit: 'Exit', accept: 'Simulate acceptance', setGoal: 'Set a goal as my mentor',
-      accepted: 'Your mentor accepted (preview). Chat and goals are now unlocked.',
+      bar: 'Guest',
+      exit: 'Exit', accepted: 'Your mentor accepted. Chat and goals are now unlocked.',
       goalTitle: 'Set a goal as the mentor', done: 'Done',
-      blocked: 'Not available in guest preview.', starting: 'Starting…', failed: "Couldn't start the preview",
-      ending: 'Exit guest preview?', endBody: 'Everything you tried here will be cleared.', stay: 'Stay', leave: 'Exit',
-      guestBtn: 'Guest mode', pickTitle: 'Preview as a mentee', cancel: 'Cancel',
-      homeEyebrow: 'For mentors', homeTitle: 'Experience Holy Helper as a mentee',
-      homeSub: 'Run the full journey in a safe sandbox. Nobody is contacted and nothing is saved.',
-      homeCta: 'Try guest mode', f1: 'Request', f2: 'Chat', f3: 'Goals', f4: 'Live session',
-      guide: 'Test guide', guideSub: 'Play both sides to try every feature.',
+      blocked: 'Not available in guest.', failed: "Couldn't start guest",
+      ending: 'Exit guest?', endBody: 'Everything you tried here will be cleared.',
+      guestBtn: 'Guest',
+      guide: 'Test guide',
       s1: 'Send a mentor request', s1d: 'Pick a mentor from the list and send a request.', s1b: 'Find a mentor',
       s2: 'Mentor responds', s2d: 'You are the mentor now. Accept or decline.', s2done: 'Accepted by {n}', s2lock: 'Send a request first.',
-      acceptB: 'Accept', declineB: 'Decline', declined: 'Request declined (preview).',
-      s3: 'Chat', s3d: 'Message your mentor. They reply on their own, or write as the mentor below.', s3b: 'Open chat',
+      acceptB: 'Accept', declineB: 'Decline', declined: 'Request declined.',
+      s3: 'Chat', s3d: 'Message your mentor, or write as the mentor below.', s3b: 'Open chat',
       mentorPh: 'Write as your mentor…', send: 'Send', sent: 'Sent as your mentor.',
       s4: 'Goals', s4d: 'Set a goal as the mentor, then tick it off as the mentee.', s4b: 'Set a goal', goalsN: '{n} set',
       s5: 'Live session', s5d: 'Start a call as the mentor and join it as the mentee.', startNow: 'Start now', in10: 'In 10 min',
       openSessions: 'Open Sessions', mentorSide: 'Open mentor side', endSession: 'End session', sessionLive: 'Live now', sessionSoon: 'Scheduled',
-      sessionHint: 'Open the mentor side on another device to see a real two-person call.',
-      locked: 'Unlocks after your request is accepted.', sessionInvite: 'Your mentor started a live session.',
+      locked: 'Unlocks after your request is accepted.',
     },
     am: {
-      title: 'እንደ ተመካሪ ቅድመ እይታ', sub: 'መተግበሪያውን ተመካሪ እንደሚያየው ይመልከቱ። አማካሪ ይፈልጉ፣ ጥያቄ ይላኩ፣ ግቦችን ያዘጋጁ እና ሁሉንም ባህሪያት ይሞክሩ። ለእውነተኛ ሰዎች ምንም አይላክም።',
-      pick: 'እንደ', m: 'ወንድ', f: 'ሴት', n: 'ያልተገለጸ', start: 'ቅድመ እይታ ጀምር',
-      note: 'አማካሪዎች የሚያዩዎት የተመካሪ ምርጫቸው ከመረጡት አማራጭ ጋር ሲዛመድ ብቻ ነው።',
-      bar: 'የእንግዳ ቅድመ እይታ', barSub: 'እዚህ ያለው ምንም እውነተኛ አይደለም',
-      exit: 'ውጣ', accept: 'ተቀባይነትን አስመስል', setGoal: 'እንደ አማካሪዬ ግብ አዘጋጅ',
-      accepted: 'አማካሪዎ ተቀብለዋል (ቅድመ እይታ)። ውይይት እና ግቦች ተከፍተዋል።',
+      bar: 'እንግዳ',
+      exit: 'ውጣ', accepted: 'አማካሪዎ ተቀብለዋል። ውይይት እና ግቦች ተከፍተዋል።',
       goalTitle: 'እንደ አማካሪ ግብ አዘጋጅ', done: 'ተጠናቀቀ',
-      blocked: 'በእንግዳ ቅድመ እይታ ውስጥ አይገኝም።', starting: 'በመጀመር ላይ…', failed: 'ቅድመ እይታውን መጀመር አልተቻለም',
-      ending: 'ከእንግዳ ቅድመ እይታ ይውጡ?', endBody: 'እዚህ የሞከሩት ሁሉ ይጸዳል።', stay: 'ቆይ', leave: 'ውጣ',
-      guestBtn: 'የእንግዳ ሁነታ', pickTitle: 'እንደ ተመካሪ ቅድመ እይታ', cancel: 'ተው',
-      homeEyebrow: 'ለአማካሪዎች', homeTitle: 'ሆሊ ሄልፐርን እንደ ተመካሪ ይለማመዱ',
-      homeSub: 'ሙሉውን ጉዞ ደህንነቱ በተጠበቀ ሙከራ ውስጥ ይሞክሩ። ማንም አይደወልም፣ ምንም አይቀመጥም።',
-      homeCta: 'የእንግዳ ሁነታን ሞክር', f1: 'ጥያቄ', f2: 'ውይይት', f3: 'ግቦች', f4: 'ቀጥታ ክፍለ ጊዜ',
-      guide: 'የሙከራ መመሪያ', guideSub: 'ሁሉንም ባህሪያት ለመሞከር ሁለቱንም ወገን ይጫወቱ።',
+      blocked: 'በእንግዳ ውስጥ አይገኝም።', failed: 'እንግዳን መጀመር አልተቻለም',
+      ending: 'ከእንግዳ ይውጡ?', endBody: 'እዚህ የሞከሩት ሁሉ ይጸዳል።',
+      guestBtn: 'እንግዳ',
+      guide: 'የሙከራ መመሪያ',
       s1: 'የአማካሪ ጥያቄ ይላኩ', s1d: 'ከዝርዝሩ አማካሪ መርጠው ጥያቄ ይላኩ።', s1b: 'አማካሪ ፈልግ',
       s2: 'አማካሪው ምላሽ ይሰጣል', s2d: 'አሁን እርስዎ አማካሪው ነዎት። ይቀበሉ ወይም ውድቅ ያድርጉ።', s2done: 'በ{n} ተቀባይነት አግኝቷል', s2lock: 'መጀመሪያ ጥያቄ ይላኩ።',
-      acceptB: 'ተቀበል', declineB: 'ውድቅ አድርግ', declined: 'ጥያቄው ውድቅ ሆኗል (ቅድመ እይታ)።',
-      s3: 'ውይይት', s3d: 'ለአማካሪዎ መልእክት ይላኩ። እሱ በራሱ ይመልሳል፣ ወይም ከታች እንደ አማካሪ ይጻፉ።', s3b: 'ውይይት ክፈት',
+      acceptB: 'ተቀበል', declineB: 'ውድቅ አድርግ', declined: 'ጥያቄው ውድቅ ሆኗል።',
+      s3: 'ውይይት', s3d: 'ለአማካሪዎ መልእክት ይላኩ፣ ወይም ከታች እንደ አማካሪ ይጻፉ።', s3b: 'ውይይት ክፈት',
       mentorPh: 'እንደ አማካሪዎ ይጻፉ…', send: 'ላክ', sent: 'እንደ አማካሪዎ ተልኳል።',
       s4: 'ግቦች', s4d: 'እንደ አማካሪ ግብ ያዘጋጁ፣ ከዚያ እንደ ተመካሪ ምልክት ያድርጉ።', s4b: 'ግብ አዘጋጅ', goalsN: '{n} ተዘጋጅቷል',
       s5: 'ቀጥታ ክፍለ ጊዜ', s5d: 'እንደ አማካሪ ጥሪ ይጀምሩና እንደ ተመካሪ ይቀላቀሉ።', startNow: 'አሁን ጀምር', in10: 'በ10 ደቂቃ',
       openSessions: 'ክፍለ ጊዜዎችን ክፈት', mentorSide: 'የአማካሪውን ጎን ክፈት', endSession: 'ክፍለ ጊዜውን ጨርስ', sessionLive: 'አሁን ቀጥታ', sessionSoon: 'ተይዟል',
-      sessionHint: 'እውነተኛ የሁለት ሰው ጥሪ ለማየት የአማካሪውን ጎን በሌላ መሳሪያ ይክፈቱ።',
-      locked: 'ጥያቄዎ ከተቀበለ በኋላ ይከፈታል።', sessionInvite: 'አማካሪዎ ቀጥታ ክፍለ ጊዜ ጀምሯል።',
+      locked: 'ጥያቄዎ ከተቀበለ በኋላ ይከፈታል።',
     },
   };
   const tr = k => (STR[localStorage.getItem('language')] || STR.en)[k] || STR.en[k] || k;
@@ -126,11 +110,7 @@
   }
 
   document.addEventListener('click', e => {
-    if (e.target.closest('#guestHeaderBtn')) { openPicker(); return; }
-    const pick = e.target.closest('[data-guest-pick]');
-    if (pick) { G.sex = pick.dataset.guestPick; paintPicker(); return; }
-    if (e.target.closest('#guestPickStart')) { closePicker(); G.enter(); return; }
-    if (e.target.closest('#guestPickCancel') || e.target.id === 'guestPickSheet') { closePicker(); return; }
+    if (e.target.closest('#guestHeaderBtn')) { G.enter(); return; }
     if (e.target.closest('#guestExitBtn')) { confirmExit(); return; }
     if (e.target.closest('#guestGuideBtn')) { openGuide(); return; }
     if (e.target.closest('#guestGuideClose') || e.target.id === 'guestGuide') { closeGuide(); return; }
@@ -149,46 +129,17 @@
     btn.style.display = mentor && !G.active ? 'inline-flex' : 'none';
     const lbl = $('guestHeaderLbl');
     if (lbl) lbl.textContent = tr('guestBtn');
-    btn.setAttribute('aria-label', tr('title'));
+    btn.setAttribute('aria-label', tr('guestBtn'));
   }
   G.syncEntry = syncEntry;
 
-  function paintPicker() {
-    const box = $('guestPickChips');
-    if (!box) return;
-    const opt = (v, k) => `<button type="button" class="guest-chip${G.sex === v ? ' is-on' : ''}" data-guest-pick="${v}" aria-pressed="${G.sex === v}">${tr(k)}</button>`;
-    box.innerHTML = opt('M', 'm') + opt('F', 'f') + opt('prefer_not', 'n');
-  }
-  function openPicker() {
-    if (G.active || $('guestPickSheet')) return;
-    const sheet = document.createElement('div');
-    sheet.id = 'guestPickSheet';
-    sheet.className = 'guest-pick';
-    sheet.setAttribute('role', 'dialog');
-    sheet.setAttribute('aria-modal', 'true');
-    sheet.innerHTML = `
-      <div class="guest-pick-card">
-        <div class="guest-entry-title">${tr('pickTitle')}</div>
-        <div class="guest-entry-sub">${tr('sub')}</div>
-        <div class="guest-entry-label" style="margin-top:14px">${tr('pick')}</div>
-        <div class="guest-chips" id="guestPickChips" role="group"></div>
-        <div class="guest-entry-note">${tr('note')}</div>
-        <div class="guest-pick-actions">
-          <button type="button" class="btn btn-primary" id="guestPickStart">${tr('start')}</button>
-          <button type="button" class="guest-act" id="guestPickCancel">${tr('cancel')}</button>
-        </div>
-      </div>`;
-    document.body.appendChild(sheet);
-    paintPicker();
-  }
-  function closePicker() { $('guestPickSheet')?.remove(); }
-
   // ── Enter / exit ────────────────────────────────────────────────────────
   G.enter = async function () {
-    if (G.active) return;
+    if (G.active || G._starting) return;
     const b = bridge();
     const me = b?.getUser();
     if (!b || me?.role !== 'mentor') return toast(tr('blocked'), 'error');
+    G._starting = true;
     try {
       const { user } = await apiFetch('/api/guest/start', { method: 'POST', body: { sex: G.sex, lang: localStorage.getItem('language') === 'am' ? 'am' : 'en' } });
       G._mentorUser = me;
@@ -204,6 +155,8 @@
       G._poll = setInterval(refreshBar, 2000);
     } catch (e) {
       toast(e.message || tr('failed'), 'error');
+    } finally {
+      G._starting = false;
     }
   };
 
@@ -259,7 +212,7 @@
       bar.innerHTML = `
         <div class="guest-bar-main">
           <span class="guest-dot" aria-hidden="true"></span>
-          <span class="guest-bar-text"><b>${tr('bar')}</b><span> · ${tr('barSub')}</span></span>
+          <span class="guest-bar-text"><b>${tr('bar')}</b></span>
           <button type="button" class="guest-act guest-guide-btn" id="guestGuideBtn">${tr('guide')}${needs ? `<i class="guest-badge" aria-hidden="true">${needs}</i>` : ''}</button>
           <button type="button" class="guest-exit" id="guestExitBtn">${tr('exit')}</button>
         </div>`;
@@ -291,7 +244,7 @@
     el.innerHTML = `
       <div class="guest-pick-card guest-guide-card">
         <div class="guest-guide-head">
-          <div><div class="guest-entry-title">${tr('guide')}</div><div class="guest-entry-sub">${tr('guideSub')}</div></div>
+          <div class="guest-entry-title">${tr('guide')}</div>
           <button type="button" class="guest-act" id="guestGuideClose">${tr('done')}</button>
         </div>
         <div id="guestSteps" class="guest-steps"></div>
@@ -335,7 +288,7 @@
       step(5, tr('s5'), has ? (ses ? `${ses.status === 'active' ? tr('sessionLive') : tr('sessionSoon')} · ${esc(ses.title)}` : tr('s5d')) : tr('locked'),
         has ? (ses ? 'done' : 'now') : 'locked',
         !has ? '' : ses
-          ? btn('sessions', tr('openSessions'), 'is-primary') + btn('mentor-side', tr('mentorSide')) + btn('end-session', tr('endSession')) + `<div class="guest-step-hint">${tr('sessionHint')}</div>`
+          ? btn('sessions', tr('openSessions'), 'is-primary') + btn('mentor-side', tr('mentorSide')) + btn('end-session', tr('endSession'))
           : btn('start-now', tr('startNow'), 'is-primary') + btn('start-10', tr('in10'))),
     ];
     box.innerHTML = steps.join('');
