@@ -1,339 +1,655 @@
-'use strict';
-
-// Guest mode for mentors: "preview the app as a mentee".
+// Guest for mentors ("try the app as a mentee").
 //
-// Mounted at /api/guest. The client (frontend/guest-mode.js) rewrites every
-// /api/<x> call to /api/guest/<x> while guest mode is on, so the real mentee
-// screens run unchanged but can only ever talk to this file. Everything here
-// reads/writes the in-memory sandbox (utils/guestSandbox.js). The only real
-// data touched is READ-ONLY: the real mentor directory and the topic list.
-// No notifications, no bot messages, no real requests are ever created.
+// A mentor taps "Guest" in the Home header and the app switches straight to the
+// real mentee screens (find a mentor, requests, chat, goals, sessions, streak,
+// journal). apiFetch (app.js) sends every call to /api/guest/*, which only
+// reads and writes an in-memory sandbox. Nothing here can create a real
+// request, message or notification. The "Test guide" sheet lets the mentor play
+// the other side (accept, reply, set goals, start a live session) so every
+// feature can be tried end to end. Exit restores the mentor account.
+//
+// Loaded after app.js and goals.js. Uses window.__holyBridge from app.js.
+(function () {
+  "use strict";
 
-const express = require('express');
-const sandbox = require('../utils/guestSandbox');
-const { JITSI_DOMAIN, isPublicJitsi, generateJitsiJWT } = require('../utils');
-const createDailyVerse = require('../utils/dailyVerse');
+  const STR = {
+    en: {
+      bar: "Guest",
+      exit: "Exit",
+      accepted: "Your mentor accepted. Chat and goals are now unlocked.",
+      goalTitle: "Set a goal as the mentor",
+      done: "Done",
+      blocked: "Not available in guest.",
+      failed: "Couldn't start guest",
+      ending: "Exit guest?",
+      endBody: "Everything you tried here will be cleared.",
+      guestBtn: "Guest",
+      guide: "Test guide",
+      s1: "Send a mentor request",
+      s1d: "Pick a mentor from the list and send a request.",
+      s1b: "Find a mentor",
+      s2: "Mentor responds",
+      s2d: "You are the mentor now. Accept or decline.",
+      s2done: "Accepted by {n}",
+      s2lock: "Send a request first.",
+      acceptB: "Accept",
+      declineB: "Decline",
+      declined: "Request declined.",
+      s3: "Chat",
+      s3d: "Message your mentor, or write as the mentor below.",
+      s3b: "Open chat",
+      mentorPh: "Write as your mentor…",
+      send: "Send",
+      sent: "Sent as your mentor.",
+      s4: "Goals",
+      s4d: "Set a goal as the mentor, then tick it off as the mentee.",
+      s4b: "Set a goal",
+      goalsN: "{n} set",
+      s5: "Live session",
+      s5d: "Start a call as the mentor and join it as the mentee.",
+      startNow: "Start now",
+      in10: "In 10 min",
+      openSessions: "Open Sessions",
+      mentorSide: "Open mentor side",
+      endSession: "End session",
+      sessionLive: "Live now",
+      sessionSoon: "Scheduled",
+      locked: "Unlocks after your request is accepted.",
+    },
+    am: {
+      bar: "እንግዳ",
+      exit: "ውጣ",
+      accepted: "አማካሪዎ ተቀብለዋል። ውይይት እና ግቦች ተከፍተዋል።",
+      goalTitle: "እንደ አማካሪ ግብ አዘጋጅ",
+      done: "ተጠናቀቀ",
+      blocked: "በእንግዳ ውስጥ አይገኝም።",
+      failed: "እንግዳን መጀመር አልተቻለም",
+      ending: "ከእንግዳ ይውጡ?",
+      endBody: "እዚህ የሞከሩት ሁሉ ይጸዳል።",
+      guestBtn: "እንግዳ",
+      guide: "የሙከራ መመሪያ",
+      s1: "የአማካሪ ጥያቄ ይላኩ",
+      s1d: "ከዝርዝሩ አማካሪ መርጠው ጥያቄ ይላኩ።",
+      s1b: "አማካሪ ፈልግ",
+      s2: "አማካሪው ምላሽ ይሰጣል",
+      s2d: "አሁን እርስዎ አማካሪው ነዎት። ይቀበሉ ወይም ውድቅ ያድርጉ።",
+      s2done: "በ{n} ተቀባይነት አግኝቷል",
+      s2lock: "መጀመሪያ ጥያቄ ይላኩ።",
+      acceptB: "ተቀበል",
+      declineB: "ውድቅ አድርግ",
+      declined: "ጥያቄው ውድቅ ሆኗል።",
+      s3: "ውይይት",
+      s3d: "ለአማካሪዎ መልእክት ይላኩ፣ ወይም ከታች እንደ አማካሪ ይጻፉ።",
+      s3b: "ውይይት ክፈት",
+      mentorPh: "እንደ አማካሪዎ ይጻፉ…",
+      send: "ላክ",
+      sent: "እንደ አማካሪዎ ተልኳል።",
+      s4: "ግቦች",
+      s4d: "እንደ አማካሪ ግብ ያዘጋጁ፣ ከዚያ እንደ ተመካሪ ምልክት ያድርጉ።",
+      s4b: "ግብ አዘጋጅ",
+      goalsN: "{n} ተዘጋጅቷል",
+      s5: "ቀጥታ ክፍለ ጊዜ",
+      s5d: "እንደ አማካሪ ጥሪ ይጀምሩና እንደ ተመካሪ ይቀላቀሉ።",
+      startNow: "አሁን ጀምር",
+      in10: "በ10 ደቂቃ",
+      openSessions: "ክፍለ ጊዜዎችን ክፈት",
+      mentorSide: "የአማካሪውን ጎን ክፈት",
+      endSession: "ክፍለ ጊዜውን ጨርስ",
+      sessionLive: "አሁን ቀጥታ",
+      sessionSoon: "ተይዟል",
+      locked: "ጥያቄዎ ከተቀበለ በኋላ ይከፈታል።",
+    },
+  };
+  const tr = (k) =>
+    (STR[localStorage.getItem("language")] || STR.en)[k] || STR.en[k] || k;
+  const esc = (s) =>
+    window.escapeHtml
+      ? window.escapeHtml(String(s))
+      : String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c],
+        );
+  const $ = (id) => document.getElementById(id);
+  const bridge = () => window.__holyBridge;
+  const toast = (m, type) =>
+    window.showToast ? window.showToast(m, type || "info") : console.log(m);
 
-module.exports = (supabase, requireAuth, mentorsRouter) => {
-  const router = express.Router();
-  const fail = (res, e) => res.status(e.status || 500).json({ error: e.message || e.error || 'Server error' });
-  const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(e => fail(res, e));
-
-  // Only mentors may use guest mode. Re-checked on every call.
-  const mentorOnly = wrap(async (req, res, next) => {
-    const { data } = await supabase.from('users').select('role, is_banned')
-      .eq('telegram_id', req.telegramUser.id).maybeSingle();
-    if (!data || data.role !== 'mentor' || data.is_banned) {
-      return res.status(403).json({ error: 'Guest mode is only available to mentors.' });
-    }
-    next();
+  const G = (window.HolyGuest = {
+    active: false,
+    sex: "prefer_not",
+    _mentorUser: null,
+    _poll: null,
   });
-  router.use(requireAuth, mentorOnly);
 
-  const sb = req => sandbox.get(req.telegramUser.id);
-  // Routes below need a running sandbox.
-  const needSandbox = (req, res, next) => {
-    const s = sb(req);
-    if (!s) return res.status(409).json({ error: 'Guest mode is not active.', code: 'guest_inactive' });
-    req.sbx = s;
-    next();
+  // ── Hard guard: while the preview runs, nothing may write to real endpoints ──
+  // apiFetch already rewrites to /api/guest; this catches the direct fetch/XHR
+  // paths (avatar upload, chat attachments) so they can never reach real data.
+  function isRealApiWrite(url, method) {
+    let path = "";
+    try {
+      path = new URL(url, location.origin).pathname;
+    } catch {
+      return false;
+    }
+    if (!path.startsWith("/api/") || path.startsWith("/api/guest/"))
+      return false;
+    if (
+      /^\/api\/(avatar\/|messages\/file\/)/.test(path) &&
+      (!method || method === "GET")
+    )
+      return false; // read-only media
+    return true;
+  }
+  const realFetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    if (G.active) {
+      const url = typeof input === "string" ? input : input?.url;
+      const method = String(
+        init?.method || (typeof input !== "string" && input?.method) || "GET",
+      ).toUpperCase();
+      if (isRealApiWrite(url, method)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ error: tr("blocked"), code: "guest_blocked" }),
+            { status: 403, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+    }
+    return realFetch(input, init);
+  };
+  const realOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+    if (G.active && isRealApiWrite(url, String(method).toUpperCase())) {
+      this.__blocked = true;
+      return realOpen.call(this, method, "about:blank", ...rest);
+    }
+    return realOpen.call(this, method, url, ...rest);
+  };
+  const realSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function (...a) {
+    if (this.__blocked) {
+      setTimeout(() => {
+        try {
+          this.onerror && this.onerror(new Error("blocked"));
+        } catch {}
+      }, 0);
+      return;
+    }
+    return realSend.apply(this, a);
   };
 
-  // ── lifecycle ─────────────────────────────────────────────────────────
-  router.post('/start', (req, res) => {
-    const s = sandbox.start(req.telegramUser.id, req.body?.sex, req.body?.lang);
-    res.json({ user: sandbox.userView(s) });
-  });
-  router.post('/end', (req, res) => { sandbox.end(req.telegramUser.id); res.json({ success: true }); });
-  // Polled by the preview bar. Besides the checklist state it hands back any
-  // simulated mentor events that have come due (typing, replies, invites).
-  router.get('/state', (req, res) => {
-    const s = sb(req);
-    if (!s) return res.json({ active: false, user: null, has_mentor: false, pending: [], events: [] });
-    const events = sandbox.flushDue(s);
-    const ses = sandbox.sessionView(s);
-    const mentorName = s.assignment ? (s.assignment.mentor.user_settings?.display_name || s.assignment.mentor.anonymous_id) : null;
-    res.json({
-      active: true, user: sandbox.userView(s), has_mentor: !!s.assignment, mentor_name: mentorName,
-      pending: s.requests.filter(r => r.status === 'pending').map(r => ({
-        id: r.id, mentor_name: r.mentor.user_settings?.display_name || r.mentor.anonymous_id })),
-      requested: s.requests.length, rejected: s.requests.filter(r => r.status === 'rejected').length,
-      goals: s.goals.length, messages_sent: s.messages.filter(m => m.from_id === s.persona.telegram_id).length,
-      session: ses && ses.status !== 'ended' ? { id: ses.id, title: ses.title, status: ses.status, scheduled_at: ses.scheduled_at,
-        mentor_link: mentorLink(s) } : null,
-      events,
-    });
-  });
-
-  // The mentor's side of the demo room, so a tester can open it on a second
-  // device and see a real two-person call. Same private room as the mentee.
-  function mentorLink(s) {
-    const ses = s.session;
-    if (!ses) return null;
-    const name = s.assignment?.mentor.user_settings?.display_name || s.assignment?.mentor.anonymous_id || 'Mentor';
-    const jwt = isPublicJitsi() ? null : generateJitsiJWT(ses.room_name, { displayName: name, moderator: true });
-    const params = ['config.disableDeepLinking=true', 'config.prejoinConfig.enabled=false',
-      `userInfo.displayName=${encodeURIComponent(name)}`, ...(jwt ? [`jwt=${jwt}`] : [])];
-    return `https://${JITSI_DOMAIN}/${ses.room_name}#${params.join('&')}`;
+  // Real-time events belong to the real account; ignore them during the preview
+  // so a live message or request can't be drawn inside the mentee screens.
+  function muteSocket(on) {
+    try {
+      const sock = window.__holyBridge?.getSocket?.();
+      if (!sock) return;
+      if (on && !sock.__origOnevent) {
+        sock.__origOnevent = sock.onevent;
+        sock.onevent = function (packet) {
+          if (!G.active) return sock.__origOnevent.call(this, packet);
+        };
+      } else if (!on && sock.__origOnevent) {
+        sock.onevent = sock.__origOnevent;
+        delete sock.__origOnevent;
+      }
+    } catch (e) {
+      console.warn("[guest] socket mute failed", e);
+    }
   }
 
-  router.use(needSandbox);
-
-  // ── identity, dashboard ──────────────────────────────────────────────
-  router.get('/auth/me', (req, res) => res.json({ registered: true, user: sandbox.userView(req.sbx), admin_id: null }));
-  // Same verse the regular app shows today (read-only).
-  const getDailyVerse = createDailyVerse(supabase);
-  router.get('/auth/verse', wrap(async (req, res) => res.json(await getDailyVerse())));
-  router.get('/users/stats', wrap(async (req, res) => {
-    const [u, m] = await Promise.all([
-      supabase.from('users').select('telegram_id', { count: 'exact', head: true }).eq('is_banned', false),
-      supabase.from('users').select('telegram_id', { count: 'exact', head: true }).eq('role', 'mentor').eq('is_banned', false),
-    ]);
-    res.json({ total_users: u.count || 0, active_mentors: m.count || 0, sessions_today: 0 });
-  }));
-  router.get('/users/settings', (req, res) => res.json({ ...req.sbx.settings, telegram_id: req.sbx.persona.telegram_id }));
-  router.patch('/users/settings', (req, res) => {
-    const ok = ['display_name', 'notify_messages', 'notify_sessions', 'notify_daily_verse', 'notify_streak_reminder'];
-    for (const k of ok) if (req.body?.[k] !== undefined) req.sbx.settings[k] = req.body[k];
-    res.json({ ...req.sbx.settings });
-  });
-  router.get('/users/pending-rating', (req, res) => res.json(null));
-  router.post('/users/skip-rating', (req, res) => res.json({ success: true }));
-  router.get('/users/my-mentor', (req, res) => {
-    const a = req.sbx.assignment;
-    res.json(a ? { id: a.id, user_id: req.sbx.persona.telegram_id, mentor_id: a.mentor.telegram_id,
-      is_active: true, started_at: a.started_at, mentor: a.mentor } : null);
-  });
-  router.get('/users/chat-partner', (req, res) => {
-    const a = req.sbx.assignment;
-    if (!a) return res.json({ type: 'none' });
-    const m = a.mentor;
-    const unread = req.sbx.messages.filter(x => !x.is_read && x.from_id === m.telegram_id).length;
-    res.json({ type: 'single', partner: { telegram_id: m.telegram_id, anonymous_id: m.anonymous_id,
-      display_name: m.user_settings?.display_name || m.anonymous_id, last_active: new Date().toISOString(),
-      photo_file_id: m.photo_file_id, photo_updated_at: m.photo_updated_at, unread_count: unread } });
-  });
-  router.post('/users/end-mentorship', (req, res) => { sandbox.endAssignment(req.sbx); res.json({ success: true }); });
-  router.post('/users/end-mentorship-and-rate', (req, res) => { sandbox.endAssignment(req.sbx); res.json({ success: true }); });
-
-  // ── topics (read-only real list; the guest's own choice is sandboxed) ──
-  router.get('/topics', wrap(async (req, res) => {
-    const { data, error } = await supabase.from('topics').select('*').eq('is_active', true).order('name', { ascending: true });
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
-  }));
-  router.get('/topics/my', wrap(async (req, res) => {
-    const ids = req.sbx.topics;
-    if (!ids.length) return res.json([]);
-    const { data } = await supabase.from('topics').select('*').in('id', ids);
-    res.json((data || []).map(t => ({ topic_id: t.id, topics: t })));
-  }));
-  router.post('/topics/my', (req, res) => {
-    const ids = Array.isArray(req.body?.topic_ids) ? req.body.topic_ids.map(Number).filter(Number.isFinite).slice(0, 20) : [];
-    req.sbx.topics = ids;
-    res.json({ success: true });
-  });
-
-  // ── mentor discovery + requests ───────────────────────────────────────
-  // The real directory, filtered for the guest persona (see routes/mentors.js).
-  router.get('/mentors', (req, res, next) => {
-    req.guestContext = {
-      sex: req.sbx.persona.sex,
-      selfId: req.telegramUser.id,
-      pendingIds: [...sandbox.pendingMentorIds(req.sbx)],
-      waitlistIds: [...req.sbx.waitlist],
-    };
-    req.url = '/';
-    mentorsRouter.handle(req, res, next);
-  });
-
-  router.post('/mentors/request', wrap(async (req, res) => {
-    const mentorId = Number(req.body?.mentor_id);
-    if (!mentorId) return res.status(400).json({ error: 'mentor_id required' });
-    // Requesting yourself is allowed in the preview: the tester is the mentor
-    // and plays both sides. Availability limits only apply to other mentors.
-    const isSelf = String(mentorId) === String(req.telegramUser.id);
-
-    // Same eligibility checks as the real endpoint (read-only), so the
-    // preview shows the real "full" / "not accepting" errors.
-    const { data: mentor } = await supabase.from('users')
-      .select('telegram_id, anonymous_id, sex, age_range, rating, rating_count, photo_file_id, photo_updated_at, accepting_requests, role, is_banned, user_settings(bio, specialization, display_name, max_mentees)')
-      .eq('telegram_id', mentorId).maybeSingle();
-    if (!mentor || mentor.role !== 'mentor' || mentor.is_banned) return res.status(404).json({ error: 'Mentor not found' });
-    if (!isSelf && mentor.accepting_requests === false) return res.status(409).json({ error: 'This mentor is not accepting new requests at this time.' });
-    const max = isSelf ? Infinity : (mentor.user_settings?.max_mentees || parseInt(process.env.MAX_MENTEES_DEFAULT || '3', 10));
-    const { count } = await supabase.from('mentorship_assignments').select('id', { count: 'exact', head: true })
-      .eq('mentor_id', mentorId).eq('is_active', true);
-    if ((count || 0) >= max) return res.status(409).json({ error: 'Mentor is at full capacity. Please try another mentor.' });
-
-    const { accepting_requests, role, is_banned, ...snapshot } = mentor;
-    const r = sandbox.addRequest(req.sbx, snapshot, req.body?.topic_id);
-    if (r.error) return fail(res, r);
-    res.status(201).json({ id: r.request.id, status: 'pending', preview: true });
-  }));
-
-  router.post('/simulate-accept', (req, res) => {
-    const r = sandbox.simulateAccept(req.sbx, String(req.body?.request_id || ''));
-    if (r.error) return fail(res, r);
-    res.json({ success: true });
-  });
-  // ── "Act as my mentor" controls (each one only touches the sandbox) ────
-  router.post('/sim/decline', (req, res) => {
-    const r = sandbox.simulateDecline(req.sbx, String(req.body?.request_id || ''), req.body?.reason);
-    if (r.error) return fail(res, r);
-    res.json({ success: true });
-  });
-  router.post('/sim/message', (req, res) => {
-    const r = sandbox.mentorSays(req.sbx, req.body?.content);
-    if (r.error) return fail(res, r);
-    res.json({ success: true });
-  });
-  router.post('/sim/session', (req, res) => {
-    const r = sandbox.startSession(req.sbx, { inMinutes: req.body?.in_minutes, title: req.body?.title });
-    if (r.error) return fail(res, r);
-    res.status(201).json({ session: r.session, mentor_link: mentorLink(req.sbx) });
-  });
-  router.post('/sim/session/end', (req, res) => {
-    const r = sandbox.endSession(req.sbx);
-    if (r.error) return fail(res, r);
-    res.json({ success: true });
-  });
-  router.post('/mentors/waitlist', (req, res) => { req.sbx.waitlist.add(Number(req.body?.mentor_id)); res.json({ success: true }); });
-  router.delete('/mentors/waitlist/:id', (req, res) => { req.sbx.waitlist.delete(Number(req.params.id)); res.json({ success: true }); });
-  router.get('/mentors/my-requests', (req, res) => res.json([]));
-  router.get('/mentors/referrals', (req, res) => res.json([]));
-  router.post('/mentors/rate', (req, res) => res.json({ success: true }));
-
-  // ── goals (mentee view + the "act as my mentor" composer) ──────────────
-  router.get('/goals/mine', (req, res) => res.json(req.sbx.assignment ? sandbox.listGoals(req.sbx) : []));
-  router.get('/goals/mentee/:id', (req, res) => res.json(sandbox.listGoals(req.sbx)));
-  router.post('/goals', (req, res) => {
-    const r = sandbox.createGoal(req.sbx, req.body || {});
-    if (r.error) return fail(res, r);
-    res.status(201).json(r.goal);
-  });
-  router.patch('/goals/tasks/:id', (req, res) => {
-    const r = sandbox.setTaskDone(req.sbx, req.params.id, req.body || {});
-    if (r.error) return fail(res, r);
-    res.json(r.goal);
-  });
-  router.delete('/goals/:id', (req, res) => {
-    if (!sandbox.deleteGoal(req.sbx, req.params.id)) return res.status(404).json({ error: 'Goal not found' });
-    res.json({ success: true });
-  });
-
-  // ── streak ────────────────────────────────────────────────────────────
-  router.get('/streaks', (req, res) => res.json(sandbox.streakView(req.sbx)));
-  router.post('/streaks/mark', (req, res) => res.json(sandbox.markStreak(req.sbx)));
-
-  // ── journal ───────────────────────────────────────────────────────────
-  router.get('/journal', (req, res) => res.json(req.sbx.journal));
-  router.get('/journal/by-date', (req, res) => {
-    const d = String(req.query.date || '').slice(0, 10);
-    res.json(req.sbx.journal.filter(e => e.created_at.slice(0, 10) === d));
-  });
-  router.post('/journal', (req, res) => {
-    const r = sandbox.addJournal(req.sbx, req.body || {});
-    if (r.error) return fail(res, r);
-    res.status(201).json(r.entry);
-  });
-  router.put('/journal/:id', (req, res) => {
-    const r = sandbox.updateJournal(req.sbx, req.params.id, req.body || {});
-    if (r.error) return fail(res, r);
-    res.json(r.entry);
-  });
-  router.delete('/journal/:id', (req, res) => {
-    if (!sandbox.deleteJournal(req.sbx, req.params.id)) return res.status(404).json({ error: 'Entry not found' });
-    res.json({ success: true });
-  });
-
-  // ── messages: a real chat against the sandbox ─────────────────────────
-  // The simulated mentor answers a few seconds after each message (see
-  // sandbox.menteeSendMessage); replies reach the screen through /state events.
-  router.get('/messages/unread/count', (req, res) =>
-    res.json({ count: req.sbx.messages.filter(m => !m.is_read && m.from_id !== req.sbx.persona.telegram_id).length }));
-  router.post('/messages/read/:id', (req, res) => {
-    const now = new Date().toISOString();
-    req.sbx.messages.forEach(m => { if (m.from_id !== req.sbx.persona.telegram_id) { m.is_read = true; m.read_at = m.read_at || now; } });
-    res.json({ success: true });
-  });
-  router.post('/messages', (req, res) => {
-    const r = sandbox.menteeSendMessage(req.sbx, req.body || {});
-    if (r.error) return fail(res, r);
-    res.status(201).json(r.message);
-  });
-  router.patch('/messages/:id', (req, res) => {
-    const r = sandbox.editMessage(req.sbx, req.params.id, req.body?.content);
-    if (r.error) return fail(res, r);
-    res.json(r.message);
-  });
-  router.delete('/messages/:id', (req, res) => {
-    if (!sandbox.deleteMessage(req.sbx, req.params.id)) return res.status(404).json({ error: 'Message not found' });
-    res.json({ success: true });
-  });
-  router.get('/messages/:id', (req, res) => {
-    if (!req.sbx.assignment) return res.status(403).json({ error: 'No active mentorship with this user' });
-    const now = new Date().toISOString();
-    req.sbx.messages.forEach(m => { if (m.from_id !== req.sbx.persona.telegram_id) { m.is_read = true; m.read_at = m.read_at || now; } });
-    res.json(req.sbx.messages);
-  });
-
-  // ── sessions: one demo live session the "mentor" can start ─────────────
-  const EARLY_JOIN_MS = 5 * 60 * 1000;
-  const sesById = (req, res) => {
-    const v = sandbox.sessionView(req.sbx);
-    if (!v || v.id !== req.params.id) { res.status(404).json({ error: 'We could not find this session', code: 'not_found' }); return null; }
-    if (v.status === 'ended') { res.status(410).json({ error: 'This session has already ended.', code: 'ended' }); return null; }
-    return v;
-  };
-  router.get('/sessions/clock', (req, res) => res.json({ now: new Date().toISOString() }));
-  router.get('/sessions/my', (req, res) => {
-    const v = sandbox.sessionView(req.sbx);
-    res.json(v ? [{ session_id: v.id, telegram_id: req.sbx.persona.telegram_id, joined_at: null, left_at: null, session: v }] : []);
-  });
-  router.get('/sessions/upcoming', (req, res) => res.json([]));
-  router.delete('/sessions/my', (req, res) => {
-    if (req.sbx.session && sandbox.sessionView(req.sbx).status === 'ended') req.sbx.session = null;
-    res.json({ success: true, count: 0 });
-  });
-  router.get('/sessions/:id/join', (req, res) => {
-    const v = sesById(req, res); if (!v) return;
-    const startMs = new Date(v.scheduled_at).getTime();
-    if (v.status === 'scheduled' && startMs - Date.now() > EARLY_JOIN_MS) {
-      return res.status(403).json({ error: 'This session has not started yet. Please wait a little.', code: 'too_early',
-        starts_at: v.scheduled_at, opens_at: new Date(startMs - EARLY_JOIN_MS).toISOString(), server_time: new Date().toISOString() });
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("#guestHeaderBtn")) {
+      G.enter();
+      return;
     }
-    const ses = req.sbx.session;
-    const me = req.sbx.settings.display_name || req.sbx.persona.anonymous_id;
-    const jwt = isPublicJitsi() ? null : generateJitsiJWT(ses.room_name, { displayName: me, moderator: false });
-    res.json({ session_id: v.id, room_name: ses.room_name, room_password: ses.room_password, ...(jwt && { jitsi_token: jwt }),
-      jitsi_domain: JITSI_DOMAIN, display_name: me, is_moderator: false, title: v.title, is_group: false,
-      scheduled_at: v.scheduled_at, status: 'active', host_name: v.host.user_settings.display_name,
-      host_present: true, call_mode: ses.call_mode || 'video', server_time: new Date().toISOString() });
-  });
-  router.post('/sessions/:id/heartbeat', (req, res) => {
-    const v = sandbox.sessionView(req.sbx);
-    if (!v || v.id !== req.params.id) return res.status(404).json({ error: 'We could not find this session' });
-    res.json({ status: v.status, ended: v.status === 'ended', host_present: true, present_count: 2,
-      call_mode: req.sbx.session.call_mode || 'video', server_time: new Date().toISOString() });
-  });
-  router.post('/sessions/:id/leave', (req, res) => res.json({ success: true, ended: false }));
-  router.post('/sessions/:id/call-mode', (req, res) => {
-    if (req.sbx.session && ['audio', 'video'].includes(req.body?.mode)) req.sbx.session.call_mode = req.body.mode;
-    res.json({ success: true, mode: req.sbx.session?.call_mode || 'video' });
-  });
-  router.get('/sessions/:id/ice', (req, res) => res.json({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }));
-  router.post('/sessions/:id/signal', (req, res) => res.json({ success: true }));
-
-  // ── support: nothing is ever sent to the real support team ─────────────
-  router.get('/support', (req, res) => res.json([]));
-
-  // Anything else: harmless empty read, refused write. A guest can never
-  // reach a real endpoint through this prefix.
-  router.use((req, res) => {
-    if (req.method === 'GET') return res.json([]);
-    res.status(403).json({ error: 'Not available in guest preview.', code: 'guest_blocked' });
+    if (e.target.closest("#guestExitBtn")) {
+      confirmExit();
+      return;
+    }
+    if (e.target.closest("#guestGuideBtn")) {
+      openGuide();
+      return;
+    }
+    if (e.target.closest("#guestGuideClose") || e.target.id === "guestGuide") {
+      closeGuide();
+      return;
+    }
+    const act = e.target.closest("[data-guest-act]");
+    if (act) {
+      runAction(act.dataset.guestAct, act);
+      return;
+    }
+    if (e.target.closest("#guestGoalClose")) {
+      closeGoalSheet();
+      return;
+    }
   });
 
-  return router;
-};
+  // ── Entry button in the Home header ─────────────────────────────────────
+  // Shown only to mentors, and hidden while a preview is running (the preview
+  // bar has its own Exit). app.js calls G.syncEntry() whenever the role changes.
+  function syncEntry() {
+    const btn = $("guestHeaderBtn");
+    if (!btn) return;
+    const mentor = bridge()?.getUser?.()?.role === "mentor";
+    btn.style.display = mentor && !G.active ? "inline-flex" : "none";
+    const lbl = $("guestHeaderLbl");
+    if (lbl) lbl.textContent = tr("guestBtn");
+    btn.setAttribute("aria-label", tr("guestBtn"));
+  }
+  G.syncEntry = syncEntry;
+
+  // ── Enter / exit ────────────────────────────────────────────────────────
+  G.enter = async function () {
+    if (G.active || G._starting) return;
+    const b = bridge();
+    const me = b?.getUser();
+    if (!b || me?.role !== "mentor") return toast(tr("blocked"), "error");
+    G._starting = true;
+    try {
+      const { user } = await apiFetch("/api/guest/start", {
+        method: "POST",
+        body: {
+          sex: G.sex,
+          lang: localStorage.getItem("language") === "am" ? "am" : "en",
+        },
+      });
+      G._mentorUser = me;
+      G.active = true;
+      b.setUser(user);
+      muteSocket(true);
+      document.body.classList.add("guest-mode");
+      syncEntry();
+      b.resetViews();
+      mountBar();
+      b.navigate("dashboard");
+      refreshBar();
+      G._poll = setInterval(refreshBar, 2000);
+    } catch (e) {
+      toast(e.message || tr("failed"), "error");
+    } finally {
+      G._starting = false;
+    }
+  };
+
+  G.exit = async function () {
+    if (!G.active) return;
+    clearInterval(G._poll);
+    G._poll = null;
+    closeGoalSheet();
+    closeGuide();
+    try {
+      await apiFetch("/api/guest/end", { method: "POST" });
+    } catch {
+      /* sandbox expires on its own */
+    }
+    G.active = false;
+    muteSocket(false);
+    const b = bridge();
+    b.setUser(G._mentorUser);
+    G._mentorUser = null;
+    document.body.classList.remove("guest-mode");
+    document.body.style.removeProperty("--guest-bar-h");
+    $("guestBar")?.remove();
+    b.resetViews();
+    syncEntry();
+    b.navigate("my-mentees");
+  };
+
+  function confirmExit() {
+    const tg = window.Telegram?.WebApp;
+    if (tg?.showConfirm) {
+      tg.showConfirm(`${tr("ending")}\n${tr("endBody")}`, (ok) => {
+        if (ok) G.exit();
+      });
+      return;
+    }
+    if (window.confirm(`${tr("ending")}\n${tr("endBody")}`)) G.exit();
+  }
+
+  // ── Preview bar ─────────────────────────────────────────────────────────
+  function mountBar() {
+    if ($("guestBar")) return;
+    const bar = document.createElement("div");
+    bar.id = "guestBar";
+    bar.className = "guest-bar";
+    bar.setAttribute("role", "region");
+    bar.setAttribute("aria-label", tr("bar"));
+    document.body.appendChild(bar);
+    document.body.style.setProperty(
+      "--guest-bar-h",
+      "calc(var(--safe-top, 0px) + 44px)",
+    );
+  }
+  async function refreshBar() {
+    const bar = $("guestBar");
+    if (!bar || !G.active || G._busy) return;
+    G._busy = true;
+    let st = null;
+    try {
+      st = await apiFetch("/api/guest/state");
+    } catch {
+      G._busy = false;
+      return;
+    }
+    G._busy = false;
+    if (!G.active) return;
+    if (!st?.active) {
+      G.exit();
+      return;
+    } // sandbox expired
+    G._state = st;
+    replay(st.events || []);
+    const needs = st.pending?.length || 0;
+    const key = needs + ":" + tr("guide");
+    if (bar.dataset.key !== key) {
+      bar.dataset.key = key;
+      bar.innerHTML = `
+        <div class="guest-bar-main">
+          <span class="guest-dot" aria-hidden="true"></span>
+          <span class="guest-bar-text"><b>${tr("bar")}</b></span>
+          <button type="button" class="guest-act guest-guide-btn" id="guestGuideBtn">${tr("guide")}${needs ? `<i class="guest-badge" aria-hidden="true">${needs}</i>` : ""}</button>
+          <button type="button" class="guest-exit" id="guestExitBtn">${tr("exit")}</button>
+        </div>`;
+    }
+    if ($("guestGuide")) paintGuide();
+  }
+
+  // Replay simulated mentor events through the app's own socket handlers, so
+  // the mentee screens react exactly as they do to a real mentor.
+  function replay(events) {
+    const sock = bridge()?.getSocket?.();
+    for (const { event, payload } of events) {
+      if (
+        event === "mentorship_request_updated" &&
+        payload?.status === "rejected"
+      )
+        toast(tr("declined"), "info");
+      try {
+        (sock?.listeners?.(event) || []).forEach((fn) => fn(payload));
+      } catch (e) {
+        console.warn("[guest] replay failed", event, e);
+      }
+    }
+  }
+
+  // ── Test guide: play the mentor's side of every step ────────────────────
+  const post = (path, body) =>
+    apiFetch("/api/guest/" + path, { method: "POST", body: body || {} });
+  const fill = (k, v) => tr(k).replace("{n}", v);
+
+  function openGuide() {
+    if ($("guestGuide")) return;
+    const el = document.createElement("div");
+    el.id = "guestGuide";
+    el.className = "guest-pick";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-modal", "true");
+    el.innerHTML = `
+      <div class="guest-pick-card guest-guide-card">
+        <div class="guest-guide-head">
+          <div class="guest-entry-title">${tr("guide")}</div>
+          <button type="button" class="guest-act" id="guestGuideClose">${tr("done")}</button>
+        </div>
+        <div id="guestSteps" class="guest-steps"></div>
+      </div>`;
+    document.body.appendChild(el);
+    paintGuide(true);
+  }
+  function closeGuide() {
+    $("guestGuide")?.remove();
+  }
+
+  function paintGuide(force) {
+    const box = $("guestSteps"),
+      st = G._state;
+    if (!box || !st) return;
+    // Don't rebuild while the tester is typing a mentor message.
+    const typing = box.querySelector("#guestMentorMsg");
+    const key = JSON.stringify([
+      st.requested,
+      st.pending?.length,
+      st.has_mentor,
+      st.goals,
+      st.session?.status,
+      st.session?.id,
+      st.rejected,
+      tr("guide"),
+    ]);
+    if (!force && box.dataset.key === key) return;
+    const draft = typing?.value || "";
+    box.dataset.key = key;
+    const has = st.has_mentor,
+      asked = st.requested > 0 || has;
+    const btn = (act, label, cls) =>
+      `<button type="button" class="guest-act${cls ? " " + cls : ""}" data-guest-act="${act}">${label}</button>`;
+    const step = (n, title, desc, state, body) => `
+      <div class="guest-step is-${state}">
+        <span class="guest-step-n" aria-hidden="true">${state === "done" ? "✓" : n}</span>
+        <div class="guest-step-main">
+          <div class="guest-step-title">${title}</div>
+          <div class="guest-step-desc">${desc}</div>
+          ${body ? `<div class="guest-step-body">${body}</div>` : ""}
+        </div>
+      </div>`;
+    const ses = st.session;
+    const steps = [
+      step(
+        1,
+        tr("s1"),
+        tr("s1d"),
+        asked ? "done" : "now",
+        asked ? "" : btn("find", tr("s1b"), "is-primary"),
+      ),
+      step(
+        2,
+        tr("s2"),
+        has
+          ? fill("s2done", esc(st.mentor_name || ""))
+          : st.pending?.length
+            ? tr("s2d")
+            : tr("s2lock"),
+        has ? "done" : st.pending?.length ? "now" : "locked",
+        st.pending?.length
+          ? btn("accept", tr("acceptB"), "is-primary") +
+              btn("decline", tr("declineB"))
+          : "",
+      ),
+      step(
+        3,
+        tr("s3"),
+        has ? tr("s3d") : tr("locked"),
+        has ? "now" : "locked",
+        has
+          ? `
+        ${btn("chat", tr("s3b"))}
+        <div class="guest-compose"><input id="guestMentorMsg" class="guest-input" type="text" maxlength="500" placeholder="${esc(tr("mentorPh"))}" />${btn("say", tr("send"), "is-primary")}</div>`
+          : "",
+      ),
+      step(
+        4,
+        tr("s4"),
+        has ? (st.goals ? fill("goalsN", st.goals) : tr("s4d")) : tr("locked"),
+        has ? (st.goals ? "done" : "now") : "locked",
+        has ? btn("goal", tr("s4b"), st.goals ? "" : "is-primary") : "",
+      ),
+      step(
+        5,
+        tr("s5"),
+        has
+          ? ses
+            ? `${ses.status === "active" ? tr("sessionLive") : tr("sessionSoon")} · ${esc(ses.title)}`
+            : tr("s5d")
+          : tr("locked"),
+        has ? (ses ? "done" : "now") : "locked",
+        !has
+          ? ""
+          : ses
+            ? btn("sessions", tr("openSessions"), "is-primary") +
+              btn("mentor-side", tr("mentorSide")) +
+              btn("end-session", tr("endSession"))
+            : btn("start-now", tr("startNow"), "is-primary") +
+              btn("start-10", tr("in10")),
+      ),
+    ];
+    box.innerHTML = steps.join("");
+    const again = box.querySelector("#guestMentorMsg");
+    if (again && draft) again.value = draft;
+  }
+
+  async function runAction(act, el) {
+    const st = G._state || {};
+    if (el) el.disabled = true;
+    const b = bridge();
+    try {
+      if (act === "find") {
+        closeGuide();
+        b.navigate("mentors");
+      } else if (act === "accept") {
+        await simulateAccept();
+      } else if (act === "decline") {
+        const first = st.pending?.[0];
+        if (first) {
+          await post("sim/decline", { request_id: first.id });
+          toast(tr("declined"), "info");
+          await refreshBar();
+          closeGuide();
+          b.resetViews();
+          b.navigate("mentors");
+        }
+      } else if (act === "chat") {
+        closeGuide();
+        b.navigate("chat");
+      } else if (act === "say") {
+        const input = $("guestMentorMsg");
+        const text = input?.value.trim();
+        if (text) {
+          await post("sim/message", { content: text });
+          input.value = "";
+          toast(tr("sent"), "success");
+        }
+      } else if (act === "goal") {
+        closeGuide();
+        openGoalSheet();
+      } else if (act === "start-now" || act === "start-10") {
+        await post("sim/session", { in_minutes: act === "start-10" ? 10 : 0 });
+        await refreshBar();
+      } else if (act === "sessions") {
+        closeGuide();
+        b.navigate("sessions");
+      } else if (act === "mentor-side" && st.session?.mentor_link) {
+        const tg = window.Telegram?.WebApp;
+        if (tg?.openLink) {
+          try {
+            tg.openLink(st.session.mentor_link);
+          } catch {
+            window.open(st.session.mentor_link, "_blank");
+          }
+        } else window.open(st.session.mentor_link, "_blank");
+      } else if (act === "end-session") {
+        await post("sim/session/end");
+        await refreshBar();
+        if (typeof window.loadSessions === "function") window.loadSessions();
+      }
+    } catch (e) {
+      toast(e.message || tr("failed"), "error");
+    } finally {
+      if (el?.isConnected) el.disabled = false;
+    }
+  }
+
+  async function simulateAccept() {
+    const first = G._state?.pending?.[0];
+    if (!first) return;
+    try {
+      await apiFetch("/api/guest/simulate-accept", {
+        method: "POST",
+        body: { request_id: first.id },
+      });
+      toast(tr("accepted"), "success");
+      await refreshBar();
+      bridge().resetViews();
+      if (typeof window.updateMessageBadge === "function")
+        window.updateMessageBadge();
+    } catch (e) {
+      toast(e.message, "error");
+    }
+  }
+
+  // ── "Set a goal as my mentor": the real mentor goal composer, aimed at the sandbox ──
+  function openGoalSheet() {
+    if (!window.HolyGoals || $("guestGoalSheet")) return;
+    const me = bridge().getUser();
+    const sheet = document.createElement("div");
+    sheet.id = "guestGoalSheet";
+    sheet.className = "guest-sheet";
+    sheet.innerHTML = `
+      <div class="guest-sheet-head">
+        <div class="guest-sheet-title">${tr("goalTitle")}</div>
+        <button type="button" class="guest-act" id="guestGoalClose">${tr("done")}</button>
+      </div>
+      <div class="guest-sheet-body"><div id="guestGoalPanel"></div></div>`;
+    document.body.appendChild(sheet);
+    window.HolyGoals.mountMentor($("guestGoalPanel"), me.telegram_id);
+    // "New goal" opens the app's own goal page (#page-goal-new). This sheet is a
+    // full-screen overlay, so it would cover that page until Done. Step aside
+    // while the page is open and come back when it closes.
+    // Three triggers so it can't be missed: right after the New goal tap, on any
+    // class change of the page, and a light check while the sheet is open.
+    const page = $("page-goal-new");
+    if (page) {
+      const sync = () => {
+        if (sheet.isConnected)
+          sheet.style.display = page.classList.contains("active") ? "none" : "";
+      };
+      sheet.addEventListener("click", (e) => {
+        if (e.target.closest('[data-act="new"]')) sync();
+      });
+      G._goalObs = new MutationObserver(sync);
+      G._goalObs.observe(page, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+      G._goalTimer = setInterval(sync, 250);
+    }
+  }
+  function closeGoalSheet() {
+    const sheet = $("guestGoalSheet");
+    if (!sheet) return;
+    G._goalObs?.disconnect();
+    G._goalObs = null;
+    clearInterval(G._goalTimer);
+    G._goalTimer = null;
+    sheet.remove();
+    // The goal page closes to the mentor's list underneath; land on the mentee
+    // dashboard and redraw its goals card with whatever was just created.
+    if (G.active) {
+      bridge()?.navigate("dashboard");
+      if (typeof window.loadDashboard === "function") window.loadDashboard();
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", syncEntry);
+  syncEntry();
+  if (typeof window.toggleLanguage === "function") {
+    const origToggle = window.toggleLanguage;
+    window.toggleLanguage = function () {
+      const r = origToggle.apply(this, arguments);
+      setTimeout(syncEntry, 50);
+      return r;
+    };
+  }
+  console.log(
+    "[guest] guest-mode.js v1.4 (goal page above sheet) loaded; header button:",
+    !!$("guestHeaderBtn"),
+  );
+})();
