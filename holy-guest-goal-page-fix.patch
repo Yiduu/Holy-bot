@@ -1,0 +1,65 @@
+diff --git a/frontend/guest-mode.js b/frontend/guest-mode.js
+index 4c75d83..85eec09 100644
+--- a/frontend/guest-mode.js
++++ b/frontend/guest-mode.js
+@@ -355,13 +355,26 @@
+       <div class="guest-sheet-body"><div id="guestGoalPanel"></div></div>`;
+     document.body.appendChild(sheet);
+     window.HolyGoals.mountMentor($('guestGoalPanel'), me.telegram_id);
++    // "New goal" opens the app's own goal page (#page-goal-new). This sheet is a
++    // full-screen overlay, so it would cover that page until Done. Step aside
++    // while the page is open and come back when it closes.
++    const page = $('page-goal-new');
++    if (page) {
++      G._goalObs = new MutationObserver(() => { sheet.style.display = page.classList.contains('active') ? 'none' : ''; });
++      G._goalObs.observe(page, { attributes: true, attributeFilter: ['class'] });
++    }
+   }
+   function closeGoalSheet() {
+     const sheet = $('guestGoalSheet');
+     if (!sheet) return;
++    G._goalObs?.disconnect(); G._goalObs = null;
+     sheet.remove();
+-    // Redraw the mentee's own goals card with whatever was just created.
+-    if (G.active && typeof window.loadDashboard === 'function') window.loadDashboard();
++    // The goal page closes to the mentor's list underneath; land on the mentee
++    // dashboard and redraw its goals card with whatever was just created.
++    if (G.active) {
++      bridge()?.navigate('dashboard');
++      if (typeof window.loadDashboard === 'function') window.loadDashboard();
++    }
+   }
+ 
+   document.addEventListener('DOMContentLoaded', syncEntry);
+diff --git a/tests/guest-mode.ui.test.js b/tests/guest-mode.ui.test.js
+index 7c060ed..629f2ee 100644
+--- a/tests/guest-mode.ui.test.js
++++ b/tests/guest-mode.ui.test.js
+@@ -85,6 +85,27 @@ const G = w.HolyGuest;
+   w.document.getElementById('guestGuideClose').click();
+   assert.ok(!w.document.getElementById('guestGuide'));
+ 
++  // Goal sheet: "New goal" opens the goal page, so the sheet must step aside, then return.
++  {
++    const pg = w.document.createElement('div'); pg.id = 'page-goal-new'; pg.className = 'page'; w.document.body.appendChild(pg);
++    w.HolyGoals = { mountMentor: () => {} };
++    w.document.querySelector('[data-guest-act="goal"]') || w.document.getElementById('guestGuideBtn').click();
++    w.document.querySelector('[data-guest-act="goal"]').click();
++    const sheet = w.document.getElementById('guestGoalSheet');
++    assert.ok(sheet, 'goal sheet opens');
++    pg.classList.add('active');
++    await new Promise(r => setTimeout(r, 10));
++    assert.strictEqual(sheet.style.display, 'none', 'sheet hides so the goal page is visible');
++    pg.classList.remove('active');
++    await new Promise(r => setTimeout(r, 10));
++    assert.strictEqual(sheet.style.display, '', 'sheet returns when the goal page closes');
++    navs.length = 0;
++    w.document.getElementById('guestGoalClose').click();
++    assert.ok(!w.document.getElementById('guestGoalSheet'));
++    assert.deepStrictEqual(navs, ['dashboard'], 'Done lands on the mentee dashboard');
++    pg.remove();
++  }
++
+   // Direct writes to real endpoints are refused while active; guest + read-only media pass.
+   const blocked = await w.fetch('/api/avatar', { method: 'POST' });
+   assert.strictEqual(blocked.status, 403);

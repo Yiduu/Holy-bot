@@ -355,13 +355,26 @@
       <div class="guest-sheet-body"><div id="guestGoalPanel"></div></div>`;
     document.body.appendChild(sheet);
     window.HolyGoals.mountMentor($('guestGoalPanel'), me.telegram_id);
+    // "New goal" opens the app's own goal page (#page-goal-new). This sheet is a
+    // full-screen overlay, so it would cover that page until Done. Step aside
+    // while the page is open and come back when it closes.
+    const page = $('page-goal-new');
+    if (page) {
+      G._goalObs = new MutationObserver(() => { sheet.style.display = page.classList.contains('active') ? 'none' : ''; });
+      G._goalObs.observe(page, { attributes: true, attributeFilter: ['class'] });
+    }
   }
   function closeGoalSheet() {
     const sheet = $('guestGoalSheet');
     if (!sheet) return;
+    G._goalObs?.disconnect(); G._goalObs = null;
     sheet.remove();
-    // Redraw the mentee's own goals card with whatever was just created.
-    if (G.active && typeof window.loadDashboard === 'function') window.loadDashboard();
+    // The goal page closes to the mentor's list underneath; land on the mentee
+    // dashboard and redraw its goals card with whatever was just created.
+    if (G.active) {
+      bridge()?.navigate('dashboard');
+      if (typeof window.loadDashboard === 'function') window.loadDashboard();
+    }
   }
 
   document.addEventListener('DOMContentLoaded', syncEntry);
