@@ -358,16 +358,22 @@
     // "New goal" opens the app's own goal page (#page-goal-new). This sheet is a
     // full-screen overlay, so it would cover that page until Done. Step aside
     // while the page is open and come back when it closes.
+    // Three triggers so it can't be missed: right after the New goal tap, on any
+    // class change of the page, and a light check while the sheet is open.
     const page = $('page-goal-new');
     if (page) {
-      G._goalObs = new MutationObserver(() => { sheet.style.display = page.classList.contains('active') ? 'none' : ''; });
+      const sync = () => { if (sheet.isConnected) sheet.style.display = page.classList.contains('active') ? 'none' : ''; };
+      sheet.addEventListener('click', e => { if (e.target.closest('[data-act="new"]')) sync(); });
+      G._goalObs = new MutationObserver(sync);
       G._goalObs.observe(page, { attributes: true, attributeFilter: ['class'] });
+      G._goalTimer = setInterval(sync, 250);
     }
   }
   function closeGoalSheet() {
     const sheet = $('guestGoalSheet');
     if (!sheet) return;
     G._goalObs?.disconnect(); G._goalObs = null;
+    clearInterval(G._goalTimer); G._goalTimer = null;
     sheet.remove();
     // The goal page closes to the mentor's list underneath; land on the mentee
     // dashboard and redraw its goals card with whatever was just created.
@@ -383,5 +389,5 @@
     const origToggle = window.toggleLanguage;
     window.toggleLanguage = function () { const r = origToggle.apply(this, arguments); setTimeout(syncEntry, 50); return r; };
   }
-  console.log('[guest] guest-mode.js loaded; header button:', !!$('guestHeaderBtn'));
+  console.log('[guest] guest-mode.js v1.4 (goal page above sheet) loaded; header button:', !!$('guestHeaderBtn'));
 })();
