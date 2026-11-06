@@ -12,11 +12,7 @@
 const express = require('express');
 const sandbox = require('../utils/guestSandbox');
 const { JITSI_DOMAIN, isPublicJitsi, generateJitsiJWT } = require('../utils');
-
-const SAMPLE_VERSE = {
-  text: 'Your word is a lamp to my feet and a light to my path.',
-  reference: 'Psalm 119:105',
-};
+const createDailyVerse = require('../utils/dailyVerse');
 
 module.exports = (supabase, requireAuth, mentorsRouter) => {
   const router = express.Router();
@@ -85,7 +81,9 @@ module.exports = (supabase, requireAuth, mentorsRouter) => {
 
   // ── identity, dashboard ──────────────────────────────────────────────
   router.get('/auth/me', (req, res) => res.json({ registered: true, user: sandbox.userView(req.sbx), admin_id: null }));
-  router.get('/auth/verse', (req, res) => res.json(SAMPLE_VERSE));
+  // Same verse the regular app shows today (read-only).
+  const getDailyVerse = createDailyVerse(supabase);
+  router.get('/auth/verse', wrap(async (req, res) => res.json(await getDailyVerse())));
   router.get('/users/stats', wrap(async (req, res) => {
     const [u, m] = await Promise.all([
       supabase.from('users').select('telegram_id', { count: 'exact', head: true }).eq('is_banned', false),

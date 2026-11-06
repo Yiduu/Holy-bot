@@ -2653,7 +2653,8 @@ window.loadDashboard = async function loadDashboard() {
     // Once-a-day invitation to actually read the verse, gated purely
     // on the calendar date so it never shows more than once per day.
     const todayStr = new Date().toISOString().split('T')[0];
-    if (verse?.text && localStorage.getItem('last_verse_popup_date') !== todayStr) {
+    // Not in guest mode: the popup would cover the screen and use up the real account's popup for today.
+    if (verse?.text && !window.HolyGuest?.active && localStorage.getItem('last_verse_popup_date') !== todayStr) {
       localStorage.setItem('last_verse_popup_date', todayStr);
       showEngagementPopup({
         id: 'daily_verse_invite',

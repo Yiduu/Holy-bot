@@ -9,6 +9,7 @@ const guestRoutes = require('../routes/guest');
 const sandbox = require('../utils/guestSandbox');
 
 const writes = [];
+const VERSES = [1, 2, 3].map(i => ({ id: i, reference: `ዮሐ ${i}:1`, text: `ጥቅስ ${i}`, is_active: true }));
 function fakeSupabase(role) {
   const mentor = { telegram_id: 77, anonymous_id: 'Mentor_77', sex: 'M', age_range: '35-44', rating: 4.5, rating_count: 3,
     accepting_requests: true, role: 'mentor', is_banned: false, user_settings: { display_name: 'Mentor Joe', max_mentees: 3 } };
@@ -23,7 +24,7 @@ function fakeSupabase(role) {
         if (table === 'users' && st.filters.telegram_id === 77) return { data: mentor };
         return { data: null };
       },
-      then: (res) => res({ data: [], count: 0, error: null }),
+      then: (res) => res({ data: table === 'daily_verses' ? VERSES : [], count: 0, error: null }),
     };
     return api;
   };
@@ -63,6 +64,10 @@ async function boot(role) {
   assert.strictEqual(start.body.user.role, 'user');
   assert.strictEqual(start.body.user.sex, 'F');
   assert.ok(start.body.user.telegram_id > 9e12, 'guest id must not collide with real Telegram ids');
+
+  // Daily verse is the same one the regular app shows today, not a sample.
+  const verse = await s.call('GET', '/auth/verse');
+  assert.deepStrictEqual(verse.body, VERSES[Math.floor(Date.now() / 86400000) % VERSES.length]);
 
   // Mentor directory is the real one, filtered for the persona.
   const list = await s.call('GET', '/mentors');
