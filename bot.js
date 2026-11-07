@@ -11,6 +11,8 @@ const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
 const { ethiopiaToday, ethiopiaTimeHM, addDays, daysBetween, trailingMissedDays } = require('./utils/goalRules');
 const { makeGoalReminders } = require('./utils/goalReminders');
+const EthCal = require('./frontend/ethiopian-calendar.js'); // Ethiopian calendar + clock for Amharic users (shared with the Mini App)
+const { LONG_DATE, dayLabel, clockLabel, parseSessionTime, slotLabel, ethCalendarKeyboard } = require('./utils/ethiopianTelegram');
 const { setTaskDone: setGoalTaskDone, emitGoal } = require('./utils/goalService');
 const fs = require('fs');
 const path = require('path');
@@ -149,9 +151,12 @@ function getState(chatId) {
 
 // ─── Formatting Helpers ───────────────────────────────────────────────────────
 
-function formatUserDateTime(dateStr, timezone = 'Africa/Addis_Ababa') {
+function formatUserDateTime(dateStr, timezone = 'Africa/Addis_Ababa', lang = 'en') {
   let tz = timezone;
   if (!tz || tz === 'UTC') tz = 'Africa/Addis_Ababa';
+  if (lang === 'am') {
+    try { return EthCal.formatInstant(dateStr, 'am', tz); } catch { /* fall through to the English format */ }
+  }
   // NOTE: dateStyle/timeStyle cannot be combined with timeZoneName in the
   // same Intl.DateTimeFormat options object — V8 throws
   // "RangeError: Invalid option : option" for that combination. Using the
@@ -354,6 +359,11 @@ function getEthiopiaNow() {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Addis_Ababa' }));
 }
 
+// Ethiopian month grid for Amharic users (utils/ethiopianTelegram.js).
+function getEthCalendarKeyboard(key, lang = 'am') {
+  return ethCalendarKeyboard(key, tSync(lang, 'btn_back'));
+}
+
 function getCalendarKeyboard(year, month, lang = 'en') {
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const header = `${months[month]} ${year}`;
@@ -406,7 +416,8 @@ function getTimeSlotsKeyboard(lang = 'en') {
 
   // Two slots per row
   for (let i = 0; i < slots.length; i += 2) {
-    const row = slots.slice(i, i + 2).map(s => ({ text: s, callback_data: `time_select_${s}` }));
+    // the label is the Ethiopian clock for Amharic users; the callback stays "09:00 AM"
+    const row = slots.slice(i, i + 2).map(s => ({ text: slotLabel(s, lang), callback_data: `time_select_${s}` }));
     keyboard.inline_keyboard.push(row);
   }
 
@@ -422,18 +433,9 @@ async function createVideoSession(chatId, date, time12h) {
   const state = getState(chatId);
   if (!state) return;
 
-  // Parse 12h time to 24h
-  const match = time12h.trim().match(/^(0?[1-9]|1[0-2]):([0-5][0-9])\s?(AM|PM)$/i);
-  if (!match) return safeSend(chatId, tSync(lang, 'invalid_time_format'));
-
-  let hours = parseInt(match[1]);
-  const minutes = match[2];
-  const ampm = match[3].toUpperCase();
-
-  if (ampm === 'PM' && hours < 12) hours += 12;
-  if (ampm === 'AM' && hours === 12) hours = 0;
-
-  const time24 = `${String(hours).padStart(2, '0')}:${minutes}`;
+  // 12h "02:30 PM" (the time-slot buttons) or an Ethiopian-clock time typed by an Amharic user -> 24h
+  const time24 = parseSessionTime(time12h);
+  if (!time24) return safeSend(chatId, tSync(lang, 'invalid_time_format'));
 
   // Combine date and time in Ethiopia timezone and convert to UTC
   const localIso = `${date}T${time24}:00+03:00`;
@@ -482,19 +484,24 @@ async function createVideoSession(chatId, date, time12h) {
     let hostTimezone = mentorSettings?.timezone || 'Africa/Addis_Ababa';
     if (!hostTimezone || hostTimezone === 'UTC') hostTimezone = 'Africa/Addis_Ababa';
 
-    const dateStr = scheduledAt.toLocaleDateString('en-US', { timeZone: hostTimezone, dateStyle: 'medium' });
+    let dateStr = scheduledAt.toLocaleDateString('en-US', { timeZone: hostTimezone, dateStyle: 'medium' });
     // NOTE: timeStyle can't be combined with timeZoneName in the same
     // Intl.DateTimeFormat options — that combination throws
     // "RangeError: Invalid option : option", which is what was making
     // every scheduling attempt fail with "Failed to schedule session."
     // Granular hour/minute options avoid the conflict while still
     // showing the timezone abbreviation (e.g. "EAT").
-    const timeStr = scheduledAt.toLocaleTimeString('en-US', {
+    let timeStr = scheduledAt.toLocaleTimeString('en-US', {
       timeZone: hostTimezone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
     });
     const typeLabel = state.tempData.type === 'private' ? 'Private' : 'Group';
 
     const mAm = lang === 'am';
+    // Amharic: Ethiopian calendar and clock, in the host's time zone
+    if (mAm) {
+      dateStr = EthCal.format(EthCal.isoInTz(scheduledAt, hostTimezone), LONG_DATE, 'am');
+      timeStr = EthCal.fmtHM(EthCal.hmInTz(scheduledAt, hostTimezone), 'am');
+    }
     const mentorMsg = card({
       icon: '✅',
       title: mAm ? 'ስብሰባው ተይዟል' : 'Session Scheduled',
@@ -1315,7 +1322,7 @@ async function viewJournalEntries(chatId, page = 0) {
 async function readJournalEntry(chatId, id) {
   const lang = await getUserLang(chatId);
   const { data: e } = await supabase.from('journal_entries').select('*').eq('id', id).single();
-  if (e) await safeSend(chatId, `📅 ${formatUserDateTime(e.created_at)}\n\n${e.content}`, {
+  if (e) await safeSend(chatId, `📅 ${formatUserDateTime(e.created_at, undefined, lang)}\n\n${e.content}`, {
     reply_markup: { inline_keyboard: [[{ text: tSync(lang, 'btn_back'), callback_data: 'journal_view_0' }]] }
   });
 }
@@ -1671,7 +1678,9 @@ async function notifySessionInvite(chatId, sessionInfo) {
   if (!recipientTimezone || recipientTimezone === 'UTC') recipientTimezone = 'Africa/Addis_Ababa';
 
   const scheduledAt = sessionInfo.scheduled_at || sessionInfo.scheduledAt;
-  const timeStr = scheduledAt
+  const timeStr = scheduledAt && lang === 'am'
+    ? EthCal.formatInstant(scheduledAt, 'am', recipientTimezone, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+    : scheduledAt
     ? new Intl.DateTimeFormat('en-US', {
       timeZone: recipientTimezone,
       weekday: 'short', year: 'numeric', month: 'short',
@@ -2111,10 +2120,9 @@ async function resolveChatId(telegramId) {
 }
 
 // A short, human date like "Aug 25"
-function formatGoalDate(dateStr) {
+function formatGoalDate(dateStr, lang = 'en') {
   try {
-    return new Date(`${String(dateStr).substring(0, 10)}T00:00:00Z`)
-      .toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Africa/Addis_Ababa' });
+    return dayLabel(dateStr, lang);
   } catch {
     return dateStr;
   }
@@ -2140,7 +2148,7 @@ async function notifyNewGoal(menteeId, goal, mentorName) {
     title: am ? 'አዲስ ግብ ተሰጥቶዎታል' : 'New Goal Assigned',
     body: am ? `${name} አዲስ ግብ አስቀምጦልዎታል። አብረው ይጓዙ!` : `${name} has set a new goal for you. Let's grow together!`,
     quote: goal.title,
-    fields: [['📅', am ? 'ቀነ-ገደብ' : 'Due', goal.due_date ? formatGoalDate(goal.due_date) : '']],
+    fields: [['📅', am ? 'ቀነ-ገደብ' : 'Due', goal.due_date ? formatGoalDate(goal.due_date, lang) : '']],
     footer: am ? 'ትንንሽ እርምጃዎች ታላቅ ለውጥ ያመጣሉ 🌱' : 'Small steps lead to big change 🌱',
   });
 
@@ -2248,7 +2256,7 @@ async function notifyGoalMissedDays(menteeId, goal, dates) {
   const lang = await getUserLang(menteeId);
   const am = lang === 'am';
   const chatId = await resolveChatId(menteeId);
-  const days = dates.map(formatGoalDate).join(', ');
+  const days = dates.map(d => formatGoalDate(d, lang)).join(', ');
   const text = card({
     icon: '🌅',
     title: am ? 'ያመለጠ ቀን' : 'A Day Slipped By',
@@ -2296,6 +2304,7 @@ async function notifyDailyReminder(menteeId, goal, tasks) {
     title: isChallenge ? (am ? 'የዛሬው የዕለት ተግባር' : "Today's Task") : (am ? 'የመንፈሳዊ ግብ ማስታወሻ' : 'Goal Reminder'),
     body: am ? 'ዛሬ ሊያጠናቅቋቸው የሚገቡ ተግባራት፦' : 'Here is what is waiting for you today:',
     quote: `${goal.title}\n${tasks.map(t => `• ${t.title}`).join('\n')}`,
+    fields: [['📅', am ? 'ቀን' : 'Date', dayLabel(ethiopiaToday(), lang, LONG_DATE)]],
     footer: am ? 'ዛሬ አንድ እርምጃ ወደፊት 🚶' : 'One step forward today 🚶',
   });
   const buttons = tasks.slice(0, 3).map(t => [goldCallback(
@@ -2317,6 +2326,10 @@ async function notifyTaskReminder(menteeId, goal, task) {
     title: am ? 'የተግባር ማስታወሻ' : 'Task Reminder',
     body: am ? 'አሁን ሊያጠናቅቁት የሚገባ ተግባር፦' : 'It is time for this task:',
     quote: `${goal.title}\n• ${task.title}`,
+    fields: [
+      ['⏰', am ? 'ሰዓት' : 'Time', task.remind_at ? clockLabel(task.remind_at, lang) : ''],
+      ['📅', am ? 'ቀን' : 'Date', dayLabel(ethiopiaToday(), lang, LONG_DATE)],
+    ],
     footer: am ? 'ዛሬ አንድ እርምጃ ወደፊት 🚶' : 'One step forward today 🚶',
   });
   await safeSend(chatId, text, {
@@ -2339,6 +2352,7 @@ async function notifyFinalReminder(menteeId, goal, tasks) {
     title: am ? 'የዛሬ የመጨረሻ ማስታወሻ' : 'Last Reminder for Today',
     body: am ? 'ዛሬ ገና ያልተጠናቀቁ ተግባራት፦' : 'Still waiting to be done today:',
     quote: `${goal.title}\n${tasks.map(t => `• ${t.title}`).join('\n')}`,
+    fields: [['📅', am ? 'ቀን' : 'Date', dayLabel(ethiopiaToday(), lang, LONG_DATE)]],
     footer: am ? 'ቀኑ ከማለቁ በፊት ያጠናቅቁ 🙏' : 'Finish before the day ends 🙏',
   });
   const buttons = tasks.slice(0, 3).map(t => [goldCallback(
@@ -3349,8 +3363,18 @@ bot.on('callback_query', async (query) => {
   }
   else if (data === 'sched_date_calendar') {
     if (!state) return bot.answerCallbackQuery(query.id);
-    const now = getEthiopiaNow();
-    await safeSend(chatId, tSync(lang, 'enter_date'), { reply_markup: getCalendarKeyboard(now.getFullYear(), now.getMonth(), lang) });
+    if (lang === 'am') {
+      await safeSend(chatId, tSync(lang, 'enter_date'), { reply_markup: getEthCalendarKeyboard(EthCal.monthKey(ethiopiaToday()), lang) });
+    } else {
+      const now = getEthiopiaNow();
+      await safeSend(chatId, tSync(lang, 'enter_date'), { reply_markup: getCalendarKeyboard(now.getFullYear(), now.getMonth(), lang) });
+    }
+  }
+  else if (data.startsWith('ecal_nav_')) {
+    const key = data.replace('ecal_nav_', '');
+    if (/^\d{4}-(0[1-9]|1[0-3])$/.test(key)) {
+      await bot.editMessageReplyMarkup(getEthCalendarKeyboard(key, lang), { chat_id: chatId, message_id: query.message.message_id });
+    }
   }
   else if (data.startsWith('cal_nav_')) {
     const parts = data.split('_'); // cal_nav_year_month
