@@ -1,0 +1,1307 @@
+diff --git a/bot.js b/bot.js
+index 1fbd862..44dedd8 100644
+--- a/bot.js
++++ b/bot.js
+@@ -11,6 +11,8 @@ const { createClient } = require('@supabase/supabase-js');
+ const axios = require('axios');
+ const { ethiopiaToday, ethiopiaTimeHM, addDays, daysBetween, trailingMissedDays } = require('./utils/goalRules');
+ const { makeGoalReminders } = require('./utils/goalReminders');
++const EthCal = require('./frontend/ethiopian-calendar.js'); // Ethiopian calendar + clock for Amharic users (shared with the Mini App)
++const { LONG_DATE, dayLabel, clockLabel, parseSessionTime, slotLabel, ethCalendarKeyboard } = require('./utils/ethiopianTelegram');
+ const { setTaskDone: setGoalTaskDone, emitGoal } = require('./utils/goalService');
+ const fs = require('fs');
+ const path = require('path');
+@@ -149,9 +151,12 @@ function getState(chatId) {
+ 
+ // ─── Formatting Helpers ───────────────────────────────────────────────────────
+ 
+-function formatUserDateTime(dateStr, timezone = 'Africa/Addis_Ababa') {
++function formatUserDateTime(dateStr, timezone = 'Africa/Addis_Ababa', lang = 'en') {
+   let tz = timezone;
+   if (!tz || tz === 'UTC') tz = 'Africa/Addis_Ababa';
++  if (lang === 'am') {
++    try { return EthCal.formatInstant(dateStr, 'am', tz); } catch { /* fall through to the English format */ }
++  }
+   // NOTE: dateStyle/timeStyle cannot be combined with timeZoneName in the
+   // same Intl.DateTimeFormat options object — V8 throws
+   // "RangeError: Invalid option : option" for that combination. Using the
+@@ -354,6 +359,11 @@ function getEthiopiaNow() {
+   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Addis_Ababa' }));
+ }
+ 
++// Ethiopian month grid for Amharic users (utils/ethiopianTelegram.js).
++function getEthCalendarKeyboard(key, lang = 'am') {
++  return ethCalendarKeyboard(key, tSync(lang, 'btn_back'));
++}
++
+ function getCalendarKeyboard(year, month, lang = 'en') {
+   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+   const header = `${months[month]} ${year}`;
+@@ -406,7 +416,8 @@ function getTimeSlotsKeyboard(lang = 'en') {
+ 
+   // Two slots per row
+   for (let i = 0; i < slots.length; i += 2) {
+-    const row = slots.slice(i, i + 2).map(s => ({ text: s, callback_data: `time_select_${s}` }));
++    // the label is the Ethiopian clock for Amharic users; the callback stays "09:00 AM"
++    const row = slots.slice(i, i + 2).map(s => ({ text: slotLabel(s, lang), callback_data: `time_select_${s}` }));
+     keyboard.inline_keyboard.push(row);
+   }
+ 
+@@ -422,18 +433,9 @@ async function createVideoSession(chatId, date, time12h) {
+   const state = getState(chatId);
+   if (!state) return;
+ 
+-  // Parse 12h time to 24h
+-  const match = time12h.trim().match(/^(0?[1-9]|1[0-2]):([0-5][0-9])\s?(AM|PM)$/i);
+-  if (!match) return safeSend(chatId, tSync(lang, 'invalid_time_format'));
+-
+-  let hours = parseInt(match[1]);
+-  const minutes = match[2];
+-  const ampm = match[3].toUpperCase();
+-
+-  if (ampm === 'PM' && hours < 12) hours += 12;
+-  if (ampm === 'AM' && hours === 12) hours = 0;
+-
+-  const time24 = `${String(hours).padStart(2, '0')}:${minutes}`;
++  // 12h "02:30 PM" (the time-slot buttons) or an Ethiopian-clock time typed by an Amharic user -> 24h
++  const time24 = parseSessionTime(time12h);
++  if (!time24) return safeSend(chatId, tSync(lang, 'invalid_time_format'));
+ 
+   // Combine date and time in Ethiopia timezone and convert to UTC
+   const localIso = `${date}T${time24}:00+03:00`;
+@@ -482,19 +484,24 @@ async function createVideoSession(chatId, date, time12h) {
+     let hostTimezone = mentorSettings?.timezone || 'Africa/Addis_Ababa';
+     if (!hostTimezone || hostTimezone === 'UTC') hostTimezone = 'Africa/Addis_Ababa';
+ 
+-    const dateStr = scheduledAt.toLocaleDateString('en-US', { timeZone: hostTimezone, dateStyle: 'medium' });
++    let dateStr = scheduledAt.toLocaleDateString('en-US', { timeZone: hostTimezone, dateStyle: 'medium' });
+     // NOTE: timeStyle can't be combined with timeZoneName in the same
+     // Intl.DateTimeFormat options — that combination throws
+     // "RangeError: Invalid option : option", which is what was making
+     // every scheduling attempt fail with "Failed to schedule session."
+     // Granular hour/minute options avoid the conflict while still
+     // showing the timezone abbreviation (e.g. "EAT").
+-    const timeStr = scheduledAt.toLocaleTimeString('en-US', {
++    let timeStr = scheduledAt.toLocaleTimeString('en-US', {
+       timeZone: hostTimezone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+     });
+     const typeLabel = state.tempData.type === 'private' ? 'Private' : 'Group';
+ 
+     const mAm = lang === 'am';
++    // Amharic: Ethiopian calendar and clock, in the host's time zone
++    if (mAm) {
++      dateStr = EthCal.format(EthCal.isoInTz(scheduledAt, hostTimezone), LONG_DATE, 'am');
++      timeStr = EthCal.fmtHM(EthCal.hmInTz(scheduledAt, hostTimezone), 'am');
++    }
+     const mentorMsg = card({
+       icon: '✅',
+       title: mAm ? 'ስብሰባው ተይዟል' : 'Session Scheduled',
+@@ -1315,7 +1322,7 @@ async function viewJournalEntries(chatId, page = 0) {
+ async function readJournalEntry(chatId, id) {
+   const lang = await getUserLang(chatId);
+   const { data: e } = await supabase.from('journal_entries').select('*').eq('id', id).single();
+-  if (e) await safeSend(chatId, `📅 ${formatUserDateTime(e.created_at)}\n\n${e.content}`, {
++  if (e) await safeSend(chatId, `📅 ${formatUserDateTime(e.created_at, undefined, lang)}\n\n${e.content}`, {
+     reply_markup: { inline_keyboard: [[{ text: tSync(lang, 'btn_back'), callback_data: 'journal_view_0' }]] }
+   });
+ }
+@@ -1671,7 +1678,9 @@ async function notifySessionInvite(chatId, sessionInfo) {
+   if (!recipientTimezone || recipientTimezone === 'UTC') recipientTimezone = 'Africa/Addis_Ababa';
+ 
+   const scheduledAt = sessionInfo.scheduled_at || sessionInfo.scheduledAt;
+-  const timeStr = scheduledAt
++  const timeStr = scheduledAt && lang === 'am'
++    ? EthCal.formatInstant(scheduledAt, 'am', recipientTimezone, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
++    : scheduledAt
+     ? new Intl.DateTimeFormat('en-US', {
+       timeZone: recipientTimezone,
+       weekday: 'short', year: 'numeric', month: 'short',
+@@ -2111,10 +2120,9 @@ async function resolveChatId(telegramId) {
+ }
+ 
+ // A short, human date like "Aug 25"
+-function formatGoalDate(dateStr) {
++function formatGoalDate(dateStr, lang = 'en') {
+   try {
+-    return new Date(`${String(dateStr).substring(0, 10)}T00:00:00Z`)
+-      .toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Africa/Addis_Ababa' });
++    return dayLabel(dateStr, lang);
+   } catch {
+     return dateStr;
+   }
+@@ -2140,7 +2148,7 @@ async function notifyNewGoal(menteeId, goal, mentorName) {
+     title: am ? 'አዲስ ግብ ተሰጥቶዎታል' : 'New Goal Assigned',
+     body: am ? `${name} አዲስ ግብ አስቀምጦልዎታል። አብረው ይጓዙ!` : `${name} has set a new goal for you. Let's grow together!`,
+     quote: goal.title,
+-    fields: [['📅', am ? 'ቀነ-ገደብ' : 'Due', goal.due_date ? formatGoalDate(goal.due_date) : '']],
++    fields: [['📅', am ? 'ቀነ-ገደብ' : 'Due', goal.due_date ? formatGoalDate(goal.due_date, lang) : '']],
+     footer: am ? 'ትንንሽ እርምጃዎች ታላቅ ለውጥ ያመጣሉ 🌱' : 'Small steps lead to big change 🌱',
+   });
+ 
+@@ -2248,7 +2256,7 @@ async function notifyGoalMissedDays(menteeId, goal, dates) {
+   const lang = await getUserLang(menteeId);
+   const am = lang === 'am';
+   const chatId = await resolveChatId(menteeId);
+-  const days = dates.map(formatGoalDate).join(', ');
++  const days = dates.map(d => formatGoalDate(d, lang)).join(', ');
+   const text = card({
+     icon: '🌅',
+     title: am ? 'ያመለጠ ቀን' : 'A Day Slipped By',
+@@ -2296,6 +2304,7 @@ async function notifyDailyReminder(menteeId, goal, tasks) {
+     title: isChallenge ? (am ? 'የዛሬው የዕለት ተግባር' : "Today's Task") : (am ? 'የመንፈሳዊ ግብ ማስታወሻ' : 'Goal Reminder'),
+     body: am ? 'ዛሬ ሊያጠናቅቋቸው የሚገቡ ተግባራት፦' : 'Here is what is waiting for you today:',
+     quote: `${goal.title}\n${tasks.map(t => `• ${t.title}`).join('\n')}`,
++    fields: [['📅', am ? 'ቀን' : 'Date', dayLabel(ethiopiaToday(), lang, LONG_DATE)]],
+     footer: am ? 'ዛሬ አንድ እርምጃ ወደፊት 🚶' : 'One step forward today 🚶',
+   });
+   const buttons = tasks.slice(0, 3).map(t => [goldCallback(
+@@ -2317,6 +2326,10 @@ async function notifyTaskReminder(menteeId, goal, task) {
+     title: am ? 'የተግባር ማስታወሻ' : 'Task Reminder',
+     body: am ? 'አሁን ሊያጠናቅቁት የሚገባ ተግባር፦' : 'It is time for this task:',
+     quote: `${goal.title}\n• ${task.title}`,
++    fields: [
++      ['⏰', am ? 'ሰዓት' : 'Time', task.remind_at ? clockLabel(task.remind_at, lang) : ''],
++      ['📅', am ? 'ቀን' : 'Date', dayLabel(ethiopiaToday(), lang, LONG_DATE)],
++    ],
+     footer: am ? 'ዛሬ አንድ እርምጃ ወደፊት 🚶' : 'One step forward today 🚶',
+   });
+   await safeSend(chatId, text, {
+@@ -2339,6 +2352,7 @@ async function notifyFinalReminder(menteeId, goal, tasks) {
+     title: am ? 'የዛሬ የመጨረሻ ማስታወሻ' : 'Last Reminder for Today',
+     body: am ? 'ዛሬ ገና ያልተጠናቀቁ ተግባራት፦' : 'Still waiting to be done today:',
+     quote: `${goal.title}\n${tasks.map(t => `• ${t.title}`).join('\n')}`,
++    fields: [['📅', am ? 'ቀን' : 'Date', dayLabel(ethiopiaToday(), lang, LONG_DATE)]],
+     footer: am ? 'ቀኑ ከማለቁ በፊት ያጠናቅቁ 🙏' : 'Finish before the day ends 🙏',
+   });
+   const buttons = tasks.slice(0, 3).map(t => [goldCallback(
+@@ -3349,8 +3363,18 @@ bot.on('callback_query', async (query) => {
+   }
+   else if (data === 'sched_date_calendar') {
+     if (!state) return bot.answerCallbackQuery(query.id);
+-    const now = getEthiopiaNow();
+-    await safeSend(chatId, tSync(lang, 'enter_date'), { reply_markup: getCalendarKeyboard(now.getFullYear(), now.getMonth(), lang) });
++    if (lang === 'am') {
++      await safeSend(chatId, tSync(lang, 'enter_date'), { reply_markup: getEthCalendarKeyboard(EthCal.monthKey(ethiopiaToday()), lang) });
++    } else {
++      const now = getEthiopiaNow();
++      await safeSend(chatId, tSync(lang, 'enter_date'), { reply_markup: getCalendarKeyboard(now.getFullYear(), now.getMonth(), lang) });
++    }
++  }
++  else if (data.startsWith('ecal_nav_')) {
++    const key = data.replace('ecal_nav_', '');
++    if (/^\d{4}-(0[1-9]|1[0-3])$/.test(key)) {
++      await bot.editMessageReplyMarkup(getEthCalendarKeyboard(key, lang), { chat_id: chatId, message_id: query.message.message_id });
++    }
+   }
+   else if (data.startsWith('cal_nav_')) {
+     const parts = data.split('_'); // cal_nav_year_month
+diff --git a/frontend/app.js b/frontend/app.js
+index c974053..190f25a 100644
+--- a/frontend/app.js
++++ b/frontend/app.js
+@@ -292,7 +292,23 @@ function getUserTimezone() {
+   }
+ }
+ 
++// Amharic = Ethiopian calendar (ዓ.ም) and Ethiopian clock (ጠዋት 3 ሰዓት = 9:00 AM).
++// Stored values stay Gregorian/UTC; these helpers only change what is displayed.
++// frontend/ethiopian-calendar.js does the conversion (no Intl calendar data needed).
++function ethOn() { return currentLanguage === 'am' && !!window.EthCal; }
++// A date-only value ('2026-11-06' or a timestamp) in the active calendar.
++function fmtCalDate(value, opts, fallbackLocale) {
++  const o = opts || { year: 'numeric', month: 'short', day: 'numeric' };
++  if (ethOn()) return EthCal.format(EthCal.isoInTz(value, getUserTimezone()), o, 'am');
++  return new Date(value).toLocaleDateString(fallbackLocale, o);
++}
++// A goal due date is a plain calendar day: read it as that day, not as a moment in the viewer's zone.
++function fmtDueDate(due) {
++  return ethOn() ? EthCal.format(String(due).substring(0, 10), { month: 'long', day: 'numeric', year: 'numeric' }, 'am') : new Date(due).toLocaleDateString();
++}
++
+ function formatTime(dateStr) {
++  if (ethOn()) { try { return EthCal.fmtHM(EthCal.hmInTz(dateStr, getUserTimezone()), 'am'); } catch (_) { /* fall back below */ } }
+   try {
+     const tz = getUserTimezone();
+     return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: tz });
+@@ -302,6 +318,7 @@ function formatTime(dateStr) {
+ }
+ 
+ function formatDateTime(dateStr) {
++  if (ethOn()) { try { return EthCal.formatInstant(dateStr, 'am', getUserTimezone(), { month: 'short', day: 'numeric', year: 'numeric' }); } catch (_) { /* fall back below */ } }
+   try {
+     const tz = getUserTimezone();
+     return new Date(dateStr).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', timeZone: tz });
+@@ -539,12 +556,14 @@ function getDateGroupHeader(dateStr) {
+   } else if (diffDays === 1) {
+     return t('Yesterday') || 'Yesterday';
+   } else if (diffDays > 1 && diffDays < 7) {
++    if (ethOn()) return EthCal.format(EthCal.isoInTz(msgDate, tz), { weekday: 'long' }, 'am');
+     try {
+       return msgDate.toLocaleDateString([], { weekday: 'long', timeZone: tz });
+     } catch (e) {
+       return msgDate.toLocaleDateString([], { weekday: 'long' });
+     }
+   } else {
++    if (ethOn()) return EthCal.format(EthCal.isoInTz(msgDate, tz), { year: 'numeric', month: 'long', day: 'numeric' }, 'am');
+     try {
+       return msgDate.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric', timeZone: tz });
+     } catch (e) {
+@@ -3123,7 +3142,7 @@ function renderMyGoalItem(g) {
+   const missed = !g.is_done && (g.is_missed || isGoalLocked(g));
+   const cb = goalCheckboxAttrs(g);
+   const due = g.due_date
+-    ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}${missed ? ` <span class="goal-missed-badge">${t('mentee_goal_missed')}</span>` : ''}</div>`
++    ? `<div class="goal-item-due">${t('mentee_goal_due')} ${fmtDueDate(g.due_date)}${missed ? ` <span class="goal-missed-badge">${t('mentee_goal_missed')}</span>` : ''}</div>`
+     : '';
+   return `
+     <div class="my-goal-item ${g.is_done ? 'done' : ''} ${missed ? 'missed' : ''}" data-goal-id="${g.id}">
+@@ -5232,7 +5251,7 @@ function openMenteeSelectModal() {
+     list.innerHTML = mentees.map(m => {
+       const displayName = m.user?.user_settings?.display_name || m.user?.anonymous_id || '–';
+       const letter = (displayName || '?').charAt(0).toUpperCase();
+-      const dateStr = m.assigned_at ? new Date(m.assigned_at).toLocaleDateString(dateLocale) : '';
++      const dateStr = m.assigned_at ? fmtCalDate(m.assigned_at, undefined, dateLocale) : '';
+       return `
+       <button type="button" class="profile-menu-item rt-topic sch-pick" onclick="startPrivateSession('${m.user.telegram_id}')">
+         ${renderAvatar(m.user, letter)}
+@@ -8014,7 +8033,7 @@ function renderMentorGoalItem(g, menteeId) {
+   const missed = !g.is_done && (g.is_missed || isGoalLocked(g));
+   const cb = goalCheckboxAttrs(g);
+   const due = g.due_date
+-    ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}${missed ? ` <span class="goal-missed-badge">${t('mentee_goal_missed')}</span>` : ''}</div>`
++    ? `<div class="goal-item-due">${t('mentee_goal_due')} ${fmtDueDate(g.due_date)}${missed ? ` <span class="goal-missed-badge">${t('mentee_goal_missed')}</span>` : ''}</div>`
+     : '';
+   return `
+     <div class="goal-item ${g.is_done ? 'done' : ''} ${missed ? 'missed' : ''}" data-goal-id="${g.id}">
+@@ -8573,7 +8592,7 @@ function renderTransferSheet() {
+     const letter = (mentee.name || '?').charAt(0).toUpperCase();
+     const dateLocale = currentLanguage === 'am' ? 'am-ET' : undefined;
+     const since = mentee.assignedAt
+-      ? new Date(mentee.assignedAt).toLocaleDateString(dateLocale, { year: 'numeric', month: 'short', day: 'numeric' })
++      ? fmtCalDate(mentee.assignedAt, { year: 'numeric', month: 'short', day: 'numeric' }, dateLocale)
+       : '';
+     card.hidden = false;
+     card.innerHTML = `
+@@ -9004,6 +9023,7 @@ const CH_ICON_CHAT = '<svg xmlns="http://www.w3.org/2000/svg" width="22" height=
+ 
+ function chName(u) { return u?.user_settings?.display_name || u?.anonymous_id || t('mentee_label'); }
+ function chDate(iso) {
++  if (ethOn()) return fmtCalDate(iso);
+   try { return new Date(iso).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric', timeZone: getUserTimezone() }); }
+   catch { return new Date(iso).toLocaleDateString(); }
+ }
+@@ -9568,7 +9588,29 @@ async function showJournalCalendar() {
+   let currentYear = today.getFullYear();
+   let currentMonth = today.getMonth();
+ 
++  let ethKey = ethOn() ? EthCal.monthKey(EthCal.isoInTz(today)) : null;
++
++  function renderEthCalendar() {
++    const { y, m } = EthCal.parseKey(ethKey);
++    const startDay = EthCal.fromISO(EthCal.toISO(y, m, 1)).wd; // 0 = Sunday, as in the Gregorian grid
++    let html = `<div class="journal-calendar card"><div class="calendar-header">
++      <button class="btn btn-sm btn-ghost" onclick="prevMonth()">◀</button>
++      <span>${EthCal.monthLabel(ethKey, 'am')}</span>
++      <button class="btn btn-sm btn-ghost" onclick="nextMonth()">▶</button>
++    </div><div class="calendar-grid">`;
++    for (let wd = 0; wd < 7; wd++) html += `<div class="calendar-weekday">${EthCal.weekdayName(wd, 'am', true)}</div>`;
++    for (let i = 0; i < startDay; i++) html += `<div class="calendar-day empty"></div>`;
++    for (let d = 1; d <= EthCal.daysInMonth(y, m); d++) {
++      const dateStr = EthCal.toISO(y, m, d); // Gregorian ISO: what the API and entriesByDate use
++      const hasEntries = entriesByDate[dateStr] && entriesByDate[dateStr].length > 0;
++      html += `<div class="calendar-day ${hasEntries ? 'has-entry' : ''}" onclick="showEntriesForDate('${dateStr}')">${d}</div>`;
++    }
++    html += `</div></div>`;
++    $('journalEntriesList').innerHTML = html;
++  }
++
+   function renderCalendar() {
++    if (ethOn()) { if (!ethKey) ethKey = EthCal.monthKey(EthCal.isoInTz(new Date())); return renderEthCalendar(); }
+     const firstDay = new Date(currentYear, currentMonth, 1);
+     const startDay = firstDay.getDay(); // 0 = Sunday
+     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+@@ -9591,11 +9633,13 @@ async function showJournalCalendar() {
+   }
+ 
+   window.prevMonth = () => {
++    if (ethOn()) { ethKey = EthCal.shiftKey(ethKey || EthCal.monthKey(EthCal.isoInTz(new Date())), -1); return renderCalendar(); }
+     if (currentMonth === 0) { currentMonth = 11; currentYear--; }
+     else currentMonth--;
+     renderCalendar();
+   };
+   window.nextMonth = () => {
++    if (ethOn()) { ethKey = EthCal.shiftKey(ethKey || EthCal.monthKey(EthCal.isoInTz(new Date())), 1); return renderCalendar(); }
+     if (currentMonth === 11) { currentMonth = 0; currentYear++; }
+     else currentMonth++;
+     renderCalendar();
+diff --git a/frontend/ethiopian-calendar.js b/frontend/ethiopian-calendar.js
+new file mode 100644
+index 0000000..8344b81
+--- /dev/null
++++ b/frontend/ethiopian-calendar.js
+@@ -0,0 +1,212 @@
++/* Ethiopian calendar + Ethiopian clock helpers (Amharic).
++ *
++ * One file, two homes: loaded in the browser as window.EthCal and require()d by
++ * the bot (bot.js). No dependencies, no Intl calendar data: Telegram WebViews
++ * and slim Node builds don't all ship the "ethiopic" calendar, so the maths is
++ * done here and every device agrees.
++ *
++ * Storage never changes. The database, the API and every scheduler keep using
++ * Gregorian ISO dates ("2026-11-06") and 24h "HH:MM" times in Ethiopia local
++ * time (EAT, UTC+3). This module only converts for DISPLAY and for picking.
++ *
++ * Calendar:  13 months. 12 x 30 days, then Pagume (5 days, 6 in a leap year).
++ *            Leap year when year % 4 === 3. Year number is "ዓ.ም." (E.C.).
++ * Clock:     Ethiopians count hours from sunrise: 6:00 AM is "12:00", 7:00 AM
++ *            is "1:00", noon is "6:00", 6:00 PM is "12:00" again, midnight is
++ *            "6:00". A period word says which half of the day it is.
++ */
++(function (root, factory) {
++  if (typeof module === 'object' && module.exports) module.exports = factory();
++  else root.EthCal = factory();
++})(typeof self !== 'undefined' ? self : this, function () {
++  'use strict';
++
++  const TZ = 'Africa/Addis_Ababa';
++
++  // Rata Die (day count, 0001-01-01 Gregorian = 1) of 1 Meskerem, year 1 E.C.
++  const ETH_EPOCH_RD = 2796;
++  const UNIX_EPOCH_RD = 719163; // Rata Die of 1970-01-01
++
++  const MONTHS = {
++    am: ['መስከረም', 'ጥቅምት', 'ኅዳር', 'ታኅሣሥ', 'ጥር', 'የካቲት', 'መጋቢት', 'ሚያዝያ', 'ግንቦት', 'ሰኔ', 'ሐምሌ', 'ነሐሴ', 'ጳጉሜን'],
++    en: ['Meskerem', 'Tikimt', 'Hidar', 'Tahsas', 'Tir', 'Yekatit', 'Megabit', 'Miazia', 'Ginbot', 'Sene', 'Hamle', 'Nehase', 'Pagume'],
++  };
++  // Index = JS getUTCDay() (0 = Sunday)
++  const WEEKDAYS = {
++    am: ['እሑድ', 'ሰኞ', 'ማክሰኞ', 'ረቡዕ', 'ሐሙስ', 'አርብ', 'ቅዳሜ'],
++    en: ['Ehud', 'Segno', 'Maksegno', 'Rob', 'Hamus', 'Arb', 'Qidame'],
++  };
++  const WEEKDAYS_NARROW = { am: ['እ', 'ሰ', 'ማ', 'ረ', 'ሐ', 'አ', 'ቅ'], en: ['E', 'S', 'M', 'R', 'H', 'A', 'Q'] };
++  const ERA = { am: 'ዓ.ም', en: 'E.C.' };
++  const COMMA = { am: '፣ ', en: ', ' };
++
++  // Day periods on the Ethiopian clock, by standard (24h) hour.
++  const PERIODS = {
++    am: { morning: 'ጠዋት', noon: 'ቀትር', afternoon: 'ከሰዓት', evening: 'ምሽት', night: 'ሌሊት' },
++    en: { morning: 'morning', noon: 'noon', afternoon: 'afternoon', evening: 'evening', night: 'night' },
++  };
++  const HOUR_WORD = { am: 'ሰዓት', en: "o'clock" };
++
++  const pad = n => String(n).padStart(2, '0');
++  const lg = lang => (lang === 'en' ? 'en' : 'am');
++
++  // ── Gregorian ISO <-> Rata Die ───────────────────────────────────────────
++  function rdFromISO(iso) {
++    const [y, m, d] = String(iso).substring(0, 10).split('-').map(Number);
++    return Math.floor(Date.UTC(y, m - 1, d) / 864e5) + UNIX_EPOCH_RD;
++  }
++  function isoFromRd(rd) {
++    return new Date((rd - UNIX_EPOCH_RD) * 864e5).toISOString().substring(0, 10);
++  }
++
++  // ── Ethiopian date <-> Rata Die ──────────────────────────────────────────
++  const rdFromEth = (y, m, d) => ETH_EPOCH_RD - 1 + 365 * (y - 1) + Math.floor(y / 4) + 30 * (m - 1) + d;
++
++  function ethFromRd(rd) {
++    const y = Math.floor((4 * (rd - ETH_EPOCH_RD) + 1463) / 1461);
++    const m = Math.floor((rd - rdFromEth(y, 1, 1)) / 30) + 1;
++    const d = rd + 1 - rdFromEth(y, m, 1);
++    return { y, m, d };
++  }
++
++  const isLeap = y => y % 4 === 3;
++  const daysInMonth = (y, m) => (m < 13 ? 30 : isLeap(y) ? 6 : 5);
++  const isValid = (y, m, d) => Number.isInteger(y) && Number.isInteger(m) && Number.isInteger(d)
++    && m >= 1 && m <= 13 && d >= 1 && d <= daysInMonth(y, m);
++
++  /** Gregorian 'YYYY-MM-DD' -> { y, m, d, wd }  (wd: 0 = Sunday) */
++  function fromISO(iso) {
++    const rd = rdFromISO(iso);
++    return { ...ethFromRd(rd), wd: ((rd % 7) + 7) % 7 };
++  }
++  /** Ethiopian y/m/d -> Gregorian 'YYYY-MM-DD' */
++  function toISO(y, m, d) {
++    return isoFromRd(rdFromEth(y, m, d));
++  }
++
++  // ── "What day is it for this person" ─────────────────────────────────────
++  /** Gregorian 'YYYY-MM-DD' of an instant, as seen in a time zone (default Ethiopia). */
++  function isoInTz(when, tz) {
++    return new Date(when || Date.now()).toLocaleDateString('en-CA', { timeZone: tz || TZ });
++  }
++  /** 'HH:MM' (24h) of an instant in a time zone (default Ethiopia). */
++  function hmInTz(when, tz) {
++    return new Date(when || Date.now()).toLocaleTimeString('en-GB', { timeZone: tz || TZ, hour12: false, hour: '2-digit', minute: '2-digit' });
++  }
++
++  // ── Date formatting ──────────────────────────────────────────────────────
++  /**
++   * format('2026-11-06', { weekday:'long', month:'long', day:'numeric', year:'numeric' }, 'am')
++   *   -> "አርብ፣ ጥቅምት 26 2019 ዓ.ም"
++   * Options follow Intl: weekday 'long'|'short'|'narrow', month 'long'|'short'|'numeric',
++   * day 'numeric', year 'numeric'. 'short' month = same name (Amharic month names are short).
++   */
++  function format(iso, o, lang) {
++    o = o || {};
++    const L = lg(lang), e = fromISO(iso);
++    const wd = o.weekday
++      ? (o.weekday === 'narrow' ? WEEKDAYS_NARROW[L][e.wd] : WEEKDAYS[L][e.wd])
++      : '';
++    const month = o.month ? (o.month === 'numeric' || o.month === '2-digit' ? String(e.m) : MONTHS[L][e.m - 1]) : '';
++    const day = o.day ? String(e.d) : '';
++    const year = o.year ? `${e.y} ${ERA[L]}` : '';
++    const md = [month, day].filter(Boolean).join(' ');
++    const core = [md, year].filter(Boolean).join(md && year ? ' ' : '');
++    return wd && core ? wd + COMMA[L] + core : wd || core;
++  }
++
++  const monthName = (m, lang) => MONTHS[lg(lang)][m - 1];
++  const weekdayName = (wd, lang, narrow) => (narrow ? WEEKDAYS_NARROW : WEEKDAYS)[lg(lang)][wd];
++
++  // ── Month keys for calendar grids ('YYYY-MM' in Ethiopian numbers) ───────
++  const monthKey = iso => { const e = fromISO(iso); return `${e.y}-${pad(e.m)}`; };
++  const parseKey = key => { const [y, m] = String(key).split('-').map(Number); return { y, m }; };
++  /** Gregorian ISO of the 1st of an Ethiopian month key */
++  const monthFirstISO = key => { const { y, m } = parseKey(key); return toISO(y, m, 1); };
++  const monthLabel = (key, lang) => { const { y, m } = parseKey(key); const L = lg(lang); return `${MONTHS[L][m - 1]} ${y} ${ERA[L]}`; };
++  /** Next / previous month key (Pagume is month 13). */
++  function shiftKey(key, delta) {
++    let { y, m } = parseKey(key);
++    m += delta;
++    while (m > 13) { m -= 13; y++; }
++    while (m < 1) { m += 13; y--; }
++    return `${y}-${pad(m)}`;
++  }
++
++  // ── Ethiopian clock ──────────────────────────────────────────────────────
++  /** 24h hour (0-23) -> { hour: 1..12, period } on the Ethiopian clock. */
++  function ethClock(h24) {
++    const hour = ((h24 - 6 + 24) % 12) || 12;
++    const period = h24 >= 6 && h24 < 12 ? 'morning' : h24 === 12 ? 'noon' : h24 > 12 && h24 < 18 ? 'afternoon' : h24 >= 18 ? 'evening' : 'night';
++    return { hour, period };
++  }
++  const parseHM = hm => { const [h, m] = String(hm).substring(0, 5).split(':').map(Number); return { h, m }; };
++
++  /**
++   * 'HH:MM' (24h, Ethiopia local) -> display text.
++   *   fmtHM('09:00','am')  -> "ጠዋት 3 ሰዓት"      fmtHM('15:30','am') -> "ከሰዓት 9:30"
++   *   fmtHM('09:00','en')  -> "9:00 AM"
++   * Pass { standard:true } to get the international 12h clock in Amharic too, or
++ * { bare:true } for the clock part only ("3 ሰዓት") when a period label sits next to it.
++   */
++  function fmtHM(hm, lang, opts) {
++    if (!/^\d{1,2}:\d{2}/.test(String(hm || ''))) return '';
++    const { h, m } = parseHM(hm);
++    if (lg(lang) === 'en' || (opts && opts.standard)) {
++      const h12 = h % 12 || 12;
++      return `${h12}:${pad(m)} ${h < 12 ? 'AM' : 'PM'}`;
++    }
++    const c = ethClock(h);
++    const clock = m === 0 ? `${c.hour} ${HOUR_WORD.am}` : `${c.hour}:${pad(m)}`;
++    return opts && opts.bare ? clock : `${PERIODS.am[c.period]} ${clock}`;
++  }
++
++  const PERIOD_WORDS = { 'ጠዋት': 'morning', 'ጥዋት': 'morning', 'ቀትር': 'noon', 'ከሰዓት': 'afternoon', 'ምሽት': 'evening', 'ማታ': 'evening', 'ሌሊት': 'night' };
++  const PW = Object.keys(PERIOD_WORDS).join('|');
++  const ETH_TIME_RE = new RegExp(`^(?:(${PW})\\s*)?(\\d{1,2})(?::([0-5]\\d))?(?:\\s*(${PW}))?$`);
++
++  /**
++   * Typed Ethiopian time -> 'HH:MM' (24h), or null when it isn't one.
++   *   "ጠዋት 3:00" / "3 ሰዓት ጠዋት" -> "09:00"   "ከሰዓት 8:30" -> "14:30"
++   *   "ማታ 3 ሰዓት" -> "21:00"        "ሌሊት 7:30" -> "01:30"      "ቀትር 6" -> "12:00"
++   * The period word is required (the same hour exists twice a day), and it must fit the hour.
++   */
++  function parseEthTime(text) {
++    // Drop the hour word, but only right after a number: ከሰዓት (afternoon) ends in ሰዓት too.
++    const t = String(text || '').replace(/(\d)\s*ሰዓት/g, '$1 ').replace(/\s+/g, ' ').trim();
++    const m = t.match(ETH_TIME_RE);
++    if (!m || (m[1] && m[4]) || !(m[1] || m[4])) return null;
++    const e = Number(m[2]), min = m[3] ? Number(m[3]) : 0;
++    if (e < 1 || e > 12) return null;
++    const dayHour = e === 12 || e <= 5; // 12,1..5 -> first half of its 12h block; 6..11 -> second half
++    let h;
++    switch (PERIOD_WORDS[m[1] || m[4]]) {
++      case 'morning': if (!dayHour) return null; h = (e + 6) % 12; break;
++      case 'noon': if (e !== 6) return null; h = 12; break;
++      case 'afternoon': if (dayHour) return null; h = e === 6 ? 12 : (e + 6) % 12 + 12; break;
++      case 'evening': if (!dayHour) return null; h = (e + 6) % 12 + 12; break;
++      default: if (dayHour) return null; h = (e + 6) % 12; // night
++    }
++    return `${pad(h)}:${pad(min)}`;
++  }
++
++  /** Both clocks, for places where confusion is costly: "ጠዋት 3 ሰዓት (9:00 AM)". */
++  function fmtHMBoth(hm, lang) {
++    if (lg(lang) === 'en') return fmtHM(hm, 'en');
++    return `${fmtHM(hm, 'am')} (${fmtHM(hm, 'am', { standard: true })})`;
++  }
++
++  /** An instant -> "ጥቅምት 26 2019 ዓ.ም፣ ጠዋት 3 ሰዓት" in the given time zone. */
++  function formatInstant(when, lang, tz, o) {
++    const iso = isoInTz(when, tz), hm = hmInTz(when, tz);
++    return format(iso, o || { month: 'long', day: 'numeric', year: 'numeric' }, lang) + COMMA[lg(lang)] + fmtHM(hm, lang);
++  }
++
++  return {
++    TZ, MONTHS, WEEKDAYS, WEEKDAYS_NARROW, ERA,
++    fromISO, toISO, isValid, isLeap, daysInMonth,
++    isoInTz, hmInTz, format, formatInstant, monthName, weekdayName,
++    monthKey, monthFirstISO, monthLabel, shiftKey, parseKey,
++    ethClock, fmtHM, fmtHMBoth, parseEthTime,
++  };
++});
+diff --git a/frontend/goals.css b/frontend/goals.css
+index c3cb232..7023b13 100644
+--- a/frontend/goals.css
++++ b/frontend/goals.css
+@@ -461,3 +461,16 @@ body.hg-typing .hg-root { padding-bottom: 140px; }
+ .hg-pt input { flex: 1 1 0; min-width: 0; }
+ .hg-copywrap:empty { display: none; }
+ 
++
++/* Amharic date field: Ethiopian day / month / year selects (see dateField in goals.js).
++   Month gets the extra width because Amharic month names are the longest label. */
++.hg-ed { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr) minmax(0, 1fr); gap: 6px; }
++.hg-ed select {
++  width: 100%; min-width: 0; box-sizing: border-box; min-height: 52px; padding: 0 8px; border-radius: 16px; outline: none;
++  font: inherit; font-size: var(--fs-md); font-weight: 400; letter-spacing: normal; text-transform: none; color: var(--text);
++  color-scheme: dark; background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.10);
++  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35); text-overflow: ellipsis;
++}
++.hg-ed select:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim), inset 0 2px 6px rgba(0, 0, 0, 0.35); }
++/* "= ጠዋት 3 ሰዓት" under a time field: the same time on the Ethiopian clock */
++.hg-etime { min-height: 1em; font-size: var(--fs-xs); font-weight: 600; letter-spacing: normal; text-transform: none; color: var(--gold-light); }
+diff --git a/frontend/goals.js b/frontend/goals.js
+index 0850996..b1a99d8 100644
+--- a/frontend/goals.js
++++ b/frontend/goals.js
+@@ -44,9 +44,10 @@
+       copied_n: 'Copied to {n} days', undo: 'Undo', rename: 'Rename', tick_when_done: 'Tick when finished', actions: 'Actions',
+       remind_add: 'Remind', remind_at: 'Reminder at {t}', remind_title: 'Task reminder',
+       rp_morning: 'Morning', rp_noon: 'Noon', rp_evening: 'Evening', rp_night: 'Night',
++      ed_day: 'Day', ed_month: 'Month', ed_year: 'Year',
+       rp_custom: 'Or pick a custom time', rp_save: 'Save reminder', rp_off: 'Remove', rp_close: 'Close',
+       rp_copy: 'Include reminder times',
+-      rp_last: 'Last reminder for unfinished tasks: 11:00 PM',
++      rp_last: 'Last reminder for unfinished tasks: {t}',
+     },
+     am: {
+       new_goal: 'አዲስ ግብ', type_one: 'ነጠላ ተግባር', type_prog: 'ደረጃ በደረጃ የሚከናወን', type_chal: 'ቻሌንጅ',
+@@ -82,10 +83,11 @@
+       copy_empty: 'ባዶ ቀናት', copy_all: 'ሁሉም ቀናት',
+       copied_n: 'ለ{n} ቀናት ተቀድቷል', undo: 'ቀልብስ', rename: 'ስም ቀይር', tick_when_done: 'ሲጨርሱ ምልክት ያድርጉ', actions: 'ተግባራት',
+       remind_add: 'አስታውስ', remind_at: 'ማስታወሻ በ{t}', remind_title: 'የተግባር ማስታወሻ',
+-      rp_morning: 'ጠዋት', rp_noon: 'ቀትር', rp_evening: 'ምሽት', rp_night: 'ሌሊት',
++      rp_morning: 'ጠዋት', rp_noon: 'ቀትር', rp_evening: 'ምሽት', rp_night: 'ማታ',
++      ed_day: 'ቀን', ed_month: 'ወር', ed_year: 'ዓ.ም',
+       rp_custom: 'ወይም የራስዎን ሰዓት ይምረጡ', rp_save: 'ማስታወሻውን አስቀምጥ', rp_off: 'አስወግድ', rp_close: 'ዝጋ',
+       rp_copy: 'የማስታወሻ ሰዓቶችንም ቅዳ',
+-      rp_last: 'ላልተጠናቀቁ ተግባራት የመጨረሻ ማስታወሻ፦ 11:00 PM',
++      rp_last: 'ላልተጠናቀቁ ተግባራት የመጨረሻ ማስታወሻ፦ {t}',
+     },
+   };
+   const tr = (k, r) => {
+@@ -101,11 +103,25 @@
+   const utc = s => { const [y, m, d] = d10(s).split('-').map(Number); return Date.UTC(y, m - 1, d); };
+   const addDays = (s, n) => new Date(utc(s) + n * 864e5).toISOString().substring(0, 10);
+   const diff = (a, b) => Math.round((utc(b) - utc(a)) / 864e5);
+-  const fmt = (s, o) => new Date(utc(s)).toLocaleDateString(currentLanguage === 'am' ? 'am-ET' : 'en-US', { timeZone: 'UTC', ...o });
++  // Amharic = Ethiopian calendar (ዓ.ም) and Ethiopian clock. Stored values stay
++  // Gregorian ISO dates and 24h 'HH:MM' (Ethiopia time); only display and the
++  // date pickers change. frontend/ethiopian-calendar.js does the conversion.
++  const EC = window.EthCal;
++  const eth = () => currentLanguage === 'am' && !!EC;
++  const fmt = (s, o) => eth() ? EC.format(d10(s), o, 'am') : new Date(utc(s)).toLocaleDateString('en-US', { timeZone: 'UTC', ...o });
++  // Month grids: keys are 'YYYY-MM' in the active calendar; days stay Gregorian ISO.
++  const mkey = d => eth() ? EC.monthKey(d) : d.substring(0, 7);
++  const mfirst = k => eth() ? EC.monthFirstISO(k) : `${k}-01`;
++  const mlabel = k => eth() ? EC.monthLabel(k, 'am') : fmt(`${k}-01`, { month: 'long', year: 'numeric' });
++  const dnum = d => eth() ? EC.fromISO(d).d : Number(d.substring(8));
+ 
+   // Reminder times are 'HH:MM' strings in Ethiopia local time, same as the server.
+   const hm = v => (v ? String(v).substring(0, 5) : '');
+-  const fmtHM = v => { const [h, m] = hm(v).split(':').map(Number); return new Date(Date.UTC(2000, 0, 1, h, m)).toLocaleTimeString(currentLanguage === 'am' ? 'am-ET' : 'en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit' }); };
++  const fmtHM = v => { if (eth()) return EC.fmtHM(hm(v), 'am'); const [h, m] = hm(v).split(':').map(Number); return new Date(Date.UTC(2000, 0, 1, h, m)).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit' }); };
++  // The phone's <input type="time"> shows the device clock; in Amharic a caption underneath says the same time the Ethiopian way.
++  const etime = v => eth() ? `<small class="hg-etime" data-etime>${hm(v) ? '= ' + esc(fmtHM(v)) : ''}</small>` : '';
++  const FINAL_AT = '23:00'; // server: FINAL_REMINDER_TIME in utils/goalRules.js
++  const lastNote = () => tr('rp_last', { t: fmtHM(FINAL_AT) });
+   const I_CLOCK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+   const PRESETS = [['rp_morning', '06:00'], ['rp_noon', '12:00'], ['rp_evening', '18:00'], ['rp_night', '21:00']];
+ 
+@@ -221,7 +237,7 @@
+   // Months touched by s..e ('YYYY-MM').
+   function monthsOf(s, e) {
+     const out = [];
+-    for (let d = s; d <= e; d = addDays(d, 1)) { const m = d.substring(0, 7); if (out[out.length - 1] !== m) out.push(m); }
++    for (let d = s; d <= e; d = addDays(d, 1)) { const m = mkey(d); if (out[out.length - 1] !== m) out.push(m); }
+     return out;
+   }
+ 
+@@ -230,18 +246,18 @@
+   // hidden, which keeps painting simple and makes day cells easy to reach.
+   function grids(key, s, e, ref, cell) {
+     const months = monthsOf(s, e);
+-    const ov = ui.month[key], r7 = ref.substring(0, 7);
++    const ov = ui.month[key], r7 = mkey(ref);
+     const active = months.includes(ov) ? ov : months.includes(r7) ? r7 : months[0];
+     const i = months.indexOf(active);
+     const nav = (m, label, aria) => `<button type="button" class="hg-mnav" data-act="mnav" data-key="${key}" data-m="${m || ''}" aria-label="${aria}"${m ? '' : ' disabled'}>${label}</button>`;
+     const head = `<div class="hg-nav">${months.length > 1 ? nav(months[i - 1], '‹', tr('prev_month')) : '<span></span>'}
+-      <span class="hg-month">${fmt(`${active}-01`, { month: 'long', year: 'numeric' })}</span>
++      <span class="hg-month">${mlabel(active)}</span>
+       ${months.length > 1 ? nav(months[i + 1], '›', tr('next_month')) : '<span></span>'}</div>`;
+     const wd = Array.from({ length: 7 }, (_, k) => `<div class="hg-w">${fmt(`2024-01-0${k + 1}`, { weekday: 'narrow' })}</div>`).join('');
+     const body = months.map(m => {
+-      const first = `${m}-01`, from = first < s ? s : first;
++      const first = mfirst(m), from = first < s ? s : first;
+       let cells = '<div class="hg-d x"></div>'.repeat((new Date(utc(from)).getUTCDay() + 6) % 7);
+-      for (let d = from; d <= e && d.substring(0, 7) === m; d = addDays(d, 1)) cells += cell(d);
++      for (let d = from; d <= e && mkey(d) === m; d = addDays(d, 1)) cells += cell(d);
+       return `<div class="hg-cal"${m === active ? '' : ' hidden'}>${wd}${cells}</div>`;
+     }).join('');
+     return head + body;
+@@ -254,7 +270,7 @@
+       let cls = 'sk';
+       if (info.ts.length) cls = d === td ? 'n' : info.all ? 'k' : d > td ? 'f' : info.done ? 'pt' : 's';
+       const mark = info.all ? CHK : (cls === 's' ? '<b></b>' : '');
+-      return `<button type="button" class="hg-d ${cls}${d === sel ? ' sel' : ''}" data-act="day" data-goal="${g.id}" data-date="${d}" aria-label="${fmt(d, { month: 'long', day: 'numeric' })}"><span>${Number(d.substring(8))}</span>${mark}</button>`;
++      return `<button type="button" class="hg-d ${cls}${d === sel ? ' sel' : ''}" data-act="day" data-goal="${g.id}" data-date="${d}" aria-label="${fmt(d, { month: 'long', day: 'numeric' })}"><span>${dnum(d)}</span>${mark}</button>`;
+     });
+   }
+ 
+@@ -282,11 +298,53 @@
+       ${hint ? `<div class="hg-hint">${hint}</div>` : ''}</div>`;
+   }
+ 
++  // <input type="date"> is always Gregorian. In Amharic the field is three selects
++  // (day / month / year, Ethiopian) plus a hidden input with the same data-f that
++  // holds the Gregorian ISO value, so snap(), the create/save code and the server
++  // keep reading a normal 'YYYY-MM-DD' and nothing else had to change.
++  function dateField(f, value, min) {
++    if (!eth()) return `<input type="date" data-f="${f}"${min ? ` min="${esc(min)}"` : ''} value="${esc(value)}">`;
++    const minOk = isDay(min) ? min : '';
++    return `<div class="hg-ed" data-ed="${f}" data-min="${esc(minOk)}">${edInner(f, isDay(value) ? value : '', minOk)}</div>`;
++  }
++  function edInner(f, value, min) {
++    const e = value ? EC.fromISO(value) : null;
++    const y0 = EC.fromISO(min || today()).y;
++    const years = []; for (let y = y0; y <= y0 + 6; y++) years.push(y);
++    if (e && !years.includes(e.y)) { years.push(e.y); years.sort((a, b) => a - b); }
++    const o = (v, label, on) => `<option value="${v}"${on ? ' selected' : ''}>${esc(label)}</option>`;
++    const days = Array.from({ length: e ? EC.daysInMonth(e.y, e.m) : 30 }, (_, i) => o(i + 1, i + 1, e && e.d === i + 1)).join('');
++    const months = Array.from({ length: 13 }, (_, i) => o(i + 1, EC.monthName(i + 1, 'am'), e && e.m === i + 1)).join('');
++    const ys = years.map(y => o(y, y, e && e.y === y)).join('');
++    return `<select data-ed-part="d" aria-label="${tr('ed_day')}">${o('', tr('ed_day'), !e)}${days}</select>
++      <select data-ed-part="m" aria-label="${tr('ed_month')}">${o('', tr('ed_month'), !e)}${months}</select>
++      <select data-ed-part="y" aria-label="${tr('ed_year')}">${o('', tr('ed_year'), !e)}${ys}</select>
++      <input type="hidden" data-f="${f}" value="${esc(value)}">`;
++  }
++  // A select changed: rebuild the ISO value, clamp to min and to the month's length
++  // (Pagume has 5-6 days), then announce it like a normal date input would.
++  function edChange(sel) {
++    const box = sel.closest('.hg-ed');
++    const val = k => Number(box.querySelector(`[data-ed-part="${k}"]`).value);
++    const y = val('y'), m = val('m'), dd = val('d');
++    let iso = '';
++    if (y && m && dd) {
++      iso = EC.toISO(y, m, Math.min(dd, EC.daysInMonth(y, m)));
++      if (isDay(box.dataset.min) && iso < box.dataset.min) iso = box.dataset.min;
++      const part = sel.dataset.edPart;
++      box.innerHTML = edInner(box.dataset.ed, iso, box.dataset.min);
++      box.querySelector(`[data-ed-part="${part}"]`)?.focus();
++    }
++    const hid = box.querySelector('input[type="hidden"]');
++    hid.value = iso;
++    hid.dispatchEvent(new Event('change', { bubbles: true }));
++  }
++
+   function editPanel(g) {
+     return `<div class="hg-form">
+       <label>${tr('f_title')}<input type="text" maxlength="200" data-f="title" value="${esc(g.title)}"></label>
+-      <label>${tr('f_end')}<input type="date" data-f="end" value="${g.end_date ? d10(g.end_date) : ''}"${g.type === 'one_time' || g.type === 'progressive' ? '' : ' min="' + d10(g.start_date) + '"'}></label>
+-      ${g.type === 'challenge' ? `<label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${g.reminder_time ? String(g.reminder_time).substring(0, 5) : ''}"></label><div class="hg-hint">${tr('rp_daily_note')} ${tr('rp_last')}</div>` : ''}
++      <label>${tr('f_end')}${dateField('end', g.end_date ? d10(g.end_date) : '', g.type === 'one_time' || g.type === 'progressive' ? '' : d10(g.start_date))}</label>
++      ${g.type === 'challenge' ? `<label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${g.reminder_time ? String(g.reminder_time).substring(0, 5) : ''}">${etime(g.reminder_time)}</label><div class="hg-hint">${tr('rp_daily_note')} ${lastNote()}</div>` : ''}
+       <div class="hg-actions"><button type="button" class="hg-btn hg-btn-ghost" data-act="cancel-edit" data-goal="${g.id}">${tr('cancel')}</button>
+       <button type="button" class="hg-btn" data-act="save-edit" data-goal="${g.id}">${tr('save')}</button></div></div>`;
+   }
+@@ -404,7 +462,7 @@
+     const cal = grids('form:' + mid, s, e, sel, x => {
+       const cls = isRest(x) ? ' rest' : hasTasks(x) ? ' has' : '';
+       const mark = isRest(x) ? I_MOON : hasTasks(x) ? '<b></b>' : '';
+-      return `<button type="button" class="hg-d${cls}${x === sel ? ' sel' : ''}" data-act="fday" data-date="${x}" aria-label="${fmt(x, { month: 'long', day: 'numeric' })}"><span>${Number(x.substring(8))}</span>${mark}</button>`;
++      return `<button type="button" class="hg-d${cls}${x === sel ? ' sel' : ''}" data-act="fday" data-date="${x}" aria-label="${fmt(x, { month: 'long', day: 'numeric' })}"><span>${dnum(x)}</span>${mark}</button>`;
+     });
+     const st = planStats(d, r, sel);
+     const rest = isRest(sel);
+@@ -451,23 +509,23 @@
+     const d = fd(menteeId), td = today();
+     const k = TK[type][2];
+     let fields = '';
+-    if (type === 'one_time') fields = `<label>${tr('f_due')}<input type="date" data-f="due" min="${td}" value="${esc(d.due)}"></label>`;
++    if (type === 'one_time') fields = `<label>${tr('f_due')}${dateField('due', d.due, td)}</label>`;
+     if (type === 'progressive') fields = `<label>${tr('f_target')}<input type="number" data-f="target" min="1" max="50" value="${esc(d.target)}" inputmode="numeric"></label>
+-      <label>${tr('f_deadline')}<input type="date" data-f="deadline" min="${td}" value="${esc(d.deadline)}"></label>`;
++      <label>${tr('f_deadline')}${dateField('deadline', d.deadline, td)}</label>`;
+     if (type === 'challenge') {
+       const len = rangeOf(d) ? diff(d.start, d.end) + 1 : 0;
+       const chips = [7, 14, 21, 30, 40].map(n => `<button type="button" class="hg-pill${len === n ? ' on' : ''}" data-act="dur" data-n="${n}">${tr('days_n', { n })}</button>`).join('');
+       const sameList = d.same.length ? d.same : [''];
+       const same = `<div class="hg-tpl"><span>${tr('f_daily')}</span><div data-tpl>${taskRows(sameList, 'trem', d.sameRemind, 'tpl')}</div>${addTask('addtpl', sameList.length)}</div>`;
+-      fields = `<div class="hg-row2"><label>${tr('f_start')}<input type="date" data-f="start" min="${td}" value="${esc(d.start)}"></label>
+-        <label>${tr('f_end')}<input type="date" data-f="end" min="${esc(d.start || td)}" value="${esc(d.end)}"></label></div>
++      fields = `<div class="hg-row2"><label>${tr('f_start')}${dateField('start', d.start, td)}</label>
++        <label>${tr('f_end')}${dateField('end', d.end, d.start || td)}</label></div>
+         <div class="hg-chips" role="group" aria-label="${tr('f_dur')}">${chips}</div>
+         <div class="hg-seg" role="group">
+           <button type="button" class="${d.mode === 'same' ? 'on' : ''}" data-act="fmode" data-mode="same">${tr('mode_same')}</button>
+           <button type="button" class="${d.mode === 'custom' ? 'on' : ''}" data-act="fmode" data-mode="custom">${tr('mode_custom')}</button></div>
+         ${d.mode === 'custom' ? planner(menteeId, d) : same}
+-        <label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${esc(d.reminder)}"></label>
+-        <div class="hg-hint hg-last">${I_CLOCK}<span>${tr('rp_last')}</span></div>`;
++        <label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${esc(d.reminder)}">${etime(d.reminder)}</label>
++        <div class="hg-hint hg-last">${I_CLOCK}<span>${lastNote()}</span></div>`;
+     }
+     return `<div class="hg-hero"><span class="hg-type-ico hg-hero-ico">${icon(type, 28)}</span>
+         <div><h2>${tr(TK[type][0])}</h2><p>${tr(k + '_hero')}</p></div></div>
+@@ -832,8 +890,8 @@
+         <div class="hg-rs-head"><h3>${esc(title) || tr('remind_title')}</h3>
+           <button type="button" class="hg-x" data-rs="close" aria-label="${tr('rp_close')}">${I_X}</button></div>
+         <div class="hg-rs-body">
+-          <div class="hg-rs-presets" role="group">${PRESETS.map(([k, v]) => `<button type="button" class="hg-pill${time === v ? ' on' : ''}" data-rs="p" data-at="${v}"><b>${tr(k)}</b> ${esc(fmtHM(v))}</button>`).join('')}</div>
+-          <label class="hg-rs-custom">${tr('rp_custom')}<input type="time" data-rs="t" value="${time}"></label>
++          <div class="hg-rs-presets" role="group">${PRESETS.map(([k, v]) => `<button type="button" class="hg-pill${time === v ? ' on' : ''}" data-rs="p" data-at="${v}"><b>${tr(k)}</b> ${esc(eth() ? EC.fmtHM(v, 'am', { bare: true }) : fmtHM(v))}</button>`).join('')}</div>
++          <label class="hg-rs-custom">${tr('rp_custom')}<input type="time" data-rs="t" value="${time}">${etime(time)}</label>
+         </div>
+         <div class="hg-rs-foot">${at ? `<button type="button" class="hg-btn hg-btn-ghost" data-rs="off">${tr('rp_off')}</button>` : ''}
+           <button type="button" class="hg-btn" data-rs="save"${time ? '' : ' disabled'}>${tr('rp_save')}</button></div></div>`;
+@@ -862,6 +920,7 @@
+       time = e.target.value;
+       ov.querySelectorAll('[data-rs="p"]').forEach(p => p.classList.toggle('on', p.dataset.at === time));
+       const sv = ov.querySelector('[data-rs="save"]'); if (sv) sv.disabled = !time;
++      const et = ov.querySelector('[data-etime]'); if (et) et.textContent = time ? '= ' + fmtHM(time) : '';
+     });
+     rsKey = e => { if (e.key === 'Escape') closeReminderSheet(); };
+     document.addEventListener('keydown', rsKey);
+@@ -877,11 +936,13 @@
+     root.addEventListener('focusout', onFieldBlur);
+     root.addEventListener('click', e => { if (e.target.closest('[data-act]') && root.querySelector('.hg-new')) snap(root); onClick(root, e); });
+     root.addEventListener('input', e => {
++      if (e.target.matches?.('input[type="time"]')) { const et = e.target.parentElement?.querySelector('[data-etime]'); if (et) et.textContent = e.target.value ? '= ' + fmtHM(e.target.value) : ''; }
+       if (!e.target.closest('.hg-new')) return;
+       snap(root); syncPlan(root);
+       const d = ui.fd[root.dataset.mentee]; if (d?.undo) { d.undo = null; root.querySelector('.hg-undo')?.remove(); }
+     });
+     root.addEventListener('change', e => {
++      if (e.target.dataset?.edPart) return edChange(e.target);   // Amharic date selects (see dateField)
+       if (!e.target.closest('.hg-new')) return;
+       snap(root);
+       if (['start', 'end'].includes(e.target.dataset.f)) paint(root, true); // planner + length chips follow the dates
+diff --git a/frontend/index.html b/frontend/index.html
+index 65ae3b6..be50181 100644
+--- a/frontend/index.html
++++ b/frontend/index.html
+@@ -16,7 +16,7 @@
+   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" /></noscript>
+   <link rel="preload" as="image" href="onboarding-counseling.webp?v=4" type="image/webp" />
+   <link rel="stylesheet" href="styles.css?v=3.8" />
+-  <link rel="stylesheet" href="goals.css?v=1.5" />
++  <link rel="stylesheet" href="goals.css?v=1.6" />
+   <link rel="stylesheet" href="guest-mode.css?v=1.4" />
+   <link rel="stylesheet" href="chat-media.css?v=1.0" />
+   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+@@ -2521,9 +2521,10 @@
+     </div>
+   </div>
+ 
++  <script src="ethiopian-calendar.js?v=1.0"></script>
+   <script src="locales.js?v=2.1"></script>
+-  <script src="app.js?v=4.3"></script>
+-  <script src="goals.js?v=1.5"></script>
++  <script src="app.js?v=4.4"></script>
++  <script src="goals.js?v=1.6"></script>
+   <script src="guest-mode.js?v=1.4"></script>
+   <script src="chat-media.js?v=1.0"></script>
+   <script src="audio-call.js?v=1.0"></script>
+diff --git a/local/am.json b/local/am.json
+index ded42ac..c1b244b 100644
+--- a/local/am.json
++++ b/local/am.json
+@@ -142,8 +142,8 @@
+   "session_group": "የቡድን ስብሰባ",
+   "enter_date": "ቀን ይምረጡ:",
+   "enter_time": "ሰዓት ይምረጡ (የኢትዮጵያ ሰዓት):",
+-  "enter_custom_time": "እባክዎ ሰዓቱን በ HH:MM AM/PM ፎርማት ያስገቡ (ለምሳሌ 02:30 PM):",
+-  "invalid_time_format": "ልክ ያልሆነ የሰዓት አቀራረብ። እባክዎ HH:MM AM/PM ይጠቀሙ (ለምሳሌ 02:30 PM)።",
++  "enter_custom_time": "እባክዎ ሰዓቱን በኢትዮጵያ ሰዓት ወይም በ HH:MM AM/PM ያስገቡ (ለምሳሌ ከሰዓት 8:30 ወይም 02:30 PM):",
++  "invalid_time_format": "ልክ ያልሆነ የሰዓት አቀራረብ። እባክዎ የጊዜውን ክፍል ከቃል ጋር ይጻፉ (ለምሳሌ ጠዋት 3:00፣ ከሰዓት 8:30) ወይም HH:MM AM/PM ይጠቀሙ (ለምሳሌ 02:30 PM)።",
+   "time_past": "የተመረጠው ሰዓት ያለፈ ነው። እባክዎ የወደፊት ሰዓት ይምረጡ።",
+   "btn_today": "ዛሬ",
+   "btn_tomorrow": "ነገ",
+diff --git a/package.json b/package.json
+index 7827f54..d809f69 100644
+--- a/package.json
++++ b/package.json
+@@ -6,7 +6,7 @@
+     "scripts": {
+         "start": "node server.js",
+         "dev": "nodemon server.js",
+-        "test": "node tests/sessions.lifecycle.test.js && node tests/mentorship-health.test.js && node tests/admin-health.routes.test.js && node tests/session-room.client.test.js && node tests/audio-call.test.js && node tests/waitlist.test.js && node tests/mentors-page.test.js && node tests/chat-attachments.test.js && node tests/chat-recorder.test.js && node tests/voice-transcode.test.js && node tests/app-height.test.js && node tests/chat-floating-date.test.js && node tests/goals.rules.test.js && node tests/goal-reminders.test.js && node tests/goals-reminders-ui.test.js && node tests/goals-ui.test.js && node tests/guest-mode.routes.test.js && node tests/guest-mode.ui.test.js"
++        "test": "node tests/sessions.lifecycle.test.js && node tests/mentorship-health.test.js && node tests/admin-health.routes.test.js && node tests/session-room.client.test.js && node tests/audio-call.test.js && node tests/waitlist.test.js && node tests/mentors-page.test.js && node tests/chat-attachments.test.js && node tests/chat-recorder.test.js && node tests/voice-transcode.test.js && node tests/app-height.test.js && node tests/chat-floating-date.test.js && node tests/goals.rules.test.js && node tests/goal-reminders.test.js && node tests/goals-reminders-ui.test.js && node tests/goals-ui.test.js && node tests/goals-ethiopian.test.js && node tests/ethiopian-calendar.test.js && node tests/ethiopian-telegram.test.js && node tests/app-ethiopian.test.js && node tests/guest-mode.routes.test.js && node tests/guest-mode.ui.test.js"
+     },
+     "engines": {
+         "node": ">=18.0.0"
+diff --git a/tests/app-ethiopian.test.js b/tests/app-ethiopian.test.js
+new file mode 100644
+index 0000000..5dcf4cd
+--- /dev/null
++++ b/tests/app-ethiopian.test.js
+@@ -0,0 +1,47 @@
++'use strict';
++// frontend/app.js display helpers in Amharic vs English. app.js is too large to
++// boot here, so the helper block is cut out of the source and run on its own.
++const assert = require('assert');
++const fs = require('fs');
++const path = require('path');
++const vm = require('vm');
++
++const src = fs.readFileSync(path.join(__dirname, '../frontend/app.js'), 'utf8');
++const a = src.indexOf('// Amharic = Ethiopian calendar (ዓ.ም) and Ethiopian clock');
++const b = src.indexOf('function getRelativeTime') > a ? src.indexOf('function getRelativeTime') : -1;
++const end = src.indexOf('\n}\n', src.indexOf('function formatDateTime')) + 3;
++assert(a > 0 && end > a, 'helper block found');
++const block = src.slice(a, end);
++
++function run(lang) {
++  const ctx = { currentLanguage: lang, window: {}, console };
++  ctx.window.EthCal = require('../frontend/ethiopian-calendar.js');
++  ctx.EthCal = ctx.window.EthCal;
++  vm.createContext(ctx);
++  vm.runInContext(`function getUserTimezone() { return 'Africa/Addis_Ababa'; }\n${block}`, ctx);
++  return ctx;
++}
++
++const am = run('am'), en = run('en');
++const AT = '2026-11-06T06:00:00Z'; // 09:00 in Addis
++
++// Amharic: Ethiopian clock and calendar
++assert.strictEqual(am.formatTime(AT), 'ጠዋት 3 ሰዓት');
++assert.strictEqual(am.formatDateTime(AT), 'ጥቅምት 27 2019 ዓ.ም፣ ጠዋት 3 ሰዓት');
++assert.strictEqual(am.fmtDueDate('2026-11-06'), 'ጥቅምት 27 2019 ዓ.ም');
++assert.strictEqual(am.fmtDueDate('2026-11-06T00:00:00.000Z'), 'ጥቅምት 27 2019 ዓ.ም', 'a due-date timestamp is read as that day');
++assert.strictEqual(am.fmtCalDate(AT), 'ጥቅምት 27 2019 ዓ.ም');
++// 22:00Z is already the next day in Ethiopia (UTC+3)
++assert.strictEqual(am.fmtCalDate('2026-11-06T22:00:00Z'), 'ጥቅምት 28 2019 ዓ.ም');
++
++// English is unchanged
++assert(/^0?9:00\s?AM$/i.test(en.formatTime(AT)), 'English clock stays 9:00 AM: ' + en.formatTime(AT));
++assert(/Nov 6, 2026/.test(en.formatDateTime(AT)));
++assert.strictEqual(en.ethOn(), false);
++
++// Amharic without the module loaded falls back to the old behaviour instead of throwing
++const noMod = run('am'); noMod.window.EthCal = undefined; noMod.EthCal = undefined;
++assert.strictEqual(noMod.ethOn(), false);
++assert.doesNotThrow(() => noMod.formatTime(AT));
++
++console.log('app.js Ethiopian display helpers test passed');
+diff --git a/tests/ethiopian-calendar.test.js b/tests/ethiopian-calendar.test.js
+new file mode 100644
+index 0000000..788a38c
+--- /dev/null
++++ b/tests/ethiopian-calendar.test.js
+@@ -0,0 +1,98 @@
++'use strict';
++// Ethiopian calendar + clock helpers (frontend/ethiopian-calendar.js).
++const assert = require('assert');
++const E = require('../frontend/ethiopian-calendar.js');
++
++const eth = iso => { const e = E.fromISO(iso); return `${e.y}-${e.m}-${e.d}`; };
++
++// Known anchors (new year, holidays, Pagume)
++assert.strictEqual(eth('2007-09-12'), '2000-1-1');   // Ethiopian Millennium
++assert.strictEqual(eth('2023-09-11'), '2015-13-6');  // leap Pagume has 6 days
++assert.strictEqual(eth('2023-09-12'), '2016-1-1');
++assert.strictEqual(eth('2024-09-11'), '2017-1-1');
++assert.strictEqual(eth('2025-09-11'), '2018-1-1');
++assert.strictEqual(eth('2026-09-10'), '2018-13-5');
++assert.strictEqual(eth('2026-09-11'), '2019-1-1');
++assert.strictEqual(eth('2026-01-07'), '2018-4-29'); // Genna (Christmas): Tahsas 29
++assert.strictEqual(eth('2026-01-19'), '2018-5-11');  // Timket (Epiphany): Tir 11
++assert.strictEqual(eth('2026-03-02'), '2018-6-23');  // Adwa Victory Day: Yekatit 23
++assert.strictEqual(eth('2026-11-06'), '2019-2-27');
++
++// Round trip every day 1900-2100, and month lengths
++let n = 0;
++for (let ms = Date.UTC(1900, 0, 1); ms <= Date.UTC(2100, 11, 31); ms += 864e5) {
++  const iso = new Date(ms).toISOString().substring(0, 10);
++  const e = E.fromISO(iso);
++  assert.ok(E.isValid(e.y, e.m, e.d), `invalid ${iso} -> ${e.y}-${e.m}-${e.d}`);
++  assert.strictEqual(E.toISO(e.y, e.m, e.d), iso);
++  n++;
++}
++assert.ok(n > 70000);
++assert.strictEqual(E.daysInMonth(2015, 13), 6);
++assert.strictEqual(E.daysInMonth(2018, 13), 5);
++assert.strictEqual(E.isValid(2018, 13, 6), false);
++assert.strictEqual(E.isValid(2018, 14, 1), false);
++
++// Formatting
++assert.strictEqual(E.format('2026-11-06', { month: 'long', day: 'numeric' }, 'am'), 'ጥቅምት 27');
++assert.strictEqual(E.format('2026-11-06', { month: 'long', year: 'numeric' }, 'am'), 'ጥቅምት 2019 ዓ.ም');
++assert.strictEqual(E.format('2026-11-06', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }, 'am'), 'አርብ፣ ጥቅምት 27 2019 ዓ.ም');
++assert.strictEqual(E.format('2026-09-10', { month: 'short', day: 'numeric' }, 'am'), 'ጳጉሜን 5');
++assert.strictEqual(E.format('2026-11-06', { weekday: 'narrow' }, 'am'), 'አ');
++assert.strictEqual(E.format('2026-11-06', { month: 'long', day: 'numeric' }, 'en'), 'Tikimt 27');
++
++// Month keys / navigation across Pagume and the new year
++assert.strictEqual(E.monthKey('2026-11-06'), '2019-02');
++assert.strictEqual(E.monthFirstISO('2019-02'), '2026-10-11');
++assert.strictEqual(E.shiftKey('2018-13', 1), '2019-01');
++assert.strictEqual(E.shiftKey('2019-01', -1), '2018-13');
++assert.strictEqual(E.monthLabel('2019-02', 'am'), 'ጥቅምት 2019 ዓ.ም');
++
++// Ethiopian clock (6:00 AM = 12:00)
++const t = hm => E.fmtHM(hm, 'am');
++assert.strictEqual(t('06:00'), 'ጠዋት 12 ሰዓት');
++assert.strictEqual(t('09:00'), 'ጠዋት 3 ሰዓት');
++assert.strictEqual(t('12:00'), 'ቀትር 6 ሰዓት');
++assert.strictEqual(t('15:30'), 'ከሰዓት 9:30');
++assert.strictEqual(t('18:00'), 'ምሽት 12 ሰዓት');
++assert.strictEqual(t('21:00'), 'ምሽት 3 ሰዓት');
++assert.strictEqual(t('23:00'), 'ምሽት 5 ሰዓት');
++assert.strictEqual(t('00:00'), 'ሌሊት 6 ሰዓት');
++assert.strictEqual(t('01:30'), 'ሌሊት 7:30');
++assert.strictEqual(t('05:59'), 'ሌሊት 11:59');
++assert.strictEqual(E.fmtHM('21:05', 'en'), '9:05 PM');
++assert.strictEqual(E.fmtHM('00:00', 'en'), '12:00 AM');
++assert.strictEqual(E.fmtHM('09:00', 'am', { standard: true }), '9:00 AM');
++assert.strictEqual(E.fmtHMBoth('09:00', 'am'), 'ጠዋት 3 ሰዓት (9:00 AM)');
++assert.strictEqual(E.fmtHM('', 'am'), '');
++// every minute of the day maps to a distinct, valid label
++const seen = new Set();
++for (let h = 0; h < 24; h++) for (const m of [0, 30]) seen.add(t(`${String(h).padStart(2, '0')}:${m ? '30' : '00'}`));
++assert.strictEqual(seen.size, 48);
++
++// Typed Ethiopian times parse back to 24h, and every formatted half hour round-trips
++const pt = E.parseEthTime;
++assert.strictEqual(pt('ጠዋት 3:00'), '09:00');
++assert.strictEqual(pt('3 ሰዓት ጠዋት'), '09:00');
++assert.strictEqual(pt('ከሰዓት 8:30'), '14:30');
++assert.strictEqual(pt('ማታ 3 ሰዓት'), '21:00');
++assert.strictEqual(pt('ምሽት 5 ሰዓት'), '23:00');
++assert.strictEqual(pt('ሌሊት 7:30'), '01:30');
++assert.strictEqual(pt('ቀትር 6'), '12:00');
++assert.strictEqual(pt('ጠዋት 12 ሰዓት'), '06:00');
++assert.strictEqual(pt('ጠዋት 7'), null, 'morning only has 12,1-5');
++assert.strictEqual(pt('3:00'), null, 'period word is required');
++assert.strictEqual(pt('ጠዋት 13'), null);
++assert.strictEqual(pt('ጠዋት 3 ማታ'), null, 'two period words');
++assert.strictEqual(pt('02:30 PM'), null, 'international times are not Ethiopian-clock input');
++for (let h = 0; h < 24; h++) for (const mm of ['00', '30']) {
++  const hm = `${String(h).padStart(2, '0')}:${mm}`;
++  assert.strictEqual(pt(E.fmtHM(hm, 'am')), hm, `round trip ${hm}`);
++}
++
++// Instants are read in Ethiopia time (UTC+3), not UTC: 22:00Z Nov 6 is already Nov 7 in Addis
++assert.strictEqual(E.isoInTz('2026-11-06T22:00:00Z'), '2026-11-07');
++assert.strictEqual(E.hmInTz('2026-11-06T22:00:00Z'), '01:00');
++assert.strictEqual(E.formatInstant('2026-11-06T06:00:00Z', 'am'), 'ጥቅምት 27 2019 ዓ.ም፣ ጠዋት 3 ሰዓት');
++
++console.log('ethiopian-calendar tests passed');
+diff --git a/tests/ethiopian-telegram.test.js b/tests/ethiopian-telegram.test.js
+new file mode 100644
+index 0000000..a7f3947
+--- /dev/null
++++ b/tests/ethiopian-telegram.test.js
+@@ -0,0 +1,63 @@
++'use strict';
++// utils/ethiopianTelegram.js: labels, typed-time parsing and the Ethiopian
++// month keyboard used by the bot for Amharic users.
++const assert = require('assert');
++const T = require('../utils/ethiopianTelegram');
++const E = require('../frontend/ethiopian-calendar.js');
++
++// Labels
++assert.strictEqual(T.dayLabel('2026-11-06', 'am'), 'ጥቅምት 27');
++assert.strictEqual(T.dayLabel('2026-11-06', 'en'), 'Nov 6');
++assert.strictEqual(T.dayLabel('2026-11-06T00:00:00Z', 'en', T.LONG_DATE), 'Friday, November 6, 2026');
++assert.strictEqual(T.dayLabel('2026-11-06', 'am', T.LONG_DATE), 'አርብ፣ ጥቅምት 27 2019 ዓ.ም');
++assert.strictEqual(T.clockLabel('09:00:00', 'am'), 'ጠዋት 3 ሰዓት');
++assert.strictEqual(T.clockLabel('09:00', 'en'), '9:00 AM');
++
++// Typed session times: slot buttons / English 12h, and the Ethiopian clock
++assert.strictEqual(T.parseSessionTime('09:00 AM'), '09:00');
++assert.strictEqual(T.parseSessionTime('12:00 AM'), '00:00');
++assert.strictEqual(T.parseSessionTime('12:30 pm'), '12:30');
++assert.strictEqual(T.parseSessionTime('02:30 PM'), '14:30');
++assert.strictEqual(T.parseSessionTime('ከሰዓት 8:30'), '14:30');
++assert.strictEqual(T.parseSessionTime('ጠዋት 3 ሰዓት'), '09:00');
++assert.strictEqual(T.parseSessionTime('25:00 PM'), null);
++assert.strictEqual(T.parseSessionTime('tomorrow'), null);
++assert.strictEqual(T.parseSessionTime('3:00'), null);
++
++// Slot buttons: Ethiopian clock label for Amharic, callback data is untouched by the label
++for (const [slot, am] of [['09:00 AM', 'ጠዋት 3 ሰዓት'], ['12:00 PM', 'ቀትር 6 ሰዓት'], ['03:00 PM', 'ከሰዓት 9 ሰዓት'], ['06:00 PM', 'ምሽት 12 ሰዓት'], ['09:00 PM', 'ምሽት 3 ሰዓት']]) {
++  assert.strictEqual(T.slotLabel(slot, 'am'), am);
++  assert.strictEqual(T.slotLabel(slot, 'en'), slot);
++}
++
++// Keyboard: header, Monday-first weekdays, every day maps to a distinct Gregorian ISO date
++function check(key) {
++  const kb = T.ethCalendarKeyboard(key, 'ተመለስ').inline_keyboard;
++  const { y, m } = E.parseKey(key);
++  assert.strictEqual(kb[0][1].text, E.monthLabel(key, 'am'));
++  assert.strictEqual(kb[1].map(b => b.text).join(''), 'ሰማረሐአቅእ');
++  assert.strictEqual(kb[kb.length - 1][0].callback_data, 'menu_schedule');
++  const days = kb.slice(2, -1);
++  days.forEach(r => assert.strictEqual(r.length, 7, 'every grid row has 7 cells'));
++  const picks = days.flat().filter(b => b.callback_data.startsWith('cal_select_'));
++  assert.strictEqual(picks.length, E.daysInMonth(y, m));
++  picks.forEach((b, i) => {
++    assert.strictEqual(b.text, String(i + 1));
++    assert.strictEqual(b.callback_data, `cal_select_${E.toISO(y, m, i + 1)}`);
++  });
++  // the 1st sits under its weekday (Monday-first column)
++  const first = days.flat().findIndex(b => b.text === '1');
++  assert.strictEqual(first % 7, (E.fromISO(E.toISO(y, m, 1)).wd + 6) % 7);
++  // Telegram limit: callback_data <= 64 bytes
++  kb.flat().forEach(b => assert.ok(Buffer.byteLength(b.callback_data) <= 64));
++  return kb;
++}
++for (const key of ['2019-01', '2019-02', '2019-12', '2018-13', '2019-13', '2015-13', '2020-13']) check(key);
++assert.strictEqual(check('2018-13').slice(2, -1).flat().filter(b => b.callback_data.startsWith('cal_select_')).length, 5, 'Pagume 2018: 5 days');
++assert.strictEqual(check('2019-13').slice(2, -1).flat().filter(b => b.callback_data.startsWith('cal_select_')).length, 6, 'Pagume 2019 (leap): 6 days');
++// navigation wraps across Pagume into the new year and back
++const nav = key => T.ethCalendarKeyboard(key, 'x').inline_keyboard[0];
++assert.strictEqual(nav('2018-13')[2].callback_data, 'ecal_nav_2019-01');
++assert.strictEqual(nav('2019-01')[0].callback_data, 'ecal_nav_2018-13');
++
++console.log('ethiopian-telegram tests passed');
+diff --git a/tests/goals-ethiopian.test.js b/tests/goals-ethiopian.test.js
+new file mode 100644
+index 0000000..8a10d56
+--- /dev/null
++++ b/tests/goals-ethiopian.test.js
+@@ -0,0 +1,135 @@
++'use strict';
++// frontend/goals.js in Amharic: Ethiopian month grid, day numbers, date selects
++// that still submit Gregorian ISO dates, and the Ethiopian clock captions.
++const assert = require('assert');
++const fs = require('fs');
++const path = require('path');
++const { JSDOM } = require('jsdom');
++const E = require('../frontend/ethiopian-calendar.js');
++
++const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Addis_Ababa' });
++const add = (s, n) => new Date(Date.UTC(...s.split('-').map((x, i) => (i === 1 ? x - 1 : +x))) + n * 864e5).toISOString().substring(0, 10);
++
++// 2026-10-08 .. 2026-10-14 = Meskerem 28 .. Tikimt 4, 2019 E.C. (crosses a month boundary)
++const start = '2026-10-08', end = '2026-10-14';
++function makeGoal() {
++  const tasks = [];
++  for (let d = start; d <= end; d = add(d, 1)) tasks.push({ id: `t-${d}`, title: 'Prayer', position: 0, due_date: d, status: 'pending', remind_at: d === end ? '09:00' : null });
++  return { id: 'g1', mentee_id: 2, mentor_id: 1, type: 'challenge', title: 'Fast', status: 'active', start_date: start, end_date: end,
++    reminder_time: '20:00', tasks, stats: { done: 0, total: 7, pct: 0, streak: 0, missed: 0 } };
++}
++
++const dom = new JSDOM('<!doctype html><body><div id="panel"></div><div id="goalPageBody"></div><div id="card" class="hidden"><span id="myGoalsProgressLabel"></span><div id="myGoalsProgressTrack"></div><div id="list"></div></div></body>',
++  { runScripts: 'outside-only', pretendToBeVisual: true });
++const w = dom.window;
++const calls = [];
++w.currentLanguage = 'am';
++w.currentUser = { telegram_id: 1 };
++w.currentPage = 'my-mentees';
++w.showAppPageQuiet = p => { w.currentPage = p; };
++w.escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
++w.menteeIcon = () => '<i></i>';
++w.haptic = () => {};
++w.showToast = () => {};
++w.apiFetch = async (p, o = {}) => { calls.push([o.method || 'GET', p, o.body]); return p.startsWith('/api/goals/mentee/') ? [makeGoal()] : makeGoal(); };
++w.eval(fs.readFileSync(path.join(__dirname, '../frontend/ethiopian-calendar.js'), 'utf8'));
++w.eval(fs.readFileSync(path.join(__dirname, '../frontend/goals.js'), 'utf8'));
++const doc = w.document;
++const tick = () => new Promise(r => setTimeout(r, 20));
++const fire = (el, type) => el.dispatchEvent(new w.Event(type, { bubbles: true }));
++const pick = (box, part, value) => { const s = box.querySelector(`[data-ed-part="${part}"]`); s.value = String(value); fire(s, 'change'); };
++
++(async () => {
++  const panel = doc.getElementById('panel');
++  await w.HolyGoals.mountMentor(panel, 2);
++
++  // Month grid is Ethiopian: opens on Tikimt (the selected day, Oct 14), with Meskerem before it
++  const label = () => panel.querySelector('.hg-month').textContent;
++  assert.strictEqual(label(), 'ጥቅምት 2019 ዓ.ም');
++  const visible = () => [...panel.querySelectorAll('.hg-cal:not([hidden]) .hg-d:not(.x) span')].map(s => s.textContent);
++  assert.deepStrictEqual(visible(), ['1', '2', '3', '4'], 'Oct 11-14 are Tikimt 1-4');
++  panel.querySelector('.hg-mnav[aria-label="ያለፈው ወር"]').click();
++  assert.strictEqual(label(), 'መስከረም 2019 ዓ.ም');
++  assert.deepStrictEqual(visible(), ['28', '29', '30'], 'Oct 8-10 are Meskerem 28-30');
++  // the weekday header is Monday-first Amharic
++  assert.strictEqual([...panel.querySelectorAll('.hg-cal:not([hidden]) .hg-w')].map(x => x.textContent).join(''), 'ሰማረሐአቅእ');
++
++  // Day title is Ethiopian; stored data-date stays Gregorian
++  panel.querySelector(`.hg-d[data-date="${end}"]`)?.click();
++  assert(panel.querySelector(`.hg-d[data-date="${end}"]`), 'cells keep Gregorian ISO in data-date');
++  assert(/ጥቅምት 4/.test(panel.querySelector('.hg-day-title').textContent), 'day title in Ethiopian calendar');
++  assert(!/Oct|2026/.test(panel.querySelector('.hg-goal').textContent), 'no Gregorian month or year left on the card');
++  // A goal that is still running: its per-task reminder chip uses the Ethiopian clock (09:00 = ጠዋት 3 ሰዓት)
++  w.HolyGoals.onRealtime({ id: 'g2', mentee_id: 2, mentor_id: 1, type: 'challenge', title: 'Run', status: 'active',
++    start_date: TODAY, end_date: add(TODAY, 6), reminder_time: '20:00', stats: { done: 0, total: 1, pct: 0, streak: 0, missed: 0 },
++    tasks: [{ id: 't-now', title: 'Pray', position: 0, due_date: TODAY, status: 'pending', remind_at: '09:00' }] });
++  assert(/ጠዋት 3 ሰዓት/.test(panel.textContent), 'task reminder shown on the Ethiopian clock');
++
++  // New goal form: date fields are Ethiopian selects, no native date input
++  panel.querySelector('[data-act="new"]').click();
++  const page = doc.getElementById('goalPageBody');
++  page.querySelector('[data-type="challenge"]').click();
++  assert.strictEqual(page.querySelectorAll('input[type="date"]').length, 0, 'no Gregorian date inputs in Amharic');
++  const sBox = page.querySelector('[data-ed="start"]'), eBox = page.querySelector('[data-ed="end"]');
++  assert(sBox && eBox);
++  assert.strictEqual(sBox.querySelector('[data-ed-part="m"]').options.length, 14, '13 months + placeholder');
++
++  // Reminder caption: default 20:00 -> ምሽት 2 ሰዓት, and it follows the input
++  const rem = page.querySelector('[data-f="reminder"]');
++  assert.strictEqual(rem.parentElement.querySelector('[data-etime]').textContent, '= ምሽት 2 ሰዓት');
++  rem.value = '09:00'; fire(rem, 'input');
++  assert.strictEqual(rem.parentElement.querySelector('[data-etime]').textContent, '= ጠዋት 3 ሰዓት');
++  assert(/ምሽት 5 ሰዓት/.test(page.querySelector('.hg-last').textContent), 'last reminder (23:00) shown on the Ethiopian clock');
++
++  // Picking Ethiopian y/m/d fills the hidden field with the Gregorian ISO date
++  const e1 = E.fromISO(add(TODAY, 1));
++  pick(page.querySelector('[data-ed="start"]'), 'y', e1.y);
++  pick(page.querySelector('[data-ed="start"]'), 'm', e1.m);
++  pick(page.querySelector('[data-ed="start"]'), 'd', e1.d);
++  assert.strictEqual(page.querySelector('[data-f="start"]').value, add(TODAY, 1), 'start is Gregorian ISO');
++  // duration chip fills the end from the start (seen through the end selects)
++  page.querySelector('[data-act="dur"][data-n="7"]').click();
++  assert.strictEqual(page.querySelector('[data-f="end"]').value, add(TODAY, 7));
++  const eEnd = E.fromISO(add(TODAY, 7));
++  const endBox = page.querySelector('[data-ed="end"]');
++  assert.strictEqual(+endBox.querySelector('[data-ed-part="d"]').value, eEnd.d, 'end selects show the Ethiopian day');
++  assert.strictEqual(+endBox.querySelector('[data-ed-part="m"]').value, eEnd.m);
++
++  // Pagume has 6 days in a leap year and 5 otherwise. The day list follows the month,
++  // and moving from Pagume 6 of a leap year to the next (normal) year clamps to Pagume 5.
++  const endSel = () => page.querySelector('[data-ed="end"]');
++  const years = [...endSel().querySelectorAll('[data-ed-part="y"] option')].map(o => +o.value).filter(Boolean);
++  const leapY = years.find(y => E.isLeap(y) && years.includes(y + 1));
++  pick(endSel(), 'y', leapY); pick(endSel(), 'm', 13);
++  assert.strictEqual(endSel().querySelector('[data-ed-part="d"]').options.length, 1 + 6, 'leap Pagume offers 6 days');
++  pick(endSel(), 'd', 6);
++  assert.strictEqual(page.querySelector('[data-f="end"]').value, E.toISO(leapY, 13, 6));
++  pick(endSel(), 'y', leapY + 1);
++  assert.strictEqual(page.querySelector('[data-f="end"]').value, E.toISO(leapY + 1, 13, 5), 'Pagume 6 clamps to Pagume 5 in a normal year');
++  assert.strictEqual(endSel().querySelector('[data-ed-part="d"]').options.length, 1 + 5, 'normal Pagume offers 5 days');
++  // and an end date is never earlier than the start (the picker's min)
++  pick(endSel(), 'y', years[0]); pick(endSel(), 'm', 1); pick(endSel(), 'd', 1);
++  assert(page.querySelector('[data-f="end"]').value >= page.querySelector('[data-f="start"]').value, 'end is not before start');
++
++  // Submit: the server still receives Gregorian ISO dates and 24h HH:MM
++  page.querySelector('[data-act="dur"][data-n="7"]').click();
++  page.querySelector('[data-f="title"]').value = 'Lent';
++  page.querySelector('[data-tpl] input').value = 'Pray';
++  page.querySelector('[data-act="create"]').click();
++  await tick();
++  const post = calls.find(c => c[0] === 'POST' && c[1] === '/api/goals');
++  assert(post, 'goal POSTed');
++  assert.strictEqual(post[2].start_date, add(TODAY, 1));
++  assert.strictEqual(post[2].end_date, add(TODAY, 7));
++  assert.strictEqual(post[2].reminder_time, '09:00');
++
++  // Reminder sheet: presets show the Ethiopian clock, custom time has a caption
++  page.querySelector('[data-act="back"]')?.click();
++  panel.querySelector('[data-act="rsheet"]')?.click();
++  const sheet = doc.querySelector('.hg-rs');
++  assert(sheet, 'reminder sheet opens');
++  assert(/12 ሰዓት/.test(sheet.querySelector('.hg-rs-presets').textContent), '06:00 preset reads 12 ሰዓት');
++  assert(sheet.querySelector('[data-etime]'), 'caption under the custom time');
++
++  console.log('goals Ethiopian calendar UI test passed');
++})().catch(e => { console.error(e); process.exit(1); });
+diff --git a/utils/ethiopianTelegram.js b/utils/ethiopianTelegram.js
+new file mode 100644
+index 0000000..1ae477f
+--- /dev/null
++++ b/utils/ethiopianTelegram.js
+@@ -0,0 +1,78 @@
++'use strict';
++
++// Ethiopian calendar and clock for the Telegram bot (Amharic users).
++//
++// Storage never changes: dates stay Gregorian ISO ('2026-11-06') and times stay
++// 24h Ethiopia time (EAT). Only the labels, the date-picker keyboard and the
++// typed-time parser here differ by language. The maths lives in
++// frontend/ethiopian-calendar.js, shared with the Mini App.
++
++const EthCal = require('../frontend/ethiopian-calendar.js');
++
++const LONG_DATE = { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' };
++
++/** 'YYYY-MM-DD' -> "ጥቅምት 27" (am) or "Nov 6" (en). Pass options for a longer form (LONG_DATE). */
++function dayLabel(iso, lang, o = { month: 'short', day: 'numeric' }) {
++  const day = String(iso).substring(0, 10);
++  if (lang === 'am') return EthCal.format(day, o, 'am');
++  try { return new Date(`${day}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', ...o }); } catch { return day; }
++}
++
++/** 'HH:MM' (24h, Ethiopia) -> "ጠዋት 3 ሰዓት" (am) or "9:00 AM" (en). */
++function clockLabel(hm, lang) {
++  return EthCal.fmtHM(String(hm).substring(0, 5), lang === 'am' ? 'am' : 'en');
++}
++
++/**
++ * 'HH:MM' (24h) from a 12h "02:30 PM" (the time-slot buttons, English users) or a
++ * typed Ethiopian-clock time ("ከሰዓት 8:30", Amharic users). null if it is neither.
++ */
++function parseSessionTime(text) {
++  const m = String(text).trim().match(/^(0?[1-9]|1[0-2]):([0-5][0-9])\s?(AM|PM)$/i);
++  if (m) {
++    let h = parseInt(m[1], 10);
++    const pm = m[3].toUpperCase() === 'PM';
++    if (pm && h < 12) h += 12;
++    if (!pm && h === 12) h = 0;
++    return `${String(h).padStart(2, '0')}:${m[2]}`;
++  }
++  return EthCal.parseEthTime(text);
++}
++
++/** Label for a time-slot button such as "09:00 AM": the Ethiopian clock for Amharic. */
++function slotLabel(slot, lang) {
++  if (lang !== 'am') return slot;
++  const hm = parseSessionTime(slot);
++  return hm ? EthCal.fmtHM(hm, 'am') : slot;
++}
++
++/**
++ * Inline month grid for an Ethiopian month. `key` is 'YYYY-MM' in Ethiopian numbers.
++ * Day buttons carry the Gregorian ISO date (cal_select_<ISO>), so everything after
++ * the pick is unchanged; ecal_nav_<key> moves between months (Pagume included).
++ */
++function ethCalendarKeyboard(key, backText) {
++  const { y, m } = EthCal.parseKey(key);
++  const rows = [];
++  rows.push([
++    { text: '◀️', callback_data: `ecal_nav_${EthCal.shiftKey(key, -1)}` },
++    { text: EthCal.monthLabel(key, 'am'), callback_data: 'noop' },
++    { text: '▶️', callback_data: `ecal_nav_${EthCal.shiftKey(key, 1)}` },
++  ]);
++  // Monday-first, like the English calendar (ሰ ማ ረ ሐ አ ቅ እ)
++  rows.push([1, 2, 3, 4, 5, 6, 0].map(wd => ({ text: EthCal.weekdayName(wd, 'am', true), callback_data: 'noop' })));
++  const offset = (EthCal.fromISO(EthCal.toISO(y, m, 1)).wd + 6) % 7;
++  let row = Array(offset).fill({ text: ' ', callback_data: 'noop' });
++  for (let d = 1; d <= EthCal.daysInMonth(y, m); d++) {
++    row.push({ text: String(d), callback_data: `cal_select_${EthCal.toISO(y, m, d)}` });
++    if (row.length === 7) { rows.push(row); row = []; }
++  }
++  if (row.length) {
++    while (row.length < 7) row.push({ text: ' ', callback_data: 'noop' });
++    rows.push(row);
++  }
++  rows.push([{ text: backText, callback_data: 'menu_schedule' }]);
++  return { inline_keyboard: rows };
++}
++
++module.exports = { LONG_DATE, dayLabel, clockLabel, parseSessionTime, slotLabel, ethCalendarKeyboard };

@@ -44,9 +44,10 @@
       copied_n: 'Copied to {n} days', undo: 'Undo', rename: 'Rename', tick_when_done: 'Tick when finished', actions: 'Actions',
       remind_add: 'Remind', remind_at: 'Reminder at {t}', remind_title: 'Task reminder',
       rp_morning: 'Morning', rp_noon: 'Noon', rp_evening: 'Evening', rp_night: 'Night',
+      ed_day: 'Day', ed_month: 'Month', ed_year: 'Year',
       rp_custom: 'Or pick a custom time', rp_save: 'Save reminder', rp_off: 'Remove', rp_close: 'Close',
       rp_copy: 'Include reminder times',
-      rp_last: 'Last reminder for unfinished tasks: 11:00 PM',
+      rp_last: 'Last reminder for unfinished tasks: {t}',
     },
     am: {
       new_goal: 'አዲስ ግብ', type_one: 'ነጠላ ተግባር', type_prog: 'ደረጃ በደረጃ የሚከናወን', type_chal: 'ቻሌንጅ',
@@ -82,10 +83,11 @@
       copy_empty: 'ባዶ ቀናት', copy_all: 'ሁሉም ቀናት',
       copied_n: 'ለ{n} ቀናት ተቀድቷል', undo: 'ቀልብስ', rename: 'ስም ቀይር', tick_when_done: 'ሲጨርሱ ምልክት ያድርጉ', actions: 'ተግባራት',
       remind_add: 'አስታውስ', remind_at: 'ማስታወሻ በ{t}', remind_title: 'የተግባር ማስታወሻ',
-      rp_morning: 'ጠዋት', rp_noon: 'ቀትር', rp_evening: 'ምሽት', rp_night: 'ሌሊት',
+      rp_morning: 'ጠዋት', rp_noon: 'ቀትር', rp_evening: 'ምሽት', rp_night: 'ማታ',
+      ed_day: 'ቀን', ed_month: 'ወር', ed_year: 'ዓ.ም',
       rp_custom: 'ወይም የራስዎን ሰዓት ይምረጡ', rp_save: 'ማስታወሻውን አስቀምጥ', rp_off: 'አስወግድ', rp_close: 'ዝጋ',
       rp_copy: 'የማስታወሻ ሰዓቶችንም ቅዳ',
-      rp_last: 'ላልተጠናቀቁ ተግባራት የመጨረሻ ማስታወሻ፦ 11:00 PM',
+      rp_last: 'ላልተጠናቀቁ ተግባራት የመጨረሻ ማስታወሻ፦ {t}',
     },
   };
   const tr = (k, r) => {
@@ -101,11 +103,25 @@
   const utc = s => { const [y, m, d] = d10(s).split('-').map(Number); return Date.UTC(y, m - 1, d); };
   const addDays = (s, n) => new Date(utc(s) + n * 864e5).toISOString().substring(0, 10);
   const diff = (a, b) => Math.round((utc(b) - utc(a)) / 864e5);
-  const fmt = (s, o) => new Date(utc(s)).toLocaleDateString(currentLanguage === 'am' ? 'am-ET' : 'en-US', { timeZone: 'UTC', ...o });
+  // Amharic = Ethiopian calendar (ዓ.ም) and Ethiopian clock. Stored values stay
+  // Gregorian ISO dates and 24h 'HH:MM' (Ethiopia time); only display and the
+  // date pickers change. frontend/ethiopian-calendar.js does the conversion.
+  const EC = window.EthCal;
+  const eth = () => currentLanguage === 'am' && !!EC;
+  const fmt = (s, o) => eth() ? EC.format(d10(s), o, 'am') : new Date(utc(s)).toLocaleDateString('en-US', { timeZone: 'UTC', ...o });
+  // Month grids: keys are 'YYYY-MM' in the active calendar; days stay Gregorian ISO.
+  const mkey = d => eth() ? EC.monthKey(d) : d.substring(0, 7);
+  const mfirst = k => eth() ? EC.monthFirstISO(k) : `${k}-01`;
+  const mlabel = k => eth() ? EC.monthLabel(k, 'am') : fmt(`${k}-01`, { month: 'long', year: 'numeric' });
+  const dnum = d => eth() ? EC.fromISO(d).d : Number(d.substring(8));
 
   // Reminder times are 'HH:MM' strings in Ethiopia local time, same as the server.
   const hm = v => (v ? String(v).substring(0, 5) : '');
-  const fmtHM = v => { const [h, m] = hm(v).split(':').map(Number); return new Date(Date.UTC(2000, 0, 1, h, m)).toLocaleTimeString(currentLanguage === 'am' ? 'am-ET' : 'en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit' }); };
+  const fmtHM = v => { if (eth()) return EC.fmtHM(hm(v), 'am'); const [h, m] = hm(v).split(':').map(Number); return new Date(Date.UTC(2000, 0, 1, h, m)).toLocaleTimeString('en-US', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit' }); };
+  // The phone's <input type="time"> shows the device clock; in Amharic a caption underneath says the same time the Ethiopian way.
+  const etime = v => eth() ? `<small class="hg-etime" data-etime>${hm(v) ? '= ' + esc(fmtHM(v)) : ''}</small>` : '';
+  const FINAL_AT = '23:00'; // server: FINAL_REMINDER_TIME in utils/goalRules.js
+  const lastNote = () => tr('rp_last', { t: fmtHM(FINAL_AT) });
   const I_CLOCK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
   const PRESETS = [['rp_morning', '06:00'], ['rp_noon', '12:00'], ['rp_evening', '18:00'], ['rp_night', '21:00']];
 
@@ -221,7 +237,7 @@
   // Months touched by s..e ('YYYY-MM').
   function monthsOf(s, e) {
     const out = [];
-    for (let d = s; d <= e; d = addDays(d, 1)) { const m = d.substring(0, 7); if (out[out.length - 1] !== m) out.push(m); }
+    for (let d = s; d <= e; d = addDays(d, 1)) { const m = mkey(d); if (out[out.length - 1] !== m) out.push(m); }
     return out;
   }
 
@@ -230,18 +246,18 @@
   // hidden, which keeps painting simple and makes day cells easy to reach.
   function grids(key, s, e, ref, cell) {
     const months = monthsOf(s, e);
-    const ov = ui.month[key], r7 = ref.substring(0, 7);
+    const ov = ui.month[key], r7 = mkey(ref);
     const active = months.includes(ov) ? ov : months.includes(r7) ? r7 : months[0];
     const i = months.indexOf(active);
     const nav = (m, label, aria) => `<button type="button" class="hg-mnav" data-act="mnav" data-key="${key}" data-m="${m || ''}" aria-label="${aria}"${m ? '' : ' disabled'}>${label}</button>`;
     const head = `<div class="hg-nav">${months.length > 1 ? nav(months[i - 1], '‹', tr('prev_month')) : '<span></span>'}
-      <span class="hg-month">${fmt(`${active}-01`, { month: 'long', year: 'numeric' })}</span>
+      <span class="hg-month">${mlabel(active)}</span>
       ${months.length > 1 ? nav(months[i + 1], '›', tr('next_month')) : '<span></span>'}</div>`;
     const wd = Array.from({ length: 7 }, (_, k) => `<div class="hg-w">${fmt(`2024-01-0${k + 1}`, { weekday: 'narrow' })}</div>`).join('');
     const body = months.map(m => {
-      const first = `${m}-01`, from = first < s ? s : first;
+      const first = mfirst(m), from = first < s ? s : first;
       let cells = '<div class="hg-d x"></div>'.repeat((new Date(utc(from)).getUTCDay() + 6) % 7);
-      for (let d = from; d <= e && d.substring(0, 7) === m; d = addDays(d, 1)) cells += cell(d);
+      for (let d = from; d <= e && mkey(d) === m; d = addDays(d, 1)) cells += cell(d);
       return `<div class="hg-cal"${m === active ? '' : ' hidden'}>${wd}${cells}</div>`;
     }).join('');
     return head + body;
@@ -254,7 +270,7 @@
       let cls = 'sk';
       if (info.ts.length) cls = d === td ? 'n' : info.all ? 'k' : d > td ? 'f' : info.done ? 'pt' : 's';
       const mark = info.all ? CHK : (cls === 's' ? '<b></b>' : '');
-      return `<button type="button" class="hg-d ${cls}${d === sel ? ' sel' : ''}" data-act="day" data-goal="${g.id}" data-date="${d}" aria-label="${fmt(d, { month: 'long', day: 'numeric' })}"><span>${Number(d.substring(8))}</span>${mark}</button>`;
+      return `<button type="button" class="hg-d ${cls}${d === sel ? ' sel' : ''}" data-act="day" data-goal="${g.id}" data-date="${d}" aria-label="${fmt(d, { month: 'long', day: 'numeric' })}"><span>${dnum(d)}</span>${mark}</button>`;
     });
   }
 
@@ -282,11 +298,53 @@
       ${hint ? `<div class="hg-hint">${hint}</div>` : ''}</div>`;
   }
 
+  // <input type="date"> is always Gregorian. In Amharic the field is three selects
+  // (day / month / year, Ethiopian) plus a hidden input with the same data-f that
+  // holds the Gregorian ISO value, so snap(), the create/save code and the server
+  // keep reading a normal 'YYYY-MM-DD' and nothing else had to change.
+  function dateField(f, value, min) {
+    if (!eth()) return `<input type="date" data-f="${f}"${min ? ` min="${esc(min)}"` : ''} value="${esc(value)}">`;
+    const minOk = isDay(min) ? min : '';
+    return `<div class="hg-ed" data-ed="${f}" data-min="${esc(minOk)}">${edInner(f, isDay(value) ? value : '', minOk)}</div>`;
+  }
+  function edInner(f, value, min) {
+    const e = value ? EC.fromISO(value) : null;
+    const y0 = EC.fromISO(min || today()).y;
+    const years = []; for (let y = y0; y <= y0 + 6; y++) years.push(y);
+    if (e && !years.includes(e.y)) { years.push(e.y); years.sort((a, b) => a - b); }
+    const o = (v, label, on) => `<option value="${v}"${on ? ' selected' : ''}>${esc(label)}</option>`;
+    const days = Array.from({ length: e ? EC.daysInMonth(e.y, e.m) : 30 }, (_, i) => o(i + 1, i + 1, e && e.d === i + 1)).join('');
+    const months = Array.from({ length: 13 }, (_, i) => o(i + 1, EC.monthName(i + 1, 'am'), e && e.m === i + 1)).join('');
+    const ys = years.map(y => o(y, y, e && e.y === y)).join('');
+    return `<select data-ed-part="d" aria-label="${tr('ed_day')}">${o('', tr('ed_day'), !e)}${days}</select>
+      <select data-ed-part="m" aria-label="${tr('ed_month')}">${o('', tr('ed_month'), !e)}${months}</select>
+      <select data-ed-part="y" aria-label="${tr('ed_year')}">${o('', tr('ed_year'), !e)}${ys}</select>
+      <input type="hidden" data-f="${f}" value="${esc(value)}">`;
+  }
+  // A select changed: rebuild the ISO value, clamp to min and to the month's length
+  // (Pagume has 5-6 days), then announce it like a normal date input would.
+  function edChange(sel) {
+    const box = sel.closest('.hg-ed');
+    const val = k => Number(box.querySelector(`[data-ed-part="${k}"]`).value);
+    const y = val('y'), m = val('m'), dd = val('d');
+    let iso = '';
+    if (y && m && dd) {
+      iso = EC.toISO(y, m, Math.min(dd, EC.daysInMonth(y, m)));
+      if (isDay(box.dataset.min) && iso < box.dataset.min) iso = box.dataset.min;
+      const part = sel.dataset.edPart;
+      box.innerHTML = edInner(box.dataset.ed, iso, box.dataset.min);
+      box.querySelector(`[data-ed-part="${part}"]`)?.focus();
+    }
+    const hid = box.querySelector('input[type="hidden"]');
+    hid.value = iso;
+    hid.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
   function editPanel(g) {
     return `<div class="hg-form">
       <label>${tr('f_title')}<input type="text" maxlength="200" data-f="title" value="${esc(g.title)}"></label>
-      <label>${tr('f_end')}<input type="date" data-f="end" value="${g.end_date ? d10(g.end_date) : ''}"${g.type === 'one_time' || g.type === 'progressive' ? '' : ' min="' + d10(g.start_date) + '"'}></label>
-      ${g.type === 'challenge' ? `<label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${g.reminder_time ? String(g.reminder_time).substring(0, 5) : ''}"></label><div class="hg-hint">${tr('rp_daily_note')} ${tr('rp_last')}</div>` : ''}
+      <label>${tr('f_end')}${dateField('end', g.end_date ? d10(g.end_date) : '', g.type === 'one_time' || g.type === 'progressive' ? '' : d10(g.start_date))}</label>
+      ${g.type === 'challenge' ? `<label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${g.reminder_time ? String(g.reminder_time).substring(0, 5) : ''}">${etime(g.reminder_time)}</label><div class="hg-hint">${tr('rp_daily_note')} ${lastNote()}</div>` : ''}
       <div class="hg-actions"><button type="button" class="hg-btn hg-btn-ghost" data-act="cancel-edit" data-goal="${g.id}">${tr('cancel')}</button>
       <button type="button" class="hg-btn" data-act="save-edit" data-goal="${g.id}">${tr('save')}</button></div></div>`;
   }
@@ -404,7 +462,7 @@
     const cal = grids('form:' + mid, s, e, sel, x => {
       const cls = isRest(x) ? ' rest' : hasTasks(x) ? ' has' : '';
       const mark = isRest(x) ? I_MOON : hasTasks(x) ? '<b></b>' : '';
-      return `<button type="button" class="hg-d${cls}${x === sel ? ' sel' : ''}" data-act="fday" data-date="${x}" aria-label="${fmt(x, { month: 'long', day: 'numeric' })}"><span>${Number(x.substring(8))}</span>${mark}</button>`;
+      return `<button type="button" class="hg-d${cls}${x === sel ? ' sel' : ''}" data-act="fday" data-date="${x}" aria-label="${fmt(x, { month: 'long', day: 'numeric' })}"><span>${dnum(x)}</span>${mark}</button>`;
     });
     const st = planStats(d, r, sel);
     const rest = isRest(sel);
@@ -451,23 +509,23 @@
     const d = fd(menteeId), td = today();
     const k = TK[type][2];
     let fields = '';
-    if (type === 'one_time') fields = `<label>${tr('f_due')}<input type="date" data-f="due" min="${td}" value="${esc(d.due)}"></label>`;
+    if (type === 'one_time') fields = `<label>${tr('f_due')}${dateField('due', d.due, td)}</label>`;
     if (type === 'progressive') fields = `<label>${tr('f_target')}<input type="number" data-f="target" min="1" max="50" value="${esc(d.target)}" inputmode="numeric"></label>
-      <label>${tr('f_deadline')}<input type="date" data-f="deadline" min="${td}" value="${esc(d.deadline)}"></label>`;
+      <label>${tr('f_deadline')}${dateField('deadline', d.deadline, td)}</label>`;
     if (type === 'challenge') {
       const len = rangeOf(d) ? diff(d.start, d.end) + 1 : 0;
       const chips = [7, 14, 21, 30, 40].map(n => `<button type="button" class="hg-pill${len === n ? ' on' : ''}" data-act="dur" data-n="${n}">${tr('days_n', { n })}</button>`).join('');
       const sameList = d.same.length ? d.same : [''];
       const same = `<div class="hg-tpl"><span>${tr('f_daily')}</span><div data-tpl>${taskRows(sameList, 'trem', d.sameRemind, 'tpl')}</div>${addTask('addtpl', sameList.length)}</div>`;
-      fields = `<div class="hg-row2"><label>${tr('f_start')}<input type="date" data-f="start" min="${td}" value="${esc(d.start)}"></label>
-        <label>${tr('f_end')}<input type="date" data-f="end" min="${esc(d.start || td)}" value="${esc(d.end)}"></label></div>
+      fields = `<div class="hg-row2"><label>${tr('f_start')}${dateField('start', d.start, td)}</label>
+        <label>${tr('f_end')}${dateField('end', d.end, d.start || td)}</label></div>
         <div class="hg-chips" role="group" aria-label="${tr('f_dur')}">${chips}</div>
         <div class="hg-seg" role="group">
           <button type="button" class="${d.mode === 'same' ? 'on' : ''}" data-act="fmode" data-mode="same">${tr('mode_same')}</button>
           <button type="button" class="${d.mode === 'custom' ? 'on' : ''}" data-act="fmode" data-mode="custom">${tr('mode_custom')}</button></div>
         ${d.mode === 'custom' ? planner(menteeId, d) : same}
-        <label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${esc(d.reminder)}"></label>
-        <div class="hg-hint hg-last">${I_CLOCK}<span>${tr('rp_last')}</span></div>`;
+        <label>${tr('f_reminder')}<input type="time" data-f="reminder" value="${esc(d.reminder)}">${etime(d.reminder)}</label>
+        <div class="hg-hint hg-last">${I_CLOCK}<span>${lastNote()}</span></div>`;
     }
     return `<div class="hg-hero"><span class="hg-type-ico hg-hero-ico">${icon(type, 28)}</span>
         <div><h2>${tr(TK[type][0])}</h2><p>${tr(k + '_hero')}</p></div></div>
@@ -832,8 +890,8 @@
         <div class="hg-rs-head"><h3>${esc(title) || tr('remind_title')}</h3>
           <button type="button" class="hg-x" data-rs="close" aria-label="${tr('rp_close')}">${I_X}</button></div>
         <div class="hg-rs-body">
-          <div class="hg-rs-presets" role="group">${PRESETS.map(([k, v]) => `<button type="button" class="hg-pill${time === v ? ' on' : ''}" data-rs="p" data-at="${v}"><b>${tr(k)}</b> ${esc(fmtHM(v))}</button>`).join('')}</div>
-          <label class="hg-rs-custom">${tr('rp_custom')}<input type="time" data-rs="t" value="${time}"></label>
+          <div class="hg-rs-presets" role="group">${PRESETS.map(([k, v]) => `<button type="button" class="hg-pill${time === v ? ' on' : ''}" data-rs="p" data-at="${v}"><b>${tr(k)}</b> ${esc(eth() ? EC.fmtHM(v, 'am', { bare: true }) : fmtHM(v))}</button>`).join('')}</div>
+          <label class="hg-rs-custom">${tr('rp_custom')}<input type="time" data-rs="t" value="${time}">${etime(time)}</label>
         </div>
         <div class="hg-rs-foot">${at ? `<button type="button" class="hg-btn hg-btn-ghost" data-rs="off">${tr('rp_off')}</button>` : ''}
           <button type="button" class="hg-btn" data-rs="save"${time ? '' : ' disabled'}>${tr('rp_save')}</button></div></div>`;
@@ -862,6 +920,7 @@
       time = e.target.value;
       ov.querySelectorAll('[data-rs="p"]').forEach(p => p.classList.toggle('on', p.dataset.at === time));
       const sv = ov.querySelector('[data-rs="save"]'); if (sv) sv.disabled = !time;
+      const et = ov.querySelector('[data-etime]'); if (et) et.textContent = time ? '= ' + fmtHM(time) : '';
     });
     rsKey = e => { if (e.key === 'Escape') closeReminderSheet(); };
     document.addEventListener('keydown', rsKey);
@@ -877,11 +936,13 @@
     root.addEventListener('focusout', onFieldBlur);
     root.addEventListener('click', e => { if (e.target.closest('[data-act]') && root.querySelector('.hg-new')) snap(root); onClick(root, e); });
     root.addEventListener('input', e => {
+      if (e.target.matches?.('input[type="time"]')) { const et = e.target.parentElement?.querySelector('[data-etime]'); if (et) et.textContent = e.target.value ? '= ' + fmtHM(e.target.value) : ''; }
       if (!e.target.closest('.hg-new')) return;
       snap(root); syncPlan(root);
       const d = ui.fd[root.dataset.mentee]; if (d?.undo) { d.undo = null; root.querySelector('.hg-undo')?.remove(); }
     });
     root.addEventListener('change', e => {
+      if (e.target.dataset?.edPart) return edChange(e.target);   // Amharic date selects (see dateField)
       if (!e.target.closest('.hg-new')) return;
       snap(root);
       if (['start', 'end'].includes(e.target.dataset.f)) paint(root, true); // planner + length chips follow the dates

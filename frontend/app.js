@@ -292,7 +292,23 @@ function getUserTimezone() {
   }
 }
 
+// Amharic = Ethiopian calendar (ዓ.ም) and Ethiopian clock (ጠዋት 3 ሰዓት = 9:00 AM).
+// Stored values stay Gregorian/UTC; these helpers only change what is displayed.
+// frontend/ethiopian-calendar.js does the conversion (no Intl calendar data needed).
+function ethOn() { return currentLanguage === 'am' && !!window.EthCal; }
+// A date-only value ('2026-11-06' or a timestamp) in the active calendar.
+function fmtCalDate(value, opts, fallbackLocale) {
+  const o = opts || { year: 'numeric', month: 'short', day: 'numeric' };
+  if (ethOn()) return EthCal.format(EthCal.isoInTz(value, getUserTimezone()), o, 'am');
+  return new Date(value).toLocaleDateString(fallbackLocale, o);
+}
+// A goal due date is a plain calendar day: read it as that day, not as a moment in the viewer's zone.
+function fmtDueDate(due) {
+  return ethOn() ? EthCal.format(String(due).substring(0, 10), { month: 'long', day: 'numeric', year: 'numeric' }, 'am') : new Date(due).toLocaleDateString();
+}
+
 function formatTime(dateStr) {
+  if (ethOn()) { try { return EthCal.fmtHM(EthCal.hmInTz(dateStr, getUserTimezone()), 'am'); } catch (_) { /* fall back below */ } }
   try {
     const tz = getUserTimezone();
     return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: tz });
@@ -302,6 +318,7 @@ function formatTime(dateStr) {
 }
 
 function formatDateTime(dateStr) {
+  if (ethOn()) { try { return EthCal.formatInstant(dateStr, 'am', getUserTimezone(), { month: 'short', day: 'numeric', year: 'numeric' }); } catch (_) { /* fall back below */ } }
   try {
     const tz = getUserTimezone();
     return new Date(dateStr).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', timeZone: tz });
@@ -539,12 +556,14 @@ function getDateGroupHeader(dateStr) {
   } else if (diffDays === 1) {
     return t('Yesterday') || 'Yesterday';
   } else if (diffDays > 1 && diffDays < 7) {
+    if (ethOn()) return EthCal.format(EthCal.isoInTz(msgDate, tz), { weekday: 'long' }, 'am');
     try {
       return msgDate.toLocaleDateString([], { weekday: 'long', timeZone: tz });
     } catch (e) {
       return msgDate.toLocaleDateString([], { weekday: 'long' });
     }
   } else {
+    if (ethOn()) return EthCal.format(EthCal.isoInTz(msgDate, tz), { year: 'numeric', month: 'long', day: 'numeric' }, 'am');
     try {
       return msgDate.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric', timeZone: tz });
     } catch (e) {
@@ -3123,7 +3142,7 @@ function renderMyGoalItem(g) {
   const missed = !g.is_done && (g.is_missed || isGoalLocked(g));
   const cb = goalCheckboxAttrs(g);
   const due = g.due_date
-    ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}${missed ? ` <span class="goal-missed-badge">${t('mentee_goal_missed')}</span>` : ''}</div>`
+    ? `<div class="goal-item-due">${t('mentee_goal_due')} ${fmtDueDate(g.due_date)}${missed ? ` <span class="goal-missed-badge">${t('mentee_goal_missed')}</span>` : ''}</div>`
     : '';
   return `
     <div class="my-goal-item ${g.is_done ? 'done' : ''} ${missed ? 'missed' : ''}" data-goal-id="${g.id}">
@@ -5232,7 +5251,7 @@ function openMenteeSelectModal() {
     list.innerHTML = mentees.map(m => {
       const displayName = m.user?.user_settings?.display_name || m.user?.anonymous_id || '–';
       const letter = (displayName || '?').charAt(0).toUpperCase();
-      const dateStr = m.assigned_at ? new Date(m.assigned_at).toLocaleDateString(dateLocale) : '';
+      const dateStr = m.assigned_at ? fmtCalDate(m.assigned_at, undefined, dateLocale) : '';
       return `
       <button type="button" class="profile-menu-item rt-topic sch-pick" onclick="startPrivateSession('${m.user.telegram_id}')">
         ${renderAvatar(m.user, letter)}
@@ -8014,7 +8033,7 @@ function renderMentorGoalItem(g, menteeId) {
   const missed = !g.is_done && (g.is_missed || isGoalLocked(g));
   const cb = goalCheckboxAttrs(g);
   const due = g.due_date
-    ? `<div class="goal-item-due">${t('mentee_goal_due')} ${new Date(g.due_date).toLocaleDateString()}${missed ? ` <span class="goal-missed-badge">${t('mentee_goal_missed')}</span>` : ''}</div>`
+    ? `<div class="goal-item-due">${t('mentee_goal_due')} ${fmtDueDate(g.due_date)}${missed ? ` <span class="goal-missed-badge">${t('mentee_goal_missed')}</span>` : ''}</div>`
     : '';
   return `
     <div class="goal-item ${g.is_done ? 'done' : ''} ${missed ? 'missed' : ''}" data-goal-id="${g.id}">
@@ -8573,7 +8592,7 @@ function renderTransferSheet() {
     const letter = (mentee.name || '?').charAt(0).toUpperCase();
     const dateLocale = currentLanguage === 'am' ? 'am-ET' : undefined;
     const since = mentee.assignedAt
-      ? new Date(mentee.assignedAt).toLocaleDateString(dateLocale, { year: 'numeric', month: 'short', day: 'numeric' })
+      ? fmtCalDate(mentee.assignedAt, { year: 'numeric', month: 'short', day: 'numeric' }, dateLocale)
       : '';
     card.hidden = false;
     card.innerHTML = `
@@ -9004,6 +9023,7 @@ const CH_ICON_CHAT = '<svg xmlns="http://www.w3.org/2000/svg" width="22" height=
 
 function chName(u) { return u?.user_settings?.display_name || u?.anonymous_id || t('mentee_label'); }
 function chDate(iso) {
+  if (ethOn()) return fmtCalDate(iso);
   try { return new Date(iso).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric', timeZone: getUserTimezone() }); }
   catch { return new Date(iso).toLocaleDateString(); }
 }
@@ -9568,7 +9588,29 @@ async function showJournalCalendar() {
   let currentYear = today.getFullYear();
   let currentMonth = today.getMonth();
 
+  let ethKey = ethOn() ? EthCal.monthKey(EthCal.isoInTz(today)) : null;
+
+  function renderEthCalendar() {
+    const { y, m } = EthCal.parseKey(ethKey);
+    const startDay = EthCal.fromISO(EthCal.toISO(y, m, 1)).wd; // 0 = Sunday, as in the Gregorian grid
+    let html = `<div class="journal-calendar card"><div class="calendar-header">
+      <button class="btn btn-sm btn-ghost" onclick="prevMonth()">◀</button>
+      <span>${EthCal.monthLabel(ethKey, 'am')}</span>
+      <button class="btn btn-sm btn-ghost" onclick="nextMonth()">▶</button>
+    </div><div class="calendar-grid">`;
+    for (let wd = 0; wd < 7; wd++) html += `<div class="calendar-weekday">${EthCal.weekdayName(wd, 'am', true)}</div>`;
+    for (let i = 0; i < startDay; i++) html += `<div class="calendar-day empty"></div>`;
+    for (let d = 1; d <= EthCal.daysInMonth(y, m); d++) {
+      const dateStr = EthCal.toISO(y, m, d); // Gregorian ISO: what the API and entriesByDate use
+      const hasEntries = entriesByDate[dateStr] && entriesByDate[dateStr].length > 0;
+      html += `<div class="calendar-day ${hasEntries ? 'has-entry' : ''}" onclick="showEntriesForDate('${dateStr}')">${d}</div>`;
+    }
+    html += `</div></div>`;
+    $('journalEntriesList').innerHTML = html;
+  }
+
   function renderCalendar() {
+    if (ethOn()) { if (!ethKey) ethKey = EthCal.monthKey(EthCal.isoInTz(new Date())); return renderEthCalendar(); }
     const firstDay = new Date(currentYear, currentMonth, 1);
     const startDay = firstDay.getDay(); // 0 = Sunday
     const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -9591,11 +9633,13 @@ async function showJournalCalendar() {
   }
 
   window.prevMonth = () => {
+    if (ethOn()) { ethKey = EthCal.shiftKey(ethKey || EthCal.monthKey(EthCal.isoInTz(new Date())), -1); return renderCalendar(); }
     if (currentMonth === 0) { currentMonth = 11; currentYear--; }
     else currentMonth--;
     renderCalendar();
   };
   window.nextMonth = () => {
+    if (ethOn()) { ethKey = EthCal.shiftKey(ethKey || EthCal.monthKey(EthCal.isoInTz(new Date())), 1); return renderCalendar(); }
     if (currentMonth === 11) { currentMonth = 0; currentYear++; }
     else currentMonth++;
     renderCalendar();

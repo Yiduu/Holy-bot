@@ -461,3 +461,16 @@ body.hg-typing .hg-root { padding-bottom: 140px; }
 .hg-pt input { flex: 1 1 0; min-width: 0; }
 .hg-copywrap:empty { display: none; }
 
+
+/* Amharic date field: Ethiopian day / month / year selects (see dateField in goals.js).
+   Month gets the extra width because Amharic month names are the longest label. */
+.hg-ed { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr) minmax(0, 1fr); gap: 6px; }
+.hg-ed select {
+  width: 100%; min-width: 0; box-sizing: border-box; min-height: 52px; padding: 0 8px; border-radius: 16px; outline: none;
+  font: inherit; font-size: var(--fs-md); font-weight: 400; letter-spacing: normal; text-transform: none; color: var(--text);
+  color-scheme: dark; background: rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.35); text-overflow: ellipsis;
+}
+.hg-ed select:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-dim), inset 0 2px 6px rgba(0, 0, 0, 0.35); }
+/* "= ጠዋት 3 ሰዓት" under a time field: the same time on the Ethiopian clock */
+.hg-etime { min-height: 1em; font-size: var(--fs-xs); font-weight: 600; letter-spacing: normal; text-transform: none; color: var(--gold-light); }
